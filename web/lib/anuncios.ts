@@ -39,6 +39,10 @@ export type Anuncio = {
   canal: CanalAnuncio;
   peso: number;
   ativo: boolean;
+  /** 125: as seções em que combina (nulo = todas) — ali ele pesa o triplo no sorteio. */
+  secoes: number[] | null;
+  /** 125: quantas variações do texto estão em teste (na lista). */
+  variantes?: number;
   // Os últimos 30 dias (na lista).
   aparicoes?: number;
   sessoes?: number;
@@ -58,11 +62,44 @@ export type RegrasAnuncio = {
   anuncio_intervalo: number;
   anuncio_maximo: number;
   anuncio_maximo_mesa: number;
+  /** 125: % das visitas que não vê anúncio nenhum (o grupo de controle). 0 desliga. */
+  anuncio_controle: number;
+  /** 125: o ritmo que aprende — pulou dobra a distância; dois sem toque, acabou na visita. */
+  anuncio_recuo: boolean;
+};
+
+/** 125: uma variação do TEXTO do anúncio (a mídia e o destino são os do anúncio). */
+export type Variante = { id: number; id_anuncio: number; titulo: string | null; texto: string | null;
+                         acao_rotulo: string | null; ativo: boolean };
+export type GravarVariante = Pick<Variante, "titulo" | "texto" | "acao_rotulo" | "ativo">;
+
+type Conclusao = "AMOSTRA_PEQUENA" | "SEM_DIFERENCA" | "A_VENCE" | "B_VENCE";
+export type LinhaDaVariante = {
+  id_variante: number | null; rotulo: string; titulo: string | null; texto: string | null;
+  sessoes: number; tocaram: number; taxa: number | null;
+  comparacao: { p_valor: number | null; conclusao: Conclusao } | null;
+  /** Falso = a variação já foi apagada ou aplicada; os números ficam. */
+  existe: boolean;
+};
+export type VariantesDoRelatorio = {
+  linhas: LinhaDaVariante[];
+  vencedora: number | null;
+  conclusao: "VARIACAO_VENCE" | "ORIGINAL_VENCE" | "AMOSTRA_PEQUENA" | "SEM_DIFERENCA";
+  minimo_por_braco: number;
+  em_teste: boolean;
+};
+
+type Grupo = { sessoes: number; engajadas: number; adicionaram: number; pratos_por_sessao: number | null };
+/** 125: o grupo de controle (sem anúncio) × as expostas. Na ordem (controle, expostas): B = expostas. */
+export type Efeito = {
+  de: string; ate: string; controle: Grupo; expostas: Grupo; minimo_por_braco: number; percentual: number;
+  adicao: { p_valor: number | null; conclusao: Conclusao };
+  engajamento: { p_valor: number | null; conclusao: Conclusao };
 };
 
 export type GravarAnuncio = Omit<Anuncio, "id" | "foto_url" | "video_url" | "video_capa_url" | "video_segundos"
   | "aparicoes" | "sessoes" | "segundos" | "pulados" | "toques" | "sessoes_tocaram" | "situacao" | "avisos"
-  | "fora_do_horario_agora">;
+  | "fora_do_horario_agora" | "variantes">;
 
 type Metricas = { aparicoes: number; sessoes: number; segundos: number | null; pulados: number; toques: number;
                   sessoes_tocaram: number };
@@ -81,6 +118,8 @@ export type Relatorio = {
   pulou_ms: number;
   /** 124: os dias que o bruto já não tinha vieram do resumo diário — e a frase que o diz. */
   resumido: { ate: string; dias: number; aviso: string } | null;
+  /** 125: os números de cada texto, e a vencedora. Nulo = o anúncio nunca teve variação. */
+  variantes: VariantesDoRelatorio | null;
 };
 
 const arquivo = (a: File) => {
@@ -99,6 +138,19 @@ export const AnunciosService = {
   enviarVideo: (id: number, a: File) =>
     api.upload<Anuncio & { message: string }>(`/cardapio-vivo/anuncios/${id}/video`, arquivo(a)),
   removerMidia: (id: number) => api.delete<Anuncio>(`/cardapio-vivo/anuncios/${id}/midia`),
+  variantes: (id: number) => api.get<Variante[]>(`/cardapio-vivo/anuncios/${id}/variantes`),
+  criarVariante: (id: number, corpo: GravarVariante) => api.post<Variante>(`/cardapio-vivo/anuncios/${id}/variantes`, corpo),
+  atualizarVariante: (idVariante: number, corpo: GravarVariante) =>
+    api.put<Variante>(`/cardapio-vivo/anuncios/variantes/${idVariante}`, corpo),
+  removerVariante: (idVariante: number) => api.delete<{ message: string }>(`/cardapio-vivo/anuncios/variantes/${idVariante}`),
+  aplicarVariante: (id: number, idVariante: number | null) =>
+    api.post<Anuncio & { message: string }>(`/cardapio-vivo/anuncios/${id}/variantes/aplicar`, { id_variante: idVariante }),
+  efeito: (de?: string, ate?: string) => {
+    const q = new URLSearchParams();
+    if (de) q.set("de", de);
+    if (ate) q.set("ate", ate);
+    return api.get<Efeito>(`/cardapio-vivo/anuncios/efeito${q.toString() ? `?${q}` : ""}`);
+  },
   relatorio: (id: number, de?: string, ate?: string) => {
     const q = new URLSearchParams();
     if (de) q.set("de", de);

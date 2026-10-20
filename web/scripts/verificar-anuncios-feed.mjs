@@ -62,7 +62,10 @@ const SLUG = `anuncio-${MARCA}`;
 const SLUG_ESP = `especial-${MARCA}`;
 await api("PUT", `/cardapio-vivo/vivos/${cat.id}`, { slug: SLUG }, token);
 await api("PUT", `/cardapio-vivo/vivos/${esp.id}`, { slug: SLUG_ESP }, token);
-await api("PUT", "/cardapio-vivo/anuncios/regras", { anuncio_depois_de: 2, anuncio_intervalo: 3, anuncio_maximo: 2, anuncio_maximo_mesa: 1 }, token);
+// ⚠️ 125: sem grupo de controle e sem o ritmo que aprende aqui — senão uma visita em dez cairia sem
+// anúncio, e rolar rápido mudaria a ordem. As duas coisas têm a seção 1b.
+const RITMO = { anuncio_depois_de: 2, anuncio_intervalo: 3, anuncio_maximo: 2, anuncio_maximo_mesa: 1 };
+await api("PUT", "/cardapio-vivo/anuncios/regras", { ...RITMO, anuncio_controle: 0, anuncio_recuo: false }, token);
 const { dados: daCasa } = await api("POST", "/cardapio-vivo/anuncios", { nome: `Especial ${MARCA}`, origem: "CASA",
   titulo: `Data especial ${MARCA}`, texto: "Fondue para dois.", acao: "CATALOGO", acao_catalogo: esp.id, cardapios: [cat.id] }, token);
 const { dados: externo } = await api("POST", "/cardapio-vivo/anuncios", { nome: `Cerveja ${MARCA}`, origem: "EXTERNO",
@@ -99,6 +102,46 @@ try {
   checar("e os dois anúncios são diferentes", new Set(anuncios).size === 2, anuncios);
   const deNovo = await abrir();
   checar("a mesma visita vê a mesma ordem (o sorteio é da sessão)", JSON.stringify(deNovo) === JSON.stringify(ordem), { ordem, deNovo });
+
+  console.log("\n1b. o ritmo que aprende e o grupo de controle (125)");
+  await api("PUT", "/cardapio-vivo/anuncios/regras", { ...RITMO, anuncio_controle: 0, anuncio_recuo: true }, token);
+  const comRecuo = await abrir();
+  checar("com o recuo ligado, quem ainda não viu anúncio vê o mesmo ritmo",
+    comRecuo.filter((x) => x.startsWith("anuncio")).length === 2, comRecuo);
+  // Passar pelo 1º anúncio em menos de 1,5 s: a distância até o próximo dobra (3 → 6), e não sobra prato.
+  const primeiro = comRecuo.findIndex((x) => x.startsWith("anuncio"));
+  await p.$eval(`[data-pos='${primeiro}']`, (el) => el.scrollIntoView());
+  await esperar(500);
+  await p.$eval(`[data-pos='${primeiro + 1}']`, (el) => el.scrollIntoView());
+  await p.waitForFunction(() => document.querySelectorAll("[data-anuncio]").length === 1, { timeout: 5000 }).catch(() => {});
+  const depoisDePular = await p.$$eval("[data-anuncio]", (els) => els.length);
+  checar("pulou o 1º anúncio: o 2º sai da visita (a distância dobrou)", depoisDePular === 1, depoisDePular);
+  checar("e o anúncio que já passou continua onde estava",
+    await p.$eval(`[data-pos='${primeiro}']`, (el) => !!el.dataset.anuncio).catch(() => false));
+  await api("PUT", "/cardapio-vivo/anuncios/regras", { ...RITMO, anuncio_controle: 50, anuncio_recuo: false }, token);
+  const achar = async (grupo) => {
+    for (let n = 0; n < 60; n++) {
+      const s = crypto.randomUUID();
+      const r = await fetch(`${API}/publico/cardapio/loja/1?cardapio=${SLUG}&sessao=${s}`).then((x) => x.json());
+      if (r.grupo_anuncio === grupo) return s;
+    }
+    return null;
+  };
+  const usarSessao = (s) => p.evaluate((id) => localStorage.setItem("cardapio.sessao", JSON.stringify({ id, ultimo: Date.now() })), s);
+  const sControle = await achar("CONTROLE");
+  await usarSessao(sControle);
+  await p.evaluate(() => { window.__lotes = []; });
+  const noControle = await abrir();
+  checar("a visita do grupo de controle não vê anúncio nenhum", sControle && !noControle.some((x) => x.startsWith("anuncio")), noControle);
+  await p.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await esperar(400);
+  const gruposDoLote = (await p.evaluate(() => window.__lotes)).map((t) => { try { return JSON.parse(t).grupo_anuncio; } catch { return "?"; } });
+  checar("e o lote dela vai marcado como controle", gruposDoLote.length > 0 && gruposDoLote.every((g) => g === "CONTROLE"), gruposDoLote);
+  const sExposta = await achar("EXPOSTO");
+  await usarSessao(sExposta);
+  const naExposta = await abrir();
+  checar("a exposta vê os anúncios", naExposta.some((x) => x.startsWith("anuncio")), naExposta);
+  await api("PUT", "/cardapio-vivo/anuncios/regras", { ...RITMO, anuncio_controle: 0, anuncio_recuo: false }, token);
 
   console.log("\n2. a etiqueta e o botão");
   const texto = async (id) => p.$eval(`[data-anuncio='${id}']`, (e) => e.innerText);
@@ -141,6 +184,12 @@ try {
   const tela = await e.evaluate(() => document.body.innerText);
   checar("a tela mostra o ritmo e os anúncios", tela.includes("O ritmo dos anúncios") && tela.includes(`Cerveja ${MARCA}`)
     && (await e.$eval("#regra-anuncio_depois_de", (i) => i.value)) === "2", tela.slice(0, 300));
+  // 🔑 125: o grupo de controle, o ritmo que aprende e o efeito.
+  checar("as regras têm o grupo de controle e o ritmo que aprende",
+    (await e.$("#regra-anuncio_controle")) !== null && (await e.$("#regra-anuncio_recuo")) !== null);
+  checar("e a tela mostra o efeito dos anúncios, controle × expostas",
+    tela.includes("O efeito dos anúncios") && ((await e.$("#efeito-anuncios")) !== null || (await e.$("#efeito-vazio")) !== null),
+    tela.slice(0, 300));
   const linhaVazio = await e.$eval(`[data-anuncio-linha='${vazioAd.id}']`, (tr) => tr.innerText).catch(() => "");
   checar("o anúncio sem conteúdo aparece COM PROBLEMA, dizendo por quê",
     /com problema/i.test(linhaVazio) && /não aparece no cardápio/.test(linhaVazio), linhaVazio);
@@ -172,6 +221,25 @@ try {
   const { dados: relApi } = await api("GET", `/cardapio-vivo/anuncios/${daCasa.id}/relatorio`, undefined, token);
   checar("e, quando foi visto, em qual cardápio (122)",
     relApi.por_cardapio.length === 0 || (await e.$("#relatorio-por-cardapio")) !== null, relApi.por_cardapio);
+
+  // 🔑 125: a variação do texto, criada pela janela, e os textos em teste no relatório.
+  await e.goto(`${WEB}/cardapio-vivo/anuncios`, { waitUntil: "networkidle2" });
+  await e.waitForSelector(`[data-anuncio-linha='${externo.id}']`, { timeout: 20000 }).catch(() => {});
+  await e.evaluate((id) => document.querySelector(`[data-anuncio-linha='${id}'] button`)?.click(), externo.id);
+  await e.waitForSelector("#variante-nova", { timeout: 10000 }).catch(() => {});
+  await e.click("#variante-nova").catch(() => {});
+  await e.waitForSelector("#variante-titulo", { timeout: 5000 }).catch(() => {});
+  await e.type("#variante-titulo", `Cerveja trincando ${MARCA}`).catch(() => {});
+  await e.click("#variante-gravar").catch(() => {});
+  await e.waitForSelector("#anuncio-variantes [data-variante]", { timeout: 10000 }).catch(() => {});
+  const { dados: vsApi } = await api("GET", `/cardapio-vivo/anuncios/${externo.id}/variantes`, undefined, token);
+  checar("a janela do anúncio cria uma variação do texto", vsApi.some((v) => v.titulo === `Cerveja trincando ${MARCA}`)
+    && (await e.$("#anuncio-variantes [data-variante]")) !== null, vsApi);
+  await e.goto(`${WEB}/cardapio-vivo/anuncios/${externo.id}/relatorio`, { waitUntil: "networkidle2" });
+  await e.waitForSelector("#relatorio-variantes", { timeout: 20000 }).catch(() => {});
+  const textos = await e.$eval("#relatorio-variantes", (t) => t.innerText).catch(() => "");
+  checar("o relatório mostra os textos em teste, com o aplicar", /Original/.test(textos) && /Variação B/.test(textos)
+    && /aplicar/.test(textos), textos.slice(0, 300));
 
   // A varredura dos arquivos sem dono (Administração ▸ Empresa): procurar e MOSTRAR, sem apagar.
   await e.goto(`${WEB}/empresa`, { waitUntil: "networkidle2" });

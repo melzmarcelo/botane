@@ -807,8 +807,7 @@ distância / máximo 2 (1 na mesa)**, ajustável; **grupo de controle de 10%** p
   no alto. Virou um envoltório `my-auto`, que centraliza e não corta o começo do texto longo.
 - `limpar_dados.py`: `cardapio_anuncios` sai com os itens (o botão aponta para um).
 - Cobertura: `smoke_cardapio_anuncios.py` (34) e `web/scripts/verificar-anuncios-feed.mjs` (12).
-- **Falta (fases 2 e 3):** recuo adaptativo (pulou → distância dobra; ignorou 2 → acabou na visita),
-  relevância pelo que a pessoa está vendo, grupo de controle de 10% e variações com vencedora.
+- **Fases 2 e 3: feitas na 1.1.112** (migração 125, 20/10/2026) — ver a seção própria, no fim.
 
 ## Análise de integridade, visualização e processo (17/10/2026)
 
@@ -876,4 +875,41 @@ o dono aprovou os três de integridade (*"pode seguir nessa ordem: 1, 2 e 3"*), 
   `#cartoes-periodo` ("Atenção dos") no painel Abertura no Cardápio Vivo, o aviso `#cartoes-resumido`
   e — novo — a atenção da abertura de cada seção no cabeçalho dela (`[data-abertura-atencao]`):
   a API já devolvia `aberturas` desde a 120 e nenhuma tela mostrava.
-- Ficaram: Spaces + CDN, anúncios fases 2/3, e conferir o resto do manual (etiquetas, CMV…).
+- Ficaram: Spaces + CDN (medido em 20/10/2026: a Cloudflare do App Platform já faz o papel de CDN — ver
+  `infra-e-deploy.md`) e anúncios fases 2/3 (feitas na 1.1.112). O manual foi conferido na 1.1.110.
+
+## Anúncios, fases 2 e 3 (migração 125, 1.1.112, 20/10/2026)
+
+🔑 O que a proposta aprovada em 16/10 deixou para depois: o ritmo que aprende, a relevância, o grupo
+de controle e as variações. Pedido do dono na hora de seguir: *"pode seguir no 6 7 e 8"*.
+- **Ritmo que aprende** (`cardapio_config.anuncio_recuo`, ligado por padrão) mora na TELA
+  (`sequencia.ts → intercalarAnuncios`, opção `reacoes`): PULOU (< `PULOU_MS` = 1,5 s, o mesmo do
+  servidor) dobra o intervalo até o próximo; dois IGNOROU (parou e não tocou) encerram os anúncios da
+  visita; TOCOU não muda nada. 🔑 Só existe reação para anúncio JÁ visto, e ele está antes de onde a
+  pessoa está: refazer a sequência muda só o que vem depois, e o sorteio (mesma semente, mesma ordem
+  de chamadas) não mexe nos que já passaram. ⚠️ O "pulou" é avisado mesmo abaixo dos 300 ms que o
+  evento exige (`Medidor.aoVerAnuncio`): passar voando É o pulou.
+- **Relevância**: `cardapio_anuncios.secoes` (categorias; nulo = todas) — antes de um prato dessas
+  seções o peso no sorteio TRIPLICA (`PESO_DA_RELEVANCIA`). O anúncio de ação PRATO combina sozinho
+  com a seção do prato dele. Não restringe: fora delas ele aparece com o peso normal.
+- **Grupo de controle** (`cardapio_config.anuncio_controle`, 0–50, padrão 10): `do_feed` recebe a
+  sessão e calcula `SQL_CONTROLE` (hashtext da sessão + ':anuncios', mod 100) — abaixo do percentual,
+  `anuncios` vazio e `grupo_anuncio = CONTROLE`; senão EXPOSTO. Sem sessão (recusou a medição, prévia)
+  ou sem anúncio válido = nulo, fora da comparação. ⚠️ **O grupo é GRAVADO em cada evento**
+  (`cardapio_eventos.grupo_anuncio`, vindo do lote): mudar o percentual não reescreve o passado.
+  `GET /cardapio-vivo/anuncios/efeito` compara engajadas (`SQL_SESSAO_ENGAJADA`), adicionaram e pratos
+  vistos, com o `_proporcoes` dos A/B (116). ⚠️ "Exposta" = PODIA ver.
+- **Variações** (`cardapio_anuncio_variantes`, até `MAX_VARIANTES` = 3 além da original): título,
+  texto e rótulo do botão, com tradução própria (`traducao` tipo `anuncio_variante`). A mídia e o
+  destino são do anúncio. Sorteio `SQL_VARIACAO` (sufixo diferente do controle: os dois não andam
+  juntos), posição 0 = a original. O evento leva `id_variante` (sem chave estrangeira: aplicar ou
+  apagar não apaga a medição; id que não é daquele anúncio vira nulo). O relatório ganha `variantes`
+  (cada texto × a original pela taxa de toque; vencedora = a que bate a original com p < 0,05 e maior
+  taxa). Aplicar (`POST …/variantes/aplicar`) copia texto e traduções para o anúncio e APAGA todas as
+  variações — fim do teste; nulo = fica a original. ⚠️ O resumo do dia (124) não separa por variação.
+- ⚠️ **Bateria**: com o controle em 10% por padrão, um teste de navegador que espera anúncio falharia
+  em uma rodada de cada dez. `verificar-anuncios-feed.mjs` grava `anuncio_controle: 0` e
+  `anuncio_recuo: false` no cenário, e testa os dois na seção 1b. O `smoke_cardapio_anuncios.py`
+  restaura as seis colunas de regras no fim.
+- Cobertura: `smoke_cardapio_anuncios.py` 73 (25 novas, 5e e 5f) e `verificar-anuncios-feed.mjs` 26.
+

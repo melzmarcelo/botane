@@ -81,8 +81,8 @@ U = 1
 preservar_reserva(U)
 preservar_cardapio_vivo(U)
 with get_cursor() as cur:
-    cur.execute("SELECT anuncio_depois_de, anuncio_intervalo, anuncio_maximo, anuncio_maximo_mesa "
-                "FROM cardapio_config WHERE id_unidade = %s", (U,))
+    cur.execute("SELECT anuncio_depois_de, anuncio_intervalo, anuncio_maximo, anuncio_maximo_mesa, "
+                "anuncio_controle, anuncio_recuo FROM cardapio_config WHERE id_unidade = %s", (U,))
     _REGRAS_ANTES = dict(cur.fetchone() or {})
 
 
@@ -95,7 +95,9 @@ def _limpar():
         if _REGRAS_ANTES:
             cur.execute("""UPDATE cardapio_config SET anuncio_depois_de = %(anuncio_depois_de)s,
                              anuncio_intervalo = %(anuncio_intervalo)s, anuncio_maximo = %(anuncio_maximo)s,
-                             anuncio_maximo_mesa = %(anuncio_maximo_mesa)s WHERE id_unidade = 1""", _REGRAS_ANTES)
+                             anuncio_maximo_mesa = %(anuncio_maximo_mesa)s,
+                             anuncio_controle = %(anuncio_controle)s, anuncio_recuo = %(anuncio_recuo)s
+                           WHERE id_unidade = 1""", _REGRAS_ANTES)
 
 
 atexit.register(_limpar)
@@ -181,7 +183,10 @@ checar("o da casa leva o catálogo e o nome no link dele", a["acao"]["tipo"] == 
        and a["acao"]["slug"] == f"namorados-{MARCA}" and a["origem"] == "CASA", a)
 e = next(x for x in f["anuncios"] if x["id"] == externo["id"])
 checar("o externo leva o anunciante e o link", e["anunciante"] == "Cervejaria X" and e["acao"]["url"].startswith("https://"), e)
-checar("pelo link, o teto é 2", f["regras_anuncio"] == {"depois_de": 5, "intervalo": 8, "maximo": 2}, f.get("regras_anuncio"))
+checar("pelo link, o teto é 2 (e o ritmo que aprende vem ligado)",
+       f["regras_anuncio"] == {"depois_de": 5, "intervalo": 8, "maximo": 2, "recuo": True}, f.get("regras_anuncio"))
+checar("sem sessão, a visita fica fora da comparação (grupo nulo) e vê a original",
+       f.get("grupo_anuncio") is None and all(x["variante"] is None for x in f["anuncios"]), f.get("grupo_anuncio"))
 _st, fm = chamar("GET", f"/publico/cardapio/mesa/{TOKEN_MESA}")
 idsm = {x["id"] for x in fm.get("anuncios", [])}
 checar("na mesa, o só-da-mesa aparece e o teto é 1", so_mesa["id"] in idsm and fm["regras_anuncio"]["maximo"] == 1, (idsm, fm.get("regras_anuncio")))
@@ -280,6 +285,122 @@ checar("o canal da mesa do resumo aparece junto do link do bruto",
        {x["canal"] for x in r_velho["por_canal"]} == {"MESA", "LINK"}, r_velho.get("por_canal"))
 with get_cursor() as cur:
     cur.execute("DELETE FROM cardapio_conteudo_dia WHERE dia = %s AND id_ref = %s", (velho, externo["id"]))
+
+print("\n5e. fase 2: o grupo de controle, a relevância e o ritmo que aprende (125)")
+st, r = chamar("PUT", "/cardapio-vivo/anuncios/regras",
+               {"anuncio_depois_de": 5, "anuncio_intervalo": 8, "anuncio_maximo": 2, "anuncio_maximo_mesa": 1,
+                "anuncio_controle": 50, "anuncio_recuo": False}, token)
+checar("o grupo de controle e o recuo gravam com as regras", st == 200 and r["anuncio_controle"] == 50
+       and r["anuncio_recuo"] is False, (st, r))
+st, _r = chamar("PUT", "/cardapio-vivo/anuncios/regras",
+                {"anuncio_depois_de": 5, "anuncio_intervalo": 8, "anuncio_maximo": 2, "anuncio_maximo_mesa": 1,
+                 "anuncio_controle": 80}, token)
+checar("grupo de controle acima de 50% é recusado (422)", st == 422, st)
+grupos: dict[str, str] = {}
+for _ in range(40):
+    s = str(uuid.uuid4())
+    _st, fs = chamar("GET", f"{LINK}&sessao={s}")
+    grupos[s] = fs.get("grupo_anuncio")
+    if fs.get("grupo_anuncio") == "CONTROLE":
+        SESSAO_CONTROLE = s
+        checar_controle_vazio = not fs["anuncios"]
+    else:
+        SESSAO_EXPOSTA = s
+contagem = {g: list(grupos.values()).count(g) for g in ("CONTROLE", "EXPOSTO")}
+checar("com 50%, as visitas se dividem entre controle e expostas", contagem["CONTROLE"] >= 8
+       and contagem["EXPOSTO"] >= 8, contagem)
+checar("o controle não recebe anúncio nenhum", checar_controle_vazio)
+_st, de_novo = chamar("GET", f"{LINK}&sessao={SESSAO_CONTROLE}")
+checar("a mesma visita cai sempre no mesmo grupo", de_novo["grupo_anuncio"] == "CONTROLE", de_novo.get("grupo_anuncio"))
+_st, fe = chamar("GET", f"{LINK}&sessao={SESSAO_EXPOSTA}")
+checar("a exposta recebe os anúncios e o recuo desligado", fe["anuncios"] and fe["regras_anuncio"]["recuo"] is False,
+       fe.get("regras_anuncio"))
+
+_st, ext_atual = chamar("GET", "/cardapio-vivo/anuncios", token=token)
+ext = next(x for x in ext_atual["anuncios"] if x["id"] == externo["id"])
+corpo_ext = {k: ext[k] for k in ("nome", "origem", "anunciante", "titulo", "texto", "acao", "acao_catalogo", "acao_item",
+                                 "acao_url", "acao_rotulo", "inicio", "fim", "dias", "hora_de", "hora_ate",
+                                 "horario_especial", "cardapios", "canal", "peso", "ativo")}
+st, r = chamar("PUT", f"/cardapio-vivo/anuncios/{externo['id']}", {**corpo_ext, "secoes": [999999]}, token)
+checar("seção que não é de um cardápio da loja é recusada (422)", st == 422, (st, r))
+st, r = chamar("PUT", f"/cardapio-vivo/anuncios/{externo['id']}", {**corpo_ext, "secoes": [g["id"]]}, token)
+checar("as seções em que combina gravam", st == 200 and r["secoes"] == [g["id"]], (st, r))
+_st, fe = chamar("GET", f"{LINK}&sessao={SESSAO_EXPOSTA}")
+checar("e chegam ao feed, para a tela pesar o sorteio",
+       next(x for x in fe["anuncios"] if x["id"] == externo["id"])["secoes"] == [g["id"]], fe["anuncios"])
+
+print("\n5f. fase 3: as variações do texto e a vencedora (125)")
+st, r = chamar("POST", f"/cardapio-vivo/anuncios/{externo['id']}/variantes", {"acao_rotulo": "Ver"}, token)
+checar("variação sem título nem texto é recusada (422)", st == 422, (st, r))
+st, var_b = chamar("POST", f"/cardapio-vivo/anuncios/{externo['id']}/variantes",
+                   {"titulo": "Cerveja trincando", "texto": "Do barril, agora.", "acao_rotulo": "Quero"}, token)
+checar("a variação grava", st == 201 and var_b["titulo"] == "Cerveja trincando", (st, var_b))
+extras = [chamar("POST", f"/cardapio-vivo/anuncios/{externo['id']}/variantes", {"titulo": f"Extra {n}"}, token)
+          for n in range(3)]
+checar("a 4ª variação além da original é recusada (422)", [s for s, _ in extras] == [201, 201, 422],
+       [s for s, _ in extras])
+for st_x, x in extras[:2]:
+    chamar("DELETE", f"/cardapio-vivo/anuncios/variantes/{x['id']}", token=token)
+_st, vs = chamar("GET", f"/cardapio-vivo/anuncios/{externo['id']}/variantes", token=token)
+checar("apagar a variação tira da lista", [v["id"] for v in vs] == [var_b["id"]], vs)
+vistos = {}
+for s in [k for k, v in grupos.items() if v == "EXPOSTO"]:
+    _st, fs = chamar("GET", f"{LINK}&sessao={s}")
+    a = next(x for x in fs["anuncios"] if x["id"] == externo["id"])
+    vistos[s] = a
+com_b = [s for s, a in vistos.items() if a["variante"] == var_b["id"]]
+sem = [s for s, a in vistos.items() if a["variante"] is None]
+checar("as visitas expostas se dividem entre a original e a variação", com_b and sem, (len(com_b), len(sem)))
+checar("quem cai na variação lê o texto e o botão dela",
+       com_b and vistos[com_b[0]]["titulo"] == "Cerveja trincando" and vistos[com_b[0]]["acao"]["rotulo"] == "Quero",
+       vistos[com_b[0]] if com_b else None)
+
+# A medição: a visita da variação toca; a da original só vê; o controle só abre o cardápio.
+def lote(sessao, grupo, eventos):
+    return chamar("POST", "/publico/cardapio/eventos", {"sessao": sessao, "loja": U, "modo": "VITRINE",
+                                                        "catalogo": ID, "grupo_anuncio": grupo, "eventos": eventos})
+
+
+st, _r = lote(com_b[0], "EXPOSTO", [
+    {"tipo": "viu_anuncio", "anuncio": externo["id"], "variante": var_b["id"], "duracao_ms": 3000},
+    {"tipo": "clicou_anuncio", "anuncio": externo["id"], "variante": var_b["id"]},
+    {"tipo": "adicionou", "item": it["id"]}])
+lote(sem[0], "EXPOSTO", [{"tipo": "viu_anuncio", "anuncio": externo["id"], "duracao_ms": 2000},
+                         {"tipo": "viu_anuncio", "anuncio": externo["id"], "variante": 999999, "duracao_ms": 2000}])
+lote(SESSAO_CONTROLE, "CONTROLE", [{"tipo": "abriu_cardapio"}, {"tipo": "viu_item", "item": it["id"], "duracao_ms": 900}])
+st, r = lote(str(uuid.uuid4()), "OUTRO", [{"tipo": "abriu_cardapio"}])
+checar("grupo inventado no lote é recusado (422)", st == 422, st)
+with get_cursor() as cur:
+    cur.execute("""SELECT id_sessao::text AS s, tipo, id_variante, grupo_anuncio FROM cardapio_eventos
+                    WHERE id_sessao::text = ANY(%s) ORDER BY id""", ([com_b[0], sem[0], SESSAO_CONTROLE],))
+    ev = [dict(x) for x in cur.fetchall()]
+checar("o evento grava a variação e o grupo da visita",
+       any(e["s"] == com_b[0] and e["tipo"] == "clicou_anuncio" and e["id_variante"] == var_b["id"]
+           and e["grupo_anuncio"] == "EXPOSTO" for e in ev), ev)
+checar("variação inventada vira a original (nulo)",
+       all(e["id_variante"] is None for e in ev if e["s"] == sem[0]), [e for e in ev if e["s"] == sem[0]])
+checar("o controle fica gravado como controle",
+       all(e["grupo_anuncio"] == "CONTROLE" for e in ev if e["s"] == SESSAO_CONTROLE), ev)
+_st, rel = chamar("GET", f"/cardapio-vivo/anuncios/{externo['id']}/relatorio?de={hoje}&ate={hoje}", token=token)
+vr = rel.get("variantes") or {}
+linhas = {l["id_variante"]: l for l in vr.get("linhas", [])}
+checar("o relatório separa a original e a variação: quem viu e quem tocou",
+       linhas.get(None, {}).get("sessoes", 0) >= 1 and linhas.get(var_b["id"], {}).get("tocaram") == 1
+       and linhas[var_b["id"]]["rotulo"] == "Variação B", vr)
+checar("com pouca gente, não aponta vencedora", vr.get("conclusao") == "AMOSTRA_PEQUENA" and vr.get("vencedora") is None, vr)
+st, efe = chamar("GET", f"/cardapio-vivo/anuncios/efeito?de={hoje}&ate={hoje}", token=token)
+checar("o efeito compara o controle com as expostas", st == 200 and efe["controle"]["sessoes"] >= 1
+       and efe["expostas"]["adicionaram"] >= 1 and efe["adicao"]["conclusao"] == "AMOSTRA_PEQUENA", (st, efe))
+st, r = chamar("POST", f"/cardapio-vivo/anuncios/{externo['id']}/variantes/aplicar", {"id_variante": var_b["id"]}, token)
+checar("aplicar a vencedora leva o texto ao anúncio", st == 200 and r["titulo"] == "Cerveja trincando"
+       and r["acao_rotulo"] == "Quero", (st, r))
+_st, vs = chamar("GET", f"/cardapio-vivo/anuncios/{externo['id']}/variantes", token=token)
+_st, rel2 = chamar("GET", f"/cardapio-vivo/anuncios/{externo['id']}/relatorio?de={hoje}&ate={hoje}", token=token)
+checar("as variações saem, e o relatório ainda mostra o que a variação fez",
+       vs == [] and any(l["id_variante"] == var_b["id"] and not l["existe"] for l in rel2["variantes"]["linhas"]),
+       (vs, rel2.get("variantes")))
+st, _r = chamar("PUT", "/cardapio-vivo/anuncios/regras",
+                {"anuncio_depois_de": 5, "anuncio_intervalo": 8, "anuncio_maximo": 2, "anuncio_maximo_mesa": 1}, token)
 
 print("\n5c. o anúncio que não aparece diz por quê (17/10/2026)")
 st, vazio_ad = chamar("POST", "/cardapio-vivo/anuncios", {"nome": f"Vazio {MARCA}"}, token)

@@ -19,7 +19,7 @@ import { Medidor, medicaoRecusada, recusarMedicao, sessaoParaTestes } from "./ev
 import CartaoFeed from "./cartao-feed";
 import ItemFeed from "./item-feed";
 import SeletorDeIdioma, { idiomaDaAba, lembrarIdioma } from "./seletor-idioma";
-import { montarSequencia } from "./sequencia";
+import { PULOU_MS, montarSequencia, type ReacaoAoAnuncio } from "./sequencia";
 import { useSelecao, type EscolhaAdicional } from "./selecao";
 import TelaPedido from "./tela-pedido";
 import TelaSelecao from "./tela-selecao";
@@ -124,6 +124,10 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
   useEffect(() => {
     if (!feed || previa) return;
     const m = new Medidor(feed.loja.id, token, feed.modo, idioma, false, feed.vivo?.id_catalogo ?? null);
+    // 🔑 125: o grupo da visita vai em cada lote, e o tempo à vista de cada anúncio volta para o ritmo.
+    m.grupoAnuncio = feed.grupo_anuncio ?? null;
+    m.aoVerAnuncio = (id, ms) => setReacoes((r) => (r.has(id) ? r
+      : new Map(r).set(id, tocados.current.has(id) ? "TOCOU" : ms < PULOU_MS ? "PULOU" : "IGNOROU")));
     medidor.current = m;
     m.iniciar();
     if (!hubDecidido.current) {
@@ -143,11 +147,14 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
   // 🔑 Os pratos com os cartões de conteúdo entre eles (120) e os anúncios pelas regras da casa
   // (121). Com filtro, só pratos. A semente do sorteio é a sessão anônima: mesma visita, mesma ordem.
   const [semente] = useState(() => (typeof window === "undefined" ? "" : sessaoParaTestes() ?? String(Math.random())));
+  // 🔑 125: a reação a cada anúncio já visto (a primeira fica) — o ritmo que aprende.
+  const [reacoes, setReacoes] = useState<ReadonlyMap<number, ReacaoAoAnuncio>>(() => new Map());
+  const tocados = useRef(new Set<number>());
   const seq = useMemo(() => montarSequencia(itens, feed?.categorias ?? [], feed?.cartoes ?? [],
                                             filtro.length === 0, {
                                               aberturas: feed?.aberturas, anuncios: feed?.anuncios,
-                                              regras: feed?.regras_anuncio, semente,
-                                            }), [itens, feed, filtro, semente]);
+                                              regras: feed?.regras_anuncio, semente, reacoes,
+                                            }), [itens, feed, filtro, semente, reacoes]);
 
   // 🔑 Quem decide o "visível" é o observador: ≥ 50% da tela é ver o prato (ou o cartão).
   useEffect(() => {
@@ -166,7 +173,8 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
         } else if (visto) {
           medidor.current?.comecouAVerConteudo(passo.chave,
             passo.tipo === "cartao" ? { tipo: "viu_cartao", cartao: passo.cartao.id, midia: passo.cartao.midia.tipo }
-            : passo.tipo === "anuncio" ? { tipo: "viu_anuncio", anuncio: passo.anuncio.id, midia: passo.anuncio.midia.tipo }
+            : passo.tipo === "anuncio" ? { tipo: "viu_anuncio", anuncio: passo.anuncio.id, midia: passo.anuncio.midia.tipo,
+                                           ...(passo.anuncio.variante ? { variante: passo.anuncio.variante } : {}) }
             : { tipo: "viu_secao", categoria: passo.id_categoria, subcategoria: passo.id_subcategoria ?? undefined,
                 midia: passo.secao.video ? "VIDEO" : "FOTO" });
         } else {
@@ -225,7 +233,9 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
    */
   function acaoDoAnuncio(a: AnuncioFeed): (() => void) | undefined {
     const medir = () => {
-      medidor.current?.registrar("clicou_anuncio", { anuncio: a.id });
+      tocados.current.add(a.id);
+      setReacoes((r) => new Map(r).set(a.id, "TOCOU"));
+      medidor.current?.registrar("clicou_anuncio", { anuncio: a.id, ...(a.variante ? { variante: a.variante } : {}) });
       medidor.current?.enviar();
     };
     const { tipo, slug, catalogo, item, url } = a.acao;

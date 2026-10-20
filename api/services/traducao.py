@@ -72,6 +72,14 @@ ENTIDADES: dict[str, dict] = {
             "descricao": ("texto", {"en": "texto_en", "de": "texto_de"}),
         },
     },
+    # 🔑 As variações do texto do anúncio (125): as mesmas colunas do anúncio.
+    "anuncio_variante": {
+        "tabela": "cardapio_anuncio_variantes",
+        "campos": {
+            "nome": ("titulo", {"en": "titulo_en", "de": "titulo_de"}),
+            "descricao": ("texto", {"en": "texto_en", "de": "texto_de"}),
+        },
+    },
     # 🔑 Os cartões do Cardápio Vivo (120): o título faz o papel do nome, e o texto o da
     # descrição — o prompt e a resposta continuam com as mesmas duas chaves.
     "cartao": {

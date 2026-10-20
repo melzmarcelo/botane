@@ -14,6 +14,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Aviso, Cartao, Carregando } from "@/components/ui";
 import { AnunciosService, porcento, type Relatorio } from "@/lib/anuncios";
+import TextosEmTeste from "./textos-em-teste";
 
 const data = (iso: string) => iso.split("-").reverse().join("/");
 
@@ -87,6 +88,8 @@ export default function RelatorioDoAnuncio() {
         <Numero rotulo="Taxa de toque" valor={porcento(t.taxa_toque)} nota="pessoas que tocaram ÷ que viram" />
         <Numero rotulo="Passaram direto" valor={porcento(t.taxa_pulou)} nota={`menos de ${rel.pulou_ms / 1000} s na tela`} />
       </section>
+
+      {rel.variantes && <TextosEmTeste idAnuncio={a.id} dados={rel.variantes} aoAplicar={() => void carregar(de, ate)} />}
 
       <Cartao titulo="Dia a dia">
         {rel.por_dia.length === 0 ? <p className="text-[13.5px] text-suave">Nenhuma aparição no período.</p> : (

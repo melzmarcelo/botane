@@ -25,6 +25,8 @@ export type TipoEvento =
 
 type Evento = {
   tipo: TipoEvento; item?: number; categoria?: number; subcategoria?: number; cartao?: number; anuncio?: number;
+  /** 125: a variação do texto do anúncio (ausente = a original). */
+  variante?: number;
   midia?: string; duracao_ms?: number; quando: number;
 };
 
@@ -32,7 +34,7 @@ type Evento = {
 export type ConteudoVisto =
   | { tipo: "viu_cartao"; cartao: number; midia?: string }
   | { tipo: "viu_secao"; categoria: number; subcategoria?: number; midia?: string }
-  | { tipo: "viu_anuncio"; anuncio: number; midia?: string };
+  | { tipo: "viu_anuncio"; anuncio: number; variante?: number; midia?: string };
 
 const CHAVE_SESSAO = "cardapio.sessao";
 const CHAVE_RECUSA = "cardapio.sem_medicao";
@@ -99,6 +101,10 @@ export class Medidor {
   private vendoConteudo = new Map<string, { inicio: number; evento: ConteudoVisto }>();
   private sessao: string;
   private desligado: boolean;
+  /** 125: o grupo desta visita nos anúncios, como o feed o deu — vai em cada lote. */
+  grupoAnuncio: string | null = null;
+  /** 125: avisa a tela quanto tempo o anúncio ficou à vista (o ritmo que aprende). */
+  aoVerAnuncio: ((anuncio: number, duracaoMs: number) => void) | null = null;
 
   constructor(
     private loja: number,
@@ -172,6 +178,8 @@ export class Medidor {
     this.vendoConteudo.delete(chave);
     const duracao = Date.now() - v.inicio;
     if (duracao >= 300) this.registrar(v.evento.tipo, { ...v.evento, duracao_ms: duracao });
+    // ⚠️ Mesmo abaixo de 300 ms: passar voando é exatamente o "pulou" que o ritmo precisa saber.
+    if (v.evento.tipo === "viu_anuncio") this.aoVerAnuncio?.(v.evento.anuncio, duracao);
   }
 
   private fecharVisualizacoes() {
@@ -198,7 +206,8 @@ export class Medidor {
     const eventos = this.fila.splice(0, 60).map(({ quando, ...e }) => ({ ...e, idade_ms: agora - quando }));
     const corpo = JSON.stringify({
       sessao: this.sessao, loja: this.loja, mesa: this.mesa, modo: this.modo,
-      dispositivo: dispositivo(), idioma: this.idioma, catalogo: this.catalogo, eventos,
+      dispositivo: dispositivo(), idioma: this.idioma, catalogo: this.catalogo,
+      grupo_anuncio: this.grupoAnuncio, eventos,
     });
     const blob = new Blob([corpo], { type: "text/plain" });
     const foi = typeof navigator.sendBeacon === "function" && navigator.sendBeacon(enderecoEventos(), blob);

@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 import arquivos
 import auditoria
 from database import get_cursor
-from models.cardapio_vivo import AnuncioCreate, RegrasAnuncio
+from models.cardapio_vivo import AnuncioCreate, AplicarVariante, RegrasAnuncio, VarianteAnuncio
 from routers.reservas import _unidade
 from seguranca import Contexto, requer_permissao
 from services import cardapio_anuncios as servico
@@ -49,6 +49,36 @@ def gravar_regras(body: RegrasAnuncio, ctx: Contexto = Depends(_EDITAR)) -> dict
         auditoria.registrar(cur, ctx.id_usuario, "cardapio_config", id_unidade, "regras_anuncio",
                             antes=antes, depois=depois, id_unidade=id_unidade)
         return depois | {"message": "Regras dos anúncios gravadas."}
+
+
+@router.get("/efeito")
+def efeito(de: date | None = Query(None), ate: date | None = Query(None),
+           ctx: Contexto = Depends(_VER)) -> dict:
+    """125: as visitas do grupo de controle (sem anúncio) × as expostas, no período."""
+    padrao_de, padrao_ate = servico.periodo_padrao()
+    with get_cursor() as cur:
+        return servico.efeito(cur, _unidade(cur, ctx), de or padrao_de, ate or padrao_ate)
+
+
+@router.put("/variantes/{id_variante}")
+def atualizar_variante(id_variante: int, body: VarianteAnuncio, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        v = servico.atualizar_variante(cur, id_unidade, id_variante, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_anuncio", v["id_anuncio"], "atualizar_variante",
+                            depois={"id_variante": id_variante, "titulo": v["titulo"]}, id_unidade=id_unidade)
+        return v
+
+
+@router.delete("/variantes/{id_variante}")
+def remover_variante(id_variante: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        v = servico._variante(cur, id_unidade, id_variante)
+        fora = servico.remover_variante(cur, id_unidade, id_variante)
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_anuncio", v["id_anuncio"], "remover_variante",
+                            antes={"id_variante": id_variante, "titulo": v["titulo"]}, id_unidade=id_unidade)
+        return fora
 
 
 @router.put("/{id_anuncio}")
@@ -102,6 +132,34 @@ def remover_midia(id_anuncio: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
     with get_cursor() as cur:
         id_unidade = _unidade(cur, ctx)
         return servico.remover_midia(cur, id_unidade, id_anuncio)
+
+
+@router.get("/{id_anuncio}/variantes")
+def listar_variantes(id_anuncio: int, ctx: Contexto = Depends(_VER)) -> list[dict]:
+    with get_cursor() as cur:
+        return servico.variantes(cur, _unidade(cur, ctx), id_anuncio)
+
+
+@router.post("/{id_anuncio}/variantes", status_code=201)
+def criar_variante(id_anuncio: int, body: VarianteAnuncio, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        v = servico.criar_variante(cur, id_unidade, id_anuncio, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_anuncio", id_anuncio, "criar_variante",
+                            depois={"id_variante": v["id"], "titulo": v["titulo"]}, id_unidade=id_unidade)
+        return v
+
+
+@router.post("/{id_anuncio}/variantes/aplicar")
+def aplicar_variante(id_anuncio: int, body: AplicarVariante, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Fica o texto escolhido (a vencedora, normalmente) e as variações saem. Auditado."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = servico.aplicar_variante(cur, id_unidade, id_anuncio, body.id_variante)
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_anuncio", id_anuncio, "aplicar_variante",
+                            depois={"id_variante": body.id_variante, "titulo": r["titulo"]},
+                            id_unidade=id_unidade)
+        return r
 
 
 @router.get("/{id_anuncio}/relatorio")

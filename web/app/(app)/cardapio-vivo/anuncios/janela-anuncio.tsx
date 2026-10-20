@@ -13,6 +13,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Campo, Confirmacao, Modal } from "@/components/ui";
 import { AnunciosService, type AcaoAnuncio, type Anuncio, type CanalAnuncio, type GravarAnuncio } from "@/lib/anuncios";
 import MidiaDoAnuncio from "./midia-do-anuncio";
+import VariantesDoAnuncio from "./variantes-do-anuncio";
 
 export type Opcoes = {
   /** Os Cardápios Vivos da loja (onde o anúncio pode aparecer). */
@@ -21,13 +22,15 @@ export type Opcoes = {
   catalogos: { id: number; nome: string }[];
   /** Os pratos de cada Cardápio Vivo (o botão pode levar a um). */
   pratos: { id: number; nome: string; cardapio: string }[];
+  /** 125: as seções de cada Cardápio Vivo (onde o anúncio combina). */
+  secoes: { id: number; nome: string; cardapio: string }[];
 };
 
 const DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 const vazio = (): GravarAnuncio => ({
   nome: "", origem: "CASA", anunciante: null, titulo: null, texto: null, acao: "NENHUMA", acao_catalogo: null,
   acao_item: null, acao_url: null, acao_rotulo: null, inicio: null, fim: null, dias: null, hora_de: null,
-  hora_ate: null, horario_especial: false, cardapios: null, canal: "AMBOS", peso: 1, ativo: true,
+  hora_ate: null, horario_especial: false, cardapios: null, canal: "AMBOS", peso: 1, ativo: true, secoes: null,
 });
 
 export default function JanelaAnuncio({ atual: inicial, opcoes, podeEditar, aoFechar, aoMudar }: {
@@ -78,6 +81,11 @@ export default function JanelaAnuncio({ atual: inicial, opcoes, podeEditar, aoFe
   const dias = f.dias ?? [];
   const alternarDia = (d: number) => mudar({ dias: dias.includes(d) ? dias.filter((x) => x !== d) : [...dias, d].sort() });
   const cardapios = f.cardapios ?? [];
+  const secoes = f.secoes ?? [];
+  const alternarSecao = (id: number) => {
+    const nova = secoes.includes(id) ? secoes.filter((x) => x !== id) : [...secoes, id];
+    mudar({ secoes: nova.length ? nova : null });
+  };
   return (
     <Modal titulo={atual ? `Anúncio — ${atual.nome}` : "Novo anúncio"} largura="720px" aoFechar={aoFechar}
            descricao="Aparece no Cardápio Vivo entre os pratos, no ritmo que a casa definiu. Só no feed."
@@ -214,6 +222,23 @@ export default function JanelaAnuncio({ atual: inicial, opcoes, podeEditar, aoFe
             <span className="text-[12.5px] text-suave">nenhum = todos</span>
           </div>
         )}
+        {opcoes.secoes.length > 0 && (
+          <details className="text-[14px]" open={secoes.length > 0}>
+            <summary className="cursor-pointer text-suave">Combina com estas seções{secoes.length ? ` (${secoes.length})` : ""}</summary>
+            <p className="mt-1 text-[12.5px] text-suave">
+              Antes de um prato destas seções, o anúncio pesa o triplo no sorteio — a cerveja perto dos petiscos. Nenhuma =
+              vale igual em todo o cardápio. O que mostra um prato já combina com a seção dele.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2" id="anuncio-secoes">
+              {opcoes.secoes.map((s) => (
+                <label key={s.id} className="flex items-center gap-2">
+                  <input type="checkbox" checked={secoes.includes(s.id)} onChange={() => alternarSecao(s.id)} />
+                  {s.nome}{opcoes.vivos.length > 1 ? <span className="text-suave"> · {s.cardapio}</span> : null}
+                </label>
+              ))}
+            </div>
+          </details>
+        )}
         <label className="flex items-center gap-2 text-[14px]">
           <input type="checkbox" checked={f.ativo} onChange={(e) => mudar({ ativo: e.target.checked })} />
           Ligado
@@ -225,6 +250,11 @@ export default function JanelaAnuncio({ atual: inicial, opcoes, podeEditar, aoFe
           ? <MidiaDoAnuncio anuncio={atual} podeEditar={podeEditar} aoMudar={(a) => { setAtual(a); void aoMudar(); }} />
           : <p className="text-[13px] text-suave">A foto ou o vídeo entram depois de criar o anúncio.</p>}
       </div>
+      {atual && (
+        <div className="mt-4 border-t border-linha pt-4">
+          <VariantesDoAnuncio anuncio={atual} podeEditar={podeEditar} aoMudar={() => void aoMudar()} />
+        </div>
+      )}
 
       {apagando && atual && (
         <Confirmacao titulo={`Excluir “${atual.nome}”?`} rotuloConfirmar="Excluir" perigo

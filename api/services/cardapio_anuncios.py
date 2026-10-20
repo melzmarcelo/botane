@@ -6,6 +6,10 @@ e "nada pesado": algo orgânico. A casa cadastra; o parceiro recebe o RELATÓRIO
 🔑 **Quem decide ONDE e QUAL é a tela**, pelas regras da casa (5º prato, 8 de distância,
 máximo 2 — 1 na mesa): o servidor manda só os anúncios que valem AGORA neste cardápio.
 ⚠️ O que o cliente fez fica na sessão anônima de sempre; nada liga anúncio a pessoa.
+🔑 **Fases 2 e 3 (125, 20/10/2026)**: o ritmo que aprende (na tela, `sequencia.ts`), a relevância
+pelas `secoes`, o **grupo de controle** (a fatia das visitas sem anúncio, gravada em cada evento) e
+as **variações** do texto, com a vencedora escolhida pela taxa de toque — as duas contas de
+sorteio são do banco (`hashtext` da sessão), como os testes A/B (116).
 """
 
 from datetime import date, datetime, timedelta
@@ -21,14 +25,22 @@ ACOES = ("NENHUMA", "CATALOGO", "PRATO", "LINK")
 CANAIS = ("AMBOS", "MESA", "LINK")
 # Abaixo disto, o anúncio passou na rolagem: a pessoa NÃO parou para ver ("pulou").
 PULOU_MS = 1500
-_REGRAS = ("anuncio_depois_de", "anuncio_intervalo", "anuncio_maximo", "anuncio_maximo_mesa")
-_REGRAS_PADRAO = {"anuncio_depois_de": 5, "anuncio_intervalo": 8, "anuncio_maximo": 2, "anuncio_maximo_mesa": 1}
+_REGRAS = ("anuncio_depois_de", "anuncio_intervalo", "anuncio_maximo", "anuncio_maximo_mesa",
+           "anuncio_controle", "anuncio_recuo")
+_REGRAS_PADRAO = {"anuncio_depois_de": 5, "anuncio_intervalo": 8, "anuncio_maximo": 2, "anuncio_maximo_mesa": 1,
+                  "anuncio_controle": 10, "anuncio_recuo": True}
+# 🔑 125: as duas contas de sorteio, no banco. ⚠️ `mod(…)` e não `%`: o `%` solto conflita com os
+# marcadores do psycopg2. Sufixos diferentes: o grupo e a variação não andam juntos.
+SQL_CONTROLE = "mod(abs(hashtext({sessao}::text || ':anuncios')), 100)"
+SQL_VARIACAO = "mod(abs(hashtext({sessao}::text || ':variacao:' || {anuncio}::text)), {total})"
+MAX_VARIANTES = 3
 _URL = re.compile(r"^https?://\S+$", re.IGNORECASE)
 
 _COLUNAS = """a.id, a.id_unidade, a.nome, a.origem, a.anunciante, a.titulo, a.texto, a.foto_url,
               a.video_url, a.video_capa_url, a.video_segundos, a.acao, a.acao_catalogo,
               a.acao_item, a.acao_url, a.acao_rotulo, a.inicio, a.fim, a.dias, a.hora_de,
-              a.hora_ate, a.horario_especial, a.cardapios, a.canal, a.peso, a.ativo, a.criado_em"""
+              a.hora_ate, a.horario_especial, a.cardapios, a.canal, a.peso, a.ativo, a.criado_em,
+              a.secoes"""
 
 
 def _anuncio(cur, id_unidade: int, id_anuncio: int) -> dict:
@@ -70,6 +82,12 @@ def _conferir(cur, id_unidade: int, d: dict) -> None:
         cur.execute(f"SELECT 1 FROM catalogos c WHERE c.id = %s AND {visivel}", (idc, id_unidade))  # noqa: S608
         if not cur.fetchone():
             raise HTTPException(status_code=422, detail="Um dos cardápios escolhidos não é desta loja.")
+    # 🔑 125: as seções em que combina — de um catálogo desta loja.
+    if d.get("secoes"):
+        cur.execute(f"""SELECT count(*) AS n FROM catalogo_categorias g JOIN catalogos c ON c.id = g.id_catalogo
+                         WHERE g.id = ANY(%s) AND {visivel}""", (list(set(d["secoes"])), id_unidade))  # noqa: S608
+        if cur.fetchone()["n"] != len(set(d["secoes"])):
+            raise HTTPException(status_code=422, detail="Uma das seções escolhidas não é de um cardápio desta loja.")
 
 
 def _valores(d: dict) -> tuple:
@@ -82,18 +100,18 @@ def _valores(d: dict) -> tuple:
             _texto(d.get("acao_rotulo")) if acao != "NENHUMA" else None,
             d.get("inicio"), d.get("fim"), d.get("dias") or None, d.get("hora_de"), d.get("hora_ate"),
             bool(d.get("horario_especial")), d.get("cardapios") or None, d.get("canal", "AMBOS"),
-            d.get("peso", 1), d.get("ativo", True))
+            d.get("peso", 1), d.get("ativo", True), sorted(set(d["secoes"])) if d.get("secoes") else None)
 
 
 _CAMPOS = """nome, origem, anunciante, titulo, texto, acao, acao_catalogo, acao_item, acao_url,
              acao_rotulo, inicio, fim, dias, hora_de, hora_ate, horario_especial, cardapios, canal,
-             peso, ativo"""
+             peso, ativo, secoes"""
 
 
 def criar(cur, id_unidade: int, dados: dict, id_usuario: int | None) -> dict:
     _conferir(cur, id_unidade, dados)
     cur.execute(f"""INSERT INTO cardapio_anuncios (id_unidade, {_CAMPOS}, criado_por)
-                    VALUES (%s, {', '.join(['%s'] * 20)}, %s) RETURNING id""",  # noqa: S608
+                    VALUES (%s, {', '.join(['%s'] * 21)}, %s) RETURNING id""",  # noqa: S608
                 (id_unidade, *_valores(dados), id_usuario))
     novo = cur.fetchone()["id"]
     traducao.tentar(cur, "anuncio", novo)
@@ -168,7 +186,8 @@ def salvar_regras(cur, id_unidade: int, dados: dict) -> dict:
     nunca gravou a aparência nasce com o padrão dela)."""
     valores = [dados[c] for c in _REGRAS]
     cur.execute(
-        f"""INSERT INTO cardapio_config (id_unidade, {', '.join(_REGRAS)}) VALUES (%s, %s, %s, %s, %s)
+        f"""INSERT INTO cardapio_config (id_unidade, {', '.join(_REGRAS)})
+            VALUES (%s, {', '.join(['%s'] * len(_REGRAS))})
             ON CONFLICT (id_unidade) DO UPDATE SET
               {', '.join(f'{c} = EXCLUDED.{c}' for c in _REGRAS)}""",  # noqa: S608
         (id_unidade, *valores))
@@ -189,7 +208,9 @@ def _metricas_sql(filtro: str) -> str:
 def listar(cur, id_unidade: int) -> dict:
     """Os anúncios da loja com a atenção dos últimos 30 dias, e as regras de exibição."""
     cur.execute(
-        f"""SELECT {_COLUNAS}, {_metricas_sql("AND e.quando > now() - interval '30 days'")}
+        f"""SELECT {_COLUNAS}, {_metricas_sql("AND e.quando > now() - interval '30 days'")},
+                   (SELECT count(*) FROM cardapio_anuncio_variantes v
+                     WHERE v.id_anuncio = a.id AND v.ativo) AS variantes
               FROM cardapio_anuncios a
               LEFT JOIN cardapio_eventos e ON e.id_anuncio = a.id AND e.id_unidade = a.id_unidade
              WHERE a.id_unidade = %s
@@ -330,6 +351,7 @@ def relatorio(cur, id_unidade: int, id_anuncio: int, de: date, ate: date) -> dic
                           "taxa_pulou": round(total["pulados"] / total["aparicoes"], 4) if total["aparicoes"] else None},
         "por_dia": por_dia, "por_canal": por_canal, "por_cardapio": por_cardapio,
         "por_hora": por_hora, "pulou_ms": PULOU_MS, "resumido": resumido,
+        "variantes": _por_variante(cur, id_unidade, id_anuncio, de, ate),
     }
 
 
@@ -390,12 +412,15 @@ def _somar_resumo(cur, id_unidade: int, id_anuncio: int, de: date, ate: date, to
 # ------------------------------------------------------------------ o que o feed recebe
 
 def do_feed(cur, id_unidade: int, id_catalogo: int, mesa: bool, idioma: str | None,
-            agora: datetime | None = None) -> dict:
+            agora: datetime | None = None, sessao: str | None = None) -> dict:
     """Os anúncios que valem AGORA neste Cardápio Vivo, e as regras de exibição da casa.
 
     🔑 Na mesa o teto é o da mesa (1, por padrão): quem está sentado quer achar o prato.
     ⚠️ O anúncio que leva a ESTE mesmo catálogo não aparece aqui (seria um convite para onde a
     pessoa já está).
+    🔑 125: com a sessão anônima, a visita cai no **grupo de controle** (sem anúncio nenhum) ou no
+    exposto, e cada anúncio com variações mostra a DELA. Sem sessão (quem recusou a medição, a
+    prévia): exposto à original, e fora da comparação (`grupo` nulo).
     """
     from services.cardapio_vivo import _secao_visivel  # ⚠️ aqui dentro: aquele importa este
     agora = agora or agora_da_casa().replace(tzinfo=None)
@@ -415,29 +440,250 @@ def do_feed(cur, id_unidade: int, id_catalogo: int, mesa: bool, idioma: str | No
                    OR a.foto_url IS NOT NULL OR a.video_url IS NOT NULL)
             ORDER BY a.id""",
         {"u": id_unidade, "hoje": agora.date(), "c": id_catalogo, "canal": "MESA" if mesa else "LINK"})
+    validos = [r for r in cur.fetchall()
+               if _secao_visivel({"dias": r["dias"], "hora_de": r["hora_de"], "hora_ate": r["hora_ate"],
+                                  "horario_especial": r["horario_especial"]}, agora, especial)]
+    rg = regras(cur, id_unidade)
+    grupo = None
+    if sessao and validos:
+        cur.execute(f"SELECT {SQL_CONTROLE.format(sessao='%s')} AS fatia", (sessao,))  # noqa: S608
+        grupo = "CONTROLE" if cur.fetchone()["fatia"] < int(rg["anuncio_controle"] or 0) else "EXPOSTO"
+        if grupo == "CONTROLE":
+            validos = []
+    variantes = _variantes_da_sessao(cur, [r["id"] for r in validos], sessao)
     anuncios = []
-    for r in cur.fetchall():
-        if not _secao_visivel({"dias": r["dias"], "hora_de": r["hora_de"], "hora_ate": r["hora_ate"],
-                               "horario_especial": r["horario_especial"]}, agora, especial):
-            continue
+    for r in validos:
+        v = variantes.get(r["id"])
         if r["video_url"]:
             midia = {"tipo": "VIDEO", "video": r["video_url"], "capa": r["video_capa_url"]}
         elif r["foto_url"]:
             midia = {"tipo": "FOTO", "foto": r["foto_url"]}
         else:
             midia = {"tipo": "NENHUMA"}
-        acao = {"tipo": r["acao"], "rotulo": r["acao_rotulo"], "catalogo": r["acao_catalogo"],
-                "slug": r["acao_slug"], "item": r["acao_item"], "url": r["acao_url"]}
+        texto = v or r
+        acao = {"tipo": r["acao"], "rotulo": (v["acao_rotulo"] if v and v["acao_rotulo"] else r["acao_rotulo"]),
+                "catalogo": r["acao_catalogo"], "slug": r["acao_slug"], "item": r["acao_item"], "url": r["acao_url"]}
         anuncios.append({
             "id": r["id"], "origem": r["origem"], "anunciante": r["anunciante"], "peso": r["peso"],
-            "titulo": traducao.escolher(r["titulo"], r["titulo_en"], r["titulo_de"], idioma),
-            "texto": traducao.escolher(r["texto"], r["texto_en"], r["texto_de"], idioma),
+            "titulo": traducao.escolher(texto["titulo"], texto["titulo_en"], texto["titulo_de"], idioma),
+            "texto": traducao.escolher(texto["texto"], texto["texto_en"], texto["texto_de"], idioma),
             "midia": midia, "acao": acao,
+            # 125: a variação desta visita (nulo = a original) e as seções em que combina.
+            "variante": v["id"] if v else None, "secoes": r["secoes"],
         })
-    rg = regras(cur, id_unidade)
-    return {"anuncios": anuncios,
+    return {"anuncios": anuncios, "grupo_anuncio": grupo,
             "regras_anuncio": {"depois_de": rg["anuncio_depois_de"], "intervalo": rg["anuncio_intervalo"],
-                               "maximo": rg["anuncio_maximo_mesa"] if mesa else rg["anuncio_maximo"]}}
+                               "maximo": rg["anuncio_maximo_mesa"] if mesa else rg["anuncio_maximo"],
+                               "recuo": bool(rg["anuncio_recuo"])}}
+
+
+def _variantes_da_sessao(cur, ids: list[int], sessao: str | None) -> dict[int, dict]:
+    """A variação que ESTA visita vê de cada anúncio — ausente = a original.
+
+    🔑 A original é uma das opções (posição 0): com uma variação, metade das visitas vê cada
+    texto; com duas, um terço. A conta é do banco, a mesma da análise.
+    """
+    if not ids or not sessao:
+        return {}
+    cur.execute("""SELECT * FROM cardapio_anuncio_variantes
+                    WHERE id_anuncio = ANY(%s) AND ativo ORDER BY id_anuncio, id""", (ids,))
+    por_anuncio: dict[int, list[dict]] = {}
+    for v in cur.fetchall():
+        por_anuncio.setdefault(v["id_anuncio"], []).append(dict(v))
+    saida = {}
+    for id_anuncio, lista in por_anuncio.items():
+        cur.execute(f"SELECT {SQL_VARIACAO.format(sessao='%s', anuncio='%s', total='%s')} AS pos",  # noqa: S608
+                    (sessao, id_anuncio, len(lista) + 1))
+        pos = cur.fetchone()["pos"]
+        if pos:
+            saida[id_anuncio] = lista[pos - 1]
+    return saida
+
+
+# ------------------------------------------------------------------ fase 3: as variações
+
+_COLUNAS_VARIANTE = "id, id_anuncio, titulo, texto, acao_rotulo, ativo, criado_em"
+
+
+def _variante(cur, id_unidade: int, id_variante: int) -> dict:
+    cur.execute(f"""SELECT {', '.join('v.' + c.strip() for c in _COLUNAS_VARIANTE.split(','))}
+                      FROM cardapio_anuncio_variantes v JOIN cardapio_anuncios a ON a.id = v.id_anuncio
+                     WHERE v.id = %s AND a.id_unidade = %s""", (id_variante, id_unidade))  # noqa: S608
+    achado = cur.fetchone()
+    if not achado:
+        raise HTTPException(status_code=404, detail="Variação não encontrada.")
+    return dict(achado)
+
+
+def variantes(cur, id_unidade: int, id_anuncio: int) -> list[dict]:
+    _anuncio(cur, id_unidade, id_anuncio)
+    cur.execute(f"SELECT {_COLUNAS_VARIANTE} FROM cardapio_anuncio_variantes WHERE id_anuncio = %s ORDER BY id",  # noqa: S608
+                (id_anuncio,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def _conferir_variante(d: dict) -> None:
+    if not (_texto(d.get("titulo")) or _texto(d.get("texto"))):
+        raise HTTPException(status_code=422, detail="A variação precisa de um título ou de um texto.")
+
+
+def criar_variante(cur, id_unidade: int, id_anuncio: int, dados: dict) -> dict:
+    """⚠️ No máximo `MAX_VARIANTES` além da original: cada uma divide as visitas, e com pouca
+    gente em cada braço o teste nunca conclui."""
+    _anuncio(cur, id_unidade, id_anuncio)
+    _conferir_variante(dados)
+    cur.execute("SELECT count(*) AS n FROM cardapio_anuncio_variantes WHERE id_anuncio = %s", (id_anuncio,))
+    if cur.fetchone()["n"] >= MAX_VARIANTES:
+        raise HTTPException(status_code=422, detail=f"No máximo {MAX_VARIANTES} variações além da original — "
+                                                    "cada uma divide as visitas, e o teste demora a concluir.")
+    cur.execute("""INSERT INTO cardapio_anuncio_variantes (id_anuncio, titulo, texto, acao_rotulo, ativo)
+                   VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                (id_anuncio, _texto(dados.get("titulo")), _texto(dados.get("texto")),
+                 _texto(dados.get("acao_rotulo")), dados.get("ativo", True)))
+    nova = cur.fetchone()["id"]
+    traducao.tentar(cur, "anuncio_variante", nova)
+    return _variante(cur, id_unidade, nova)
+
+
+def atualizar_variante(cur, id_unidade: int, id_variante: int, dados: dict) -> dict:
+    _variante(cur, id_unidade, id_variante)
+    _conferir_variante(dados)
+    cur.execute("""UPDATE cardapio_anuncio_variantes SET titulo = %s, texto = %s, acao_rotulo = %s, ativo = %s
+                    WHERE id = %s""",
+                (_texto(dados.get("titulo")), _texto(dados.get("texto")), _texto(dados.get("acao_rotulo")),
+                 dados.get("ativo", True), id_variante))
+    traducao.tentar(cur, "anuncio_variante", id_variante)
+    return _variante(cur, id_unidade, id_variante)
+
+
+def remover_variante(cur, id_unidade: int, id_variante: int) -> dict:
+    """⚠️ Os eventos ficam com o id (sem chave estrangeira): o relatório mostra "(apagada)"."""
+    _variante(cur, id_unidade, id_variante)
+    cur.execute("DELETE FROM cardapio_anuncio_variantes WHERE id = %s", (id_variante,))
+    return {"message": "Variação removida."}
+
+
+def aplicar_variante(cur, id_unidade: int, id_anuncio: int, id_variante: int | None) -> dict:
+    """Leva o texto escolhido (normalmente o vencedor) ao anúncio e encerra o teste.
+
+    🔑 Aplicar = o texto (e as traduções) da variação passa a ser o do anúncio, e TODAS as
+    variações saem. `id_variante` nulo = fica a original. O relatório antigo continua: os eventos
+    guardam o id da variação que cada visita viu.
+    """
+    _anuncio(cur, id_unidade, id_anuncio)
+    if id_variante is not None:
+        cur.execute("""SELECT * FROM cardapio_anuncio_variantes WHERE id = %s AND id_anuncio = %s""",
+                    (id_variante, id_anuncio))
+        v = cur.fetchone()
+        if not v:
+            raise HTTPException(status_code=404, detail="Variação não encontrada neste anúncio.")
+        cur.execute("""UPDATE cardapio_anuncios
+                          SET titulo = %s, texto = %s, acao_rotulo = coalesce(%s, acao_rotulo),
+                              titulo_en = %s, titulo_de = %s, texto_en = %s, texto_de = %s,
+                              traducao_editada = %s, traducao_origem = %s, traducao_em = %s
+                        WHERE id = %s""",
+                    (v["titulo"], v["texto"], v["acao_rotulo"], v["titulo_en"], v["titulo_de"],
+                     v["texto_en"], v["texto_de"], v["traducao_editada"], v["traducao_origem"],
+                     v["traducao_em"], id_anuncio))
+    cur.execute("DELETE FROM cardapio_anuncio_variantes WHERE id_anuncio = %s", (id_anuncio,))
+    return _anuncio(cur, id_unidade, id_anuncio) | {
+        "message": "Texto vencedor aplicado; as variações saíram." if id_variante else
+                   "Fica a original; as variações saíram."}
+
+
+def _por_variante(cur, id_unidade: int, id_anuncio: int, de: date, ate: date) -> dict | None:
+    """Os números de cada texto no período, e qual vence pela TAXA DE TOQUE.
+
+    🔑 Exposta = a visita que VIU o anúncio naquela variação; tocou = tocou no botão. Cada
+    variação é comparada com a original (o mesmo teste de duas proporções dos A/B, 116).
+    ⚠️ Só o bruto: o resumo do dia (124) não separa por variação.
+    """
+    from services.cardapio_testes import MIN_POR_BRACO, _proporcoes  # ⚠️ aqui dentro: evita o ciclo
+    cur.execute(
+        """SELECT coalesce(e.id_variante, 0) AS variante,
+                  count(DISTINCT e.id_sessao) FILTER (WHERE e.tipo = 'viu_anuncio') AS sessoes,
+                  count(DISTINCT e.id_sessao) FILTER (WHERE e.tipo = 'clicou_anuncio') AS tocaram
+             FROM cardapio_eventos e
+            WHERE e.id_anuncio = %s AND e.id_unidade = %s
+              AND e.quando >= %s::date AND e.quando < (%s::date + 1)
+            GROUP BY 1""", (id_anuncio, id_unidade, de, ate))
+    medidas = {r["variante"]: dict(r) for r in cur.fetchall()}
+    cur.execute("SELECT id, titulo, texto, ativo FROM cardapio_anuncio_variantes WHERE id_anuncio = %s ORDER BY id",
+                (id_anuncio,))
+    atuais = {r["id"]: dict(r) for r in cur.fetchall()}
+    if not atuais and not any(k for k in medidas):
+        return None
+    a = _anuncio(cur, id_unidade, id_anuncio)
+    base = medidas.get(0, {"sessoes": 0, "tocaram": 0})
+    linhas = [{"id_variante": None, "rotulo": "Original", "titulo": a["titulo"], "texto": a["texto"],
+               "sessoes": base["sessoes"], "tocaram": base["tocaram"],
+               "taxa": round(base["tocaram"] / base["sessoes"], 4) if base["sessoes"] else None,
+               "comparacao": None, "existe": True}]
+    for n, idv in enumerate(sorted(set(atuais) | {k for k in medidas if k}), start=1):
+        m = medidas.get(idv, {"sessoes": 0, "tocaram": 0})
+        v = atuais.get(idv)
+        comp = _proporcoes(base["sessoes"], base["tocaram"], m["sessoes"], m["tocaram"])
+        linhas.append({"id_variante": idv, "rotulo": f"Variação {chr(65 + n)}",
+                       "titulo": v["titulo"] if v else None, "texto": v["texto"] if v else None,
+                       "sessoes": m["sessoes"], "tocaram": m["tocaram"],
+                       "taxa": round(m["tocaram"] / m["sessoes"], 4) if m["sessoes"] else None,
+                       "comparacao": {"p_valor": comp["p_valor"], "conclusao": comp["conclusao"]},
+                       "existe": v is not None})
+    # 🔑 A vencedora: a variação que bate a original com significância e tem a maior taxa. Sem
+    # ninguém batendo e com amostra suficiente em todas, a original vence quando alguém PERDE dela.
+    vencem = [l for l in linhas[1:] if l["existe"] and l["comparacao"]["conclusao"] == "B_VENCE"]
+    perdem = [l for l in linhas[1:] if l["comparacao"]["conclusao"] == "A_VENCE"]
+    if vencem:
+        vencedora = max(vencem, key=lambda l: l["taxa"] or 0)["id_variante"]
+        conclusao = "VARIACAO_VENCE"
+    elif perdem and all(l["comparacao"]["conclusao"] != "AMOSTRA_PEQUENA" for l in linhas[1:]):
+        vencedora, conclusao = None, "ORIGINAL_VENCE"
+    elif any(l["comparacao"]["conclusao"] == "AMOSTRA_PEQUENA" for l in linhas[1:]):
+        vencedora, conclusao = None, "AMOSTRA_PEQUENA"
+    else:
+        vencedora, conclusao = None, "SEM_DIFERENCA"
+    return {"linhas": linhas, "vencedora": vencedora, "conclusao": conclusao,
+            "minimo_por_braco": MIN_POR_BRACO, "em_teste": bool(atuais)}
+
+
+# ------------------------------------------------------------------ fase 2: o efeito (grupo de controle)
+
+def efeito(cur, id_unidade: int, de: date, ate: date) -> dict:
+    """As visitas que NÃO viram anúncio (controle) × as que podiam ver (expostas), no período.
+
+    🔑 É o que responde "os anúncios atrapalham quem está escolhendo o prato?": quantas visitas
+    se envolveram com o cardápio e quantas adicionaram um prato, em cada grupo. O grupo vem
+    GRAVADO no evento (125), então mudar o percentual não reescreve o passado.
+    ⚠️ Exposta = podia ver: a visita que parou antes do 5º prato está no grupo sem ter visto.
+    """
+    from services.cardapio_testes import MIN_POR_BRACO, _proporcoes  # ⚠️ aqui dentro: evita o ciclo
+    from services.cardapio_vivo import SQL_SESSAO_ENGAJADA
+    if de > ate:
+        raise HTTPException(status_code=422, detail="O período termina antes de começar.")
+    cur.execute(
+        f"""WITH s AS (
+                SELECT id_sessao, max(grupo_anuncio) AS grupo, {SQL_SESSAO_ENGAJADA} AS engajada,
+                       bool_or(tipo = 'adicionou') AS adicionou,
+                       count(DISTINCT id_item) FILTER (WHERE tipo = 'viu_item') AS pratos
+                  FROM cardapio_eventos
+                 WHERE id_unidade = %s AND quando >= %s::date AND quando < (%s::date + 1)
+                   AND grupo_anuncio IS NOT NULL
+                 GROUP BY id_sessao)
+            SELECT grupo, count(*) AS sessoes, count(*) FILTER (WHERE engajada) AS engajadas,
+                   count(*) FILTER (WHERE adicionou) AS adicionaram,
+                   round(avg(pratos), 1) AS pratos_por_sessao
+              FROM s GROUP BY grupo""",  # noqa: S608 - a regra é constante do módulo
+        (id_unidade, de, ate))
+    g = {r["grupo"]: dict(r) for r in cur.fetchall()}
+    vazio = {"sessoes": 0, "engajadas": 0, "adicionaram": 0, "pratos_por_sessao": None}
+    ctl, exp = g.get("CONTROLE", vazio), g.get("EXPOSTO", vazio)
+    adicao = _proporcoes(ctl["sessoes"], ctl["adicionaram"], exp["sessoes"], exp["adicionaram"])
+    envolv = _proporcoes(ctl["sessoes"], ctl["engajadas"], exp["sessoes"], exp["engajadas"])
+    return {"de": de, "ate": ate, "controle": ctl, "expostas": exp, "minimo_por_braco": MIN_POR_BRACO,
+            "percentual": int(regras(cur, id_unidade)["anuncio_controle"]),
+            # A/B na ordem (controle, expostas): "B_VENCE" = as expostas adicionaram MAIS.
+            "adicao": {"p_valor": adicao["p_valor"], "conclusao": adicao["conclusao"]},
+            "engajamento": {"p_valor": envolv["p_valor"], "conclusao": envolv["conclusao"]}}
 
 
 def periodo_padrao() -> tuple[date, date]:

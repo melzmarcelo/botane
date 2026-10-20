@@ -78,6 +78,8 @@ class Evento(BaseModel):
     subcategoria: int | None = None
     cartao: int | None = None
     anuncio: int | None = None
+    # 125: a variação do texto do anúncio que esta visita viu (nulo = a original).
+    variante: int | None = None
     midia: str | None = Field(None, pattern="^(VIDEO|FOTO|NENHUMA)$")
     duracao_ms: int | None = Field(None, ge=0)
     # Há quanto tempo aconteceu, no relógio do navegador — o servidor recua a PRÓPRIA hora.
@@ -95,6 +97,8 @@ class LoteEventos(BaseModel):
     idioma: str | None = Field(None, pattern="^(pt|en|de)$")
     # De qual Cardápio Vivo (117). Ausente = o principal (o feed de antes da 117).
     catalogo: int | None = None
+    # 125: o grupo da visita nos anúncios, como o feed o deu. Nulo = sem anúncio para ver.
+    grupo_anuncio: str | None = Field(None, pattern="^(CONTROLE|EXPOSTO)$")
     eventos: list[Evento] = Field(max_length=200)
 
 
@@ -225,6 +229,8 @@ class AnuncioCreate(BaseModel):
     canal: str = Field("AMBOS", pattern="^(AMBOS|MESA|LINK)$")
     peso: int = Field(1, ge=1, le=10)
     ativo: bool = True
+    # 125: as seções em que combina (nulo = todas) — ali o anúncio pesa mais no sorteio.
+    secoes: list[int] | None = Field(None, max_length=60)
 
     @model_validator(mode="after")
     def _dias(self):
@@ -240,3 +246,19 @@ class RegrasAnuncio(BaseModel):
     anuncio_intervalo: int = Field(8, ge=2, le=50)
     anuncio_maximo: int = Field(2, ge=0, le=10)
     anuncio_maximo_mesa: int = Field(1, ge=0, le=10)
+    # 125: a fatia das visitas sem anúncio (o grupo de controle) e o ritmo que aprende.
+    anuncio_controle: int = Field(10, ge=0, le=50)
+    anuncio_recuo: bool = True
+
+
+class VarianteAnuncio(BaseModel):
+    """Uma variação do TEXTO de um anúncio (125). A mídia e o destino são os do anúncio."""
+    titulo: str | None = Field(None, max_length=120)
+    texto: str | None = Field(None, max_length=500)
+    acao_rotulo: str | None = Field(None, max_length=40)
+    ativo: bool = True
+
+
+class AplicarVariante(BaseModel):
+    """Qual texto fica: o id da variação, ou nulo para a original."""
+    id_variante: int | None = None

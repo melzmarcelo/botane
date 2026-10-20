@@ -18,6 +18,7 @@ import { AnunciosService, porcento, type Anuncio, type RegrasAnuncio, type Situa
 import { CardapioVivoService } from "@/lib/cardapio-vivo";
 import * as cat from "@/lib/catalogos";
 import { useSessao } from "@/lib/sessao";
+import EfeitoDosAnuncios from "./efeito-dos-anuncios";
 import JanelaAnuncio, { type Opcoes } from "./janela-anuncio";
 
 const SITUACAO: Record<SituacaoAnuncio, [string, "erva" | "alerta" | "neutro"]> = {
@@ -31,7 +32,7 @@ export default function PaginaAnuncios() {
   const editar = pode("catalogos.editar");
   const [dados, setDados] = useState<{ anuncios: Anuncio[]; regras: RegrasAnuncio } | null>(null);
   const [regras, setRegras] = useState<RegrasAnuncio | null>(null);
-  const [opcoes, setOpcoes] = useState<Opcoes>({ vivos: [], catalogos: [], pratos: [] });
+  const [opcoes, setOpcoes] = useState<Opcoes>({ vivos: [], catalogos: [], pratos: [], secoes: [] });
   const [abrindo, setAbrindo] = useState<Anuncio | null | "novo">(null);
   const [erro, setErro] = useState("");
 
@@ -51,13 +52,14 @@ export default function PaginaAnuncios() {
     void (async () => {
       try {
         const [cfg, lista] = await Promise.all([CardapioVivoService.config(), cat.listar()]);
-        const pratos = (await Promise.all(cfg.vivos.map(async (v) => {
-          const k = await cat.conteudo(v.id_catalogo);
-          return k.categorias.flatMap((c) => [...c.itens, ...c.subcategorias.flatMap((s) => s.itens)])
-            .map((i) => ({ id: i.id, nome: i.nome_catalogo || i.produto, cardapio: v.nome }));
-        }))).flat();
+        const conteudos = await Promise.all(cfg.vivos.map(async (v) => ({ v, k: await cat.conteudo(v.id_catalogo) })));
+        const pratos = conteudos.flatMap(({ v, k }) => k.categorias
+          .flatMap((c) => [...c.itens, ...c.subcategorias.flatMap((s) => s.itens)])
+          .map((i) => ({ id: i.id, nome: i.nome_catalogo || i.produto, cardapio: v.nome })));
+        // 125: as seções de cada Cardápio Vivo — onde o anúncio pode "combinar".
+        const secoes = conteudos.flatMap(({ v, k }) => k.categorias.map((c) => ({ id: c.id, nome: c.nome, cardapio: v.nome })));
         setOpcoes({ vivos: cfg.vivos.map((v) => ({ id_catalogo: v.id_catalogo, nome: v.nome })),
-                    catalogos: lista.map((c) => ({ id: c.id, nome: c.nome })), pratos });
+                    catalogos: lista.map((c) => ({ id: c.id, nome: c.nome })), pratos, secoes });
       } catch {
         /* sem as escolhas, a janela abre com as listas vazias */
       }
@@ -77,7 +79,7 @@ export default function PaginaAnuncios() {
 
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!dados || !regras) return <Carregando />;
-  const numero = (campo: keyof RegrasAnuncio, rotulo: string, min: number) => (
+  const numero = (campo: Exclude<keyof RegrasAnuncio, "anuncio_recuo">, rotulo: string, min: number) => (
     <label className="flex flex-col gap-1 text-[13.5px]">
       <span className="text-suave">{rotulo}</span>
       <input type="number" min={min} max={50} className="campo mono !w-24" disabled={!editar} value={regras[campo]}
@@ -105,8 +107,27 @@ export default function PaginaAnuncios() {
           {numero("anuncio_intervalo", "Pratos entre um e outro", 2)}
           {numero("anuncio_maximo", "No máximo, por visita", 0)}
           {numero("anuncio_maximo_mesa", "No máximo, na mesa", 0)}
+          {numero("anuncio_controle", "Visitas sem anúncio (%)", 0)}
         </div>
+        {/* 🔑 125: o ritmo que aprende e o grupo de controle. */}
+        <label className="mt-4 flex items-start gap-2 text-[14px]">
+          <input type="checkbox" id="regra-anuncio_recuo" className="mt-1" disabled={!editar} checked={regras.anuncio_recuo}
+                 onChange={(e) => setRegras({ ...regras, anuncio_recuo: e.target.checked })} />
+          <span>
+            Ritmo que aprende
+            <span className="block text-[12.5px] text-suave">
+              Quem passa direto por um anúncio espera o dobro de pratos pelo próximo; quem vê dois sem tocar não vê mais
+              nenhum naquela visita.
+            </span>
+          </span>
+        </label>
+        <p className="mt-3 text-[12.5px] text-suave">
+          As visitas sem anúncio são o grupo de controle: comparadas com as outras, mostram se os anúncios mudam o que
+          as pessoas fazem no cardápio (abaixo). 0 desliga; até 50.
+        </p>
       </Cartao>
+
+      <EfeitoDosAnuncios />
 
       <Cartao titulo="Os anúncios" descricao="A atenção é dos últimos 30 dias. “Pularam” = passou em menos de 1,5 s, sem parar."
               acao={editar ? <button type="button" className="btn btn-primario" id="anuncio-novo" onClick={() => setAbrindo("novo")}>+ anúncio</button> : undefined}>
@@ -129,6 +150,7 @@ export default function PaginaAnuncios() {
                         <span className="block text-[12.5px] text-suave">
                           {a.origem === "EXTERNO" ? `Patrocinado · ${a.anunciante ?? ""}` : "Da casa"}
                           {a.inicio || a.fim ? ` · ${a.inicio ?? "…"} a ${a.fim ?? "…"}` : ""}
+                          {a.variantes ? ` · ${a.variantes + 1} textos em teste` : ""}
                         </span>
                         {(a.avisos ?? []).map((t) => (
                           <span key={t} className="block text-[12.5px] text-alerta" data-anuncio-aviso>⚠ {t}</span>

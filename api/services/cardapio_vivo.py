@@ -606,9 +606,12 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         # regras de exibição da casa. ⚠️ A prévia do cadastro não mostra anúncio — a não ser
         # que se peça (1.1.109): aí, os que valem AGORA, como na mesa se for o principal.
         "aberturas": cv.get("aberturas") or "AUTOMATICA",
+        # ⚠️ 125: a prévia não entra no grupo de controle nem nas variações (sem sessão).
         **(catalogo_anuncios.do_feed(cur, id_unidade, id_catalogo,
-                                     bool(mesa) or bool(previa_catalogo and cv.get("principal")), idioma)
-           if not previa_catalogo or previa_anuncios else {"anuncios": [], "regras_anuncio": None}),
+                                     bool(mesa) or bool(previa_catalogo and cv.get("principal")), idioma,
+                                     sessao=None if previa_catalogo else sessao)
+           if not previa_catalogo or previa_anuncios
+           else {"anuncios": [], "regras_anuncio": None, "grupo_anuncio": None}),
         **conteudo,
     }
 
@@ -740,6 +743,14 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
         cur.execute("SELECT id FROM cardapio_anuncios WHERE id = ANY(%s) AND id_unidade = %s",
                     (anuncios, id_unidade))
         da_loja = {r["id"] for r in cur.fetchall()}
+    # 🔑 125: a variação só entra se é DAQUELE anúncio; id inventado vira nulo (a original).
+    pares = {(e["anuncio"], e["variante"]) for e in eventos if e.get("anuncio") in da_loja and e.get("variante")}
+    variante_ok: set[tuple] = set()
+    if pares:
+        cur.execute("SELECT id_anuncio, id FROM cardapio_anuncio_variantes WHERE id = ANY(%s)",
+                    ([v for _a, v in pares],))
+        variante_ok = {(r["id_anuncio"], r["id"]) for r in cur.fetchall()} & pares
+    grupo = lote.get("grupo_anuncio")
 
     linhas = []
     for e in eventos:
@@ -753,14 +764,15 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
                        e.get("subcategoria"),
                        e.get("cartao") if e.get("cartao") in do_catalogo else None,
                        e.get("anuncio") if e.get("anuncio") in da_loja else None,
-                       cv["id_catalogo"], lote["modo"], e.get("midia"), duracao, idade))
+                       e.get("variante") if (e.get("anuncio"), e.get("variante")) in variante_ok else None,
+                       grupo, cv["id_catalogo"], lote["modo"], e.get("midia"), duracao, idade))
     if linhas:
         cur.executemany(
             """INSERT INTO cardapio_eventos (id_sessao, id_unidade, id_mesa, tipo, id_item,
                                              id_produto, id_categoria, id_subcategoria, id_cartao,
-                                             id_anuncio, id_catalogo, modo, midia, duracao_ms,
-                                             quando)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                             id_anuncio, id_variante, grupo_anuncio, id_catalogo,
+                                             modo, midia, duracao_ms, quando)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                        now() - make_interval(secs => %s / 1000.0))""",
             linhas)
         cur.execute("UPDATE cardapio_sessoes SET eventos = eventos + %s WHERE id = %s",

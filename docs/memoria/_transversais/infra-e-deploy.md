@@ -58,6 +58,13 @@
   disco do servidor; é reenviar uma vez.
   ⚠️ No dia em que houver foto de produto ou anexo de nota — arquivo grande, muitos, servidos
   direto —, o Spaces volta a ser a resposta, e é só `arquivos.py` que muda.
+  🔑 **Medido em 20/10/2026, antes de escrever o Spaces: a CDN JÁ EXISTE.** O App Platform tem a
+  Cloudflare na frente, e ela guarda `/api/arquivos/*` pelo `Cache-Control: public, immutable`:
+  a logo respondeu `cf-cache-status: HIT` com `Age` de 16 h; a foto de prato, `MISS` em ~0,8 s na
+  primeira vez e `HIT` em ~0,08 s depois — também com `?w=480` (cada largura é uma URL). O PDF de
+  850 KB, HIT. Ou seja: o banco só é lido uma vez por arquivo e por borda. O que o Spaces ainda
+  daria é tirar os bytes do banco (tamanho e backup) — vale quando o banco crescer, não antes.
+  Conferir de novo com `curl -sD - -o /dev/null <url> | grep -i cf-cache`.
 
 ## Armadilhas já pagas
 

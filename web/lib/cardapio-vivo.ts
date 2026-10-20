@@ -52,9 +52,16 @@ export type AnuncioFeed = {
   midia: CartaoFeed["midia"];
   acao: { tipo: "NENHUMA" | "CATALOGO" | "PRATO" | "LINK"; rotulo: string | null; catalogo: number | null;
           slug: string | null; item: number | null; url: string | null };
+  /** 125: a variação do texto que ESTA visita vê (nulo = a original) — vai nos eventos. */
+  variante?: number | null;
+  /** 125: as seções em que combina (nulo = todas): ali ele pesa mais no sorteio. */
+  secoes?: number[] | null;
 };
 
-export type RegrasAnuncioFeed = { depois_de: number; intervalo: number; maximo: number };
+/** `recuo` (125): o ritmo que aprende — pulou dobra a distância; dois sem toque, acabou. */
+export type RegrasAnuncioFeed = { depois_de: number; intervalo: number; maximo: number; recuo?: boolean };
+/** 125: o grupo da visita nos anúncios. Nulo = fora da comparação (sem sessão, sem anúncio). */
+export type GrupoAnuncio = "CONTROLE" | "EXPOSTO";
 export type Aberturas = "AUTOMATICA" | "SO_VIDEO" | "NUNCA";
 
 /**
@@ -95,6 +102,7 @@ export type Feed = {
   aberturas: Aberturas;
   anuncios: AnuncioFeed[];
   regras_anuncio: RegrasAnuncioFeed | null;
+  grupo_anuncio?: GrupoAnuncio | null;
   categorias: (SecaoFeed & { subcategorias: SecaoFeed[] })[];
   itens: ItemFeed[];
   restricoes: { chave: string; nome: string }[];
