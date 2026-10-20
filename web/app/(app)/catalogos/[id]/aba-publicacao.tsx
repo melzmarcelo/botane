@@ -15,9 +15,10 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
 import JanelaCardapioVivo from "@/components/janela-cardapio-vivo";
-import { Campo, Cartao, Confirmacao, Etiqueta } from "@/components/ui";
+import { Campo, Cartao, Etiqueta } from "@/components/ui";
 import { CardapioVivoService, type RespostaConfig } from "@/lib/cardapio-vivo";
 import * as cat from "@/lib/catalogos";
+import JanelaExcluirCatalogo from "./janela-excluir-catalogo";
 
 type Props = { capa: cat.Catalogo; podeEditar: boolean; aoMudar: () => Promise<void> };
 
@@ -76,16 +77,6 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
     }
   }
 
-  async function excluir() {
-    try {
-      const r = await cat.excluir(capa.id);
-      aviso.sucesso(r.message);
-      router.replace("/catalogos");
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível excluir");
-    }
-  }
-
   // 🔑 Vários Cardápios Vivos por loja (117): este catálogo pode ser um deles.
   const meuVivo = vivo?.vivos.find((v) => v.id_catalogo === capa.id) ?? null;
   const outrosVivos = (vivo?.vivos ?? []).filter((v) => v.id_catalogo !== capa.id);
@@ -119,10 +110,11 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
                   {capa.situacao === "RASCUNHO" ? "Publicar" : "Publicar de novo"}
                 </button>
               )}
-              {/* ⚠️ Só RASCUNHO se apaga: o que já esteve no ar se inativa. */}
-              {capa.situacao === "RASCUNHO" && (
-                <button type="button" className="btn btn-secundario text-erro" onClick={() => setApagando(true)}>
-                  Excluir rascunho
+              {/* 🔑 20/10/2026: o rascunho e o INATIVO se excluem (o inativo, com o nome digitado);
+                  o que está no ar, primeiro sai do ar. */}
+              {capa.situacao !== "ATIVO" && (
+                <button type="button" id="catalogo-excluir" className="btn btn-secundario text-erro" onClick={() => setApagando(true)}>
+                  {capa.situacao === "RASCUNHO" ? "Excluir rascunho" : "Excluir catálogo"}
                 </button>
               )}
             </span>
@@ -238,11 +230,8 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
       </Cartao>
 
       {apagando && (
-        <Confirmacao titulo={`Excluir “${capa.nome}”?`} rotuloConfirmar="Excluir" perigo
-                     aoConfirmar={() => void excluir()} aoCancelar={() => setApagando(false)}>
-          Ele ainda é rascunho, então nunca esteve no ar. As seções e os vínculos saem junto;
-          os produtos continuam cadastrados. Isto não se desfaz.
-        </Confirmacao>
+        <JanelaExcluirCatalogo capa={capa} aoFechar={() => setApagando(false)}
+                               aoExcluir={() => router.replace("/catalogos")} />
       )}
     </div>
   );

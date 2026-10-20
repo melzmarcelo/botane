@@ -350,6 +350,30 @@ st, r = chamar("DELETE", f"/catalogos/{c1['id']}", token=token)
 checar("apagar um RASCUNHO funciona", st == 200, (st, r))
 if st == 200:
     criados.remove(c1["id"])
+
+# 🔑 (20/10/2026, pedido do dono: "um botão para poder excluir cardápios") O INATIVO se
+# apaga com o NOME digitado; a prévia diz o que vai junto.
+st, ina = criar("Para excluir", origem="PRODUTOS", situacao="ATIVO")
+chamar("POST", f"/catalogos/{ina['id']}/categorias", {"nome": "Uma seção"}, token=token)
+chamar("PUT", f"/catalogos/{ina['id']}", {"situacao": "INATIVO"}, token=token)
+st, pv = chamar("GET", f"/catalogos/{ina['id']}/exclusao", token=token)
+checar("a prévia diz o que sai junto e que pede o nome",
+       st == 200 and pv["secoes"] == 1 and pv["pode"] and pv["pede_nome"], (st, pv))
+st, pv_ativo = chamar("GET", f"/catalogos/{sem_prazo['id']}/exclusao", token=token)
+checar("e no ATIVO diz que não pode, e por quê", st == 200 and not pv_ativo["pode"]
+       and "tire do ar" in (pv_ativo["motivo"] or ""), pv_ativo)
+st, r = chamar("DELETE", f"/catalogos/{ina['id']}", token=token)
+checar("apagar um INATIVO sem o nome é recusado (409), e a frase diz o nome",
+       st == 409 and ina["nome"] in str((r or {}).get("detail")), (st, r))
+st, r = chamar("DELETE", f"/catalogos/{ina['id']}?confirmar_nome=outro", token=token)
+checar("com o nome errado também", st == 409, (st, r))
+st, r = chamar("DELETE", f"/catalogos/{ina['id']}?confirmar_nome={urllib.parse.quote(ina['nome'].lower())}",
+               token=token)
+checar("com o nome (sem ligar para maiúsculas), apaga", st == 200, (st, r))
+if st == 200:
+    criados.remove(ina["id"])
+st, _r = chamar("GET", f"/catalogos/{ina['id']}", token=token)
+checar("e ele não existe mais (404)", st == 404, st)
 checar("e depois ele nao e encontrado",
        chamar("GET", f"/catalogos/{c1['id']}", token=token)[0] == 404)
 

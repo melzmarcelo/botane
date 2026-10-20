@@ -349,24 +349,55 @@ def atualizar(cur, id_unidade: int, id_catalogo: int, dados: dict) -> dict:
     return obter(cur, id_unidade, id_catalogo)
 
 
-def excluir(cur, id_unidade: int, id_catalogo: int) -> dict:
-    """Apaga o catálogo — e só enquanto ele é RASCUNHO.
+def previa_exclusao(cur, id_unidade: int, id_catalogo: int) -> dict:
+    """O que excluir este catálogo leva junto — sem excluir.
 
-    🔑 **Catálogo que já esteve no ar não se apaga, se INATIVA.** Alguém leu
-    aquele cardápio; apagá-lo tira do sistema o que a casa publicou, e é o tipo
-    de coisa de que se sente falta meses depois, quando um cliente pergunta pelo
-    prato que viu. A situação `INATIVO` existe exatamente para isso.
+    🔑 Pedido do dono (20/10/2026): *"um botão para poder excluir cardápios"*, depois do
+    "Catering" de teste que só saía por SQL. Saem em cascata as seções, os pratos VINCULADOS (os
+    produtos ficam), os cartões, o Cardápio Vivo dele, os testes A/B e a medição dele. Os pedidos
+    que o citam e os anúncios que o abrem FICAM, sem o catálogo.
     """
     atual = obter(cur, id_unidade, id_catalogo)
-    if atual["situacao"] != "RASCUNHO":
-        raise HTTPException(
-            status_code=409,
-            detail=(f"Só rascunho se apaga, e este está {atual['situacao'].lower()}. "
-                    f"Um catálogo que já esteve no ar é o que a casa publicou — "
-                    f"deixe-o INATIVO em vez de apagar."),
-        )
+    cur.execute(
+        """SELECT (SELECT count(*) FROM catalogo_categorias WHERE id_catalogo = %(c)s) AS secoes,
+                  (SELECT count(*) FROM catalogo_itens i JOIN catalogo_categorias g ON g.id = i.id_categoria
+                    WHERE g.id_catalogo = %(c)s) AS pratos,
+                  (SELECT count(*) FROM catalogo_cartoes WHERE id_catalogo = %(c)s) AS cartoes,
+                  (SELECT count(*) FROM pedidos WHERE id_catalogo = %(c)s) AS pedidos,
+                  (SELECT count(*) FROM cardapio_testes WHERE id_catalogo = %(c)s) AS testes,
+                  (SELECT count(*) FROM cardapio_anuncios WHERE acao_catalogo = %(c)s) AS anuncios,
+                  (SELECT count(*) FROM cardapio_eventos WHERE id_catalogo = %(c)s) AS eventos,
+                  EXISTS (SELECT 1 FROM cardapio_vivos WHERE id_catalogo = %(c)s) AS cardapio_vivo""",
+        {"c": id_catalogo})
+    n = dict(cur.fetchone())
+    pode = atual["situacao"] in ("RASCUNHO", "INATIVO")
+    return {"id": id_catalogo, "nome": atual["nome"], "situacao": atual["situacao"], **n,
+            "pode": pode, "pede_nome": atual["situacao"] == "INATIVO",
+            "motivo": None if pode else "Está no ar: tire do ar (deixe INATIVO) antes de excluir."}
+
+
+def excluir(cur, id_unidade: int, id_catalogo: int, confirmar_nome: str | None = None) -> dict:
+    """Apaga o catálogo: o RASCUNHO direto; o INATIVO com o nome digitado; o ATIVO, nunca.
+
+    🔑 **Catálogo no ar não se apaga** — primeiro sai do ar. E o que já esteve no ar só se
+    apaga com o NOME digitado (pedido do dono, 20/10/2026: *"um botão para poder excluir
+    cardápios"*): é o que a casa publicou, e o clique distraído não pode levar.
+    ⚠️ A medição do catálogo (eventos e o resumo do dia) vai junto: sem o catálogo, ela não
+    responde a pergunta nenhuma. Os pedidos e os anúncios ficam, sem ele (`SET NULL`).
+    """
+    atual = obter(cur, id_unidade, id_catalogo)
+    if atual["situacao"] == "ATIVO":
+        raise HTTPException(status_code=409, detail="Este catálogo está no ar: tire do ar (deixe INATIVO) "
+                                                    "antes de excluir.")
+    if atual["situacao"] != "RASCUNHO" and (confirmar_nome or "").strip().casefold() != atual["nome"].strip().casefold():
+        raise HTTPException(status_code=409, detail=f"Para excluir um catálogo que já esteve no ar, digite o "
+                                                    f"nome dele: “{atual['nome']}”.")
     from services.catalogo_conteudo import midias_do_conteudo
     midias = midias_do_conteudo(cur, catalogo=id_catalogo)
+    cur.execute("DELETE FROM cardapio_eventos WHERE id_catalogo = %s AND id_unidade = %s",
+                (id_catalogo, id_unidade))
+    cur.execute("DELETE FROM cardapio_conteudo_dia WHERE id_catalogo = %s AND id_unidade = %s",
+                (id_catalogo, id_unidade))
     cur.execute("DELETE FROM catalogos WHERE id = %s AND id_unidade = %s",
                 (id_catalogo, id_unidade))
     # ⚠️ **O arquivo vai junto** — o PDF e, desde 17/10/2026, a mídia das seções, das

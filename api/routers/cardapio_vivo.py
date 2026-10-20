@@ -73,6 +73,31 @@ def _resposta_config(cur, id_unidade: int) -> dict:
     }
 
 
+class PeriodoDaMedicao(BaseModel):
+    de: date
+    ate: date
+
+
+@router.get("/medicao")
+def medicao_do_periodo(de: date = Query(...), ate: date = Query(...),
+                       ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """20/10/2026: quanto da medição existe no período — a prévia do apagar."""
+    with get_cursor() as cur:
+        return servico.medicao_do_periodo(cur, _unidade(cur, ctx), de, ate)
+
+
+@router.post("/medicao/apagar")
+def apagar_medicao(body: PeriodoDaMedicao, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Apaga a medição do período nesta loja. Auditado; não há desfazer."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = servico.apagar_medicao(cur, id_unidade, body.de, body.ate)
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_medicao", id_unidade, "apagar_periodo",
+                            antes={"de": str(body.de), "ate": str(body.ate), "eventos": r["eventos"],
+                                   "sessoes": r["sessoes"]}, id_unidade=id_unidade)
+        return r
+
+
 @router.get("/config")
 def obter_config(ctx: Contexto = Depends(_VER)) -> dict:
     with get_cursor() as cur:

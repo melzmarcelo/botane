@@ -9177,8 +9177,8 @@ try {
   checar("e publica", await clicarQuando(p, "Publicar", { exato: true }));
   await p.waitForFunction(() => /No ar hoje/.test(document.body.innerText), { timeout: 15000, polling: 300 }).catch(() => {});
   checar("e o catálogo fica no ar", await esperarTexto(p, "No ar hoje", 2000));
-  // ⚠️ Excluir só aparece no RASCUNHO: o que já esteve no ar se inativa.
-  checar("e um ATIVO nao oferece excluir", !(await esperarTexto(p, "Excluir rascunho", 800)));
+  // ⚠️ O que está no ar não se exclui: primeiro sai do ar (20/10/2026).
+  checar("e um ATIVO nao oferece excluir", (await p.$("#catalogo-excluir")) === null);
 
   // 🔑 **A lista em CARTÕES**: um selo só para o estado e o que falta, e "Abrir".
   await irPara(p, `${WEB}/catalogos`);
@@ -9215,15 +9215,49 @@ try {
   await new Promise((r) => setTimeout(r, 600));
   await foto(p, "37-catalogos");
 
-  // ⚠️ **Volta a RASCUNHO antes de apagar**: o servidor recusa apagar o que ja
-  // esteve no ar, e e a regra que a checagem acima acabou de afirmar. Fase que
-  // desvia, devolve.
+  // 🔑 (20/10/2026, pedido do dono: "um botão para poder excluir cardápios") O que já
+  // esteve no ar sai do ar e então se exclui PELA TELA, com o nome digitado.
+  await irPara(p, `${WEB}/catalogos/${idCat}`);
+  await clicarQuando(p, "Publicação", { exato: true });
+  await esperarTexto(p, "No ar hoje", 8000);
+  await clicarQuando(p, "Tirar do ar", { exato: true });
+  await p.waitForSelector("#catalogo-excluir", { timeout: 10000 }).catch(() => {});
+  const rotuloExcluir = await p.$eval("#catalogo-excluir", (b) => b.textContent).catch(() => "");
+  checar("fora do ar, o catalogo oferece 'Excluir catálogo'", rotuloExcluir === "Excluir catálogo", rotuloExcluir);
+  await p.click("#catalogo-excluir").catch(() => {});
+  await p.waitForSelector("#excluir-catalogo-nome", { timeout: 10000 }).catch(() => {});
+  const janelaExc = await p.$eval("#excluir-catalogo", (d) => d.innerText).catch(() => "");
+  checar("a janela diz que ele já esteve no ar e o que vai junto",
+    /já esteve no ar/.test(janelaExc) && /Vai junto/.test(janelaExc) && /não se desfaz/.test(janelaExc), janelaExc.slice(0, 300));
+  checar("e o Excluir fica travado até digitar o nome",
+    await p.$eval("#excluir-catalogo-confirmar", (b) => b.disabled).catch(() => false));
+  await p.type("#excluir-catalogo-nome", `Cardapio tela ${mCat}`).catch(() => {});
+  await p.click("#excluir-catalogo-confirmar").catch(() => {});
+  await p.waitForFunction(() => location.pathname === "/catalogos", { timeout: 15000, polling: 300 }).catch(() => {});
+  const { status: stExc } = await api("GET", `/catalogos/${idCat}`, null, token);
+  checar("com o nome, exclui e volta para a lista", stExc === 404, stExc);
+  // Rede de segurança: se a tela falhou, a fase não deixa o catálogo para trás.
   const { dados: catsDaFase } = await api("GET", "/catalogos", null, token);
   const meuCat = (catsDaFase ?? []).find((c) => c.nome === `Cardapio tela ${mCat}`);
   if (meuCat) {
     await api("PUT", `/catalogos/${meuCat.id}`, { situacao: "RASCUNHO" }, token);
     await api("DELETE", `/catalogos/${meuCat.id}`, null, token);
   }
+  // 🔑 (20/10/2026) Apagar a medição de um período: a tela confere antes de apagar.
+  await irPara(p, `${WEB}/cardapio-vivo`);
+  await p.waitForSelector("#medicao-de", { timeout: 20000 }).catch(() => {});
+  for (const [sel, v] of [["#medicao-de", "2001-01-01"], ["#medicao-ate", "2001-01-01"]]) {
+    await p.$eval(sel, (el, valor) => {
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      set.call(el, valor);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }, v).catch(() => {});
+  }
+  await p.click("#medicao-conferir").catch(() => {});
+  await p.waitForSelector("#medicao-previa", { timeout: 10000 }).catch(() => {});
+  const previaMed = await p.$eval("#medicao-previa", (d) => d.innerText).catch(() => "");
+  checar("o Cardápio Vivo confere a medição de um período antes de apagar",
+    /Nada medido de 01\/01\/2001/.test(previaMed) || /evento\(s\) de/.test(previaMed), previaMed);
   // ⚠️ **Devolve o parametro.** A fase 12 logo abaixo comeca afirmando que o
   // menu NAO tem o grupo Reservas — deixa-lo ligado aqui derrubaria a primeira
   // checagem dela, e a culpa pareceria ser de Reservas.

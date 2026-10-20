@@ -913,3 +913,25 @@ de controle e as variações. Pedido do dono na hora de seguir: *"pode seguir no
   restaura as seis colunas de regras no fim.
 - Cobertura: `smoke_cardapio_anuncios.py` 73 (25 novas, 5e e 5f) e `verificar-anuncios-feed.mjs` 26.
 
+## Excluir catálogo e apagar a medição de um período (1.1.113, 20/10/2026)
+
+🔑 Pedido do dono: *"cria um botão para poder excluir cardápios e realizar a limpeza de dados de
+determinado período"* — o "Catering" de teste e a medição de teste só saíam por SQL
+(`.tmp/limpeza_producao.sql`, que deixou de ser necessário).
+- **Excluir** (`services/catalogos.excluir`): RASCUNHO direto (como era); INATIVO só com
+  `?confirmar_nome=` igual ao nome (sem ligar para maiúsculas); ATIVO nunca — 409 "tire do ar".
+  ⚠️ Revoga a regra "só rascunho se apaga" de 21/09 — decisão do dono. `GET /catalogos/{id}/exclusao`
+  é a prévia (seções, pratos, cartões, pedidos, testes, anúncios, eventos, se é Cardápio Vivo). O
+  banco leva em cascata seções, itens, cartões, `cardapio_vivos`, `cardapio_testes`, lojas e config
+  de pedidos; `pedidos` e `cardapio_anuncios.acao_catalogo` ficam com NULL. A medição do catálogo
+  (`cardapio_eventos` e `cardapio_conteudo_dia` por `id_catalogo`, sem chave estrangeira) é apagada
+  à mão no mesmo cursor, junto da mídia. Tela: `janela-excluir-catalogo.tsx` (aba Publicação,
+  `#catalogo-excluir`, nome em `#excluir-catalogo-nome`).
+- **Medição de um período** (`cardapio_vivo.medicao_do_periodo` / `apagar_medicao`,
+  `GET /cardapio-vivo/medicao` e `POST /cardapio-vivo/medicao/apagar`, `catalogos.editar`, auditado):
+  eventos da LOJA no período, os três resumos por dia (`agregados`, `resumo`, `conteudo`) e as
+  sessões que ficaram sem evento. ⚠️ Sessão com evento em outro dia FICA. Não toca em anúncios,
+  testes, chamados nem pedidos (`pedidos.id_sessao` não tem chave estrangeira). Tela:
+  `medicao-do-periodo.tsx`, no fim do Cardápio Vivo.
+- Cobertura: `smoke_catalogos` (+8), `smoke_cardapio_vivo` 11b (+7) e `verificar.mjs` 11z (+5).
+

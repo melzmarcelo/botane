@@ -603,6 +603,46 @@ checar("e a fonte padrão é a do site (Fraunces)", _cv._PADRAO["fonte"] == "FRA
        and _cv.FONTES[0] == "FRAUNCES", _cv.FONTES)
 gravar_cardapio(chamar, token, CFG)
 
+print("\n11b. apagar a medição de um período (20/10/2026)")
+# Um dia que ninguém mais usa (01/01/2001): a medição dele é montada aqui e apagada pela rota.
+DIA_VELHO = "2001-01-01"
+S_VELHA, S_MISTA = str(uuid.uuid4()), str(uuid.uuid4())
+with get_cursor() as cur:
+    for s in (S_VELHA, S_MISTA):
+        cur.execute("""INSERT INTO cardapio_sessoes (id, id_unidade, modo, dispositivo)
+                       VALUES (%s, %s, 'VITRINE', 'CELULAR')""", (s, U))
+    for s in (S_VELHA, S_VELHA, S_MISTA):
+        cur.execute("""INSERT INTO cardapio_eventos (id_sessao, id_unidade, tipo, modo, quando)
+                       VALUES (%s, %s, 'abriu_cardapio', 'VITRINE', %s::date + time '12:00')""", (s, U, DIA_VELHO))
+    # A sessão "mista" também tem evento em outro dia — ela tem de ficar.
+    cur.execute("""INSERT INTO cardapio_eventos (id_sessao, id_unidade, tipo, modo, quando)
+                   VALUES (%s, %s, 'abriu_cardapio', 'VITRINE', date '2001-01-05' + time '12:00')""", (S_MISTA, U))
+    cur.execute("""INSERT INTO cardapio_resumo_dia (dia, id_unidade, sessoes, engajadas, hubs,
+                                                    cliques_avaliacao, cliques_wifi)
+                   VALUES (%s, %s, 2, 0, 0, 0, 0) ON CONFLICT DO NOTHING""", (DIA_VELHO, U))
+st, pv = chamar("GET", f"/cardapio-vivo/medicao?de={DIA_VELHO}&ate={DIA_VELHO}", token=token)
+checar("a prévia conta os eventos, as visitas e o resumo do dia",
+       st == 200 and pv["eventos"] == 3 and pv["sessoes"] == 2 and pv["resumo_dia"] == 1 and not pv["vazio"], (st, pv))
+st, r = chamar("POST", "/cardapio-vivo/medicao/apagar", {"de": "2001-01-02", "ate": "2001-01-01"}, token)
+checar("período ao contrário é recusado (422)", st == 422, st)
+st, r = chamar("POST", "/cardapio-vivo/medicao/apagar", {"de": DIA_VELHO, "ate": DIA_VELHO}, token)
+checar("apagar devolve o que saiu", st == 200 and r["eventos"] == 3 and r["sessoes_apagadas"] == 1, (st, r))
+with get_cursor() as cur:
+    cur.execute("SELECT count(*) AS n FROM cardapio_eventos WHERE id_unidade = %s AND quando::date = %s", (U, DIA_VELHO))
+    sobrou_dia = cur.fetchone()["n"]
+    cur.execute("SELECT id::text AS id FROM cardapio_sessoes WHERE id = ANY(%s::uuid[])", ([S_VELHA, S_MISTA],))
+    sessoes_ficaram = {x["id"] for x in cur.fetchall()}
+    cur.execute("SELECT count(*) AS n FROM cardapio_eventos WHERE id_sessao = %s", (S_MISTA,))
+    da_mista = cur.fetchone()["n"]
+checar("o dia fica sem medição nenhuma", sobrou_dia == 0, sobrou_dia)
+checar("a visita que só existia ali sai; a que tem outro dia fica, com o evento do outro dia",
+       sessoes_ficaram == {S_MISTA} and da_mista == 1, (sessoes_ficaram, da_mista))
+st, pv = chamar("GET", f"/cardapio-vivo/medicao?de={DIA_VELHO}&ate={DIA_VELHO}", token=token)
+checar("e a prévia de novo diz que está vazio", st == 200 and pv["vazio"], pv)
+with get_cursor() as cur:
+    cur.execute("DELETE FROM cardapio_eventos WHERE id_sessao = %s", (S_MISTA,))
+    cur.execute("DELETE FROM cardapio_sessoes WHERE id = %s", (S_MISTA,))
+
 print("\n12. a porta: Portal desligado, cardápio fechado")
 chamar("PUT", f"/unidades/{U}/parametros", {**par, "reservas_ligado": False}, token)
 st, _r = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")

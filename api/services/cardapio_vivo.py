@@ -881,6 +881,61 @@ def _resumir_dia(cur, dia, id_unidade: int | None = None) -> None:
         (dia, dia, dia, id_unidade, id_unidade))
 
 
+# ---------------------------------------------------------------------------
+# Apagar a medição de um período (20/10/2026)
+# ---------------------------------------------------------------------------
+
+_TABELAS_DO_DIA = ("cardapio_agregados_dia", "cardapio_resumo_dia", "cardapio_conteudo_dia")
+
+
+def medicao_do_periodo(cur, id_unidade: int, de, ate) -> dict:
+    """Quanto da medição do Cardápio Vivo existe no período, nesta loja — sem apagar.
+
+    🔑 Pedido do dono (20/10/2026): *"realizar a limpeza de dados de determinado período"* — os
+    dias de teste antes de abrir, ou um dia em que a medição saiu errada. Conta o bruto (eventos e
+    sessões) e os três resumos por dia.
+    """
+    if de > ate:
+        raise HTTPException(status_code=422, detail="O período termina antes de começar.")
+    cur.execute("""SELECT count(*) AS eventos, count(DISTINCT id_sessao) AS sessoes
+                     FROM cardapio_eventos
+                    WHERE id_unidade = %s AND quando >= %s::date AND quando < %s::date + 1""",
+                (id_unidade, de, ate))
+    r = dict(cur.fetchone())
+    for t in _TABELAS_DO_DIA:
+        cur.execute(f"SELECT count(*) AS n FROM {t} WHERE id_unidade = %s AND dia BETWEEN %s AND %s",  # noqa: S608
+                    (id_unidade, de, ate))
+        r[t.removeprefix("cardapio_")] = cur.fetchone()["n"]
+    return {"de": de, "ate": ate, **r, "vazio": not any(v for k, v in r.items())}
+
+
+def apagar_medicao(cur, id_unidade: int, de, ate) -> dict:
+    """Apaga a medição do período nesta loja: eventos, os resumos daqueles dias e as sessões que
+    ficaram sem evento nenhum.
+
+    ⚠️ **Não toca** nos anúncios, nos testes A/B, nos chamados de garçom nem nos pedidos — só na
+    medição. Os números deles (que vêm da medição) voltam sem aqueles dias.
+    ⚠️ A sessão que tem evento FORA do período fica: ela é de um dia que não se pediu para apagar.
+    """
+    antes = medicao_do_periodo(cur, id_unidade, de, ate)
+    cur.execute("""DELETE FROM cardapio_eventos
+                    WHERE id_unidade = %s AND quando >= %s::date AND quando < %s::date + 1
+                RETURNING id_sessao""", (id_unidade, de, ate))
+    sessoes = list({r["id_sessao"] for r in cur.fetchall()})
+    for t in _TABELAS_DO_DIA:
+        cur.execute(f"DELETE FROM {t} WHERE id_unidade = %s AND dia BETWEEN %s AND %s",  # noqa: S608
+                    (id_unidade, de, ate))
+    sem_evento = 0
+    if sessoes:
+        cur.execute("""DELETE FROM cardapio_sessoes s
+                        WHERE s.id = ANY(%s::uuid[]) AND s.id_unidade = %s
+                          AND NOT EXISTS (SELECT 1 FROM cardapio_eventos e WHERE e.id_sessao = s.id)""",
+                    ([str(s) for s in sessoes], id_unidade))
+        sem_evento = cur.rowcount
+    return antes | {"sessoes_apagadas": sem_evento,
+                    "message": f"Medição apagada: {antes['eventos']} evento(s) de {antes['sessoes']} visita(s)."}
+
+
 def reter(cur, hoje=None) -> dict:
     """O job diário: agrega ontem e apaga o bruto além da retenção de cada loja.
 

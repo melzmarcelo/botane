@@ -202,13 +202,21 @@ def remover_arquivo(id_catalogo: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
         return depois
 
 
+@router.get("/{id_catalogo}/exclusao")
+def previa_exclusao(id_catalogo: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """O que excluir leva junto, sem excluir (20/10/2026)."""
+    with get_cursor() as cur:
+        return servico.previa_exclusao(cur, _unidade(cur, ctx), id_catalogo)
+
+
 @router.delete("/{id_catalogo}")
-def excluir(id_catalogo: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
-    """⚠️ Só rascunho se apaga — o resto se inativa. A regra mora no service."""
+def excluir(id_catalogo: int, confirmar_nome: str | None = Query(None, max_length=200),
+            ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """⚠️ O rascunho sai direto; o INATIVO, com o nome digitado; o ATIVO, nunca. Ver o service."""
     with get_cursor() as cur:
         id_unidade = _unidade(cur, ctx)
         antes = servico.obter(cur, id_unidade, id_catalogo)
-        r = servico.excluir(cur, id_unidade, id_catalogo)
+        r = servico.excluir(cur, id_unidade, id_catalogo, confirmar_nome)
         auditoria.registrar(cur, ctx.id_usuario, "catalogo", id_catalogo, "excluir",
                             antes={"nome": antes["nome"], "situacao": antes["situacao"]},
                             id_unidade=id_unidade)

@@ -224,7 +224,17 @@ export type MesaAcesso = {
   id: number; nome: string; token: string; ativo: boolean; id_salao: number; salao: string; link: string;
 };
 
+/** 20/10/2026: quanto da medição existe num período (a prévia do apagar). */
+export type MedicaoDoPeriodo = {
+  de: string; ate: string; eventos: number; sessoes: number;
+  agregados_dia: number; resumo_dia: number; conteudo_dia: number; vazio: boolean;
+};
+
 export const CardapioVivoService = {
+  medicao: (de: string, ate: string) =>
+    api.get<MedicaoDoPeriodo>(`/cardapio-vivo/medicao?de=${de}&ate=${ate}`),
+  apagarMedicao: (de: string, ate: string) =>
+    api.post<MedicaoDoPeriodo & { message: string; sessoes_apagadas: number }>("/cardapio-vivo/medicao/apagar", { de, ate }),
   config: () => api.get<RespostaConfig>("/cardapio-vivo/config"),
   salvarConfig: (c: Omit<ConfigCardapio, "id_unidade" | "logo_url" | "id_catalogo">) =>
     api.put<RespostaConfig>("/cardapio-vivo/config", c),

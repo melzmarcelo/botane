@@ -97,8 +97,17 @@ export const criar = (corpo: Gravar) => api.post<Catalogo>("/catalogos", corpo);
 export const atualizar = (id: number, corpo: Gravar) =>
   api.put<Catalogo>(`/catalogos/${id}`, corpo);
 
-export const excluir = (id: number) =>
-  api.delete<{ message: string }>(`/catalogos/${id}`);
+/** 20/10/2026: o INATIVO só sai com o nome digitado (`confirmarNome`); o ATIVO, nunca. */
+export const excluir = (id: number, confirmarNome?: string) =>
+  api.delete<{ message: string }>(`/catalogos/${id}${confirmarNome ? `?confirmar_nome=${encodeURIComponent(confirmarNome)}` : ""}`);
+
+/** O que excluir leva junto, sem excluir. */
+export type PreviaExclusao = {
+  id: number; nome: string; situacao: Situacao; secoes: number; pratos: number; cartoes: number;
+  pedidos: number; testes: number; anuncios: number; eventos: number; cardapio_vivo: boolean;
+  pode: boolean; pede_nome: boolean; motivo: string | null;
+};
+export const previaExclusao = (id: number) => api.get<PreviaExclusao>(`/catalogos/${id}/exclusao`);
 
 /**
  * Envia o PDF que o site de reservas vai exibir.

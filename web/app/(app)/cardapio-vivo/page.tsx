@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import AcessoMesas from "./acesso-mesas";
 import Configuracao from "./configuracao";
 import Excecoes from "./excecoes";
+import MedicaoDoPeriodo from "./medicao-do-periodo";
 import Vivos from "./vivos";
 
 /**
@@ -94,6 +95,9 @@ export default function PaginaCardapioVivo() {
       <Excecoes podeEditar={pode("catalogos.editar")} />
 
       {pode("reservas.configurar") && <AcessoMesas />}
+
+      {/* 🔑 20/10/2026: apagar a medição de um período (os dias de teste, um dia errado). */}
+      {pode("catalogos.editar") && <MedicaoDoPeriodo />}
     </div>
   );
 }
