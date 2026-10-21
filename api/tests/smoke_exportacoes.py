@@ -243,12 +243,16 @@ checar("o cadastro filtrado por tipo não traz o insumo desta rodada",
 st, cad, _ = chamar("GET", f"/exportar/produtos.csv?tipos_produto=INSUMO", token=token, bruto=True)
 cad = cad.decode("utf-8")
 _cabecalho = next((l for l in cad.splitlines() if l.startswith("Código;")), "")
-checar("a planilha do cadastro traz todos os campos (nome curto, locais, Omie, PDV, "
-       "fornecedores, cardápio, datas)",
+checar("a planilha do cadastro traz todos os campos (nome curto, locais, PDV, "
+       "fornecedores, cardápio)",
        all(c in _cabecalho for c in ("Nome curto", "Local padrão", "Local de venda",
-                                     "Controla estoque", "Código no Omie", "Código no PDV",
-                                     "Fornecedores", "Nome no cardápio", "Observação",
-                                     "Cadastrado em")), _cabecalho)
+                                     "Controla estoque", "Código no PDV",
+                                     "Fornecedores", "Nome no cardápio", "Observação")), _cabecalho)
+# ⚠️ (21/10/2026, pedido do dono) "Todos" é o que a tela mostra: os internos ficam de fora.
+checar("e não traz os campos internos (código e unidade do Omie, origem, datas)",
+       not any(c in _cabecalho for c in ("Código no Omie", "Un. no Omie", "Origem do cadastro",
+                                         "Cadastrado em", "Revisado em", "Sincronizado em")),
+       _cabecalho)
 checar("e o custo de referência, para quem vê custo", "Custo de referência" in _cabecalho,
        _cabecalho)
 # ⚠️ O PDF tem teto de linhas: o recorte é o primeiro tipo que cabe nele.

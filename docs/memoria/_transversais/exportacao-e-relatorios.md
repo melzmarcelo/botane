@@ -221,6 +221,10 @@
 - 🔑 **Planilha com TODOS os campos, PDF com os principais** (1.1.114, 20/10/2026). O `exportar`
   passa `_formato` (interno, com `_`) a `montar`; `_produtos` e `_pessoas` escolhem as colunas por
   ele. ⚠️ A prévia não recebe o formato — a contagem de linhas é a mesma.
+  - ⚠️ **"Todos" = os que a TELA do produto mostra** (21/10/2026, pedido do dono: *"alguns internos
+    não precisamos exportar, exemplo é o código no Omie"*). Saíram `codigo_omie`, `um_omie`, `origem`,
+    `criado_em`, `revisado_em` e `sincronizado_em`. O código no PDV fica (aparece em "Códigos").
+    `smoke_exportacoes` cobra que os internos NÃO estão no cabeçalho.
   - `_com_as_lojas` passou a pôr também `_ve_custo` (`estoque.saldos`): o custo de referência só sai
     para quem vê custo — a regra do `GET /produtos/{id}`.
   - O relatório `pessoas` (`cadastros.fornecedores`): filtros `tipo_pessoa`, `situacao_pessoa` e

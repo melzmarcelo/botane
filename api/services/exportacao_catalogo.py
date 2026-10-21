@@ -497,13 +497,12 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
     extras = """, p.nome_curto, p.estoque_maximo, p.controla_validade, p.controla_estoque,
                   p.producao_propria, p.modo_producao,
                   lp.nome AS local_padrao, lv.nome AS local_venda,
-                  p.marca, p.peso_liquido, p.peso_bruto, p.cest, p.codigo_omie, p.um_omie,
-                  p.codigo_pdv, p.integrado_pdv, p.origem,
+                  p.marca, p.peso_liquido, p.peso_bruto, p.cest,
+                  p.codigo_pdv, p.integrado_pdv,
                   p.nome_catalogo, p.informacao_adicional,
                   array_to_string(p.restricoes, ', ') AS restricoes,
                   p.custo_referencia, p.custo_referencia_em, p.custo_referencia_origem,
-                  p.observacao, p.criado_em, p.revisado_em, p.sincronizado_em,
-                  fz.fornecedores""" if largo else ""
+                  p.observacao, fz.fornecedores""" if largo else ""
     juncoes = """
              LEFT JOIN locais_estoque lp ON lp.id = p.id_local_padrao
              LEFT JOIN locais_estoque lv ON lv.id = p.id_local_venda
@@ -544,6 +543,12 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
     # com os de sempre: quarenta colunas numa folha deitada viram letra de bula.
     # ⚠️ O custo de referência só sai para quem vê custo (`estoque.saldos`) — a mesma
     # regra do `GET /produtos/{id}`: custo é dado de estoque, não de cadastro.
+    # ⚠️ **"Todos os campos" é todos os que a TELA mostra** (pedido do dono, 21/10/2026:
+    # "alguns internos não precisamos exportar, exemplo é o código no Omie"). Saíram
+    # `codigo_omie` (o id interno do Omie, que só serve ao casamento), `um_omie`,
+    # `origem` e as datas de cadastro, revisão e sincronização — nenhum aparece nem se
+    # edita no cadastro. O código no PDV fica: aparece em "Códigos" e cruza com o PDV.
+    # Campo novo na planilha só se a tela do produto também o mostrar.
     resumidas = [
         ("codigo", "Código"), ("produto", "Produto"), ("tipo", "Tipo"),
         ("categoria", "Categoria"), ("setor", "Setor"), ("um_estoque", "Un. estoque"),
@@ -560,7 +565,7 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
             ("tipo", "Tipo"), ("categoria", "Categoria"), ("setor", "Setor"),
             ("status", "Situação"), ("ativo", "Ativo"),
             ("um_estoque", "Un. estoque"), ("um_compra", "Un. compra"),
-            ("fator_compra", "Fator de compra"), ("um_omie", "Un. no Omie"),
+            ("fator_compra", "Fator de compra"),
             ("preco_venda", "Preço de venda"),
             ("controla_estoque", "Controla estoque"), ("producao_propria", "Produção própria"),
             ("modo_producao", "Modo de produção"),
@@ -570,8 +575,7 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
             ("controla_validade", "Controla validade"), ("controla_lote", "Controla lote"),
             ("marca", "Marca"), ("peso_liquido", "Peso líquido"), ("peso_bruto", "Peso bruto"),
             ("ncm", "NCM"), ("cest", "CEST"), ("codigo_barras", "Código de barras"),
-            ("codigo_omie", "Código no Omie"), ("codigo_pdv", "Código no PDV"),
-            ("integrado_pdv", "Integrado ao PDV"), ("origem", "Origem do cadastro"),
+            ("codigo_pdv", "Código no PDV"), ("integrado_pdv", "Integrado ao PDV"),
             ("fornecedores", "Fornecedores"),
             ("nome_catalogo", "Nome no cardápio"), ("informacao_adicional", "Informação adicional"),
             ("restricoes", "Restrições"),
@@ -580,8 +584,7 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
             colunas += [("custo_referencia", "Custo de referência"),
                         ("custo_referencia_em", "Custo de referência em"),
                         ("custo_referencia_origem", "Origem do custo de referência")]
-        colunas += [("observacao", "Observação"), ("criado_em", "Cadastrado em"),
-                    ("revisado_em", "Revisado em"), ("sincronizado_em", "Sincronizado em")]
+        colunas += [("observacao", "Observação")]
     if not f.get("_ve_custo"):
         for linha in linhas:
             for campo in ("custo_referencia", "custo_referencia_em", "custo_referencia_origem"):
