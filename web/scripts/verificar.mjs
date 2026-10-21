@@ -7675,7 +7675,11 @@ try {
           // 🔑 O preço é POR UNIDADE DE ESTOQUE, e dizê-lo é o que impede
           // "R$ 2,50" de ser lido como o preço da caixa.
           diz_a_unidade: /por unidade de estoque/i.test(document.body.innerText),
-          linhas: document.querySelectorAll("table tbody tr").length,
+          // ⚠️ **Só a tabela dos PRODUTOS** (21/10/2026): a ficha também mostra o consumo
+          // da pessoa no ciclo aberto, e contar toda `tbody tr` da página somava as duas.
+          linhas: ([...document.querySelectorAll("table")].find((t) =>
+            [...t.querySelectorAll("th")].some((th) => th.textContent?.trim() === "Último preço"))
+            ?.querySelectorAll("tbody tr").length) ?? 0,
           // A linha leva ao produto: a ficha da pessoa é o ponto de partida.
           leva_ao_produto: [...document.querySelectorAll("a")].some(
             (a) => /^\/produtos\/\d+$/.test(a.getAttribute("href") ?? "")),
@@ -10447,7 +10451,9 @@ try {
   // aqui, que a tela chega, desenha e leva o recorte para a URL e para o Baixar.
   await irPara(p, `${WEB}/`);
   // ⚠️ 30 s: logo depois de mexer na tela inicial, o `next dev` recompila ela aqui.
-  await p.waitForSelector('a[href^="/vendas/painel"]', { timeout: 30000 }).catch(() => {});
+  // ⚠️ E o seletor é o da FAIXA: o menu lateral também tem um link para o painel, e
+  // esperar "qualquer link" voltava na hora, antes de a faixa carregar.
+  await p.waitForSelector('a.faixa-numero[href^="/vendas/painel"]', { timeout: 30000 }).catch(() => {});
   const linkPainel = await p.evaluate(() =>
     document.querySelector('a.faixa-numero[href^="/vendas/painel"]')?.getAttribute("href") ?? null);
   checar("os números de venda da tela inicial levam ao painel, com o dia",

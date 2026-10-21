@@ -129,10 +129,20 @@ st, r = chamar("POST", "/vendas/importar", {"vendas": [
     cupom("F", d1 - timedelta(days=7), [(p2, 2, 5)], hora="10:00:00"),
 ]}, token=token)
 checar("as vendas entraram", st in (200, 201) and not (r or {}).get("erros"), (st, r))
-# Consumo interno pede a pessoa (qualquer uma serve) e um periodo de consumo aberto.
+# Consumo interno pede a pessoa e um periodo de consumo aberto.
+# ⚠️ **Uma pessoa PROPRIA da suite, nunca "a primeira da lista"** (21/10/2026): a
+# primeira era o fornecedor que a bateria do navegador abre, e a ficha dele ganhou
+# uma segunda tabela (o consumo no ciclo) — a checagem "dez linhas por pagina"
+# passou a contar as duas e acusou a ficha.
 garantir_ciclo_de_consumo(chamar, token)
-st, pessoas = chamar("GET", "/fornecedores", token=token)
-pessoa = ((pessoas or {}).get("itens") if isinstance(pessoas, dict) else pessoas or [{}])[0].get("id")
+NOME_PESSOA = "Smoke painel de vendas"
+st, achadas = chamar("GET", f"/fornecedores?incluir_inativos=true&busca={NOME_PESSOA}", token=token)
+pessoa = next((x["id"] for x in (achadas or []) if x.get("nome", "").lower() == NOME_PESSOA.lower()),
+              None)
+if pessoa is None:
+    st, nova = chamar("POST", "/fornecedores", {"nome": NOME_PESSOA, "fornecedor": False}, token=token)
+    pessoa = (nova or {}).get("id")
+checar("a pessoa da suite existe", pessoa is not None, achadas)
 st, r = chamar("POST", "/vendas/importar", {"vendas": [
     cupom("Y", d1, [(p1, 5, 10)], hora="14:00:00", consumo_interno=True, id_pessoa=pessoa)]},
     token=token)
@@ -242,6 +252,17 @@ checar("com recorte, o arquivo diz que a receita e bruta",
        isinstance(csv_c, str) and "receita bruta dos itens" in csv_c, str(csv_c)[:300])
 st, pdf = chamar("GET", f"/exportar/vendas/previa?inicio={d1}&fim={d2}", token=token)
 checar("a previa conta as linhas", st == 200, (st, pdf))
+
+print("10. limpeza")
+# O consumo interno da suite sai do ciclo aberto: cancelado, ele nao pesa na conta da pessoa.
+st, docs_y = chamar("GET", f"/vendas?busca=PV-Y-{marca}", token=token)
+for v in docs_y or []:
+    if v.get("documento") == f"PV-Y-{marca}":
+        chamar("DELETE", f"/vendas/{v['id']}", token=token)
+st, docs_y = chamar("GET", f"/vendas?busca=PV-Y-{marca}", token=token)
+checar("o consumo interno da suite foi cancelado",
+       all(v.get("cancelada") for v in (docs_y or []) if v.get("documento") == f"PV-Y-{marca}"),
+       docs_y)
 
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 sys.exit(1 if falhas else 0)
