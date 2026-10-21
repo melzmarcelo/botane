@@ -174,7 +174,10 @@ checar("e B vê a sugerida (a torta em destaque sobe)", ob[0] == itens["C"], ob)
 from services import cardapio_testes  # noqa: E402
 with get_cursor() as cur:
     cur.execute("SELECT id FROM unidades WHERE id <> %s ORDER BY id DESC LIMIT 1", (U,))
-    OUTRA = cur.fetchone()["id"]
+    # ⚠️ Base recém-zerada tem UMA loja só: aí a "outra" é um id que não existe —
+    # o que se cobra (nenhum teste vaza para fora da loja) vale igual.
+    _outra = cur.fetchone()
+    OUTRA = _outra["id"] if _outra else U + 1_000_000
     v_aqui = cardapio_testes.variantes(cur, U, ID_CAT, braco["B"])
     v_outra = cardapio_testes.variantes(cur, OUTRA, ID_CAT, braco["B"])
 checar("na loja do teste, o braço B tem a foto forçada", A in v_aqui["foto"], v_aqui)
