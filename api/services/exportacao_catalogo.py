@@ -608,8 +608,7 @@ def _pessoas(cur, _id_unidade: int, f: dict) -> Saida:
         """SELECT f.nome, f.nome_fantasia, f.cnpj, f.fornecedor,
                   f.email, f.telefone, f.whatsapp, f.contato, f.cidade, f.uf,
                   f.prazo_entrega_dias, f.dias_entrega, f.pedido_minimo,
-                  f.cupom_base, f.cupom_desconto_pct, f.codigo_omie, f.ativo,
-                  f.observacao, f.criado_em,
+                  f.cupom_base, f.cupom_desconto_pct, f.ativo, f.observacao,
                   (SELECT count(*) FROM produto_fornecedor pf
                     WHERE pf.id_fornecedor = f.id) AS produtos,
                   (SELECT max(pf.ultima_compra) FROM produto_fornecedor pf
@@ -632,6 +631,8 @@ def _pessoas(cur, _id_unidade: int, f: dict) -> Saida:
         desconto = float(linha["cupom_desconto_pct"] or 0)
         linha["politica"] = (("pelo custo" if linha["cupom_base"] == "CUSTO" else "preço de venda")
                              + (f", {desconto:g}% de desconto" if desconto else ""))
+    # ⚠️ Mesma regra do cadastro de produtos (21/10/2026): só o que a tela mostra. Saíram
+    # `codigo_omie` e `criado_em`. O login fica: aparece na tela de Usuários.
     if f.get("_formato") == "pdf":
         colunas = [("nome", "Nome"), ("tipo", "Tipo"), ("cnpj", "CNPJ"),
                    ("telefone", "Telefone"), ("email", "E-mail"), ("cidade", "Cidade"),
@@ -643,10 +644,9 @@ def _pessoas(cur, _id_unidade: int, f: dict) -> Saida:
                    ("cidade", "Cidade"), ("uf", "UF"),
                    ("prazo_entrega_dias", "Prazo de entrega (dias)"),
                    ("dias_entrega", "Dias de entrega"), ("pedido_minimo", "Pedido mínimo"),
-                   ("politica", "Política do cupom"), ("codigo_omie", "Código no Omie"),
+                   ("politica", "Política do cupom"),
                    ("produtos", "Produtos"), ("ultima_compra", "Última compra"),
-                   ("usuario", "Login no sistema"), ("observacao", "Observação"),
-                   ("criado_em", "Cadastrada em")]
+                   ("usuario", "Login no sistema"), ("observacao", "Observação")]
     return Saida(
         linhas, colunas, "Cadastro de pessoas",
         [("Pessoas", len(linhas)),

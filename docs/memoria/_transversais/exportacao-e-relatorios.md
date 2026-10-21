@@ -224,7 +224,8 @@
   - ⚠️ **"Todos" = os que a TELA do produto mostra** (21/10/2026, pedido do dono: *"alguns internos
     não precisamos exportar, exemplo é o código no Omie"*). Saíram `codigo_omie`, `um_omie`, `origem`,
     `criado_em`, `revisado_em` e `sincronizado_em`. O código no PDV fica (aparece em "Códigos").
-    `smoke_exportacoes` cobra que os internos NÃO estão no cabeçalho.
+    `smoke_exportacoes` cobra que os internos NÃO estão no cabeçalho. Em `pessoas`, a mesma regra:
+    saíram `codigo_omie` e `criado_em`; o login fica (aparece na tela de Usuários).
   - `_com_as_lojas` passou a pôr também `_ve_custo` (`estoque.saldos`): o custo de referência só sai
     para quem vê custo — a regra do `GET /produtos/{id}`.
   - O relatório `pessoas` (`cadastros.fornecedores`): filtros `tipo_pessoa`, `situacao_pessoa` e

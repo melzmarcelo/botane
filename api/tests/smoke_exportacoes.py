@@ -284,6 +284,11 @@ try:
     checar("e a busca traz as duas desta rodada",
            f"EXP PESSOA FORNECE {marca}" in pes.upper() and f"EXP PESSOA EQUIPE {marca}" in pes.upper(),
            pes[:300])
+    # ⚠️ (21/10/2026, pedido do dono) Só o que a tela da pessoa mostra.
+    _cab_pes = next((l for l in pes.splitlines() if l.startswith("Nome;")), "")
+    checar("a planilha de pessoas não traz o código no Omie nem a data de cadastro",
+           "Nome fantasia" in _cab_pes and "Código no Omie" not in _cab_pes
+           and "Cadastrada em" not in _cab_pes, _cab_pes)
     checar("com tipo e política do cupom na linha",
            "não fornecedor" in pes and "pelo custo" in pes, pes[-400:])
     st, so_outras, _ = chamar(
