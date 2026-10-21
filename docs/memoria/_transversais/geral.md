@@ -212,6 +212,21 @@
   ⚠️ Digitar num campo com debounce dispara uma navegação por caractere no App Router; o pedido
   à API só sai depois da última. Medir por tempo fixo aí é apostar.
 
+- 🔑 **A bateria do navegador espera a REDE, não o relógio: `assentar(N)`** (21/10/2026, pedido
+  do dono: revisar os tempos fixos). Eram 286 `setTimeout` soltos; três rodadas do mesmo dia caíram
+  por palpite curto, sempre com o sistema certo. Agora 262 deles são `await assentar(N)`: dorme os
+  mesmos N ms (o MÍNIMO — há espera que é de debounce) e depois espera não haver requisição em voo
+  e a última ter terminado há 150 ms, com teto de 8 s que não derruba nada. A contagem vem de um
+  `fetch`/XHR embrulhado por `evaluateOnNewDocument` (`prepararPagina`, nas três páginas).
+  ⚠️ **Rede, e NÃO o DOM parado**: a primeira versão esperava também o DOM quieto e caiu no
+  primeiro aviso flutuante — a barrinha de contagem mexe na página sem parar, a espera ia ao teto
+  e o aviso (6 s) já tinha sumido. Coisa passageira se lê enquanto está lá.
+  ⚠️ **Ficam em `setTimeout`**: as 17 de dentro de laço (polling, já tentam de novo) e as 7 que
+  rodam DENTRO do navegador (corpo de `evaluate`, onde `assentar` não existe — a primeira troca em
+  massa derrubou a rodada por isso). Espera nova em código de bateria: `assentar`, ou melhor ainda
+  um `waitForFunction` pelo que se vai medir.
+  ⚠️ Custo: a rodada foi de ~15 para ~20 min.
+
 - 🔑 **Arquivo temporário escrito dentro de `api/` REINICIA a API** (21/09/2026). O reloader do
   uvicorn observa a pasta inteira: gravar um `_tmp_*.py` em `api/tests/` derruba a conexão da
   chamada que estiver em curso, e o que se vê é um `ConnectionResetError: [WinError 10054]` no

@@ -100,7 +100,7 @@ async function entrar(pagina, quem) {
     pagina.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
     pagina.click('button[type="submit"]'),
   ]);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
 }
 
 /**
@@ -178,6 +178,67 @@ async function irPara(pagina, url) {
       if (!/detached|Target closed|Navigating frame|ProtocolError|timed out/i.test(String(e))
           || tentativa === 2) throw e;
       await new Promise((r) => setTimeout(r, 800));
+    }
+  }
+}
+
+/**
+ * 🔑 **Espera a TELA, não o relógio** (21/10/2026, pedido do dono: revisar os tempos
+ * fixos da bateria). Eram 286 `setTimeout` soltos, e cada um era um palpite de quanto
+ * a tela leva para carregar — três rodadas do mesmo dia caíram por palpite curto
+ * (o botão de reconciliar, as prateleiras, o "+ conjunto"), sempre com o sistema
+ * certo.
+ * ⚠️ **O tempo antigo continua valendo como MÍNIMO**: há espera que existe por
+ * debounce (a busca só dispara depois de parar de digitar), e nesse intervalo a
+ * página está quieta sem ter terminado. Só depois do mínimo é que se espera a REDE
+ * assentar: nenhuma requisição em voo (das que começaram há menos de 10 s — uma
+ * conexão longa não pode prender a bateria) e a última terminada há 150 ms, o tempo
+ * de o React desenhar o que chegou.
+ * ⚠️ **Rede, e NÃO o DOM** — a primeira versão esperava também o DOM ficar parado
+ * 300 ms, e caiu no primeiro aviso flutuante: a barrinha de contagem dele mexe na
+ * página o tempo todo, a espera ia ao teto e, quando o teste olhava, o aviso (que
+ * vive 6 s) já tinha sumido. Coisa passageira precisa ser lida enquanto está lá.
+ * ⚠️ O teto não derruba nada: passado dele, segue como antes. Vale para TODAS as
+ * páginas abertas, porque a espera não sabe de qual o próximo passo vai ler.
+ */
+const INSTRUMENTO = () => {
+  if (window.__bateria) return;
+  const e = (window.__bateria = { voo: new Map(), seq: 0, terminou: 0 });
+  const fim = (id) => { e.voo.delete(id); e.terminou = performance.now(); };
+  const buscar = window.fetch;
+  window.fetch = function (...args) {
+    const id = ++e.seq;
+    e.voo.set(id, performance.now());
+    return buscar.apply(this, args).finally(() => fim(id));
+  };
+  const enviar = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function (...args) {
+    const id = ++e.seq;
+    e.voo.set(id, performance.now());
+    this.addEventListener("loadend", () => fim(id), { once: true });
+    return enviar.apply(this, args);
+  };
+};
+
+async function prepararPagina(pagina) {
+  await pagina.evaluateOnNewDocument(INSTRUMENTO);
+}
+
+const ASSENTAR_TETO = 8000;
+async function assentar(minimo = 0) {
+  if (minimo) await new Promise((r) => setTimeout(r, minimo));
+  const ate = Date.now() + ASSENTAR_TETO;
+  for (const pagina of await navegador.pages()) {
+    while (Date.now() < ate && !pagina.isClosed()) {
+      const quieta = await pagina.evaluate(() => {
+        const e = window.__bateria;
+        if (!e) return true;
+        const agora = performance.now();
+        const emVoo = [...e.voo.values()].some((t) => agora - t < 10000);
+        return !emVoo && agora - e.terminou > 150;
+      }).catch(() => false);
+      if (quieta) break;
+      await new Promise((r) => setTimeout(r, 100));
     }
   }
 }
@@ -308,6 +369,7 @@ const aoTerminar = [];
 
 try {
   const p = await navegador.newPage();
+  await prepararPagina(p);
   // ⚠️ **Sem cache do navegador, e isto NAO e zelo excessivo** (15/09/2026).
   // O perfil do Chrome e reaproveitado entre rodadas, e em desenvolvimento o
   // Next serve a folha de estilo sempre na MESMA URL enquanto o conteudo dela
@@ -377,6 +439,7 @@ try {
 
   // E com a caixinha marcada, o contrário — que é o que a pessoa pediu.
   const p2 = await navegador.newPage();
+  await prepararPagina(p2);
   await p2.setCacheEnabled(false);
   await p2.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
   await p2.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
@@ -390,7 +453,7 @@ try {
     p2.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
     p2.click('button[type="submit"]'),
   ]);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const comManter = await ondeMoraASessao(p2);
   checar("com 'manter conectado', a sessão sobrevive ao fechamento",
     comManter.local && !comManter.sessao, comManter);
@@ -501,7 +564,7 @@ try {
     ["/auditoria", "08-auditoria"],
   ]) {
     await p.goto(WEB + rota, { waitUntil: "networkidle2" });
-    await new Promise((r) => setTimeout(r, 900));
+    await assentar(900);
     const texto = await p.evaluate(() => document.body.innerText);
     checar(`${rota} carrega sem erro visível`, !/Erro 5|Não autenticado|Failed to fetch/.test(texto),
       texto.slice(0, 90));
@@ -521,7 +584,7 @@ try {
   // se expandia sozinho, e o menu ia abrindo grupos conforme se navegava ate
   // nao caber na altura da tela. Quem diz "voce esta aqui" e a cor do titulo.
   await irPara(p, `${WEB}/empresa`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const grupoDaTela = () =>
     p.evaluate(() => {
       const b = [...document.querySelectorAll("aside button")]
@@ -540,7 +603,7 @@ try {
     [...document.querySelectorAll("aside button")]
       .find((x) => /administra/i.test(x.innerText))?.click();
   });
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
   const depoisDoClique = await grupoDaTela();
   checar("um clique abre o grupo e mostra os itens",
     depoisDoClique.aberto === "true" && depoisDoClique.visivel === true, depoisDoClique);
@@ -563,13 +626,13 @@ try {
   coletando = false;
   await p.evaluate(() => localStorage.clear());
   await entrar(p, COZINHA);
-  await new Promise((r) => setTimeout(r, 800));
+  await assentar(800);
   // Este usuário nasceu agora pela API: senha definida por outra pessoa
   // obriga a troca no primeiro acesso.
   checar("usuário novo cai na troca de senha obrigatória",
     p.url().includes("/trocar-senha"), p.url());
   await p.goto(WEB + "/", { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 700));
+  await assentar(700);
   await foto(p, "09-cozinha-inicio");
   // ⚠️ **Pelo DOM tambem, e aqui a razao e mais forte:** com os grupos
   // recolhidos, "nao aparece no texto visivel" passaria para QUALQUER item,
@@ -601,7 +664,7 @@ try {
   checar("nem Papeis e permissoes",
     buscaCozinha.abriu && !buscaCozinha.telas.some((t) => /Pap/.test(t)), buscaCozinha.telas);
   await p.keyboard.press("Escape");
-  await new Promise((r) => setTimeout(r, 200));
+  await assentar(200);
 
   // Digitar a rota na barra de endereço não abre porta nenhuma: quem barra é a API.
   await p.goto(`${WEB}/usuarios`, { waitUntil: "networkidle2" });
@@ -628,7 +691,7 @@ try {
     ["/cadastros", "14-tabelas"],
   ]) {
     await p.goto(WEB + rota, { waitUntil: "networkidle2" });
-    await new Promise((r) => setTimeout(r, 1000));
+    await assentar(1000);
     const texto = await p.evaluate(() => document.body.innerText);
     checar(`${rota} carrega`, !/Erro 5|Não autenticado|Falha ao carregar/.test(texto),
       texto.slice(0, 90));
@@ -637,7 +700,7 @@ try {
 
   // Cadastro de um produto pela tela, do jeito que o cliente faria.
   await p.goto(`${WEB}/produtos/novo`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const nomeProduto = `Teste tela ${Date.now().toString().slice(-5)}`;
   // ⚠️ **Pelo id do campo, e nao por `input[required]`.** O `required` saiu do
   // formulario em 15/09/2026: ele traz a validacao NATIVA junto, ou seja, o
@@ -666,7 +729,7 @@ try {
   // A ajuda do tipo é o que explica a escolha a quem cadastra; sem ela
   // "Utensílios" fica indistinguível de "Material de limpeza".
   await p.select("main select", "UTENSILIO");
-  await new Promise((r) => setTimeout(r, 300));
+  await assentar(300);
   const ajudaUtensilio = await textoVisivel(p);
   checar("e explica que utensílio não é consumido pela receita",
     /quebra, some e é reposto/i.test(ajudaUtensilio),
@@ -680,7 +743,7 @@ try {
     p.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
     p.click('button[type="submit"]'),
   ]);
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const criou = /\/produtos\/\d+/.test(p.url());
   checar("cadastra produto pela tela", criou, p.url());
   // ⚠️ A tela do produto carrega em várias chamadas; sob carga ela ainda não
@@ -783,7 +846,7 @@ try {
     movProduto.semEstornar && movProduto.levaParaORazao, movProduto);
   await p.evaluate(() => [...document.querySelectorAll('[role="tab"]')]
     .find((b) => b.textContent.trim() === "Principal")?.click());
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   checar("sem expor o vínculo interno com o Omie", !fiscais.omie, fiscais);
 
   // O aviso de "criado" ficava no TOPO, e o botão de salvar está no fim de um
@@ -823,13 +886,13 @@ try {
   // ⚠️ Com o ponteiro em cima, o relógio PARA: era o medo real de fechar
   // sozinho — a mensagem sumir no meio da leitura.
   await p.hover("[data-aviso]");
-  await new Promise((r) => setTimeout(r, 2500));
+  await assentar(2500);
   const pausado = await p.evaluate(() => !!document.querySelector("[data-aviso]"));
   checar("e não some enquanto o ponteiro está em cima", pausado);
 
   // Tirado o ponteiro, o tempo volta a correr e ele sai sozinho.
   await p.mouse.move(5, 5);
-  await new Promise((r) => setTimeout(r, 7000));
+  await assentar(7000);
   const sumiu = await p.evaluate(() => !document.querySelector("[data-aviso='ok']"));
   checar("tirando o ponteiro, o aviso de sucesso some sozinho", sumiu);
 
@@ -918,7 +981,7 @@ try {
 
   // A tela de Exportação: só existe com o envio ligado, e é onde a fila mora.
   await irPara(p, `${WEB}/exportacao`);
-  await new Promise((r) => setTimeout(r, 2500));
+  await assentar(2500);
   const exportacao = await p.evaluate(() => {
     const texto = document.body.innerText;
     const abas = [...document.querySelectorAll("nav button")].map((b) => b.textContent ?? "");
@@ -966,7 +1029,7 @@ try {
   // tela inútil é pior que porta nenhuma.
   await comEnvioAssim(false);
   await irPara(p, `${WEB}/exportacao`);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const desligada = await p.evaluate(() => ({
     explica: /envio ao PDV est. desligado/i.test(document.body.innerText),
     noMenu: [...document.querySelectorAll("aside a")].some(
@@ -991,7 +1054,7 @@ try {
   checar("a lista de produtos oferece a busca", !!campoBuscaProduto);
   if (!campoBuscaProduto) throw new Error("campo de busca de produto nao apareceu");
   await campoBuscaProduto.type(nomeProduto);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const naLista = await esperarTexto(p, nomeProduto);
   checar("produto aparece na lista quando procurado pelo nome", naLista, nomeProduto);
 
@@ -1056,7 +1119,7 @@ try {
     naJanelaLote.aplicarTravado === true, naJanelaLote);
   await foto(p, "08d-alteracao-multipla");
   await p.keyboard.press("Escape");
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
 
   await p.goto(`${WEB}/produtos/ean-das-notas`, { waitUntil: "networkidle2" });
   await p.waitForFunction(
@@ -1093,7 +1156,7 @@ try {
 
   // O endereço de cada aba vale por si — dá para guardar e voltar direto.
   await irPara(p, `${WEB}/cadastros?aba=locais`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const abaLocais = await p.evaluate(() => ({
     titulo: document.querySelector("h1")?.textContent?.trim(),
     diz: /locais de estoque/i.test(document.body.innerText),
@@ -1111,14 +1174,14 @@ try {
   const semInativos = await p.evaluate(() => document.querySelectorAll("main ul > li").length);
   await p.evaluate(() => [...document.querySelectorAll('input[type="checkbox"]')]
     .find((c) => c.closest("label")?.innerText.toLowerCase().includes("inativos"))?.click());
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const comInativos = await p.evaluate(() => document.querySelectorAll("main ul > li").length);
   checar("mostrar inativos nunca encolhe a lista de apoio",
     comInativos >= semInativos, { semInativos, comInativos });
   // Desmarca: as checagens seguintes contam com a lista no estado padrao.
   await p.evaluate(() => [...document.querySelectorAll('input[type="checkbox"]')]
     .find((c) => c.closest("label")?.innerText.toLowerCase().includes("inativos"))?.click());
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
 
   // 🔑 **"Poucos por natureza" era suposicao, e a base real desmentiu**: 184
   // locais, 86 categorias, 52 setores. A checagem nao afirma "tem rodape" (isso
@@ -1145,7 +1208,7 @@ try {
     if (pagLocais.podeVirar) {
       await p.evaluate(() =>
         document.querySelector('button[aria-label="Próxima página"]')?.click());
-      await new Promise((r) => setTimeout(r, 400));
+      await assentar(400);
       const outra = await p.evaluate(() =>
         document.querySelector("main ul > li")?.textContent?.trim() ?? "");
       checar("e virar a pagina troca as linhas", outra !== pagLocais.primeira,
@@ -1158,7 +1221,7 @@ try {
   // Nas tabelas de apoio o formulário fica ACIMA da lista: cadastrar é o que se
   // vai fazer ali, e rolar a lista inteira para achar o campo é atrito bobo.
   await irPara(p, `${WEB}/cadastros`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const ordemCadastro = await p.evaluate(() => {
     const form = document.querySelector("main form");
     const lista = document.querySelector("main ul, main table");
@@ -1247,7 +1310,7 @@ try {
   }, APOIO);
   checar("a linha da tabela de apoio oferece editar",
     abriuEdicao.achouLinha && abriuEdicao.achouBotao, abriuEdicao);
-  await new Promise((r) => setTimeout(r, 600));
+  await assentar(600);
   const noFormulario = await p.evaluate(() => {
     const form = document.querySelector("#form-apoio");
     const campo = form?.querySelector("input");
@@ -1326,7 +1389,7 @@ try {
     { nome: `Tela bolo ${marca}`, tipo: "PRODUZIDO", um_estoque: "UN" }, token);
 
   await p.goto(`${WEB}/fichas/nova`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1300));
+  await assentar(1300);
   // ⚠️ **O produto da ficha virou BUSCA.** Era um `<select>` alimentado por
   // `/produtos?tipo=PRODUZIDO`, que pagina: eram os 200 primeiros em ordem
   // alfabética. Ao importar o cardápio do PDV (627 pratos), o produto recém
@@ -1336,7 +1399,7 @@ try {
   checar("o produto da ficha se escolhe por busca", !!buscaProduto);
   await buscaProduto.type(`Tela bolo ${marca}`);
   await p.keyboard.press("Tab");
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   // ⚠️ `.toUpperCase()`: o nome do produto e normalizado pelo BANCO (migracao
   // 036, gatilho), entao o que a tela mostra nunca e o que a suite digitou.
   checar("e o Tab acha o prato desta rodada",
@@ -1372,7 +1435,7 @@ try {
   checar("o item da ficha se escolhe por busca", !!buscaItem);
   await buscaItem.type(`Tela farinha ${marca}`);
   await p.keyboard.press("Tab");
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const itemEscolhido = await p.evaluate(
     () => document.querySelector('input[aria-label="Buscar insumo ou preparo"]')?.value ?? "");
   checar("e o Tab preenche a linha",
@@ -1423,7 +1486,7 @@ try {
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE"
       + "hQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
     await campoFotoNova.uploadFile(`${FOTOS}/_prato-teste.png`);
-    await new Promise((r) => setTimeout(r, 700));
+    await assentar(700);
     const previa = await p.evaluate(() => {
       const img = document.querySelector('img[alt^="Foto de"]');
       return { tem: !!img, ehLocal: (img?.getAttribute("src") ?? "").startsWith("blob:") };
@@ -1440,7 +1503,7 @@ try {
     p.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
     p.click('button[type="submit"]'),
   ]);
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const criouFicha = /\/fichas\/\d+/.test(p.url());
   checar("cria ficha pela tela", criouFicha, p.url());
   if (criouFicha && campoFotoNova) {
@@ -1496,7 +1559,7 @@ try {
     const rendAntes = await valorDe("Rendimento da receita");
     await p.evaluate(() => [...document.querySelectorAll("button")]
       .find((b) => (b.textContent ?? "").trim() === "usar")?.click());
-    await new Promise((r) => setTimeout(r, 600));
+    await assentar(600);
     const rendDepois = await valorDe("Rendimento da receita");
     checar("usar a sugestao escreve no campo do rendimento",
       rendDepois !== rendAntes && Number(rendDepois) > 0, [rendAntes, rendDepois]);
@@ -1510,7 +1573,7 @@ try {
     await p.keyboard.press("KeyA");
     await p.keyboard.up("Control");
     await campoTamanho.type("0.5");
-    await new Promise((r) => setTimeout(r, 500));
+    await assentar(500);
     const depoisDoTamanho = {
       rendimento: Number(await valorDe("Rendimento da receita")),
       porcoes: Number(await valorDe("Porções da receita")),
@@ -1560,7 +1623,7 @@ try {
     // Volta o rendimento para o que a fase montou: o resto do roteiro conta com
     // ele, e este bloco nao grava nada de proposito.
     await irPara(p, `${WEB}/fichas/${idFicha}`);
-    await new Promise((r) => setTimeout(r, 1200));
+    await assentar(1200);
 
     // 🔑 **Os MODOS de rendimento moram no CABECALHO, numa tabela** (13/09/2026
     // e 16/09/2026, pedidos do dono: "o rendimento e os destinos estao em grupos
@@ -1600,7 +1663,7 @@ try {
       document.querySelector('input[aria-label="Rendimento da receita"]')?.value ?? "");
     await p.evaluate(() => [...document.querySelectorAll("button")]
       .find((b) => /\+ modo/i.test(b.textContent ?? ""))?.click());
-    await new Promise((r) => setTimeout(r, 500));
+    await assentar(500);
     const nascida = await p.evaluate(() => ({
       rendimento:
         document.querySelector('input[aria-label="rendimento do modo 1"]')?.value ?? null,
@@ -1646,7 +1709,7 @@ try {
     // A prateleira de destino ao PROGRAMAR — a agenda guardava o campo desde o
     // comeco e a tela nunca o mandava.
     await irPara(p, `${WEB}/producao`);
-    await new Promise((r) => setTimeout(r, 1400));
+    await assentar(1400);
     const temPrateleira = await p.evaluate(() =>
       !!document.querySelector('select[aria-label="Prateleira de destino"]'));
     checar("a agenda pergunta para qual prateleira produzir", temPrateleira);
@@ -1656,7 +1719,7 @@ try {
     // checagens boas falharam de uma vez com "abriu: false", apontando para
     // recursos que estao no lugar. Quem navega, devolve a tela onde a achou.
     await irPara(p, `${WEB}/fichas/${idFicha}`);
-    await new Promise((r) => setTimeout(r, 1300));
+    await assentar(1300);
 
     // 🔑 **A folha OPERACIONAL** (pedido do dono, 08/10/2026): a que fica na
     // cozinha, sem custo e sem os dados de cadastro. Quem tira é o servidor
@@ -1675,7 +1738,7 @@ try {
         .find((b) => /Imprimir ficha/i.test(b.textContent ?? ""))
         ?.click();
     });
-    await new Promise((r) => setTimeout(r, 2000));
+    await assentar(2000);
     const janelaFicha = await p.evaluate(() => {
       const d = document.querySelector('[role="dialog"]');
       const texto = d?.innerText ?? "";
@@ -1700,7 +1763,7 @@ try {
     await p.evaluate(() => {
       document.querySelector('[role="dialog"] [aria-label="fechar"]')?.click();
     });
-    await new Promise((r) => setTimeout(r, 500));
+    await assentar(500);
 
     // 🔑 **A foto do prato pronto.** A ficha é seguida por quem está de pé na
     // cozinha, e "está pronto?" é uma pergunta VISUAL: nenhuma descrição de
@@ -1775,7 +1838,7 @@ try {
     // checagem, que acusou o recurso por uma suposicao do teste.
     const { dados: origemAntes } = await api("GET", `/fichas/${idFicha}`, null, token);
     await irPara(p, `${WEB}/fichas/${idFicha}`);
-    await new Promise((r) => setTimeout(r, 1300));
+    await assentar(1300);
     const temDuplicar = await p.evaluate(() => [...document.querySelectorAll("button")]
       .some((b) => /Duplicar receita/i.test(b.textContent ?? "")));
     checar("a ficha oferece duplicar a receita", temDuplicar);
@@ -1803,7 +1866,7 @@ try {
     await campoDestino.click();
     await campoDestino.type(`Tela bolo banana ${marca}`);
     await p.keyboard.press("Tab");
-    await new Promise((r) => setTimeout(r, 1500));
+    await assentar(1500);
     await p.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')]
       .find((b) => /Copiar receita/i.test(b.textContent ?? ""))?.click());
     // A tela vai para a COPIA: o passo seguinte e sempre ajustar a receita nova.
@@ -1863,7 +1926,7 @@ try {
       await buscaFiltrada.click();
       await buscaFiltrada.type(`Tela farinha ${marca}`);
       await p.keyboard.press("Tab");
-      await new Promise((r) => setTimeout(r, 1500));
+      await assentar(1500);
       const oQueVeio = await p.evaluate(() => {
         const janelas = [...document.querySelectorAll('[role="dialog"]')];
         const lupa = janelas[janelas.length - 1];
@@ -1900,13 +1963,13 @@ try {
     await api("DELETE", `/fichas/${idCopia}`, null, token);
     await api("DELETE", `/produtos/${bananaTela.id}`, null, token);
     await irPara(p, `${WEB}/fichas/${idFicha}`);
-    await new Promise((r) => setTimeout(r, 900));
+    await assentar(900);
 
     // A cozinha vê a receita e não vê dinheiro — na tela, não só na API.
     await p.evaluate(() => localStorage.clear());
     await entrar(p, COZINHA);
     await p.goto(`${WEB}/fichas/${idFicha}`, { waitUntil: "networkidle2" });
-    await new Promise((r) => setTimeout(r, 1300));
+    await assentar(1300);
     const textoCozinha = await textoVisivel(p);
     checar("cozinha vê a receita", /TELA FARINHA/i.test(textoCozinha),
     textoCozinha.slice(0, 80));
@@ -2059,7 +2122,7 @@ try {
 
     // O rascunho se exclui — e a tela pergunta antes.
     await irPara(p, `${WEB}/fichas/${fichaRasc.id}`);
-    await new Promise((r) => setTimeout(r, 1300));
+    await assentar(1300);
     const temExcluir = await p.evaluate(() => [...document.querySelectorAll("button")]
       .some((b) => /Excluir rascunho/i.test(b.textContent ?? "")));
     checar("a ficha em rascunho oferece excluir", temExcluir);
@@ -2105,7 +2168,7 @@ try {
     ["/inventario", "20-inventario"],
   ]) {
     await p.goto(WEB + rota, { waitUntil: "networkidle2" });
-    await new Promise((r) => setTimeout(r, 1100));
+    await assentar(1100);
     const texto = await p.evaluate(() => document.body.innerText);
     checar(`${rota} carrega`, !/Erro 5|Não autenticado|Falha ao carregar/.test(texto),
       texto.slice(0, 90));
@@ -2132,7 +2195,7 @@ try {
   // filtros e a prévia, o formulário não cabia mais no topo da lista. Aqui se
   // consulta; lá se monta.
   await p.goto(`${WEB}/inventario`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1100));
+  await assentar(1100);
   const listaInv = await p.evaluate(() => ({
     temBotao: [...document.querySelectorAll("a")].some(
       (a) => a.textContent?.trim() === "Nova contagem"),
@@ -2145,7 +2208,7 @@ try {
   checar("e não carrega mais o formulário de abertura", listaInv.semFormulario, listaInv);
 
   await irPara(p, `${WEB}/inventario/novo`);
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const noNovo = await p.evaluate(() => {
     const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((x) =>
       x.textContent?.trim());
@@ -2180,7 +2243,7 @@ try {
       l.textContent?.trim() === nome);
     alvo?.querySelector("input")?.click();
   }, localInv?.nome);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const comLocal = await totalDaPrevia();
   checar("escolher um local estreita a prévia", comLocal > 0 && comLocal <= semFiltro,
     [semFiltro, comLocal]);
@@ -2279,7 +2342,7 @@ try {
     c.dispatchEvent(new Event("input", { bubbles: true }));
     c.blur();
   }, `Inv tela ${m4}`.toUpperCase());
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const { dados: invDepois } = await api("GET", `/inventarios/${p.url().match(/\d+$/)[0]}`,
     null, token);
   checar("o que se digita grava sozinho, sem botão de salvar",
@@ -2336,7 +2399,7 @@ try {
     [stAgenda, dAgenda]);
 
   await irPara(p, `${WEB}/producao`);
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const agenda = await p.evaluate(() => {
     const texto = document.body.innerText;
     const abas = [...document.querySelectorAll("nav button")].map((b) => b.textContent?.trim());
@@ -2476,7 +2539,7 @@ try {
     // colunas da direita cortadas. No papel não há barra de rolagem para
     // denunciar o corte.
     await p.emulateMediaType("print");
-    await new Promise((r) => setTimeout(r, 300));
+    await assentar(300);
     const papel = await p.evaluate(() => {
       const tabela = document.querySelector("table");
       const largura = tabela ? tabela.getBoundingClientRect().width : 0;
@@ -2499,7 +2562,7 @@ try {
     // Volta para a agenda: as checagens seguintes são de lá, e ficar na folha
     // faria a próxima medir o campo errado (aqui o rótulo é "Quantidade").
     await irPara(p, `${WEB}/producao`);
-    await new Promise((r) => setTimeout(r, 1300));
+    await assentar(1300);
   }
 
   // Produzir uma linha da agenda: quantidade à vista e confirmação do sistema,
@@ -2516,7 +2579,7 @@ try {
     return true;
   });
   if (linhaAgendada) {
-    await new Promise((r) => setTimeout(r, 800));
+    await assentar(800);
     const dialogo = await p.evaluate(() => {
       const d = document.querySelector('[role="dialog"]');
       return d ? { titulo: d.getAttribute("aria-label"), texto: d.innerText } : null;
@@ -2534,7 +2597,7 @@ try {
       [...(d?.querySelectorAll("button") ?? [])].find(
         (b) => b.textContent === "Cancelar")?.click();
     });
-    await new Promise((r) => setTimeout(r, 500));
+    await assentar(500);
   }
 
   // Contagem CEGA: o esperado não aparece na tela nem sai do servidor.
@@ -2549,7 +2612,7 @@ try {
   checar("abre a contagem cega", !!invCega?.id, invCega);
   if (invCega?.id) {
     await irPara(p, `${WEB}/inventario/${invCega.id}`);
-    await new Promise((r) => setTimeout(r, 1500));
+    await assentar(1500);
     const cega = await p.evaluate(() => {
       const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((x) => x.textContent);
       return {
@@ -2575,12 +2638,12 @@ try {
   // Filtrar o razão. O razão cresce todo dia; sem filtro, achar um movimento
   // vira rolagem — e a planilha tem de sair com o MESMO recorte da tela.
   await p.goto(`${WEB}/estoque`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1100));
+  await assentar(1100);
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Movimentos");
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const filtrosRazao = await p.evaluate(() => {
     const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((x) => x.textContent);
     return { rotulos, temData: !!document.querySelector('input[type="date"]') };
@@ -2610,7 +2673,7 @@ try {
     await p.waitForFunction(
       () => !document.body.innerText.includes("Carregando"), { timeout: 12000 },
     ).catch(() => {});
-    await new Promise((r) => setTimeout(r, 1400));
+    await assentar(1400);
     const soProvisorios = await p.evaluate(() => {
       // ⚠️ Só a tabela do RAZÃO (a que tem a coluna "O quê"): a tela tem outras
       // tabelas no DOM, e somá-las dava 104 linhas numa página de 100 — com as
@@ -2642,17 +2705,17 @@ try {
       (razaoNoCatalogo?.filtros ?? []).some((f) => f.nome === "provisorio"),
       (razaoNoCatalogo?.filtros ?? []).map((f) => f.nome));
     await p.evaluate(() => document.querySelector("#so-provisorios")?.click());
-    await new Promise((r) => setTimeout(r, 1200));
+    await assentar(1200);
   }
   await p.evaluate(() => {
     document.querySelector('button[aria-label="Buscar produto"]')?.click();
   });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     d?.querySelector("li button")?.click();
   });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const fixado = await p.evaluate(() => ({
     etiqueta: !!document.querySelector('button[aria-label="tirar o filtro de produto"]'),
     texto: document.body.innerText,
@@ -2664,7 +2727,7 @@ try {
   await p.evaluate(() => {
     document.querySelector('button[aria-label="tirar o filtro de produto"]')?.click();
   });
-  await new Promise((r) => setTimeout(r, 1000));
+  await assentar(1000);
 
   const antesFiltro = await p.evaluate(() =>
     document.querySelectorAll("table tbody tr").length);
@@ -2677,7 +2740,7 @@ try {
       c.dispatchEvent(new Event("input", { bubbles: true }));
     }
   });
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const depoisFiltro = await p.evaluate(() => document.body.innerText);
   checar("filtrar por um período sem movimento esvazia a lista",
     /Nenhum movimento com esses filtros/.test(depoisFiltro),
@@ -2687,7 +2750,7 @@ try {
   // Lançar é tela própria: saldos é onde se CONSULTA. Os quatro botões viraram
   // Estoque ▸ Ajustes, e da tela de saldos sobra o atalho.
   await p.goto(`${WEB}/estoque`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1100));
+  await assentar(1100);
   const saldosSemForm = await p.evaluate(() => {
     const textos = [...document.querySelectorAll("button, a")].map((x) => x.textContent?.trim());
     return {
@@ -2734,7 +2797,7 @@ try {
     validadeNoProduto.texto.slice(0, 300));
   await p.evaluate(() => [...document.querySelectorAll("button")]
     .find((b) => b.textContent?.trim() === "+ Regra")?.click());
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   checar("acrescentar uma regra avisa que há alteração não salva",
     /altera[çc][õo]es n[ãa]o salvas/i.test((await cartaoDeValidade()).texto));
   // 🔑 **O campo "Dura" aceita ficar vazio enquanto se digita** (06/10/2026, relato
@@ -2852,7 +2915,7 @@ try {
   const campoSobrou = 'input[aria-label="quanto sobrou no pote"]';
   await p.waitForSelector(campoSobrou, { timeout: 5000 }).catch(() => {});
   await p.type(campoSobrou, "1");
-  await new Promise((r) => setTimeout(r, 200));
+  await assentar(200);
   await clicarBotaoParcial("Registrar");
   await p.waitForFunction(() => !document.querySelector('input[aria-label="quanto sobrou no pote"]'),
     { timeout: 10000 }).catch(() => {});
@@ -2861,7 +2924,7 @@ try {
     Number(depoisDoPainel.quantidade) === 1 && (depoisDoPainel.usos ?? []).length === 2
       && (depoisDoPainel.usos ?? []).some((u) => Number(u.quantidade) === 0.5 && Number(u.restante) === 1),
     depoisDoPainel);
-  await new Promise((r) => setTimeout(r, 600));
+  await assentar(600);
   const linhaDepois = await p.evaluate((cod) =>
     [...document.querySelectorAll("tr")].find((x) => x.innerText.includes(cod))?.innerText ?? "",
     poteParcial.codigo);
@@ -2949,9 +3012,9 @@ try {
   //   3. o voltar devolve a ROLAGEM (`components/rolagem.tsx`) — o filtro e a
   //      página já voltavam pela URL.
   await irPara(p, `${WEB}/produtos`);
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   await p.evaluate(() => window.scrollTo(0, 900));
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
   const navRolagemAntes = await p.evaluate(() => window.scrollY);
   const navProdutoAberto = await p.evaluate(() => {
     const links = [...document.querySelectorAll('a.link-registro[href^="/produtos/"]')];
@@ -2977,7 +3040,7 @@ try {
     { navRolagemAntes, navRolagemDepois });
 
   await irPara(p, `${WEB}/precificacao`);
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const linhaDaPrecificacao = await p.evaluate(() => {
     const linha = document.querySelector("tbody tr");
     const link = linha?.querySelector('a.link-registro[href^="/produtos/"]');
@@ -2988,7 +3051,7 @@ try {
   if (linhaDaPrecificacao.temLinha) {
     checar("na precificação o nome do produto é link para o cadastro",
       !!linhaDaPrecificacao.href, linhaDaPrecificacao);
-    await new Promise((r) => setTimeout(r, 900));
+    await assentar(900);
     checar("abrir a simulação grava o produto aberto na URL",
       /aberto=\d+/.test(await p.evaluate(() => location.search)),
       await p.evaluate(() => location.search));
@@ -2997,7 +3060,7 @@ try {
     await p.waitForFunction((h) => location.pathname === h, { timeout: 20000 },
       linhaDaPrecificacao.href).catch(() => {});
     await p.waitForSelector("a.link-voltar", { timeout: 20000 }).catch(() => {});
-    await new Promise((r) => setTimeout(r, 600));
+    await assentar(600);
     checar("o clique no nome vai ao cadastro, sem só abrir a simulação",
       (await p.evaluate(() => location.pathname)) === linhaDaPrecificacao.href);
     await p.evaluate(() => document.querySelector("a.link-voltar")?.click());
@@ -3016,10 +3079,10 @@ try {
   }
 
   await irPara(p, `${WEB}/estoque`);
-  await new Promise((r) => setTimeout(r, 1000));
+  await assentar(1000);
   await p.evaluate(() => [...document.querySelectorAll("button")]
     .find((b) => /^movimentos/i.test(b.textContent?.trim() ?? ""))?.click());
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const razaoComLinks = await p.evaluate(() => ({
     url: location.pathname + location.search,
     origem: [...document.querySelectorAll("a.link-registro")]
@@ -3036,7 +3099,7 @@ try {
       razaoComLinks.origem[0]);
     await p.waitForFunction((h) => location.pathname === h, { timeout: 20000 },
       razaoComLinks.origem[0]).catch(() => {});
-    await new Promise((r) => setTimeout(r, 1500));
+    await assentar(1500);
     const navDocumentoAberto = await p.evaluate(() => ({
       caminho: location.pathname, texto: document.body.innerText.slice(0, 400) }));
     checar("o documento abre, e existe",
@@ -3045,14 +3108,14 @@ try {
     await p.goBack();
     await p.waitForFunction(() => location.pathname === "/estoque", { timeout: 20000 })
       .catch(() => {});
-    await new Promise((r) => setTimeout(r, 1500));
+    await assentar(1500);
     checar("e voltar devolve ao razão, na mesma aba",
       (await p.evaluate(() => location.pathname + location.search)) === razaoComLinks.url,
       await p.evaluate(() => location.pathname + location.search));
   }
 
   await irPara(p, `${WEB}/ajustes`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const telaAjustes = await p.evaluate(() => {
     const texto = document.body.innerText;
     // ⚠️ **Dentro do `main`, nao no documento inteiro.** A busca era
@@ -3089,7 +3152,7 @@ try {
       /ajuste de estoque/i.test(x.textContent ?? ""));
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 700));
+  await assentar(700);
   const formSaldo = await p.evaluate(() =>
     [...document.querySelectorAll(".rotulo, .rotulo-campo")].map((r) => r.textContent?.trim() ?? ""));
   checar("no ajuste de estoque pede a quantidade que REALMENTE tem",
@@ -3103,7 +3166,7 @@ try {
       /ajuste de custo/i.test(x.textContent ?? ""));
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 700));
+  await assentar(700);
   const formCusto = await p.evaluate(() => ({
     rotulos: [...document.querySelectorAll("span.rotulo, .rotulo, .rotulo-campo")]
       .map((r) => r.textContent?.trim() ?? ""),
@@ -3155,7 +3218,7 @@ try {
   // campos numa página que não os tem e a suíte MORRE, longe da causa. Mesma
   // família da lição do localStorage: quem desvia, devolve.
   await irPara(p, `${WEB}/ajustes`);
-  await new Promise((r) => setTimeout(r, 800));
+  await assentar(800);
   checar("com um já escolhido e o formulário montado para ele",
     telaAjustes.escolhido?.startsWith("Entrada") && telaAjustes.temCusto, telaAjustes);
 
@@ -3195,7 +3258,7 @@ try {
   await p.keyboard.press("Tab");
   // ⚠️ Mesma troca: espera a JANELA existir, nao 1.400 ms.
   await p.waitForSelector('[role="dialog"]', { timeout: 15000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   const janela = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     return d ? { titulo: d.getAttribute("aria-label"), linhas: d.querySelectorAll("li").length }
@@ -3227,13 +3290,13 @@ try {
     set.call(campo, alvo);
     campo.dispatchEvent(new Event("input", { bubbles: true }));
   }, `Est tela ${m4}`.toUpperCase());
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   await p.evaluate((alvo) => {
     const d = document.querySelector('[role="dialog"]');
     if (!d) return;
     [...d.querySelectorAll("li button")].find((b) => b.textContent.includes(alvo))?.click();
   }, `Est tela ${m4}`.toUpperCase());
-  await new Promise((r) => setTimeout(r, 700));
+  await assentar(700);
   const depoisDaJanela = await p.evaluate(() => ({
     fechou: !document.querySelector('[role="dialog"]'),
     campo: document.activeElement?.getAttribute("aria-label"),
@@ -3261,7 +3324,7 @@ try {
       (x) => x.textContent === "Lançar entrada");
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const textoEstoque = await p.evaluate(() => document.body.innerText);
   checar("entrada pela tela mostra o novo custo médio", /custo médio: R\$\s?20,00/i.test(textoEstoque),
     textoEstoque.match(/.{0,60}custo médio.{0,20}/i)?.[0]);
@@ -3305,12 +3368,12 @@ try {
       /ajuste de estoque/i.test(x.textContent ?? ""));
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 600));
+  await assentar(600);
   const campoLocal = await p.$('input[aria-label="Buscar produto"]');
   if (campoLocal) {
     await campoLocal.type(`Est tela ${m4}`);
     await p.keyboard.press("Tab");
-    await new Promise((r) => setTimeout(r, 1600));
+    await assentar(1600);
   }
   const apos = await p.evaluate(() => {
     const s = document.querySelectorAll("main select")[0];
@@ -3385,7 +3448,7 @@ try {
   if (buscaItemVenda) {
     await buscaItemVenda.type(`Prato preco tela ${m6}`);
     await p.keyboard.press("Tab");
-    await new Promise((r) => setTimeout(r, 1600));
+    await assentar(1600);
   }
   // ⚠️ **O preço é MASCARADO** (`CampoMoeda`): o campo mostra "37,50" e é de
   // texto, então nem `input[type=number]` o encontra nem `Number()` o lê.
@@ -3454,14 +3517,14 @@ try {
       && /60,00/.test(textoPreviaCupom), textoPreviaCupom.slice(0, 400));
 
   await p.reload({ waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const doc6 = `TELA-${m6}`;
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")]
       .find((x) => x.textContent?.trim() === "Colar planilha");
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
   await p.evaluate((d) => {
     const campos = [...document.querySelectorAll("input")];
     const alvo = campos.find((c) => c.placeholder?.includes("fechamento-"));
@@ -3473,7 +3536,7 @@ try {
   }, doc6);
   const area = await p.$("textarea");
   await area.type(`${prod6.codigo}; Prato de teste; 10; 30,00`);
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
   const textoPrevia = await p.evaluate(() => document.body.innerText);
   checar("a tela reconhece a linha colada", /1 linha\(s\) reconhecida/.test(textoPrevia),
     textoPrevia.match(/.{0,40}reconhecid.{0,30}/)?.[0]);
@@ -3487,7 +3550,7 @@ try {
     const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Importar");
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 2200));
+  await assentar(2200);
   const textoImport = await p.evaluate(() => document.body.innerText);
   checar("importa a venda pela tela", /1 venda\(s\) importada/.test(textoImport),
     textoImport.slice(0, 160));
@@ -3514,7 +3577,7 @@ try {
       alvo.dispatchEvent(new Event("input", { bubbles: true }));
     }
   }, doc6);
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   checar("a busca da lista acha a venda desta rodada",
     (await textoVisivel(p)).includes(doc6), (await textoVisivel(p)).slice(0, 120));
 
@@ -3536,7 +3599,7 @@ try {
     c.dispatchEvent(new Event("input", { bubbles: true }));
     c.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   // ⚠️ **Medir na LISTA, e ela e um `<ul>`.** Duas medicoes erradas antes desta:
   // `textoVisivel` anexa o VALOR dos campos de input, e a caixa de busca ainda
   // contem o documento — procura-lo no texto da tela devolvia verdadeiro com a
@@ -3554,7 +3617,7 @@ try {
     [...document.querySelectorAll("button")]
       .find((b) => /Todos os dias/i.test(b.textContent ?? ""))?.click();
   });
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   checar("e o botao Todos os dias devolve a lista", await vendaNaLista());
 
   // 🔑 **O relatorio de consumo por pessoa** (04/09/2026, pedido do dono: "o
@@ -3656,7 +3719,7 @@ try {
   const { dados: minhas } = await api("GET", `/vendas?busca=${doc6}`, null, token);
   checar("a lista devolve exatamente a venda buscada", minhas.length === 1, minhas.length);
   await p.goto(`${WEB}/vendas/${minhas[0].id}`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const textoDet = await textoVisivel(p);
   checar("o detalhe da venda abre", /Receita/i.test(textoDet) && textoDet.includes(doc6),
     textoDet.slice(0, 140));
@@ -3680,7 +3743,7 @@ try {
   const nomePdv = `PDV ${m6} CURTO`;
   await api("PUT", `/produtos/${prod6.id}`, { nome_curto: nomePdv }, token);
   await p.reload({ waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const comCurto = await p.evaluate(() => {
     const linha = [...document.querySelectorAll("tbody tr")]
       .find((t) => /CURTO/i.test(t.innerText));
@@ -3863,14 +3926,14 @@ try {
     [...document.querySelectorAll('[role="tab"]')]
       .find((b) => b.textContent?.trim() === "Curva ABC")?.click();
   });
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   await p.evaluate(() => {
     [...document.querySelectorAll('[role="tablist"] button')]
       .find((b) => b.textContent?.trim() === "Baixar")?.click();
   });
   await p.waitForFunction(() => document.querySelector('[role="dialog"]'),
     { timeout: 15000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const janelaCmv = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     if (!d) return null;
@@ -3906,7 +3969,7 @@ try {
     [...document.querySelectorAll('[role="tab"]')]
       .find((b) => b.textContent?.trim() === "A conta")?.click();
   });
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
 
   const textoCmv = await p.evaluate(() => document.body.innerText);
   checar("painel mostra CMV real e teórico",
@@ -4012,7 +4075,7 @@ try {
 
   // O texto tem de vir da tela de integrações, não da última do laço.
   await p.goto(`${WEB}/integracoes`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
 
   // 🔑 **A tela virou ABAS** (09/09/2026, pedido do dono: *"cria uma aba e
   // coloca as coisas do Omie, outra para o PDV Legal, outra para o e-mail e
@@ -4048,7 +4111,7 @@ try {
   checar("e não carrega junto o bloco do Omie", !naEmail.temOmie, naEmail);
 
   await p.goto(`${WEB}/integracoes`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const textoInt = await p.evaluate(() => document.body.innerText);
   checar("a tela avisa que está em modo simulado", /modo simulado/i.test(textoInt),
     textoInt.slice(0, 120));
@@ -4060,7 +4123,7 @@ try {
   // e então traz as novas e relê as abertas. A regra da releitura é da suíte da API
   // (`smoke_nota_atualizada`, `smoke_nota_cancelada`); aqui se mede o botão e a frase.
   await p.goto(`${WEB}/compras`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1100));
+  await assentar(1100);
   const botoesOmie = await p.evaluate(() => [...document.querySelectorAll("button")]
     .map((b) => b.textContent?.trim() ?? ""));
   checar("a listagem tem UM botão de sincronizar, sem o Buscar e o Atualizar soltos",
@@ -4120,7 +4183,7 @@ try {
   const campoBuscaNota = (await p.$$('input[aria-label="Buscar nota"]'))[0];
   checar("a lista de notas tem busca", !!campoBuscaNota);
   await campoBuscaNota.type("4812");
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   // A nota agora abre em PÁGINA PRÓPRIA: o item da lista é um link.
   const linkNota = await p.evaluate(() => {
     const a = [...document.querySelectorAll("a")].find((x) =>
@@ -4129,7 +4192,7 @@ try {
   });
   checar("a nota da lista leva para a página dela", !!linkNota, linkNota);
   await irPara(p, WEB + linkNota);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const textoNota = await p.evaluate(() => document.body.innerText);
   checar("a nota abre com os itens", /CAFE EM GRAO/i.test(textoNota), textoNota.slice(0, 100));
   // O que o dono pediu: as três áreas, no mesmo modelo da digitação.
@@ -4173,7 +4236,7 @@ try {
   );
 
   await p.goto(`${WEB}/compras`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1100));
+  await assentar(1100);
   const entradaXmlTela = await p.$('input[type="file"]');
   checar("a tela de compras tem a porta do XML", !!entradaXmlTela);
   await entradaXmlTela.uploadFile(caminhoXml);
@@ -4251,16 +4314,16 @@ try {
   await foto(p, "29c-trocar-produto");
   // ⚠️ Desiste: a nota segue para as checagens seguintes do jeito que estava.
   await clicarLinha("cancelar");
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   checar("desistir devolve a linha ao produto que já estava lá",
     !(await temLinhaBotao("trocar")) && (await temLinhaBotao("não é este produto")));
 
   // O mesmo arquivo de novo: a chave da NF-e é que impede a duplicação. Volta
   // para a lista, que é onde mora a porta do XML.
   await irPara(p, `${WEB}/compras`);
-  await new Promise((r) => setTimeout(r, 1100));
+  await assentar(1100);
   await (await p.$('input[type="file"]')).uploadFile(caminhoXml);
-  await new Promise((r) => setTimeout(r, 2500));
+  await assentar(2500);
   const textoRepetido = await p.evaluate(() => document.body.innerText);
   checar("o mesmo XML não entra duas vezes",
     /repetida|já tinha sido importada/i.test(textoRepetido), textoRepetido.slice(0, 200));
@@ -4269,7 +4332,7 @@ try {
   // Arquivo que não é nota: a recusa tem de explicar o que houve.
   writeFileSync(`${FOTOS}/_nao-e-nota.xml`, "<retEnviNFe><nRec>1</nRec></retEnviNFe>");
   await (await p.$('input[type="file"]')).uploadFile(`${FOTOS}/_nao-e-nota.xml`);
-  await new Promise((r) => setTimeout(r, 2000));
+  await assentar(2000);
   const textoRecusa = await p.evaluate(() => document.body.innerText);
   checar("arquivo que não é a nota é recusado com explicação",
     /recibo\/evento da nota/i.test(textoRecusa), textoRecusa.slice(0, 200));
@@ -4284,7 +4347,7 @@ try {
   // A digitação tem PÁGINA PRÓPRIA: o formulário é longo, e aberto dentro da
   // lista empurrava as notas para fora da tela.
   await irPara(p, `${WEB}/compras`);
-  await new Promise((r) => setTimeout(r, 1100));
+  await assentar(1100);
   const linkDigitar = await p.evaluate(() => {
     const a = [...document.querySelectorAll("a")].find((x) =>
       x.textContent?.trim() === "Digitar nota");
@@ -4342,7 +4405,7 @@ try {
   const numerosNota = await p.$$('input[inputmode="decimal"]');
   await numerosNota[0].type("2");
   await numerosNota[1].type("10");
-  await new Promise((r) => setTimeout(r, 600));
+  await assentar(600);
   const textoPreviaNota = await p.evaluate(() => document.body.innerText);
   checar("a tela mostra o custo unitário antes de gravar",
     /R\$\s*10,00/.test(textoPreviaNota), textoPreviaNota.slice(-260));
@@ -4391,7 +4454,7 @@ try {
   await p.evaluate(() => {
     [...document.querySelectorAll("button")].find((x) => /cancelar/i.test(x.textContent))?.click();
   });
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
 
   // Limpeza: as duas notas do teste saem, para a próxima rodada começar limpa.
   const { dados: notasDoTesteXml } = await api("GET", "/notas?limite=60", null, token);
@@ -4473,7 +4536,7 @@ try {
     [...document.querySelectorAll("button")]
       .find((b) => b.textContent?.trim() === "Criar produto")?.click();
   });
-  await new Promise((r) => setTimeout(r, 3000));
+  await assentar(3000);
   const { dados: achados } = await api(
     "GET", `/produtos?busca=${encodeURIComponent(`Produto criacao ${mNovo}`)}`, null, token);
   const produtoCriado = (achados ?? [])[0];
@@ -4704,7 +4767,7 @@ try {
   await irPara(p, `${WEB}/produtos/${ovoTela.id}`);
   await p.waitForFunction(() => /Unidades de compra/.test(document.body.innerText),
     { timeout: 15000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 700));
+  await assentar(700);
   const cabecalhoEquiv = await p.evaluate(() =>
     [...document.querySelectorAll("section.cartao thead th")].map((t) => t.textContent));
   checar("a coluna da equivalencia mostra a relacao, nao um numero solto",
@@ -4712,10 +4775,10 @@ try {
 
   await p.evaluate(() => [...document.querySelectorAll("button")]
     .find((b) => (b.textContent ?? "").trim() === "+ unidade")?.click());
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   const selsOvo = await p.$$("section.cartao tbody select");
   await selsOvo[selsOvo.length - 1].select("G");
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   const rotulosOvo = await p.evaluate(() =>
     [...document.querySelectorAll("section.cartao tbody input[aria-label]")]
       .map((i) => i.getAttribute("aria-label")));
@@ -4825,7 +4888,7 @@ try {
         s2.call(c, "0.5");
         c.dispatchEvent(new Event("input", { bubbles: true }));
       });
-      await new Promise((r) => setTimeout(r, 300));
+      await assentar(300);
       await p.evaluate(() => {
         const c = document.querySelector('input[aria-label^="conversão de"]');
         [...c.closest("tr").querySelectorAll("button")]
@@ -4865,7 +4928,7 @@ try {
   }, token);
 
   await irPara(p, `${WEB}/produtos/${comboTela.id}`);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const textoKit = await p.evaluate(() => document.body.innerText);
   checar("produto KIT ganha o cartão de composição", /O que vai no combo/i.test(textoKit),
     textoKit.slice(0, 140));
@@ -4880,12 +4943,12 @@ try {
   await buscaComponente.type(`Combo bebida ${marcaKit}`);
   await p.keyboard.press("Tab");
   await esperarTexto(p, `Combo bebida ${marcaKit}`, 6000);
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   await p.evaluate(() => {
     [...document.querySelectorAll("button")]
       .find((x) => /gravar composição/i.test(x.textContent))?.click();
   });
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const textoGravado = await p.evaluate(() => document.body.innerText);
   checar("a composição grava pela tela", /componente\(s\)/i.test(textoGravado),
     textoGravado.slice(0, 160));
@@ -4902,11 +4965,11 @@ try {
   // O que mexe no razão pergunta antes — e a pergunta é do sistema, não do
   // navegador: `window.confirm` não tem onde dizer o que a ação faz.
   await irPara(p, `${WEB}/estoque`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   await p.evaluate(() => {
     [...document.querySelectorAll("button")].find((x) => x.textContent === "Movimentos")?.click();
   });
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const clicouEstornar = await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find(
       (x) => x.textContent?.trim() === "estornar");
@@ -4916,7 +4979,7 @@ try {
   });
   checar("o razão oferece estornar", clicouEstornar, clicouEstornar);
   if (clicouEstornar) {
-    await new Promise((r) => setTimeout(r, 700));
+    await assentar(700);
     const d = await p.evaluate(() => {
       const el = document.querySelector('[role="dialog"]');
       return el ? { titulo: el.getAttribute("aria-label"), texto: el.innerText } : null;
@@ -4930,7 +4993,7 @@ try {
       [...(el?.querySelectorAll("button") ?? [])].find(
         (b) => b.textContent === "Cancelar")?.click();
     });
-    await new Promise((r) => setTimeout(r, 500));
+    await assentar(500);
     const fechou = await p.evaluate(() => !document.querySelector('[role="dialog"]'));
     checar("e cancelar não estorna nada", fechou, fechou);
   }
@@ -4950,7 +5013,7 @@ try {
     [...document.querySelectorAll("th")].some((t) => t.textContent?.trim() === "Inicial")
       || /período (aberto|fechado)/i.test(document.body.innerText),
   { timeout: 20000, polling: 300 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   const mov = await p.evaluate(() => {
     const texto = document.body.innerText;
     const cabecalhos = [...document.querySelectorAll("th")].map((t) => t.textContent?.trim());
@@ -4999,7 +5062,7 @@ try {
   }
 
   checar("a aba da quebra abre", await clicarQuando(p, "Quebra por "));
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const quebra = await p.evaluate(() => document.body.innerText);
   checar("e diz que não é rateio, e sim a mesma conta restrita",
     /não é rateio/i.test(quebra), quebra.slice(0, 200));
@@ -5026,7 +5089,7 @@ try {
     sel.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
   });
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const porCategoria = await p.evaluate(() => document.body.innerText);
   checar("dá para trocar para categoria",
     trocouEixo && /CMV por categoria/i.test(porCategoria), porCategoria.slice(0, 200));
@@ -5053,16 +5116,16 @@ try {
   checar("o recorte oferece esta loja e a empresa inteira",
     !!opcoesEscopo && opcoesEscopo.includes("loja") && opcoesEscopo.includes("empresa"),
     opcoesEscopo);
-  await new Promise((r) => setTimeout(r, 2200));
+  await assentar(2200);
   checar("e a apuração continua de pé no escopo da empresa",
     /CMV real/i.test(await p.evaluate(() => document.body.innerText)));
   // Volta para a loja: as fases seguintes leem esta tela esperando o padrão.
   await mexerNoEscopo("loja");
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
 
   checar("a aba do que subiu de preço abre",
     await clicarQuando(p, "O que subiu de preço"));
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   checar("e traz o relatório de preços",
     /O que subiu de preço/i.test(await p.evaluate(() => document.body.innerText)));
 
@@ -5125,7 +5188,7 @@ try {
   await irPara(p, `${WEB}/produtos/${prodTroca.id}`);
   await p.waitForFunction(() => /Unidade de estoque/i.test(document.body.innerText),
     { timeout: 30000, polling: 300 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
 
   // ⚠️ O seletor nativo, não `p.select`: a tela reage ao `change` do React, e o
   // valor precisa ser posto pelo setter nativo para o estado acompanhar.
@@ -5141,7 +5204,7 @@ try {
     return true;
   });
   checar("a ficha do produto deixa escolher outra unidade de estoque", escolheuKg);
-  await new Promise((r) => setTimeout(r, 2600));
+  await assentar(2600);
 
   // 🔑 **A tela PERGUNTA em vez de recusar.** UN e KG não são da mesma grandeza
   // e este cadastro não tem embalagem que as ligue: ninguém sabe o número, e é
@@ -5159,7 +5222,7 @@ try {
     !/zere o saldo/i.test(pergunta.texto));
 
   await p.type("#fator-troca-unidade", "2");
-  await new Promise((r) => setTimeout(r, 2800));
+  await assentar(2800);
   const previsto = await p.evaluate(() => document.body.innerText);
   // 🔑 **O saldo que vira, escrito.** É a diferença entre "confie em mim" e
   // "10 UN viram 20 KG".
@@ -5175,7 +5238,7 @@ try {
   await foto(p, "35b-troca-de-unidade");
 
   checar("e dá para salvar", await clicarQuando(p, "Salvar"));
-  await new Promise((r) => setTimeout(r, 2500));
+  await assentar(2500);
   // A confirmação do salto de custo: R$ 7,00 vira R$ 3,50, que não é salto —
   // mas se a janela aparecer, responde.
   await p.evaluate(() => {
@@ -5183,7 +5246,7 @@ try {
     [...(d?.querySelectorAll("button") ?? [])]
       .find((b) => /confirmar|sim|trocar/i.test(b.textContent ?? ""))?.click();
   });
-  await new Promise((r) => setTimeout(r, 2500));
+  await assentar(2500);
 
   const { dados: saldoTroca } = await api(
     "GET", `/estoque/saldos?id_produto=${prodTroca.id}`, null, token);
@@ -5218,11 +5281,11 @@ try {
   }
 
   await irPara(p, `${WEB}/estoque`);
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   await p.evaluate(() => {
     [...document.querySelectorAll("button")].find((x) => /movimentos/i.test(x.textContent))?.click();
   });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const textoLotes = await p.evaluate(() => document.body.innerText);
   checar("a tela lista os lotes em estoque", /Lotes em estoque/i.test(textoLotes),
     textoLotes.slice(0, 120));
@@ -5260,7 +5323,7 @@ try {
 
   console.log("9. alertas e exportação");
   await p.goto(`${WEB}/alertas`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const textoAlertas = await p.evaluate(() => document.body.innerText);
   checar("/alertas carrega",
     !/Erro 5|Não autenticado|Falha ao carregar/.test(textoAlertas), textoAlertas.slice(0, 90));
@@ -5300,13 +5363,13 @@ try {
     doInventario?.filtros);
 
   await p.goto(`${WEB}/produtos`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   await p.evaluate(() => {
     [...document.querySelectorAll("button")]
       .find((x) => /^Baixar/i.test(x.textContent?.trim() ?? ""))
       ?.click();
   });
-  await new Promise((r) => setTimeout(r, 2400));
+  await assentar(2400);
   // ⚠️ **A prévia ESPERA pelo texto, não por um relógio** (21/10/2026). O cadastro de
   // produtos da base local cresce a cada rodada (53 mil em outubro) e a prévia dele
   // passou a levar ~1,8 s no servidor: os 2,4 s fixos acima viraram sorteio.
@@ -5340,7 +5403,7 @@ try {
   // aberta). A altura de 1000 do resto da bateria escondia isso, então esta
   // checagem MEDE numa tela de notebook de verdade.
   await p.setViewport({ width: 1440, height: 760 });
-  await new Promise((r) => setTimeout(r, 700));
+  await assentar(700);
   const coube = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     if (!d) return { achou: false };
@@ -5362,13 +5425,13 @@ try {
   // O botão fica FORA da rolagem: rolado até o fim, ele continua onde estava.
   checar("e o botão de baixar sempre à vista", coube.botaoAlcancavel, coube);
   await p.setViewport({ width: 1440, height: 1000 });
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
   // ⚠️ Fechar antes de seguir: janela aberta trava a rolagem do corpo, e o
   // bloco seguinte mediria uma tela que não rola.
   await p.evaluate(() => {
     document.querySelector('[role="dialog"] [aria-label="fechar"]')?.click();
   });
-  await new Promise((r) => setTimeout(r, 600));
+  await assentar(600);
 
   // 🔑 **O inventário valorizado tem botão próprio em /estoque**, ao lado da
   // posição de hoje: são perguntas diferentes — uma é operacional, a outra é o
@@ -5419,7 +5482,7 @@ try {
   // O Início é a tela que o dono abre: tem de responder o mês inteiro de um
   // olhar, e responder com número verdadeiro.
   await p.goto(`${WEB}/`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const textoInicio = await p.evaluate(() => document.body.innerText);
   checar("o Início mostra o resumo de alertas",
     listaAlertas.length === 0 || /Precisa de atenção/i.test(textoInicio),
@@ -5503,7 +5566,7 @@ try {
   await irPara(p, `${WEB}/esqueci-senha`);
   await p.type('input[type="email"]', `nao.existe.${marcaSenha}@botane.com.br`);
   await p.click('button[type="submit"]');
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const textoInventado = await p.evaluate(() => document.body.innerText);
   checar("e-mail que não existe recebe a resposta neutra",
     /se este e-mail estiver cadastrado/i.test(textoInventado), textoInventado.slice(0, 140));
@@ -5514,14 +5577,14 @@ try {
   await irPara(p, `${WEB}/esqueci-senha`);
   await p.type('input[type="email"]', emailSenha);
   await p.click('button[type="submit"]');
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const textoReal = await p.evaluate(() => document.body.innerText);
   checar("e-mail cadastrado recebe exatamente a mesma resposta",
     /se este e-mail estiver cadastrado/i.test(textoReal));
 
   // Link vencido/inventado: a tela recusa antes de pedir a senha.
   await irPara(p, `${WEB}/redefinir-senha?token=isto-nao-vale-nada`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const textoRuim = await p.evaluate(() => document.body.innerText);
   checar("link inválido é recusado antes do formulário",
     /não vale mais/i.test(textoRuim), textoRuim.slice(0, 140));
@@ -5571,7 +5634,7 @@ try {
     ).catch(() => {});
   }
   checar("a tela de usuários oferece gerar o link", clicou);
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const textoAdmin = await p.evaluate(() => document.body.innerText);
   checar("o link aparece para o administrador copiar",
     /redefinir-senha\?token=/.test(textoAdmin), textoAdmin.slice(0, 200));
@@ -5583,7 +5646,7 @@ try {
   // A pessoa abre o link e escolhe a senha nova.
   await p.evaluate(() => localStorage.clear());
   await irPara(p, linkGerado);
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const textoForm = await p.evaluate(() => document.body.innerText);
   checar("o link abre a tela com o nome de quem é",
     /Olá, Tela/i.test(textoForm), textoForm.slice(0, 160));
@@ -5592,7 +5655,7 @@ try {
   await campos[0].type("senhanova12345");
   await campos[1].type("senhanova-diferente");
   await p.click('button[type="submit"]');
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   checar("senhas diferentes são recusadas na tela",
     /precisam ser iguais/i.test(await p.evaluate(() => document.body.innerText)));
 
@@ -5604,7 +5667,7 @@ try {
   await campos2[1].type("senhanova12345");
   await foto(p, "34-redefinir-senha");
   await p.click('button[type="submit"]');
-  await new Promise((r) => setTimeout(r, 2000));
+  await assentar(2000);
   const textoPronto = await p.evaluate(() => document.body.innerText);
   checar("a senha é trocada pela tela", /senha alterada/i.test(textoPronto),
     textoPronto.slice(0, 160));
@@ -5693,7 +5756,7 @@ try {
 
   console.log("9b. instalável no celular (PWA)");
   await p.goto(`${WEB}/`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
 
   const manifesto = await p.evaluate(async () => {
     const link = document.querySelector('link[rel="manifest"]');
@@ -5754,7 +5817,7 @@ try {
     cacheado.some((u) => u.endsWith("/offline")), cacheado);
 
   await p.goto(`${WEB}/offline`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 700));
+  await assentar(700);
   const textoOffline = await p.evaluate(() => document.body.innerText);
   checar("a página de sem-conexão diz o que fazer",
     /câmara fria|sinal/i.test(textoOffline), textoOffline.slice(0, 120));
@@ -5762,13 +5825,14 @@ try {
 
   console.log("10. celular (390 x 844)");
   const c = await navegador.newPage();
+  await prepararPagina(c);
   await c.setCacheEnabled(false);
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
   await c.screenshot({ path: `${FOTOS}/m1-login.png`, fullPage: true });
   await entrar(c, ADMIN);
   await irPara(c, WEB + "/");
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
 
   const larguraCorpo = await c.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
@@ -5856,7 +5920,7 @@ try {
   await c.screenshot({ path: `${FOTOS}/m2-inicio.png`, fullPage: true });
 
   await c.click('button[aria-label="Abrir menu"]');
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
   const gavetaAberta = await c.evaluate(() => {
     const a = document.querySelector("aside");
     return a ? a.getBoundingClientRect().left >= -1 : false;
@@ -5876,7 +5940,7 @@ try {
     [...document.querySelectorAll("aside button")]
       .find((x) => /administra/i.test(x.innerText))?.click();
   });
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
   const abriu = await c.evaluate(() =>
     [...document.querySelectorAll("aside a")].some(
       (x) => x.textContent === "Empresa" && x.offsetParent !== null,
@@ -5888,7 +5952,7 @@ try {
     const l = [...document.querySelectorAll("aside a")].find((x) => x.textContent === "Empresa");
     l?.click();
   });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const fechouSozinha = await c.evaluate(() => {
     const a = document.querySelector("aside");
     return a ? a.getBoundingClientRect().right <= 1 : false;
@@ -5927,7 +5991,7 @@ try {
   // "locais" e entrar pelo menu caía na SEGUNDA, com a primeira ali do lado
   // marcada como não escolhida.
   await irPara(p, `${WEB}/cadastros`);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   // ⚠️ Quem responde "que aba está aberta" é a FRASE que a tela mostra abaixo do
   // título — cada aba tem a sua. Procurar o botão marcado esbarra no menu
   // lateral, que também é feito de botões.
@@ -5982,7 +6046,7 @@ try {
     filaUm.texto.slice(0, 400));
 
   await irPara(p, `${WEB}/cadastros?aba=grupos-cmv`);
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   checar("a aba Grupos do CMV existe em Tabelas de apoio",
     await p.evaluate(() => /grupos do cmv/i.test(document.body.innerText)));
 
@@ -6019,12 +6083,12 @@ try {
     await p.evaluate((tipo) => {
       document.querySelector(`#tipo-novo-${tipo}`)?.click();
     }, tipoLivre);
-    await new Promise((r) => setTimeout(r, 400));
+    await assentar(400);
     await p.evaluate(() => {
       [...document.querySelectorAll("button")]
         .find((b) => b.textContent === "Criar grupo")?.click();
     });
-    await new Promise((r) => setTimeout(r, 1800));
+    await assentar(1800);
 
     const { dados: depoisCriar } = await api("GET", "/cmv/grupos", null, token);
     const meu = (depoisCriar ?? []).find((g) => g.nome === `Teste tela ${marcaG}`);
@@ -6036,7 +6100,7 @@ try {
 
     // ⚠️ O tipo agora está tomado: a caixa dele tem de aparecer DESABILITADA e
     // dizendo em que grupo está.
-    await new Promise((r) => setTimeout(r, 600));
+    await assentar(600);
     const travado = await p.evaluate((tipo) => {
       const caixa = document.querySelector(`#tipo-novo-${tipo}`);
       const rotulo = document.querySelector(`label[for="tipo-novo-${tipo}"]`);
@@ -6054,7 +6118,7 @@ try {
 
   // A linha do grupo aparece na conta do CMV, junto de Perdas e Ajustes.
   await irPara(p, `${WEB}/cmv`);
-  await new Promise((r) => setTimeout(r, 2200));
+  await assentar(2200);
   const noPainel = await p.evaluate(() => {
     const linhas = [...document.querySelectorAll("table tr")]
       .map((l) => l.textContent?.trim() ?? "");
@@ -6092,7 +6156,7 @@ try {
   // principal, e com o do cardapio entre eles a direcao deixa de ser unica. A
   // tela diz isso e manda refazer a partir dele, que e o que esta fase faz.
   await irPara(p, `${WEB}/produtos/${vincB.id}`);
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const temBotao = await p.evaluate(() =>
     [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Vincular"));
   checar("a tela do produto tem o botao Vincular", temBotao);
@@ -6102,7 +6166,7 @@ try {
       (x) => x.textContent?.trim() === "Vincular");
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   const busca = await p.$('input[aria-label="Buscar produto"]');
   checar("e abre a busca do outro cadastro", !!busca);
 
@@ -6148,7 +6212,7 @@ try {
     naJanela.linhas.slice(0, 4));
   // Escape fecha SO a janela de busca; a Vincular continua aberta para o resto.
   await p.keyboard.press("Escape");
-  await new Promise((r) => setTimeout(r, 600));
+  await assentar(600);
   const vincSegue = await p.evaluate(() =>
     document.querySelectorAll('[role="dialog"]').length);
   checar("e o Escape fecha so a busca, deixando a Vincular aberta",
@@ -6206,12 +6270,12 @@ try {
       === (paginandoNaBusca.depois.texto ?? "").split(" de ")[1],
     [paginandoNaBusca.antes.texto, paginandoNaBusca.depois.texto]);
   await p.keyboard.press("Escape");
-  await new Promise((r) => setTimeout(r, 500));
+  await assentar(500);
 
   if (busca) {
     await busca.type(`BEB CERV HEINEKEN 350ML ${mVinc}`);
     await p.keyboard.press("Tab");
-    await new Promise((r) => setTimeout(r, 1800));
+    await assentar(1800);
     const previa = await textoVisivel(p);
     // ⚠️ A previa vem ANTES do botao porque fusao nao tem desfazer: quem
     // confirma precisa ver com que nome o produto vai ficar.
@@ -6299,7 +6363,7 @@ try {
     // ⚠️ Medido numa tela de notebook de verdade: a altura de 1000 do resto da
     // bateria esconde exatamente esta classe de defeito.
     await p.setViewport({ width: 1440, height: 760 });
-    await new Promise((r) => setTimeout(r, 700));
+    await assentar(700);
     const coubeVinc = await p.evaluate(() => {
       const d = document.querySelector('[role="dialog"]');
       if (!d) return { achou: false };
@@ -6321,7 +6385,7 @@ try {
     // O botão fica FORA da rolagem: rolado até o fim, continua onde estava.
     checar("e o botão de fundir sempre à vista", coubeVinc.botaoAlcancavel, coubeVinc);
     await p.setViewport({ width: 1440, height: 1000 });
-    await new Promise((r) => setTimeout(r, 500));
+    await assentar(500);
     await foto(p, "32-vincular");
 
     await p.evaluate(() => {
@@ -6329,7 +6393,7 @@ try {
         (x) => (x.textContent?.trim() ?? "").startsWith("Vincular e fundir"));
       b?.click();
     });
-    await new Promise((r) => setTimeout(r, 2600));
+    await assentar(2600);
     // ⚠️ **Esperar o `window.location.reload()` que a fusão dispara.** A tela
     // recarrega para mostrar o nome e os códigos novos; seguir por cima dele
     // faz o recarregamento chegar no MEIO do bloco seguinte, desmontando a
@@ -6468,7 +6532,7 @@ try {
         [...document.querySelectorAll("button")]
           .find((x) => (x.textContent?.trim() ?? "").startsWith("Vincular e fundir"))?.click();
       });
-      await new Promise((r) => setTimeout(r, 2600));
+      await assentar(2600);
       const textoDepois = await textoVisivel(p);
       // 🔑 A afirmação central: a tela mandava o `id_sai` da prévia de volta, e
       // na direção invertida ele É o cadastro da tela — o pedido chegava com o
@@ -6638,7 +6702,7 @@ try {
   // endpoints da Tablet Cloud não é público; um cartão com um botão de testar e
   // mais nada parece um pedaço faltando, e alguém abriria chamado por isso.
   await irPara(p, `${WEB}/integracoes?aba=pdv`);
-  await new Promise((r) => setTimeout(r, 2000));
+  await assentar(2000);
   const pdv = await p.evaluate(() => {
     const texto = document.body.innerText;
     const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((r) =>
@@ -6682,7 +6746,7 @@ try {
   // nunca casava. O sintoma seria uma tabela VAZIA, que se le como "esta tudo
   // certo". Por isso a tela mostra o RESUMO antes da tabela.
   await irPara(p, `${WEB}/integracoes`);
-  await new Promise((r) => setTimeout(r, 2000));
+  await assentar(2000);
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find(
       (x) => /Conferir estoque|Confer[êe]ncia/i.test(x.textContent ?? ""));
@@ -6783,7 +6847,7 @@ try {
   }, token));
 
   await irPara(p, `${WEB}/integracoes`);
-  await new Promise((r) => setTimeout(r, 2000));
+  await assentar(2000);
   // ⚠️ **Pelo id da seção, não por "o primeiro select com HORARIA".** Desde que
   // o PDV Legal ganhou agenda, há DOIS blocos iguais na mesma tela — e o
   // seletor por conteúdo passou a devolver o de quem estivesse antes no DOM.
@@ -6812,7 +6876,7 @@ try {
     sel.value = "HORARIA";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   checar("a cada hora avisa que consome cota",
     await p.evaluate(() => /bloqueia a integração inteira/i.test(document.body.innerText)));
 
@@ -6823,7 +6887,7 @@ try {
     sel.value = "DIARIA";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   checar("uma vez por dia pergunta a hora",
     await p.evaluate(() =>
       [...document.querySelectorAll("#agenda-omie span.rotulo, #agenda-omie span.rotulo-campo")].some((r) =>
@@ -6870,7 +6934,7 @@ try {
   // parecer específica do PDV. Dormir um tempo fixo e afirmar é supor a
   // precondição; esperar por ela é garanti-la.
   await p.waitForSelector("#agenda-pdv", { timeout: 20000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   const agendaPdv = await p.evaluate(() => {
     const sel = document.querySelector("#agenda-pdv select");
     return {
@@ -6938,7 +7002,7 @@ try {
     sel.value = "HORARIA";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   // ⚠️ "A cada hora" não parece caro até alguém multiplicar: 24 buscas por dia,
   // e cada uma faz uma requisição por dia da janela.
   checar("a cada hora diz quanto custa",
@@ -6950,7 +7014,7 @@ try {
     sel.value = "DIARIA";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   checar("uma vez por dia pergunta a hora",
     await p.evaluate(() =>
       [...document.querySelectorAll("#agenda-pdv span.rotulo, #agenda-pdv span.rotulo-campo")].some((r) =>
@@ -6977,7 +7041,7 @@ try {
   // consultar e cadastrar sao telas diferentes, como em Compras e Vendas.
   // O id 1 e a matriz, a mesma que a linha acima acabou de configurar.
   await irPara(p, `${WEB}/lojas/1`);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   // ⚠️ O título está num `.rotulo`, que o CSS põe em maiúsculas — e `innerText`
   // devolve o texto RENDERIZADO, não o que está no JSX. Procurar pela frase
   // como ela foi escrita não acha nada.
@@ -7014,7 +7078,7 @@ try {
     sel.value = "SEMANAL";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const semanal = await seletores();
   checar("no semanal, pergunta o dia em que a semana fecha", semanal.temSemana, semanal);
   checar("e some a pergunta do mês", !semanal.temMes, semanal);
@@ -7027,9 +7091,9 @@ try {
   await p.evaluate(() => {
     [...document.querySelectorAll("button")].find((b) => b.textContent === "Salvar")?.click();
   });
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   await irPara(p, `${WEB}/cmv`);
-  await new Promise((r) => setTimeout(r, 2200));
+  await assentar(2200);
   const noCmv = await p.evaluate(() => {
     const texto = document.body.innerText;
     const opcoes = [...document.querySelectorAll("main select")]
@@ -7061,7 +7125,7 @@ try {
   // norma sem teste volta na primeira vez que alguem ajustar uma cor "so um
   // pouquinho".
   await irPara(p, `${WEB}/produtos`);
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const normas = await p.evaluate(() => {
     // Contraste do WCAG 2.1, calculado sobre o que o NAVEGADOR realmente pinta
     // — nao sobre o token, que pode estar sendo sobreposto por outra regra.
@@ -7127,7 +7191,7 @@ try {
   // o maior bloco de acoes do sistema, entao e ela que quebra primeiro.
   await irPara(p, `${WEB}/cmv`);
   await p.waitForSelector("main header h1", { timeout: 20000 });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const cabecalho = await p.evaluate(() => {
     const h = document.querySelector("main header");
     const t = h.querySelector("h1");
@@ -7157,7 +7221,7 @@ try {
     cabecalho.prosaNoDom === true && cabecalho.prosaVisivel === false, cabecalho);
   await p.evaluate(() =>
     document.querySelector("main header button[aria-expanded]")?.click());
-  await new Promise((r) => setTimeout(r, 300));
+  await assentar(300);
   const cabecalhoAberto = await p.evaluate(() => {
     const b = document.querySelector("main header button[aria-expanded]");
     const prosa = document.querySelector("#explica-tela");
@@ -7176,7 +7240,7 @@ try {
     cabecalhoAberto);
   await p.evaluate(() =>
     document.querySelector("main header button[aria-expanded]")?.click());
-  await new Promise((r) => setTimeout(r, 250));
+  await assentar(250);
 
   // 🔑 **E o mesmo "saber mais" nas telas que montam o cabecalho a MAO**
   // (15/09/2026, pedido do dono: *"colocar este saber mais em todas as telas
@@ -7209,7 +7273,7 @@ try {
   // ficaram de fora de proposito; esta e a guarda de uma delas.
   await irPara(p, `${WEB}/consumo`);
   await p.waitForSelector("h1", { timeout: 15000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   const primeiroPeriodo = await p.evaluate(() => {
     const l = [...document.querySelectorAll("a")].find((a) => /\/consumo\/\d+$/.test(a.getAttribute("href") ?? ""));
     if (l) l.click();
@@ -7314,7 +7378,7 @@ try {
     await p.goto(`${WEB}/estoque?busca=Casas%20tela%20${marcaCasas}`,
       { waitUntil: "networkidle2" });
     await p.reload({ waitUntil: "networkidle2" });
-    await new Promise((r) => setTimeout(r, 1500));
+    await assentar(1500);
     return p.evaluate(() => {
       const tr = document.querySelector("table tbody tr");
       return tr ? [...tr.querySelectorAll("td")][2]?.innerText.trim() ?? "" : "";
@@ -7367,7 +7431,7 @@ try {
     criadosPag.length === 25, criadosPag.length);
 
   await irPara(p, `${WEB}/produtos`);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
 
   const lerPaginacao = () =>
     p.evaluate(() => {
@@ -7397,7 +7461,7 @@ try {
   checar("na primeira página o 'anterior' fica desligado", antes.anteriorDesligada, antes);
 
   await p.evaluate(() => document.querySelector('button[aria-label="Próxima página"]')?.click());
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const segunda = await lerPaginacao();
   checar("a próxima página traz outros registros",
     segunda.primeiro !== antes.primeiro && segunda.primeiro !== null, [antes.primeiro, segunda.primeiro]);
@@ -7458,9 +7522,9 @@ try {
   // chega — e esta checagem rolava ao fim no mesmo instante: a reposição vinha
   // logo depois e a medida "antes" saía igual à "depois" ([342, 342]). Uma pessoa
   // não rola em 80 ms; o roteiro rola, e por isso espera.
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await new Promise((r) => setTimeout(r, 300));
+  await assentar(300);
   const rolagemAntes = await p.evaluate(() => window.scrollY);
   await p.evaluate(() => document.querySelector('button[aria-label="Página anterior"]')?.click());
   // ⚠️ **O que se afirma é o TOPO DO CARTÃO à vista, não `scrollY ≈ 0`.** A
@@ -7490,11 +7554,11 @@ try {
     rolagem);
   // Volta para a página 2, que é onde o resto deste bloco espera estar.
   await p.evaluate(() => document.querySelector('button[aria-label="Próxima página"]')?.click());
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
 
   // 20, 50 ou 100 — escolha de quem olha.
   await p.select('select[aria-label="Registros por página"]', "50");
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const maior = await lerPaginacao();
   checar("trocar o tamanho traz mais linhas", maior.linhas > antes.linhas,
     [antes.linhas, maior.linhas]);
@@ -7503,9 +7567,9 @@ try {
   // ⚠️ A preferência é lembrada: quem escolheu 50 não quer reescolher a cada
   // visita. Sai da tela e volta.
   await irPara(p, `${WEB}/fornecedores`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   await irPara(p, `${WEB}/produtos`);
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const lembrado = await lerPaginacao();
   checar("a escolha de quantos por página é lembrada", lembrado.porPagina === 50,
     lembrado.porPagina);
@@ -7513,7 +7577,7 @@ try {
   // Filtrar volta ao começo: quem está na página 3 e digita uma busca não pode
   // cair numa tela vazia porque o resultado tem uma página só.
   await p.evaluate(() => document.querySelector('button[aria-label="Próxima página"]')?.click());
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const campoBuscaPag =
     (await p.$$('input[placeholder="nome, código ou código de barras"]'))[0];
   // ⚠️ Um termo que EXISTE nesta base. "cafe" era chute: numa base recém-limpa
@@ -7763,7 +7827,7 @@ try {
   const mCad = Date.now().toString().slice(-5);
 
   await irPara(p, `${WEB}/fornecedores`);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const listaForn = await textoVisivel(p);
   // ⚠️ A lista nao pode mais ter o formulario dentro: se "Razao social" aparecer
   // aqui, o cartao voltou para a direita.
@@ -7778,7 +7842,7 @@ try {
       (a) => /Nova pessoa/i.test(a.textContent ?? "") && a.getAttribute("href") === "/fornecedores/novo")));
 
   await irPara(p, `${WEB}/fornecedores/novo`);
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const formForn = await textoVisivel(p);
   checar("a pagina de nova pessoa abre", /Nova pessoa/i.test(formForn), formForn.slice(0, 140));
   // 🔑 A marca que decide onde a pessoa aparece: sem ela, o seletor de
@@ -7800,14 +7864,14 @@ try {
     const campos = [...document.querySelectorAll("input")];
     if (campos[0]) { set.call(campos[0], nome); campos[0].dispatchEvent(new Event("input", { bubbles: true })); }
   }, `Fornecedor tela ${mCad}`);
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   // ⚠️ Clique por `evaluate`, nao por `p.click` com `waitForNavigation`: a volta
   // para a lista e do CLIENTE (`router.push`), entao a espera por navegacao nunca
   // resolve e trava o protocolo do Chrome -- derrubando a rodada inteira.
   await p.evaluate(() => {
     document.querySelector('button[type="submit"]')?.click();
   });
-  await new Promise((r) => setTimeout(r, 2500));
+  await assentar(2500);
   const { dados: fornCriados } = await api(
     "GET", `/fornecedores?busca=Fornecedor tela ${mCad}`, null, token);
   // ⚠️ **`.toUpperCase()`: o nome do fornecedor é normalizado pelo BANCO**
@@ -7832,14 +7896,14 @@ try {
   }
 
   await irPara(p, `${WEB}/usuarios`);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const listaUsu = await textoVisivel(p);
   checar("a lista de usuarios nao tem mais o formulario",
     !/Nova senha|Pap[ée]is<\/span>/i.test(listaUsu) && !/Criar usu[áa]rio/i.test(listaUsu),
     listaUsu.slice(0, 160));
 
   await irPara(p, `${WEB}/usuarios/novo`);
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const formUsu = await textoVisivel(p);
   checar("a pagina de novo usuario abre", /Novo usu[áa]rio/i.test(formUsu), formUsu.slice(0, 140));
   // ⚠️ Os papeis agora cabem lado a lado, com a descricao inteira a vista.
@@ -7854,7 +7918,7 @@ try {
   // publicado como documento. Duas cópias do mesmo texto divergem no primeiro
   // parágrafo novo — e aí o sistema explica duas coisas diferentes sobre si.
   await irPara(p, `${WEB}/ajuda`);
-  await new Promise((r) => setTimeout(r, 3000));
+  await assentar(3000);
   const ajuda = await p.evaluate(() => {
     const q = document.querySelector("iframe");
     const doc = q?.contentDocument;
@@ -8106,7 +8170,7 @@ try {
   // contrario do que um menu faz.
   await p.evaluate(() =>
     document.querySelectorAll("aside .menu-grupo").forEach((b) => b.click()));
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   const cortados = await p.evaluate(() =>
     [...document.querySelectorAll("aside .menu-item span:last-child")]
       .filter((s) => s.scrollWidth > s.clientWidth + 1)
@@ -8115,7 +8179,7 @@ try {
   // ⚠️ Devolve os grupos ao estado recolhido: quem desvia, devolve.
   await p.evaluate(() =>
     document.querySelectorAll("aside .menu-grupo[aria-expanded='true']").forEach((b) => b.click()));
-  await new Promise((r) => setTimeout(r, 300));
+  await assentar(300);
 
   // ---- a busca (Ctrl+K) ----
   await p.keyboard.down("Control");
@@ -8175,7 +8239,7 @@ try {
   await p.keyboard.up("Control");
   await p.waitForSelector("#paleta-campo", { timeout: 8000 });
   await p.keyboard.press("Escape");
-  await new Promise((r) => setTimeout(r, 300));
+  await assentar(300);
   const depoisDoEscape = await p.evaluate(() => ({
     fechou: !document.querySelector("#paleta-campo"),
     rota: location.pathname,
@@ -8189,7 +8253,7 @@ try {
   checar("o botao do menu abre a mesma busca",
     await p.evaluate(() => !!document.querySelector("#paleta-campo")));
   await p.keyboard.press("Escape");
-  await new Promise((r) => setTimeout(r, 250));
+  await assentar(250);
 
   // ---- os atalhos SAÍRAM ----
   // 🔑 **Pedido do dono (05/10/2026): "retira os meus atalhos do menu".** A seção
@@ -8218,7 +8282,7 @@ try {
   // suíte da API (`smoke_preco_custo`); aqui é a tela que se mede.
   await irPara(p, `${WEB}/precos`);
   await p.waitForSelector("h1", { timeout: 12000 });
-  await new Promise((r) => setTimeout(r, 800));
+  await assentar(800);
   const precosVazia = await p.evaluate(() => ({
     titulo: document.querySelector("h1")?.innerText ?? "",
     pede: /Escolha um produto/.test(document.querySelector("main")?.innerText ?? ""),
@@ -8304,7 +8368,7 @@ try {
   // mede e uma que ela não mede, mas que era o pior defeito da tela.
   await irPara(p, `${WEB}/produtos/novo`);
   await p.waitForSelector("#campo-nome", { timeout: 20000 });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   const pecas = await p.evaluate(() => {
     const luz = (cor) => {
       const [r, g, b] = cor.match(/[\d.]+/g).slice(0, 3).map(Number).map((x) => {
@@ -8352,7 +8416,7 @@ try {
     if (c) { c.value = ""; }
   });
   await p.click('button[type="submit"]');
-  await new Promise((r) => setTimeout(r, 600));
+  await assentar(600);
   const comErro = await p.evaluate(() => {
     const campo = document.querySelector("#campo-nome");
     const erro = document.querySelector(".erro-campo");
@@ -8376,7 +8440,7 @@ try {
   // ⚠️ E corrigir apaga o erro NA HORA: erro que só some no próximo "salvar"
   // deixa a pessoa sem saber se acertou.
   await p.type("#campo-nome", "ab");
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   const corrigido = await p.evaluate(() => ({
     invalido: document.querySelector("#campo-nome")?.getAttribute("aria-invalid"),
     temErro: !!document.querySelector(".erro-campo"),
@@ -8433,7 +8497,7 @@ try {
   await p.waitForFunction(() => /Razão de estoque|Saldos/.test(document.body.innerText),
     { timeout: 20000 }).catch(() => {});
   await clicarQuando(p, "Movimentos", { exato: true });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
 
   // ⚠️ **O produto se escolhe pela LUPA, nao digitando.** Este filtro e o
   // `FiltroCadastro`: o texto filtra a lista, e quem FIXA um produto e a
@@ -8490,7 +8554,7 @@ try {
   await clicarQuando(p, "Reprocessar 3 movimento");
   await p.waitForFunction(() => !document.querySelector('[role="dialog"]'),
     { timeout: 20000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
 
   const { dados: movsRep } = await api(
     "GET", `/estoque/movimentos?id_produto=${prodRep.id}&por_pagina=50`, null, token);
@@ -8689,7 +8753,7 @@ try {
       { foraApi, ...oAviso });
     // Volta ao modo de sempre: o proximo bloco le a lista por prateleira.
     await p.select("#visao-saldos", "prateleira");
-    await new Promise((r) => setTimeout(r, 800));
+    await assentar(800);
   }
 
   // Troca de loja pelo seletor da barra — e o rotulo dele que o identifica, nao
@@ -8764,7 +8828,7 @@ try {
   // ⚠️ Volta para a matriz ANTES do resto do roteiro: as checagens seguintes
   // supoem a loja de sempre, e uma tela na filial nao tem nada dentro.
   await p.select('select[aria-label="Loja"]', "1");
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
 
   console.log("10f. em que loja a pessoa trabalha");
   // 🔑 **`usuario_papeis.id_unidade` existe desde o primeiro script e a tela
@@ -8910,11 +8974,11 @@ try {
   aoTerminar.push(restaurarLogo);
 
   await p.goto(`${WEB}/empresa`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   const entradaArquivo = await p.$('input[type="file"]');
   checar("tela da empresa tem seletor de imagem", !!entradaArquivo);
   await entradaArquivo.uploadFile(`${FOTOS}/_logo-teste.png`);
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const temImagem = await p.evaluate(
     () => !!document.querySelector('img[alt="Logo da empresa"]'),
   );
@@ -8924,7 +8988,7 @@ try {
   // Um .txt disfarçado precisa ser recusado pelo servidor.
   writeFileSync(`${FOTOS}/_falso.png`, "isto nao e uma imagem");
   await (await p.$('input[type="file"]')).uploadFile(`${FOTOS}/_falso.png`);
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const textoErro = await p.evaluate(() => document.body.innerText);
   checar("arquivo que não é imagem é recusado",
     /não aceito|não é uma imagem|Formato/i.test(textoErro), textoErro.slice(0, 80));
@@ -8976,7 +9040,7 @@ try {
   await p.waitForFunction(
     () => document.querySelectorAll(".grid-rolante tbody tr").length > 30,
     { timeout: 30000, polling: 300 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
 
   const gridLongo = await p.evaluate(() => {
     // ⚠️ O MAIOR grid da tela, não o primeiro: a aba de movimentos passou a ter
@@ -9044,7 +9108,7 @@ try {
   await irPara(p, `${WEB}/cmv`);
   await p.waitForFunction(() => /Food cost/i.test(document.body.innerText),
     { timeout: 30000, polling: 300 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const gridCurto = await p.evaluate(() => {
     const curtos = [...document.querySelectorAll(".grid-rolante")]
       .map((d) => ({ linhas: d.querySelectorAll("tbody tr").length,
@@ -9071,7 +9135,7 @@ try {
   await api("PUT", "/unidades/1/parametros",
     { ...parCat, reservas_ligado: false }, token);
   await irPara(p, `${WEB}/catalogos`);
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   // ⚠️ **O menu se lê pelos HREFS, não pelo texto.** O grupo começa recolhido,
   // então o `innerText` da lateral não traz os itens de dentro — uma checagem
   // por texto passaria trivialmente nos dois casos, ligado e desligado, e não
@@ -9230,7 +9294,7 @@ try {
   checar("no telefone a tela nao rola de lado", rolagens.every((x) => x === 0), rolagens);
   await p.setViewport({ width: 1440, height: 1000 });
   await irPara(p, `${WEB}/catalogos`);
-  await new Promise((r) => setTimeout(r, 600));
+  await assentar(600);
   await foto(p, "37-catalogos");
 
   // 🔑 (20/10/2026, pedido do dono: "um botão para poder excluir cardápios") O que já
@@ -9328,7 +9392,7 @@ try {
   // grupos recolhidos o `display: none` tira os itens do texto visivel, e a
   // pergunta aqui e "o menu OFERECE esta tela?".
   await irPara(p, `${WEB}/`);
-  await new Promise((r) => setTimeout(r, 900));
+  await assentar(900);
   const grupoNoMenu = async () =>
     p.evaluate(() => !!document.querySelector("aside a[href='/reservas/configuracoes']"));
   checar("desligado, o menu nao tem o grupo Reservas", !(await grupoNoMenu()));
@@ -9339,7 +9403,7 @@ try {
 
   // ⚠️ A tela também não abre pelo endereço direto: quem recusa é o servidor.
   await irPara(p, `${WEB}/reservas/configuracoes`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const recusa = await p.evaluate(() => document.body.innerText);
   checar("e a tela recusa pelo endereco direto, dizendo onde se liga",
     /n[ãa]o est[áa] ligado|Lojas/i.test(recusa), recusa.slice(0, 200));
@@ -9349,7 +9413,7 @@ try {
   // a pessoa faria depois de ligar o parâmetro noutra aba.
   await irPara(p, `${WEB}/`);
   await p.reload({ waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   checar("ligado, o grupo Reservas aparece no menu", await grupoNoMenu());
 
   // ⚠️ **Ponto de partida MONTADO, e a razao e a propria feature.** A
@@ -9424,7 +9488,7 @@ try {
       (x) => (x.textContent ?? "").trim() === "Salvar");
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   await p.reload({ waitUntil: "networkidle2" });
   await esperarTexto(p, "Horário de funcionamento", 9000);
   const depoisR = await p.evaluate(() => document.body.innerText);
@@ -9541,7 +9605,7 @@ try {
     escrever("prefixo do nome das mesas", prefixo);
   }, { quantos: "6", prefixo: prefixoLote });
   checar("e o botao diz quantas vai criar", await clicarQuando(p, "Criar 6 mesas"));
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
 
   const { dados: comLote } = await api("GET", "/reservas/salao", null, token);
   // 🔑 **Cada teste procura os registros DELE** — a mesma licao que a fase da
@@ -9627,7 +9691,7 @@ try {
   // gravava ao perder o foco. O que se prova: a tabela so mostra, mexer nao
   // grava, Desfazer devolve, e Salvar grava — inclusive a caracteristica.
   await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}&ver=lista`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const salaoSoMostra = await p.evaluate(() => ({
     linhas: document.querySelectorAll("table tbody tr").length,
     campos: document.querySelectorAll("table tbody input, table tbody select").length,
@@ -9640,7 +9704,7 @@ try {
   const mesaDoPainel = daVaranda[0];
   await p.evaluate((nome) =>
     document.querySelector(`tr[aria-label="mesa ${nome}"]`)?.click(), mesaDoPainel.nome);
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   const noPainelDaMesa = () => p.evaluate(() => ({
     nome: document.querySelector('input[aria-label="nome da mesa"]')?.value ?? null,
     lugares: document.querySelector('output[aria-label="lugares"]')?.textContent ?? null,
@@ -9653,7 +9717,7 @@ try {
     painelDaMesaAberto.nome === mesaDoPainel.nome && painelDaMesaAberto.salvarDesligado === true,
     painelDaMesaAberto);
   await p.evaluate(() => document.querySelector('button[aria-label="mais lugares"]')?.click());
-  await new Promise((r) => setTimeout(r, 300));
+  await assentar(300);
   const painelDaMesaMexido = await noPainelDaMesa();
   checar("mexer liga o Salvar e avisa que ha alteracao nao salva",
     painelDaMesaMexido.salvarDesligado === false && painelDaMesaMexido.avisa, painelDaMesaMexido);
@@ -9662,7 +9726,7 @@ try {
     salaoSemGravar.mesas.find((m) => m.id === mesaDoPainel.id)?.lugares === mesaDoPainel.lugares,
     salaoSemGravar.mesas.find((m) => m.id === mesaDoPainel.id));
   await clicarQuando(p, "Desfazer", { exato: true });
-  await new Promise((r) => setTimeout(r, 300));
+  await assentar(300);
   checar("Desfazer devolve o valor gravado",
     (await noPainelDaMesa()).lugares === String(mesaDoPainel.lugares), await noPainelDaMesa());
   await p.evaluate(() => [...document.querySelectorAll("button[aria-pressed]")]
@@ -9724,7 +9788,7 @@ try {
     // anteriores — oito linhas —, a planta desceu para baixo da dobra e o arraste
     // caía no vazio. Três checagens falhavam acusando a tela de não arrastar.
     await alvos[indice].evaluate((e) => e.scrollIntoView({ block: "center" }));
-    await new Promise((r) => setTimeout(r, 200));
+    await assentar(200);
     const caixa = await alvos[indice].boundingBox();
     const [cx, cy] = [caixa.x + caixa.width / 2, caixa.y + caixa.height / 2];
     await p.mouse.move(cx, cy);
@@ -9732,7 +9796,7 @@ try {
     await p.mouse.move(cx + dx / 2, cy + dy / 2, { steps: 4 });
     await p.mouse.move(cx + dx, cy + dy, { steps: 4 });
     await p.mouse.up();
-    await new Promise((r) => setTimeout(r, 250));
+    await assentar(250);
   };
   await arrastarNaPlanta(0, 0, 120);
   const plantaArrastada = await mesasNaPlanta();
@@ -9749,7 +9813,7 @@ try {
   await p.evaluate(() => [...document.querySelectorAll("button")]
     .filter((b) => b.textContent?.trim() === "Desfazer")
     .find((b) => !b.closest("form"))?.click());
-  await new Promise((r) => setTimeout(r, 250));
+  await assentar(250);
   checar("Desfazer devolve a mesa ao lugar",
     (await mesasNaPlanta())[0].y === plantaDeInicio[0].y, await mesasNaPlanta());
 
@@ -9774,7 +9838,7 @@ try {
   checar("clicar sem arrastar abre a mesa no painel", (await mesasNaPlanta())[1].aberta === true,
     await mesasNaPlanta());
   await p.select('select[aria-label="formato da mesa"]', "REDONDA");
-  await new Promise((r) => setTimeout(r, 250));
+  await assentar(250);
   checar("mudar o formato no painel já muda o desenho, antes do Salvar",
     (await mesasNaPlanta())[1].redonda === true, await mesasNaPlanta());
   const { dados: formatoSemGravar } = await api("GET", "/reservas/salao", null, token);
@@ -9793,7 +9857,7 @@ try {
   const antesDaSeta = await mesasNaPlanta();
   await (await p.$$(seletorDaPlanta))[1].focus();
   await p.keyboard.press("ArrowDown");
-  await new Promise((r) => setTimeout(r, 200));
+  await assentar(200);
   checar("a seta move a mesa em foco de um passo da grade",
     (await mesasNaPlanta())[1].y === antesDaSeta[1].y + 30, [antesDaSeta[1], (await mesasNaPlanta())[1]]);
 
@@ -9835,7 +9899,7 @@ try {
 
   // A capacidade é a que a casa informa — e só vale no Salvar.
   await p.click(`${linhaDoConjunto} button[aria-label^="menos capacidade do conjunto"]`);
-  await new Promise((r) => setTimeout(r, 200));
+  await assentar(200);
   const cjMexido = await telaDosConjuntos();
   checar("baixar a capacidade mostra 15 e avisa que não está salvo",
     cjMexido.linhas[0].capacidade === "15" && /n[ãa]o salvo/i.test(cjMexido.linhas[0].texto),
@@ -9892,7 +9956,7 @@ try {
   });
   checar("o conjunto novo não se cria sem mesas marcadas", (await criarCj()) === true);
   for (const figura of await p.$$(seletorDaPlanta)) await figura.click();
-  await new Promise((r) => setTimeout(r, 300));
+  await assentar(300);
   const cjMarcando = await p.evaluate((sel) => ({
     naPlanta: [...document.querySelectorAll(sel)]
       .filter((b) => b.getAttribute("aria-pressed") === "true").length,
@@ -9926,7 +9990,7 @@ try {
     doSalaoCj(cjCriado));
   await p.click(`${diasDoSalao}[aria-label="segunda"]`);
   await p.click('input[aria-label="aceita reserva pelo site"]');
-  await new Promise((r) => setTimeout(r, 200));
+  await assentar(200);
   const salaoMexido = doSalaoCj(await lerSalaoCj());
   checar("desmarcar a segunda e tirar do site NÃO grava sozinho",
     (await diasNaTela()) === 6 && salaoMexido.dias_semana.length === 7
@@ -10015,7 +10079,7 @@ try {
       [...document.querySelectorAll("button")]
         .find((b) => b.getAttribute("aria-label") === `${quantos} pessoas`)?.click();
     }, n);
-    await new Promise((r) => setTimeout(r, 1400));
+    await assentar(1400);
     return p.evaluate(() =>
       [...document.querySelectorAll('button[aria-label^="horário"]')]
         .map((b) => ({ hora: b.textContent.trim(), livre: !b.disabled })));
@@ -10051,7 +10115,7 @@ try {
   await escrever("nome de quem reserva", `Familia ${marcaNota}`);
   await escrever("telefone de quem reserva", "47 99910-5033");
   checar("o botao diz o horario escolhido", await clicarQuando(p, "Marcar às 12:00"));
-  await new Promise((r) => setTimeout(r, 2000));
+  await assentar(2000);
 
   const naAgenda = await p.evaluate(() => document.body.innerText);
   checar("a reserva aparece na agenda", new RegExp(`Familia`).test(naAgenda),
@@ -10106,7 +10170,7 @@ try {
       .find((b) => b.getAttribute("aria-label") === "horário 13:00")?.click();
   });
   checar("e o botao fica disponivel depois de escolher", await clicarQuando(p, "Remarcar"));
-  await new Promise((r) => setTimeout(r, 1800));
+  await assentar(1800);
   const depoisRemarcar = await p.evaluate(() => document.body.innerText);
   checar("a agenda mostra a reserva no horario novo",
     /13:00/.test(depoisRemarcar), depoisRemarcar.slice(0, 500));
@@ -10116,12 +10180,12 @@ try {
 
   // O ciclo: confirmada -> chegou -> encerrada, e o que some da tela a cada passo.
   checar("a reserva confirmada oferece marcar chegada", await clicarQuando(p, "chegou"));
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const depoisChegou = await p.evaluate(() => document.body.innerText);
   checar("e a situacao passa a dizer que chegou", /chegou/.test(depoisChegou),
     depoisChegou.slice(0, 400));
   checar("oferecendo encerrar em seguida", await clicarQuando(p, "encerrar"));
-  await new Promise((r) => setTimeout(r, 1600));
+  await assentar(1600);
   const depoisEncerrou = await p.evaluate(() => document.body.innerText);
   checar("encerrada nao oferece mais nada — o ciclo terminou",
     /encerrada/.test(depoisEncerrou), depoisEncerrou.slice(0, 400));
@@ -10140,7 +10204,7 @@ try {
 
   // 🔑 **E as permissões passam a ser oferecidas** — o terceiro efeito.
   await irPara(p, `${WEB}/papeis`);
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const comPerm = await p.evaluate(() => document.body.innerText);
   checar("ligado, o catalogo de permissoes oferece as chaves de Reserva",
     /Ver a agenda e as reservas do dia/i.test(comPerm), comPerm.slice(0, 200));
@@ -10148,7 +10212,7 @@ try {
   await ligarReservas(false);
   await irPara(p, `${WEB}/papeis`);
   await p.reload({ waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1400));
+  await assentar(1400);
   const semPerm = await p.evaluate(() => document.body.innerText);
   // ⚠️ Esconder do catálogo NÃO revoga nada de quem já tem — é tirar da
   // vitrine. O que recusa uma loja desligada é a trava do próprio router.
@@ -10156,7 +10220,7 @@ try {
     !/Ver a agenda e as reservas do dia/i.test(semPerm), semPerm.slice(0, 200));
   await irPara(p, `${WEB}/`);
   await p.reload({ waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   checar("junto com o grupo no menu", !(await grupoNoMenu()));
 
   console.log("13. pedidos pelo catalogo: painel, confirmar e lancado no PDV");
@@ -10220,7 +10284,7 @@ try {
   if (campoCupom) await campoCupom.type(`CUP${marcaNota}`);
   checar("a janela do cupom abre", !!campoCupom);
   checar("e marca como lancado", await clicarQuando(p, "Marcar como lançado"));
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const { dados: depois } = await api("GET", `/pedidos?situacao=confirmados&busca=${pedido.numero}`, null, token);
   const esse = (depois || []).find((x) => x.numero === pedido.numero);
   checar("o servidor gravou o lancamento com o cupom",
@@ -10270,19 +10334,19 @@ try {
   // 🔑 A descrição se grava DALI, sem ir ao cadastro do produto.
   await p.type("#prato-descricao", "Massa crocante, recheio de frango.");
   checar("e grava a descrição do prato pela gaveta", await clicarQuando(p, "Salvar nome e descrição", { exato: true }));
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const { dados: pDepois } = await api("GET", `/produtos/${pPed.id}`, null, token);
   checar("e ela vai para o PRODUTO", pDepois?.informacao_adicional === "Massa crocante, recheio de frango.",
     pDepois?.informacao_adicional);
   await p.keyboard.press("Escape");
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
   // 🔑 Vários de uma vez, e o que já está na seção aparece travado.
   checar("'+ pratos' abre a busca com seleção múltipla", await clicarQuando(p, "+ pratos", { exato: true }));
   await p.waitForSelector("#busca-produto", { timeout: 8000 }).catch(() => {});
   await p.type("#busca-produto", `TELA COXINHA ${marcaNota}`);
   checar("e o que já está nesta seção aparece como 'já está aqui'", await esperarTexto(p, "já está aqui", 8000));
   await p.keyboard.press("Escape");
-  await new Promise((r) => setTimeout(r, 400));
+  await assentar(400);
 
   // Publicar mora na própria página.
   await irPara(p, `${WEB}/catalogos/${catPed.id}?aba=publicacao`);
@@ -10346,7 +10410,7 @@ try {
     b?.click();
     return !!b;
   }));
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const { dados: trG } = await api("GET", `/traducao/categoria/${gPed.id}`, null, token);
   checar("o servidor gravou o inglês corrigido à mão",
     trG && trG.en.nome === "Savoury" && trG.editada.includes("nome_en"), trG);
@@ -10373,7 +10437,7 @@ try {
   await p.waitForSelector("#prato-mover", { timeout: 8000 }).catch(() => {});
   const moveu = await p.select("#prato-mover", `${gDoces.id}-`).then((v) => v.length > 0).catch(() => false);
   checar("a gaveta oferece 'mover para' outra seção", moveu);
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const { dados: arvMov } = await api("GET", `/catalogos/${catPed.id}/conteudo`, null, token);
   const noDoce = arvMov?.categorias?.find((c) => c.id === gDoces.id)?.itens?.[0];
   checar("e o prato muda de seção como o MESMO item, com o destaque",
@@ -10394,7 +10458,7 @@ try {
 
   // A perda: o motivo Descarte e a observação obrigatória.
   await irPara(p, `${WEB}/ajustes`);
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   await p.evaluate(() => [...document.querySelectorAll("main button[aria-pressed]")]
     .find((b) => b.querySelector("span")?.textContent?.trim() === "Perda")?.click());
   await p.waitForSelector("#ajuste-observacao", { timeout: 8000 }).catch(() => {});
@@ -10414,7 +10478,7 @@ try {
     filtroTipo.join("|") === "todas|fornecedores|não fornecedores", filtroTipo);
   await p.select("#pessoas-tipo", "outras").catch(() => {});
   await p.waitForFunction(() => location.search.includes("tipo=outras"), { timeout: 5000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 1200));
+  await assentar(1200);
   const listaOutras = await p.evaluate(() => document.querySelector("main")?.innerText ?? "");
   checar("e o filtro vai na URL, com a lista de não fornecedores",
     p.url().includes("tipo=outras") && /pessoa\(s\)/.test(listaOutras), p.url());
@@ -10433,7 +10497,7 @@ try {
     await p.$eval("#periodo-nome", (el) => { el.select(); }).catch(() => {});
     await p.type("#periodo-nome", `Ciclo tela ${m2010}`).catch(() => {});
     await p.click("#periodo-nome-salvar").catch(() => {});
-    await new Promise((r) => setTimeout(r, 1500));
+    await assentar(1500);
     const { dados: cicloDepois } = await api("GET", `/consumo/periodos/${umCiclo.id}`, null, token);
     checar("o ciclo de consumo se renomeia pela tela",
       cicloDepois?.periodo?.nome === `Ciclo tela ${m2010}`, cicloDepois?.periodo);
@@ -10461,7 +10525,7 @@ try {
       !!(await p.$("#venda-acrescentar-itens")), vendaAcr?.message);
     await api("DELETE", `/vendas/${idAcr}`, null, token);
     await irPara(p, `${WEB}/vendas/${idAcr}`);
-    await new Promise((r) => setTimeout(r, 1500));
+    await assentar(1500);
     checar("e a cancelada, não", !(await p.$("#venda-acrescentar")));
   } else {
     checar("a venda lançada à mão oferece acrescentar itens", false, vendaAcr);
@@ -10506,7 +10570,7 @@ try {
   await p.click('[data-modo="mes"]').catch(() => {});
   await p.waitForFunction(() => location.search.includes("modo=mes"), { timeout: 6000 }).catch(() => {});
   await p.waitForFunction(() => /-01&ate=/.test(location.search), { timeout: 6000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const urlMes = p.url();
   checar("trocar para Mês põe o mês inteiro na URL",
     urlMes.includes("modo=mes") && /de=\d{4}-\d{2}-01/.test(urlMes), urlMes);
@@ -10519,7 +10583,7 @@ try {
 
   // A seta volta um mês.
   await p.click('button[aria-label="recorte anterior"]').catch(() => {});
-  await new Promise((r) => setTimeout(r, 1500));
+  await assentar(1500);
   const deAntes = new URL(urlMes).searchParams.get("de");
   const deDepois = new URL(p.url()).searchParams.get("de");
   checar("a seta anda um mês para trás",
