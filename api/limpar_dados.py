@@ -51,8 +51,10 @@ OPERACAO = [
     # ⚠️ Os cartões do feed (120) apontam para os itens (a posição "antes do prato" e o botão
     # "Ver o prato"): sem eles aqui, o TRUNCATE dos itens seria recusado. Saem junto.
     "catalogo_cartoes",
-    # ⚠️ Os anúncios (121) também: o botão "ver o prato" aponta para um item.
-    "cardapio_anuncios",
+    # ⚠️ Os anúncios (121) também: o botão "ver o prato" aponta para um item. As
+    # VARIANTES do texto em teste apontam para o anúncio — saem antes dele (a guarda
+    # recusou a limpeza em 21/10/2026, quando a tabela nasceu sem entrar aqui).
+    "cardapio_anuncio_variantes", "cardapio_anuncios",
     # O Cardápio Vivo (113): a atenção medida e os adicionais apontam para `produtos`.
     "cardapio_eventos", "cardapio_agregados_dia", "cardapio_resumo_dia", "cardapio_sessoes",
     # Os chamados da mesa (115) apontam para mesa e usuário: são operação.
@@ -62,6 +64,10 @@ OPERACAO = [
     "produto_adicionais_opcoes", "produto_adicionais_grupos",
     # razão de estoque e o que pendura nele
     "movimento_lotes", "estoque_lotes", "estoque_movimentos", "estoque_saldos",
+    # ⚠️ Os LOTES DE AJUSTE apontam para a loja e para o usuário: fora daqui, o
+    # `--filiais-de-teste` morria apagando a loja de teste (21/10/2026). A guarda do
+    # TRUNCATE não os via, porque loja e usuário saem por DELETE, não por TRUNCATE.
+    "ajuste_lotes",
     # ⚠️ `inventario_contadores` aponta para `inventarios`: sem ela aqui, o
     # TRUNCATE falha no meio e quem rodou acha que limpou. Foi a guarda do
     # próprio script que avisou — a mensagem do Postgres passa longe disso.
