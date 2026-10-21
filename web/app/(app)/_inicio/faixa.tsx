@@ -70,12 +70,16 @@ export default function FaixaHoje({ p }: { p: Painel }) {
 
   const hoje = new Date().toLocaleDateString("sv-SE");
   const numeros: React.ReactNode[] = [];
+  // 🔑 **Os números das vendas abrem o PAINEL, naquele dia** (pedido do dono, 21/10/2026):
+  // daqui se troca para semana, mês ou período. A lista de documentos continua no "ver
+  // as vendas" do canto.
+  const noPainel = dia ? `/vendas/painel?modo=dia&de=${dia.data}&ate=${dia.data}` : "/vendas/painel";
   if (dia) {
     const c = dia.comparacao;
     numeros.push(
-      <Numero key="v" rotulo="Vendas" valor={inteiro(dia.vendas)} href="/vendas"
+      <Numero key="v" rotulo="Vendas" valor={inteiro(dia.vendas)} href={noPainel}
               sub={`${inteiro(dia.itens)} item(ns)`} />,
-      <Numero key="f" rotulo="Faturado" valor={reais(dia.receita)} href="/vendas"
+      <Numero key="f" rotulo="Faturado" valor={reais(dia.receita)} href={noPainel}
               sub={c && c.pct !== null
                 ? <span className={c.pct >= 0 ? "text-erva" : "text-alerta"}>
                     {c.pct >= 0 ? "+" : ""}{c.pct.toLocaleString("pt-BR")}% sobre {diaDaSemana(dia.data).split("-")[0]} passada
@@ -84,7 +88,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
                 : "sem venda na semana passada para comparar"} />,
       // ⚠️ Sem venda no dia o ticket é NULO, não zero.
       <Numero key="t" rotulo="Ticket médio" valor={dia.ticket_medio === null ? "—" : reais(dia.ticket_medio)}
-              href="/vendas" sub="por cupom" />,
+              href={noPainel} sub="por cupom" />,
     );
   }
   if (p.pedidos) {

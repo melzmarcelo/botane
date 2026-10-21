@@ -5,6 +5,36 @@
 
 ## O que já existe
 
+- 🔑 **O PAINEL de vendas** (`/vendas/painel`, 1.1.116, 21/10/2026, pedido do dono: *"uma página
+  de dashboard [...] ao clicar sobre os registros das vendas na tela de início, iria para esta
+  nova tela, com o filtro por dia [...] semana, mês, período, produtos mais vendidos, valores e
+  gráficos, e com base nesta estrutura de filtros, montar um relatório que pode ser baixado"*).
+  - **Uma conta, duas saídas:** `services/painel_vendas.painel` alimenta `GET /vendas/painel` E o
+    relatório `vendas` do catálogo de exportação. O arquivo bate com a tela número a número.
+  - **Os quadros:** totais (faturado, cupons, ticket, itens, média por dia) com a variação sobre
+    o anterior; evolução por dia/semana/mês; dia da semana (MÉDIA por dia que teve venda — um mês
+    com cinco sábados não faz o sábado melhor); hora do cupom (digitada sem hora vai a
+    `sem_hora`, nunca à meia-noite); categoria e setor (clicar filtra o painel); mais vendidos
+    por faturado ou quantidade, com o total de produtos.
+  - **Comparação:** um DIA contra o mesmo dia da semana anterior (como a faixa da tela inicial);
+    um período contra o de MESMO TAMANHO logo antes.
+  - ⚠️ **Sem recorte, todo quadro de tempo é LÍQUIDO** (evolução, dia da semana, hora): o desconto
+    sai de consulta própria sobre o cabeçalho, agrupada do mesmo jeito, e a soma das barras dá
+    o cabeçalho. **Com recorte** (categoria, setor, produto) a receita é a BRUTA dos itens
+    escolhidos, `desconto` vem nulo e `bruta` verdadeiro — o desconto é do cupom, repartir seria
+    inventar. Produtos, categorias e setores são SEMPRE brutos (mesma regra do CMV).
+  - ⚠️ **Item sem vínculo agrupa pelo CÓDIGO do PDV**, não num "Sem vínculo" só.
+  - ⚠️ **A rota fica ANTES de `/{id_venda}`** (senão "painel" vira 422), e sem datas abre no dia
+    da última venda. Recusa período invertido e mais de dois anos.
+  - **A faixa da tela inicial** (Vendas, Faturado, Ticket) leva a
+    `/vendas/painel?modo=dia&de=D&ate=D`; "ver as vendas" continua indo aos documentos.
+  - **A tela guarda tudo na URL** (`modo`, `de`, `ate`, `agrupar`, `ordem`, `limite`,
+    `categoria`, `setor`); as setas andam um passo do tamanho do recorte (dia, semana de
+    SEGUNDA a domingo, mês, ou o tamanho do período). Gráficos em SVG à mão (`graficos.tsx`),
+    como Preços e a cascata do CMV.
+  - Cobertura: `smoke_painel_vendas.py` (num trecho dos anos 80 sem venda, conferido vazio antes)
+    e `verificar.mjs` 11zz2.
+
 - ⚠️ **A busca da integração vive na tela do ASSUNTO, não só em Integrações.** `/vendas` ganhou
   **Buscar no PDV** (27/08/2026), gêmeo do "Buscar no Omie" de `/compras`, mais o
   **Reconciliar N pendente(s)** quando há item de venda sem produto. Quem abre Vendas para ver as

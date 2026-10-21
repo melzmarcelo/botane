@@ -165,6 +165,9 @@ class _Filtros:
         tipo_pessoa: list[str] | None = Query(default=None),
         situacao_pessoa: list[str] | None = Query(default=None),
         busca_pessoa: str | None = Query(default=None, max_length=80),
+        # 🔑 O estudo de vendas (21/10/2026): de quanto em quanto a evolução se
+        # agrupa. Texto, pelo mesmo motivo da `aba`: valor desconhecido cai no dia.
+        agrupar: str | None = None,
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
@@ -175,7 +178,7 @@ class _Filtros:
             "provisorio": provisorio,
             "ciclo": ciclo, "pessoas": pessoas, "detalhe": detalhe,
             "tipo_pessoa": tipo_pessoa, "situacao_pessoa": situacao_pessoa,
-            "busca_pessoa": busca_pessoa,
+            "busca_pessoa": busca_pessoa, "agrupar": agrupar,
         }
 
     def preenchidos(self) -> dict:

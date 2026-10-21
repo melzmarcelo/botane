@@ -712,6 +712,24 @@ seta fica apagada quando não há para onde ir.
 ⚠️ Quando o dia na tela é o mais recente e não é hoje, o cartão avisa — é o sinal
 de que falta importar as vendas de hoje.
 
+### O painel de vendas
+
+Clicar em **Vendas**, **Faturado** ou **Ticket médio** na tela inicial abre o
+**painel de vendas** naquele dia (também em **Vendas → Painel**). Nele:
+
+- escolha **Dia, Semana, Mês ou Período**; as setinhas andam um passo daquele
+  tamanho (a semana vai de segunda a domingo);
+- os números de cima comparam com o anterior: um dia contra o mesmo dia da semana
+  passada, um período contra o mesmo número de dias logo antes;
+- os gráficos mostram a evolução, o **dia da semana** (a média dos dias que
+  tiveram venda), a **hora** e o peso de cada **categoria** e **setor** — clicar
+  numa categoria filtra o painel inteiro por ela;
+- os **mais vendidos** saem por faturado ou por quantidade;
+- **Baixar** leva o mesmo recorte para planilha ou PDF, com todos os produtos.
+
+⚠️ Filtrando por categoria ou setor, o faturado é o dos itens escolhidos, **sem**
+o desconto do cupom — o desconto é do cupom inteiro, não de um item.
+
 ### O que olhar todo mês
 
 Menu **CMV → Painel de CMV**:

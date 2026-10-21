@@ -102,8 +102,8 @@ Saldos, movimentos, ajustes, inventário e transferências entre lojas.
 ## Vendas
 
 - **Rotas:** `vendas.py`, `consumo.py`, `pdv.py`
-- **Serviços:** `consumo_pessoa.py`, `consumo_periodo.py`, `services/pdv/`
-- **Telas:** `vendas/`, `vendas/[id]/`, `vendas/lancar/`, `vendas/por-pessoa/`, `vendas/sem-vinculo/`, `consumo/`, `meu-consumo/`
+- **Serviços:** `consumo_pessoa.py`, `consumo_periodo.py`, `painel_vendas.py`, `services/pdv/`
+- **Telas:** `vendas/`, `vendas/painel/`, `vendas/[id]/`, `vendas/lancar/`, `vendas/por-pessoa/`, `vendas/sem-vinculo/`, `consumo/`, `meu-consumo/`
 - **Permissões:** `cmv.painel`, `cmv.relatorios`, `cmv.fechamento`, `consumo.periodos`
 
 ⚠️ **"Em aberto" é a venda SEM carimbo de período** (`vendas.id_consumo_periodo`),

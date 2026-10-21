@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from psycopg2 import errors as erros_pg
 
 import auditoria
+import relogio
 from database import get_cursor
 from paginacao import pagina
 from models.cmv import (AcrescentarItensRequest, ImportarVendasRequest, PreviaCupomRequest,
@@ -23,6 +24,7 @@ from services import cmv as motor
 from services import consumo_pessoa as consumo
 from services import consumo_periodo as ciclo
 from services import estoque as motor_estoque
+from services import painel_vendas
 from services import precos
 from services import producao_agenda as agenda
 
@@ -1162,6 +1164,41 @@ def consumo_no_ciclo_aberto(id_pessoa: int, ctx: Contexto = Depends(_ver)) -> di
         "desconto": round(cheio - total, 2),
         "total": total,
     }
+
+
+# ⚠️ **Antes de `/{id_venda}`**, como `/sem-vinculo` e `/por-pessoa`: a rota com
+# parâmetro engoliria "painel" e responderia 422.
+@router.get("/painel")
+def painel(inicio: date | None = None, fim: date | None = None,
+           agrupar: str = "dia", ordem: str = "receita",
+           limite: int = Query(20, ge=1, le=500),
+           categorias: list[int] | None = Query(None),
+           setores: list[int] | None = Query(None),
+           produtos: list[int] | None = Query(None),
+           ctx: Contexto = Depends(_ver)) -> dict:
+    """O estudo de vendas de um recorte (pedido do dono, 21/10/2026).
+
+    🔑 **Sem datas, abre no dia da ÚLTIMA venda**, como a faixa da tela inicial
+    — de onde se chega aqui clicando. Um painel aberto num "hoje" ainda sem
+    busca no PDV diria que a casa não vendeu.
+    ⚠️ Até dois anos por recorte: além disso a pergunta já é de outro relatório.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        if inicio is None and fim is None:
+            cur.execute("SELECT max(data) AS d FROM vendas WHERE id_unidade = %s "
+                        "AND NOT cancelada AND NOT consumo_interno", (id_unidade,))
+            ultimo = (cur.fetchone() or {}).get("d") or relogio.hoje_da_casa()
+            inicio = fim = ultimo
+        inicio = inicio or fim
+        fim = fim or inicio
+        if fim < inicio:
+            raise HTTPException(status_code=400, detail="O fim do período vem antes do início.")
+        if (fim - inicio).days > 731:
+            raise HTTPException(status_code=400,
+                                detail="O recorte passa de dois anos — estreite o período.")
+        return painel_vendas.painel(cur, id_unidade, inicio, fim, agrupar, categorias,
+                                    setores, produtos, ordem, limite)
 
 
 @router.get("/{id_venda}")

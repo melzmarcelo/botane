@@ -43,6 +43,7 @@ from services import consumo_periodo as ciclo_motor
 from services import estoque as estoque_motor
 from services import exportacao
 from services import memoria_calculo as memoria
+from services import painel_vendas
 from services import periodos as periodos_motor
 from services import relatorios
 
@@ -200,6 +201,10 @@ ABAS_DO_PAINEL = [
 ]
 
 
+def _opcoes_agrupar(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in painel_vendas.AGRUPAMENTOS.items()]
+
+
 def _opcoes_aba(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": v, "nome": n} for v, n in ABAS_DO_PAINEL]
 
@@ -270,6 +275,8 @@ FILTROS: dict[str, dict] = {
                     "opcoes": _opcoes_tipo_pessoa},
     "situacao_pessoa": {"tipo": "multipla", "rotulo": "Situação", "ajuda": "ativas e inativas",
                         "opcoes": _opcoes_situacao_pessoa},
+    "agrupar": {"tipo": "escolha", "rotulo": "Evolução por",
+                "ajuda": "dia, semana ou mês", "opcoes": _opcoes_agrupar},
     "busca_pessoa": {"tipo": "texto", "rotulo": "Nome ou CNPJ contém",
                      "ajuda": "parte do nome, do nome fantasia ou do CNPJ"},
 }
@@ -1299,6 +1306,82 @@ def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _vendas(cur, id_unidade: int, f: dict) -> Saida:
+    """O estudo de vendas — o mesmo recorte da tela, em arquivo.
+
+    🔑 **A conta é a da TELA** (`painel_vendas.painel`): o arquivo baixado tem de
+    bater com o painel de onde ele saiu, número a número.
+    O quadro da frente são os PRODUTOS, todos (a tela mostra os primeiros); a
+    evolução, o dia da semana, a hora, a categoria e o setor vão atrás.
+    """
+    inicio, fim = _periodo(f)
+    p = painel_vendas.painel(
+        cur, id_unidade, inicio, fim, (f.get("agrupar") or "dia"),
+        _lista(f.get("categorias")), _lista(f.get("setores")), _lista(f.get("produtos")),
+        "receita", 5000)
+    t, c = p["totais"], p["comparacao"]
+
+    def r2(v):
+        return None if v is None else round(v, 2)
+
+    def pct(v):
+        return "—" if v is None else f"{v:+.1f}%".replace(".", ",")
+
+    produtos = [{**l, "receita": r2(l["receita"]), "preco_medio": r2(l["preco_medio"])}
+                for l in p["produtos"]]
+    nome_ag = painel_vendas.AGRUPAMENTOS[p["agrupar"]]
+    serie = [{**s, "receita": r2(s["receita"]), "ticket_medio": r2(s["ticket_medio"])}
+             for s in p["serie"]]
+    semana = [{**s, "receita": r2(s["receita"]), "media_receita": r2(s["media_receita"]),
+               "media_cupons": round(s["media_cupons"], 1)} for s in p["por_dia_semana"]]
+    horas = [{"hora": f"{h['hora']:02d}h", "cupons": h["cupons"], "receita": r2(h["receita"])}
+             for h in p["por_hora"]]
+    if p["sem_hora"]:
+        horas.append({"hora": "sem hora (digitada)", "cupons": p["sem_hora"]["cupons"],
+                      "receita": r2(p["sem_hora"]["receita"])})
+    grupo = [("nome", "Nome"), ("cupons", "Cupons"), ("quantidade", "Quantidade"),
+             ("receita", "Receita"), ("participacao_pct", "Participação %")]
+
+    resumo = [("Cupons", t["cupons"]), ("Dias com venda", t["dias"]),
+              ("Itens", t["itens"]),
+              ("Receita bruta dos itens" if p["bruta"] else "Receita líquida", r2(t["receita"])),
+              ("Ticket médio", r2(t["ticket_medio"])),
+              ("Média por dia", r2(t["media_por_dia"]))]
+    if t["desconto"] is not None:
+        resumo.insert(3, ("Desconto dos cupons", r2(t["desconto"])))
+    resumo.append((f"Contra {c['rotulo']} ({_intervalo(c['inicio'], c['fim'])})",
+                   f"receita {pct(c['pct_receita'])} · cupons {pct(c['pct_cupons'])} · "
+                   f"ticket {pct(c['pct_ticket'])}"))
+    if p["canceladas"]:
+        resumo += [("Cupons cancelados (fora das somas)", p["canceladas"]["cupons"]),
+                   ("Valor dos cancelados", r2(p["canceladas"]["valor"]))]
+
+    return Saida(
+        produtos,
+        [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
+         ("setor", "Setor"), ("quantidade", "Quantidade"), ("cupons", "Cupons"),
+         ("receita", "Receita"), ("preco_medio", "Preço médio"),
+         ("participacao_pct", "Participação %")],
+        f"Vendas — {_intervalo(inicio, fim)}"
+        + (" — recorte (receita bruta dos itens)" if p["bruta"] else ""),
+        resumo, inicio, fim,
+        anexos=[
+            (serie, [("periodo", nome_ag), ("cupons", "Cupons"), ("itens", "Itens"),
+                     ("receita", "Receita"), ("ticket_medio", "Ticket médio")],
+             f"Evolução por {nome_ag.lower()}", None),
+            (semana, [("nome", "Dia da semana"), ("dias", "Dias com venda"),
+                      ("cupons", "Cupons"), ("receita", "Receita"),
+                      ("media_receita", "Receita média por dia"),
+                      ("media_cupons", "Cupons por dia")],
+             "Por dia da semana", None),
+            (horas, [("hora", "Hora"), ("cupons", "Cupons"), ("receita", "Receita")],
+             "Por hora do cupom", None),
+            (p["por_categoria"], grupo, "Por categoria", None),
+            (p["por_setor"], grupo, "Por setor", None),
+        ],
+    )
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -1357,6 +1440,14 @@ RELATORIOS: dict[str, Relatorio] = {
         "Memória de cálculo por produto",
         "Um insumo movimento a movimento, com a conta do custo médio escrita em cada linha.",
         "estoque.saldos", "movimentos", ("periodo", "produtos"), _memoria_produto),
+    # 🔑 O estudo de vendas (21/10/2026, pedido do dono): o recorte do painel de
+    # vendas, com os produtos na frente e os quadros do painel atrás.
+    "vendas": Relatorio(
+        "Estudo de vendas",
+        "O período escolhido: totais e a comparação com o anterior, os produtos, a "
+        "evolução, o dia da semana, a hora, a categoria e o setor.",
+        "cmv.relatorios", "vendas",
+        ("periodo", "agrupar", "categorias", "setores", "produtos"), _vendas),
     "consumo-pessoa": Relatorio(
         "Consumo por pessoa",
         "O que cada um consumiu, quanto custaria e quanto está sendo cobrado — "

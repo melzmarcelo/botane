@@ -95,6 +95,9 @@ export const MENU: GrupoMenu[] = [
         icone: "calendario",
         chave: ["consumo.periodos", "cmv.relatorios"],
       },
+      // 🔑 O estudo das vendas (21/10/2026) — a mesma chave dos documentos.
+      { href: "/vendas/painel", nome: "Painel", icone: "grafico",
+        chave: ["cmv.painel", "cmv.relatorios"] },
       // Os documentos de venda (cupons do PDV e os lançados à mão) — a antiga "Vendas".
       { href: "/vendas", nome: "Documentos", icone: "vendas", chave: "cmv.painel" },
     ],

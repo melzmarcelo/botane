@@ -227,3 +227,9 @@
     `busca_pessoa` (texto próprio — o `busca` dos outros diz "Produto contém"). Pessoa é da CASA:
     a loja não entra.
   - Cobertura: `smoke_exportacoes.py` (cabeçalho do cadastro e seção 4b).
+- 🔑 **O relatório `vendas` — Estudo de vendas** (1.1.116, 21/10/2026): a MESMA conta do painel
+  de vendas (`painel_vendas.painel`, ver `vendas.md`). Os produtos na frente (até 5.000), e
+  atrás a evolução, o dia da semana, a hora, a categoria e o setor. Filtro novo `agrupar`
+  (escolha: dia, semana, mês), declarado também em `routers/exportacoes.py` — filtro que o
+  catálogo oferece e o router não declara chega vazio (a lição do consumo por pessoa).
+  Chave `cmv.relatorios`: quem tem só `cmv.painel` vê o painel sem o Baixar.

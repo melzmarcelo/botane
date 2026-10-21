@@ -10441,6 +10441,61 @@ try {
   }
   if (prodAcr?.id) await api("DELETE", `/produtos/${prodAcr.id}`, null, token);
 
+  console.log("\n11zz2. o painel de vendas (21/10)");
+  // 🔑 Pedido do dono: os números de venda da tela inicial abrem o painel NAQUELE dia, e
+  // dali se troca para semana, mês ou período. A conta é cobrada em smoke_painel_vendas;
+  // aqui, que a tela chega, desenha e leva o recorte para a URL e para o Baixar.
+  await irPara(p, `${WEB}/`);
+  // ⚠️ 30 s: logo depois de mexer na tela inicial, o `next dev` recompila ela aqui.
+  await p.waitForSelector('a[href^="/vendas/painel"]', { timeout: 30000 }).catch(() => {});
+  const linkPainel = await p.evaluate(() =>
+    document.querySelector('a.faixa-numero[href^="/vendas/painel"]')?.getAttribute("href") ?? null);
+  checar("os números de venda da tela inicial levam ao painel, com o dia",
+    !!linkPainel && /modo=dia&de=\d{4}-\d{2}-\d{2}&ate=/.test(linkPainel), linkPainel);
+  const { dados: painelSrv } = await api("GET", "/vendas/painel", null, token);
+  const diaPainel = painelSrv?.inicio;
+  await irPara(p, `${WEB}${linkPainel ?? `/vendas/painel?modo=dia&de=${diaPainel}&ate=${diaPainel}`}`);
+  await p.waitForSelector("#painel-vendas-filtros", { timeout: 15000 }).catch(() => {});
+  await p.waitForFunction(() => !!document.querySelector("#painel-vendas-resumo")
+    || /Nenhuma venda importada/.test(document.querySelector("main")?.innerText ?? ""),
+    { timeout: 15000 }).catch(() => {});
+  const telaPainel = await p.evaluate(() => ({
+    resumo: !!document.querySelector("#painel-vendas-resumo"),
+    vazio: /Nenhuma venda importada/.test(document.querySelector("main")?.innerText ?? ""),
+    numeros: [...document.querySelectorAll("[data-numero-painel]")].map((e) => e.getAttribute("data-numero-painel")),
+    hora: /Por hora do cupom/.test(document.querySelector("main")?.innerText ?? ""),
+    produtos: document.querySelectorAll("#painel-vendas-produtos tbody tr").length,
+    baixar: [...document.querySelectorAll("main button")].some((b) => b.textContent?.trim() === "Baixar"),
+  }));
+  checar("o painel abre no dia, com faturado, cupons e ticket — ou diz que não há venda",
+    telaPainel.vazio || (telaPainel.resumo && telaPainel.numeros.includes("Ticket médio")), telaPainel);
+  checar("e, com venda, mostra a hora e os mais vendidos",
+    telaPainel.vazio || (telaPainel.hora && telaPainel.produtos > 0), telaPainel);
+  checar("e oferece baixar o relatório do recorte", telaPainel.baixar, telaPainel);
+
+  // Trocar para MÊS: a URL leva o recorte, e a evolução aparece.
+  await p.click('[data-modo="mes"]').catch(() => {});
+  await p.waitForFunction(() => location.search.includes("modo=mes"), { timeout: 6000 }).catch(() => {});
+  await p.waitForFunction(() => /-01&ate=/.test(location.search), { timeout: 6000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 1500));
+  const urlMes = p.url();
+  checar("trocar para Mês põe o mês inteiro na URL",
+    urlMes.includes("modo=mes") && /de=\d{4}-\d{2}-01/.test(urlMes), urlMes);
+  const mesTela = await p.evaluate(() => ({
+    titulo: document.querySelector("h1")?.textContent ?? "",
+    agrupar: !!document.querySelector("#painel-vendas-agrupar"),
+  }));
+  checar("o título diz o mês, e a evolução pode ser agrupada",
+    / de 20\d\d/.test(mesTela.titulo) && mesTela.agrupar, mesTela);
+
+  // A seta volta um mês.
+  await p.click('button[aria-label="recorte anterior"]').catch(() => {});
+  await new Promise((r) => setTimeout(r, 1500));
+  const deAntes = new URL(urlMes).searchParams.get("de");
+  const deDepois = new URL(p.url()).searchParams.get("de");
+  checar("a seta anda um mês para trás",
+    !!deAntes && !!deDepois && deDepois < deAntes && deDepois.endsWith("-01"), [deAntes, deDepois]);
+
   if (esse) await api("POST", `/pedidos/${esse.id}/cancelar`, { motivo: "pedido de teste da bateria" }, token);
   await ligarReservas(false);
 } finally {
