@@ -853,6 +853,13 @@ print("8b. o cadastro vem ANTES da nota")
 # ⚠️ Fica no FIM da suite de proposito: com o catalogo importado, os produtos das
 # fixtures passam a existir e a fila de pendencias esvazia. Rodando antes, ele
 # apagaria a premissa do bloco 3, que prova o caminho contrario.
+# ⚠️ **A marca do agendador começa ZERADA** (20/10/2026). O agendador da API local roda
+# sozinho de hora em hora; numa bateria que passava das 22h ele já tinha marcado o dia, e
+# a checagem do fim acusava o BOTÃO pelo que o agendador fez. Zerada aqui, ela mede só o clique.
+from database import get_cursor as _cur  # noqa: E402
+
+with _cur() as _c:
+    _c.execute("UPDATE integracoes SET catalogo_em = NULL WHERE servico = 'OMIE'")
 st, comCat = chamar("POST", "/omie/sincronizar?dias=60", token=token)
 cad = (comCat or {}).get("cadastros") or {}
 checar("a sincronizacao traz o catalogo junto", st == 200 and cad != {}, comCat)
