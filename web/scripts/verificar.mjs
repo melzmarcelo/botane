@@ -4551,7 +4551,12 @@ try {
   // mesma; o que mudou e que agora ha uma aba entre ela e quem olha.
   await p.evaluate(() => [...document.querySelectorAll('[role="tab"]')]
     .find((b) => b.textContent.trim() === "Estoque")?.click());
-  await new Promise((r) => setTimeout(r, 600));
+  // ⚠️ Esperar as LINHAS, não 600 ms: o salvar acima relê o produto, e o cartão das
+  // prateleiras recarrega junto — numa rodada lenta a tabela ainda estava vazia.
+  await p.waitForFunction(
+    () => document.querySelectorAll("#locais-do-produto tbody tr").length > 0
+      && !!document.querySelector("#local-a-acrescentar"),
+    { timeout: 15000, polling: 250 }).catch(() => {});
   const textoLoc = await textoVisivel(p);
   checar("a tela do produto diz em que prateleiras ele está",
     /Onde este produto fica/i.test(textoLoc), textoLoc.slice(0, 160));
@@ -9869,9 +9874,17 @@ try {
     cjDesfeito.maior_grupo);
 
   // Criar marcando NA PLANTA: clicar marca em vez de abrir a mesa.
-  await p.evaluate(() => [...document.querySelectorAll("button")]
-    .find((b) => b.textContent?.trim() === "+ conjunto")?.click());
-  await p.waitForSelector('[aria-label="novo conjunto"]', { timeout: 8000 }).catch(() => {});
+  // ⚠️ Antes, a janela do "Desfazer" tem de ter FECHADO: o clique no "+ conjunto"
+  // com ela ainda saindo se perdia, o painel não abria e a planta abria a mesa.
+  await p.waitForFunction(() => !document.querySelector('[role="dialog"], [role="alertdialog"]'),
+    { timeout: 8000 }).catch(() => {});
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    await p.evaluate(() => [...document.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "+ conjunto")?.click());
+    const abriu = await p.waitForSelector('[aria-label="novo conjunto"]', { timeout: 5000 })
+      .then(() => true).catch(() => false);
+    if (abriu) break;
+  }
   const criarCj = () => p.evaluate(() => {
     const b = [...document.querySelectorAll("button")]
       .find((x) => x.textContent?.trim() === "Criar conjunto");
