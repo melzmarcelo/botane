@@ -669,8 +669,10 @@ def previa(relatorio: str, filtros: _Filtros = Depends(),
         raise HTTPException(status_code=404, detail=f"Relatório que não existe: {relatorio}")
     _exige(ctx, rel.permissao)
     with get_cursor() as cur:
+        # ⚠️ `_previa`: só a contagem — o relatório pode poupar as colunas largas.
         saida = catalogo_motor.montar(cur, relatorio, unidade_atual(cur, ctx),
-                                      _com_as_lojas(cur, ctx, filtros.como_dict))
+                                      _com_as_lojas(cur, ctx, filtros.como_dict)
+                                      | {"_previa": True})
     # O número tem de ser o do ARQUIVO, anexo incluído — senão a prévia diz 10
     # e o contador abre uma planilha de 500 linhas.
     total = len(saida.linhas) + sum(len(a[0]) for a in saida.anexos)

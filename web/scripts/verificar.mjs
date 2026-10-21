@@ -7802,7 +7802,10 @@ try {
     aoTerminar.push(() => api("DELETE", `/fornecedores/${meuForn.id}`, null, token));
     // ⚠️ A edicao e a MESMA forma da criacao, para o olho reconhecer.
     await irPara(p, `${WEB}/fornecedores/${meuForn.id}`);
-    await new Promise((r) => setTimeout(r, 1600));
+    // ⚠️ Espera o NOME, não um tempo fixo (20/10/2026): com 1,6 s a leitura às vezes
+    // pegava a tela ainda carregando (só o nome da casa) e acusava a edição.
+    await p.waitForFunction((nome) => document.body.innerText.toUpperCase().includes(nome),
+      { timeout: 15000, polling: 300 }, `Fornecedor tela ${mCad}`.toUpperCase()).catch(() => {});
     const edicao = await textoVisivel(p);
     checar("e a edicao abre com o nome no titulo",
       edicao.toUpperCase().includes(`Fornecedor tela ${mCad}`.toUpperCase()),

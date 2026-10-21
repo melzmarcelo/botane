@@ -483,33 +483,42 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
     # é resolvido por loja (o dela, caindo para o da casa). O nome fica como
     # está para não mexer na assinatura que o catálogo inteiro compartilha.
     situacao = _lista(f.get("situacao"))
-    cur.execute(
-        """SELECT p.codigo, p.nome AS produto, p.nome_curto, p.tipo, c.nome AS categoria,
-                  s.nome AS setor, p.um_estoque, p.um_compra, p.fator_compra,
-                  p.estoque_minimo, p.estoque_maximo, p.perecivel, p.validade_dias,
-                  p.controla_lote, p.controla_validade, p.controla_estoque,
+    # ⚠️ **As colunas largas só quando vão para a PLANILHA.** O PDF usa as de sempre, e a
+    # prévia (`_previa`) só conta linhas: buscar as quarenta colunas ali levou a prévia de
+    # 1 s para 3,4 s numa base de 50 mil produtos — e a janela de exportação esperando.
+    largo = f.get("_formato") != "pdf" and not f.get("_previa")
+    extras = """, p.nome_curto, p.estoque_maximo, p.controla_validade, p.controla_estoque,
                   p.producao_propria, p.modo_producao,
                   lp.nome AS local_padrao, lv.nome AS local_venda,
-                  p.marca, p.peso_liquido, p.peso_bruto,
-                  p.ncm, p.cest, p.codigo_barras, p.codigo_omie, p.um_omie,
+                  p.marca, p.peso_liquido, p.peso_bruto, p.cest, p.codigo_omie, p.um_omie,
                   p.codigo_pdv, p.integrado_pdv, p.origem,
                   p.nome_catalogo, p.informacao_adicional,
                   array_to_string(p.restricoes, ', ') AS restricoes,
                   p.custo_referencia, p.custo_referencia_em, p.custo_referencia_origem,
-                  p.observacao, p.status, p.ativo, p.criado_em, p.revisado_em,
-                  p.sincronizado_em,
+                  p.observacao, p.criado_em, p.revisado_em, p.sincronizado_em,
+                  fz.fornecedores""" if largo else ""
+    juncoes = """
+             LEFT JOIN locais_estoque lp ON lp.id = p.id_local_padrao
+             LEFT JOIN locais_estoque lv ON lv.id = p.id_local_venda
+             -- Agregado UMA vez, não por linha.
+             LEFT JOIN (SELECT pf.id_produto,
+                               string_agg(f.nome, ' / ' ORDER BY pf.preferencial DESC,
+                                          lower(f.nome)) AS fornecedores
+                          FROM produto_fornecedor pf
+                          JOIN fornecedores f ON f.id = pf.id_fornecedor
+                         GROUP BY pf.id_produto) fz ON fz.id_produto = p.id""" if largo else ""
+    cur.execute(
+        f"""SELECT p.codigo, p.nome AS produto, p.tipo, c.nome AS categoria,
+                  s.nome AS setor, p.um_estoque, p.um_compra, p.fator_compra,
+                  p.estoque_minimo, p.perecivel, p.validade_dias, p.controla_lote,
+                  p.ncm, p.codigo_barras, p.status, p.ativo,
                   (SELECT pp.preco_venda FROM produto_precos pp
                     WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
                       AND (pp.id_unidade = %(uni)s OR pp.id_unidade IS NULL)
-                    ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda,
-                  (SELECT string_agg(f.nome, ' / ' ORDER BY pf.preferencial DESC, lower(f.nome))
-                     FROM produto_fornecedor pf JOIN fornecedores f ON f.id = pf.id_fornecedor
-                    WHERE pf.id_produto = p.id) AS fornecedores
+                    ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda{extras}
              FROM produtos p
              LEFT JOIN categorias c ON c.id = p.id_categoria
-             LEFT JOIN setores s ON s.id = p.id_setor
-             LEFT JOIN locais_estoque lp ON lp.id = p.id_local_padrao
-             LEFT JOIN locais_estoque lv ON lv.id = p.id_local_venda
+             LEFT JOIN setores s ON s.id = p.id_setor{juncoes}
             WHERE (%(tipos)s::varchar[] IS NULL OR p.tipo = ANY(%(tipos)s))
               AND (%(categorias)s::int[] IS NULL OR p.id_categoria = ANY(%(categorias)s))
               AND (%(setores)s::int[] IS NULL OR p.id_setor = ANY(%(setores)s))
@@ -536,7 +545,7 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
         ("perecivel", "Perecível"), ("validade_dias", "Validade (dias)"),
         ("controla_lote", "Controla lote"), ("ncm", "NCM"),
         ("codigo_barras", "Código de barras"), ("status", "Situação"), ("ativo", "Ativo")]
-    if f.get("_formato") == "pdf":
+    if not largo:
         colunas = resumidas
     else:
         colunas = [
