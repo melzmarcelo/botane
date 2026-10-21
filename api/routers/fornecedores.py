@@ -66,6 +66,11 @@ def obter(id_fornecedor: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
     with get_cursor() as cur:
         cur.execute(
             f"""SELECT id, {', '.join(_CAMPOS)},
+                       -- Os mesmos números da lista: a ficha da pessoa os mostra.
+                       (SELECT count(*) FROM produto_fornecedor pf
+                         WHERE pf.id_fornecedor = fornecedores.id) AS produtos,
+                       (SELECT max(pf.ultima_compra) FROM produto_fornecedor pf
+                         WHERE pf.id_fornecedor = fornecedores.id) AS ultima_compra,
                        (SELECT u.nome FROM usuarios u
                          WHERE u.id_pessoa = fornecedores.id AND u.ativo LIMIT 1) AS usuario
                   FROM fornecedores WHERE id = %s""", (id_fornecedor,)

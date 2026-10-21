@@ -20,18 +20,11 @@ export default function PaginaFornecedor() {
 
   const carregar = useCallback(async () => {
     try {
-      // ⚠️ Não há `GET /fornecedores/{id}`: a lista é a fonte, e a busca vai ao
-      // SERVIDOR. Procurar na página carregada acharia só quem já estivesse na
-      // tela — numa base com 817 fornecedores, quase nunca.
-      const r = await api.listar<Fornecedor>(
-        `/fornecedores?busca=&incluir_inativos=true&limite=1000`,
-      );
-      const achado = r.itens.find((f) => String(f.id) === String(id));
-      if (!achado) {
-        setErro("Fornecedor não encontrado.");
-        return;
-      }
-      setX(achado);
+      // 🔑 **Pela rota da pessoa, não pela lista** (20/10/2026). A tela pedia as
+      // primeiras 1.000 da lista e procurava o id ali: passando de mil pessoas, a
+      // cadastrada por último abria "Fornecedor não encontrado" — o 404 de verdade
+      // vem da rota, que responde por qualquer uma.
+      setX(await api.get<Fornecedor>(`/fornecedores/${id}`));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
