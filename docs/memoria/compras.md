@@ -5,6 +5,26 @@
 
 ## O que já existe
 
+- 🔑 **Os filtros da lista de notas** (1.1.117, 21/10/2026, pedido do dono: *"nas notas de
+  entrada poderia ter mais filtros: período, situação..."*). A rota já aceitava situação, origem
+  e período; a tela só oferecia a busca.
+  - **Tela** (`compras/filtros-notas.tsx`): situação (com **"a lançar"** = importada + conciliada,
+    uma escolha e duas situações), origem (Omie, XML, digitada), período de/até e "só com item sem
+    produto". Tudo na URL (`situacao`, `origem`, `de`, `ate`, `pendentes`), e entra nos `filtros`
+    da paginação (filtrar volta à página 1).
+  - **API:** `status` e `origem` viraram LISTA (`?status=IMPORTADA&status=CONCILIADA`); um valor
+    só continua valendo, em qualquer caixa — o conector manda um só. `pendentes=true` = item com
+    `id_produto` nulo e não ignorado, a regra da fila de conciliação. ⚠️ O período é pela data de
+    ENTRADA, e pela de emissão quando não há entrada (`coalesce`).
+  - **`GET /notas/resumo`**: quantas e quanto, no MESMO filtro (`FiltroNotas`, uma classe só para a
+    lista e o resumo — cópia do `WHERE` diverge). ⚠️ Rota própria e não cabeçalho: a lista só conta
+    na primeira página. ⚠️ O `valor` é o que é COMPRA — sem CANCELADA e NAO_ENCONTRADA —, e vai
+    também `por_status`. O título do cartão mostra "N nota(s) · R$ X" só quando o resumo e o
+    `X-Total` concordam.
+  - `paginacao.pagina` passou a aceitar parâmetros NOMEADOS (dict): o corte usa `%(_limite)s`.
+  - Cobertura: `smoke_notas_filtros.py` (num trecho dos anos 80 sem nota, situação e origem por SQL)
+    e `verificar.mjs` 11zz3.
+
 - 🔑 **A lista de notas e a fila de conciliação são da LOJA do seletor** (06/10/2026, bateria
   de duas lojas). `GET /notas` e `GET /notas/pendencias` não filtravam `id_unidade`: quem
   enxerga as duas lojas via as notas das duas misturadas, enquanto o alerta e o Início já

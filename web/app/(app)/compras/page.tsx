@@ -14,6 +14,8 @@ import { CORES, dataBr, Nota, rotuloStatus } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
 import LancarLote from "./lote";
+import BarraDeFiltros, { useFiltrosNotas } from "./filtros-notas";
+import { resumoNotas, type ResumoNotas } from "@/lib/compras";
 
 /**
  * A lista das notas de entrada — só a lista.
@@ -63,7 +65,9 @@ export default function PaginaCompras() {
   const [ocupado, setOcupado] = useState(false);
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [importados, setImportados] = useState<ResultadoXml[] | null>(null);
-  const pag = usePaginacao("notas", { padrao: 50, filtros: [busca] });
+  const filtros = useFiltrosNotas();
+  const [resumo, setResumo] = useState<ResumoNotas | null>(null);
+  const pag = usePaginacao("notas", { padrao: 50, filtros: [busca, ...filtros.chaves] });
   const entradaXml = useRef<HTMLInputElement>(null);
 
   /**
@@ -82,6 +86,12 @@ export default function PaginaCompras() {
     try {
       const q = new URLSearchParams(pag.parametros);
       if (busca.trim()) q.set("busca", busca.trim());
+      filtros.aplicar(q);
+      // 🔑 O total em reais do MESMO filtro (21/10/2026), em rota própria: a lista só
+      // conta na primeira página, e o valor tem de continuar ao virar a página.
+      const sem = new URLSearchParams();
+      if (busca.trim()) sem.set("busca", busca.trim());
+      resumoNotas(filtros.aplicar(sem)).then(setResumo).catch(() => setResumo(null));
       // A lista e a FILA vêm juntas: a fila é da casa inteira e não depende de
       // qual página está aberta.
       const [n, pendentes] = await Promise.all([
@@ -101,7 +111,7 @@ export default function PaginaCompras() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, busca, pag.offset, pag.porPagina]);
+  }, [pag.pronto, busca, pag.offset, pag.porPagina, ...filtros.chaves]);
 
   useEffect(() => {
     // Digitar dispara busca no servidor: um respiro evita uma consulta por tecla.
@@ -494,7 +504,9 @@ export default function PaginaCompras() {
       )}
 
       <Cartao
-        titulo={notas ? `${pag.total} nota(s)` : "Notas"}
+        titulo={notas
+          ? `${pag.total} nota(s)${resumo && resumo.notas === pag.total ? ` · ${reais(resumo.valor)}` : ""}`
+          : "Notas"}
         acao={
           <input
             className="campo w-[240px]"
@@ -505,11 +517,21 @@ export default function PaginaCompras() {
           />
         }
       >
+        <BarraDeFiltros f={filtros} />
+        {/* ⚠️ O valor do título é o que é COMPRA: cancelada e não encontrada no Omie
+            ficam fora dele, e a frase diz quando há delas no filtro. */}
+        {resumo && resumo.por_status.some((s) => s.status === "CANCELADA" || s.status === "NAO_ENCONTRADA") && (
+          <p className="mb-2 text-[12.5px] text-suave">
+            O valor não soma as canceladas nem as não encontradas no Omie.
+          </p>
+        )}
         {!notas ? (
           <Carregando />
         ) : !notas.length ? (
           <Vazio>
-            {busca
+            {filtros.ativos
+              ? "Nenhuma nota com esses filtros."
+              : busca
               ? "Nenhuma nota com esse número ou fornecedor."
               : "Nenhuma nota ainda. Importe um XML, digite a do mercado ou busque no Omie."}
           </Vazio>

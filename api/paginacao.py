@@ -53,7 +53,7 @@ from contextvars import ContextVar
 pediram_o_total: ContextVar[bool] = ContextVar("pediram_o_total", default=False)
 
 
-def pagina(cur, sql: str, params: tuple | list, *, limite: int, offset: int,
+def pagina(cur, sql: str, params: tuple | list | dict, *, limite: int, offset: int,
            resposta=None) -> list[dict]:
     """Roda a consulta paginada e, quando é o caso, o total do mesmo filtro.
 
@@ -61,8 +61,14 @@ def pagina(cur, sql: str, params: tuple | list, *, limite: int, offset: int,
     o total usa exatamente o mesmo texto e os mesmos parâmetros. Uma cópia do
     filtro escrita à mão é uma cópia que diverge no primeiro `WHERE` novo.
     """
-    params = tuple(params)
-    cur.execute(f"{sql}\nLIMIT %s OFFSET %s", (*params, limite, offset))
+    # Parâmetros NOMEADOS (`%(x)s`, num dict) ou posicionais — o corte segue o estilo
+    # da consulta, porque o psycopg não aceita os dois misturados.
+    if isinstance(params, dict):
+        cur.execute(f"{sql}\nLIMIT %(_limite)s OFFSET %(_offset)s",
+                    {**params, "_limite": limite, "_offset": offset})
+    else:
+        params = tuple(params)
+        cur.execute(f"{sql}\nLIMIT %s OFFSET %s", (*params, limite, offset))
     linhas = [dict(r) for r in cur.fetchall()]
 
     # A contagem sai na primeira página de um filtro — ou quando a tela diz que

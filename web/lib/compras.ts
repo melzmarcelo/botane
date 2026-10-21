@@ -4,6 +4,18 @@
  */
 import { api } from "@/lib/api";
 
+/** Quantas notas e quanto somam, no mesmo filtro da lista. */
+export type ResumoNotas = {
+  notas: number;
+  /** Sem as canceladas e as não encontradas no Omie: o que é COMPRA. */
+  valor: number;
+  por_status: { status: string; notas: number; valor: number }[];
+};
+
+/** `q` é a mesma query de filtros da lista, sem página. */
+export const resumoNotas = (q: URLSearchParams) =>
+  api.get<ResumoNotas>(`/notas/resumo${q.toString() ? `?${q}` : ""}`);
+
 /** Em que pé a nota está para o lote. Quem decide é o servidor. */
 export type SituacaoNoLote = "pronta" | "conferir" | "travada";
 

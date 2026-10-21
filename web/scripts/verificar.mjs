@@ -10502,6 +10502,34 @@ try {
   checar("a seta anda um mês para trás",
     !!deAntes && !!deDepois && deDepois < deAntes && deDepois.endsWith("-01"), [deAntes, deDepois]);
 
+  console.log("\n11zz3. os filtros das notas de entrada (21/10)");
+  // 🔑 Pedido do dono: período, situação... A conta é cobrada em smoke_notas_filtros;
+  // aqui, que a tela oferece os filtros, os leva para a URL e o título mostra o total.
+  await irPara(p, `${WEB}/compras`);
+  await p.waitForSelector("#notas-situacao", { timeout: 15000 }).catch(() => {});
+  const opcoesSit = await p.$$eval("#notas-situacao option", (os) => os.map((o) => o.textContent?.trim()))
+    .catch(() => []);
+  checar("Compras oferece situação, com 'a lançar'", opcoesSit.includes("a lançar"), opcoesSit);
+  checar("e origem, período e só com item sem produto",
+    !!(await p.$("#notas-origem")) && !!(await p.$("#notas-de")) && !!(await p.$("#notas-ate"))
+      && !!(await p.$("#notas-pendentes")));
+  const { total: aLancar } = await api("GET", "/notas?status=IMPORTADA&status=CONCILIADA&limite=1", null, token);
+  await p.select("#notas-situacao", "abertas").catch(() => {});
+  await p.waitForFunction(() => location.search.includes("situacao=abertas"), { timeout: 6000 }).catch(() => {});
+  await p.waitForFunction((n) => new RegExp(`^${n} nota\\(s\\)`).test(
+    [...document.querySelectorAll("main h2, main h3")].map((h) => h.textContent?.trim() ?? "")
+      .find((t) => /nota\(s\)/.test(t)) ?? ""), { timeout: 10000 }, aLancar).catch(() => {});
+  const tituloNotas = await p.evaluate(() =>
+    [...document.querySelectorAll("main h2, main h3")].map((h) => h.textContent?.trim() ?? "")
+      .find((t) => /nota\(s\)/.test(t)) ?? "");
+  checar("'a lançar' vai na URL e o título conta as importadas e conciliadas",
+    p.url().includes("situacao=abertas") && tituloNotas.startsWith(`${aLancar} nota(s)`),
+    { url: p.url(), tituloNotas, aLancar });
+  checar("e o título traz o valor em reais", aLancar === 0 || /R\$/.test(tituloNotas), tituloNotas);
+  await p.click("#notas-limpar-filtros").catch(() => {});
+  await p.waitForFunction(() => !location.search.includes("situacao="), { timeout: 6000 }).catch(() => {});
+  checar("limpar filtros tira tudo da URL", !p.url().includes("situacao="), p.url());
+
   if (esse) await api("POST", `/pedidos/${esse.id}/cancelar`, { motivo: "pedido de teste da bateria" }, token);
   await ligarReservas(false);
 } finally {

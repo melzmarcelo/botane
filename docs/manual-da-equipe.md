@@ -180,6 +180,15 @@ diferente de valer zero, e é assim que deve ser.
 
 ---
 
+### Filtrar as notas
+
+Em **Notas de entrada**, abaixo da busca, dá para filtrar por **situação** (a
+opção **a lançar** junta as importadas e as conciliadas — o que ainda falta pôr
+no estoque), **origem** (Omie, XML ou digitada), **período** de entrada e **só
+com item sem produto**. O título mostra quantas notas e quanto somam.
+
+⚠️ O valor não soma as canceladas nem as que o Omie não tem mais: não é compra.
+
 ### A busca de notas traz os produtos novos junto
 
 O botão **Buscar notas novas**, em Integrações, traz **primeiro o catálogo** e

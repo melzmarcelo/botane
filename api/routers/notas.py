@@ -389,12 +389,89 @@ def editar_manual(id_nota: int, body: NotaManual,
 # ---------------------------------------------------------------- consulta
 
 
+class FiltroNotas:
+    """Os filtros da lista de notas — os MESMOS para a página e para o total.
+
+    🔑 **Pedido do dono (21/10/2026): "nas notas de entrada poderia ter mais
+    filtros: período, situação..."** A rota já aceitava situação, origem e
+    período; a tela só oferecia a busca. Duas mudanças aqui:
+
+    * ⚠️ **Situação e origem viraram LISTA** (`?status=IMPORTADA&status=CONCILIADA`):
+      "a lançar" são duas situações, e a tela pede as duas de uma vez. Um valor só
+      continua valendo — é uma lista de um.
+    * `pendentes`: só as notas com item ainda sem produto (e não ignorado) — a
+      mesma regra da coluna `pendentes` e da fila de conciliação.
+
+    ⚠️ O filtro mora numa classe só porque a lista e o RESUMO (`/notas/resumo`)
+    têm de concordar: uma cópia do `WHERE` escrita à mão diverge no primeiro filtro
+    novo, e o total em reais deixaria de ser o das notas que estão na tela.
+    """
+
+    def __init__(self,
+                 status: list[str] | None = Query(default=None),
+                 origem: list[str] | None = Query(default=None),
+                 busca: str | None = Query(default=None, max_length=80),
+                 inicio: date | None = None,
+                 fim: date | None = None,
+                 pendentes: bool = False):
+        self.status = [s.upper() for s in status or [] if s] or None
+        self.origem = [o.upper() for o in origem or [] if o] or None
+        self.like = f"%{busca.strip()}%" if busca and busca.strip() else None
+        self.inicio, self.fim, self.pendentes = inicio, fim, pendentes
+
+    def sql(self, id_unidade: int) -> tuple[str, dict]:
+        return (
+            """WHERE n.id_unidade = %(u)s
+                  AND (%(st)s::varchar[] IS NULL OR n.status = ANY(%(st)s))
+                  AND (%(org)s::varchar[] IS NULL OR n.origem = ANY(%(org)s))
+                  AND (%(ini)s::date IS NULL
+                       OR coalesce(n.data_entrada, n.data_emissao) >= %(ini)s)
+                  AND (%(fim)s::date IS NULL
+                       OR coalesce(n.data_entrada, n.data_emissao) <= %(fim)s)
+                  AND (%(like)s::varchar IS NULL
+                       OR n.numero ILIKE %(like)s OR n.nome_emitente ILIKE %(like)s
+                       OR f.nome ILIKE %(like)s OR n.chave_nfe ILIKE %(like)s)
+                  AND (NOT %(pend)s OR EXISTS (
+                       SELECT 1 FROM nota_itens i
+                        WHERE i.id_nota = n.id AND i.id_produto IS NULL AND NOT i.ignorado))""",
+            {"u": id_unidade, "st": self.status, "org": self.origem, "ini": self.inicio,
+             "fim": self.fim, "like": self.like, "pend": self.pendentes},
+        )
+
+
+@router.get("/resumo")
+def resumo(filtro: FiltroNotas = Depends(),
+           ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
+    """Quantas notas e quanto somam, no MESMO filtro da lista.
+
+    ⚠️ Rota própria, e não um cabeçalho da lista: a lista só conta na primeira
+    página (`paginacao.pagina`), e o total em reais tem de continuar ali ao virar
+    a página. ⚠️ Somar CANCELADA e NAO_ENCONTRADA no mesmo número das lançadas
+    seria somar compra que não houve — por isso o valor vai também por situação.
+    """
+    with get_cursor() as cur:
+        where, par = filtro.sql(unidade_atual(cur, ctx))
+        cur.execute(
+            f"""SELECT n.status, count(*) AS notas, coalesce(sum(n.valor_total), 0) AS valor
+                  FROM notas_entrada n
+                  LEFT JOIN fornecedores f ON f.id = n.id_fornecedor
+                 {where}
+                 GROUP BY n.status""",
+            par,
+        )
+        por = [{"status": r["status"], "notas": r["notas"], "valor": float(r["valor"])}
+               for r in cur.fetchall()]
+    valem = [p for p in por if p["status"] not in ("CANCELADA", "NAO_ENCONTRADA")]
+    return {
+        "notas": sum(p["notas"] for p in por),
+        # O valor que é COMPRA: sem as canceladas e as que o Omie não tem mais.
+        "valor": round(sum(p["valor"] for p in valem), 2),
+        "por_status": sorted(por, key=lambda p: -p["notas"]),
+    }
+
+
 @router.get("")
-def listar(status: str | None = None,
-           origem: str | None = None,
-           busca: str | None = Query(default=None, max_length=80),
-           inicio: date | None = None,
-           fim: date | None = None,
+def listar(filtro: FiltroNotas = Depends(),
            limite: int = Query(default=50, ge=1, le=200),
            offset: int = Query(default=0, ge=0),
            resposta: Response = None,
@@ -407,8 +484,8 @@ def listar(status: str | None = None,
     fornecedor ou por período é o jeito como alguém procura uma nota de verdade
     — ninguém rola uma lista de milhares.
     """
-    like = f"%{busca.strip()}%" if busca and busca.strip() else None
     with get_cursor() as cur:
+        where, par = filtro.sql(unidade_atual(cur, ctx))
         linhas = pagina(
             cur,
             """SELECT n.id, n.chave_nfe, n.numero, n.serie, n.nome_emitente, n.cnpj_emitente,
@@ -424,19 +501,9 @@ def listar(status: str | None = None,
                 -- A lista não filtrava: quem enxerga as duas via as notas das duas
                 -- misturadas, enquanto o alerta e o Início já contavam por loja —
                 -- a tela dizia "3 notas a lançar" e mostrava sete.
-                WHERE n.id_unidade = %s
-                  AND (%s::varchar IS NULL OR n.status = %s)
-                  AND (%s::varchar IS NULL OR n.origem = %s)
-                  AND (%s::date IS NULL
-                       OR coalesce(n.data_entrada, n.data_emissao) >= %s)
-                  AND (%s::date IS NULL
-                       OR coalesce(n.data_entrada, n.data_emissao) <= %s)
-                  AND (%s::varchar IS NULL
-                       OR n.numero ILIKE %s OR n.nome_emitente ILIKE %s
-                       OR f.nome ILIKE %s OR n.chave_nfe ILIKE %s)
+                """ + where + """
                 ORDER BY n.data_emissao DESC NULLS LAST, n.id DESC""",
-            (unidade_atual(cur, ctx), status, status, origem, origem, inicio, inicio,
-             fim, fim, like, like, like, like, like),
+            par,
             limite=limite, offset=offset, resposta=resposta,
         )
     return linhas
