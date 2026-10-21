@@ -4100,8 +4100,13 @@ try {
   checar("a fila de conciliação vem do servidor, não da página",
     Array.isArray(filaPendente), filaPendente);
   if ((filaPendente ?? []).length > 0) {
+    // ⚠️ Espera: a frase da sincronização chega ANTES de a tela recarregar a fila. Numa
+    // base recém-zerada a pendência nasce nesta mesma sincronização, e o texto lido
+    // acima ainda não tinha o botão.
+    const temPendente = await p.waitForFunction(() => /pendente/i.test(document.body.innerText),
+      { timeout: 15000, polling: 300 }).then(() => true).catch(() => false);
     checar("e a tela oferece reconciliar quando há pendência",
-      /pendente/i.test(textoCompras), textoCompras.slice(0, 160));
+      temPendente, (await p.evaluate(() => document.body.innerText)).slice(0, 160));
   } else {
     checar("e a tela oferece reconciliar quando há pendência", true,
       "nenhum item pendente nesta base");
