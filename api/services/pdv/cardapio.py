@@ -366,7 +366,8 @@ def _gravar_preco(cur, id_produto: int, preco: float, id_usuario: int,
 
 def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
              criar_ausentes: bool = True, id_unidade: int = 1,
-             alinhar: bool = True, precos_tambem: bool = False) -> dict:
+             alinhar: bool = True, precos_tambem: bool = False,
+             trocar_unidade: bool = True) -> dict:
     """Traz o cardápio e liga o que o CÓDIGO manda ligar.
 
     🔑 **`alinhar` separa as duas coisas que esta função faz** (01/09/2026,
@@ -525,12 +526,18 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
             if not do_omie and item["nome_longo"]:
                 campos_do_item["nome"] = item["nome_longo"]
             if not alinhar:
-                # ⚠️ **Só a SITUAÇÃO.** É o único campo que a sincronização
-                # automática tem autoridade para mexer: produto desligado no
-                # cardápio tem de sumir das listas daqui, e ninguém corrige
-                # `ativo` à mão esperando que ele fique. Todo o resto é
-                # alinhamento, e alinhamento é um clique de alguém.
+                # ⚠️ **Só a SITUAÇÃO.** Com o Botané dono do cadastro (envio ao PDV
+                # ligado), é o único campo que a sincronização automática mexe:
+                # produto desligado no cardápio tem de sumir das listas daqui.
                 campos_do_item = {"ativo": item["ativo"]}
+            elif not trocar_unidade:
+                # ⚠️ **A unidade só se COMPLETA sozinha, nunca se troca** (20/10/2026).
+                # Trocar UN por KG num produto com saldo sem converter o estoque e o
+                # custo é a armadilha que a troca de unidade existe para evitar; o
+                # botão "Importar cardápio" continua alinhando, porque ali alguém olha.
+                cur.execute("SELECT um_estoque FROM produtos WHERE id = %s", (id_produto,))
+                if (cur.fetchone() or {}).get("um_estoque"):
+                    campos_do_item.pop("um_estoque", None)
             mudou, conflitos = _atualizar(cur, id_produto, campos_do_item)
             resumo["completados"] += 1 if mudou else 0
             resumo["ean_de_outro"] += conflitos
@@ -627,13 +634,26 @@ def sincronizar_cadastros(cur, cliente: ClientePdv, id_usuario: int, filial: str
     Botané, e trazer o de lá apagaria o daqui sem ninguém pedir. Ver
     `_preco_e_do_pdv`.
     """
+    # 🔑 **Enquanto o Botané não envia nada ao PDV, o PDV é o DONO do cadastro**
+    # (pedido do dono, 20/10/2026: *"como ainda não estamos enviando nada para o PDV, o
+    # preço que deve ser considerado é do PDV; quando as vendas são importadas, os
+    # produtos devem ser atualizados, cadastrando os novos e ajustando os que tiveram
+    # alteração, inclusive de preço"*). Inverte a regra de 01/09 ("só criar e
+    # desativar"): com o envio desligado, a busca de vendas ALINHA — nome (quando não
+    # há lado do Omie), nome curto, categoria, setor, NCM, CEST, EAN, situação e preço.
+    # ⚠️ Correção feita aqui num produto do PDV volta a ser a do PDV na busca seguinte:
+    # o conserto é no PDV. Com o envio LIGADO o Botané é o dono, e vale o de antes.
+    # ⚠️ A unidade só se completa (`trocar_unidade=False`) — ver `importar`.
     do_pdv = _preco_e_do_pdv(cur, id_unidade)
     r = importar(cur, cliente, id_usuario, filial, criar_ausentes=True,
-                 id_unidade=id_unidade, alinhar=False, precos_tambem=do_pdv)
+                 id_unidade=id_unidade, alinhar=do_pdv, precos_tambem=do_pdv,
+                 trocar_unidade=False)
     return {"itens": r["itens"], "criados": r["criados"],
-            # `completados` aqui só pode ser mudança de situação: é o único
-            # campo que o modo desligado escreve.
-            "situacao_mudou": r["completados"], "sem_vinculo": r["sem_vinculo"],
+            # Com o PDV dono, `completados` é todo produto que mudou em algum campo;
+            # com o Botané dono, só pode ser mudança de situação.
+            "alinhados": r["completados"] if do_pdv else 0,
+            "situacao_mudou": 0 if do_pdv else r["completados"],
+            "sem_vinculo": r["sem_vinculo"],
             # ⚠️ Só o que MUDOU (`precos.gravar` devolve falso quando o valor é
             # o mesmo): "629 preços" toda hora não é notícia, "3 preços" é.
             "precos": r["precos"],

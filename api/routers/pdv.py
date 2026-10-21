@@ -317,7 +317,8 @@ def sincronizar(
         # Prato criado no PDV hoje e vendido hoje: se a venda entrasse primeiro,
         # o item ficaria sem vínculo e sem custo, esperando alguém percorrer a
         # fila. Sincronizando antes, ele já existe quando a venda chega.
-        # ⚠️ **Só criar e desativar**, nunca alinhar — ver `sincronizar_cadastros`.
+        # 🔑 Com o envio ao PDV desligado (o PDV é o dono), ALINHA os cadastros —
+        # desde 20/10/2026. Ligado, só cria e desativa. Ver `sincronizar_cadastros`.
         # ⚠️ **Falhar aqui NÃO impede a busca de vendas.** Venda não importada é
         # receita faltando no CMV; cadastro não sincronizado é um item que fica
         # na fila mais um dia. Derrubar a segunda por causa da primeira trocaria
@@ -387,6 +388,8 @@ def sincronizar(
                     + rota_vendas.frase_das_falhas(gravado.get("falhas") or [])
                     + (f". {cadastros['criados']} produto(s) novo(s) do PDV"
                        if cadastros.get("criados") else "")
+                    + (f", {cadastros['alinhados']} atualizado(s) pelo PDV"
+                       if cadastros.get("alinhados") else "")
                     + (f", {cadastros['situacao_mudou']} com a situação alterada"
                        if cadastros.get("situacao_mudou") else "")
                     # 🔑 O preço vem junto desde 09/09/2026 (ver

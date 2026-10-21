@@ -681,7 +681,20 @@
   cadastrado aqui; prato desligado lá é desativado aqui. E o cadastro vem **antes** da venda,
   de propósito: prato criado hoje e vendido hoje entraria como item sem vínculo e sem custo,
   esperando alguém percorrer a fila.
-  🔑 **Mas só CRIAR e DESATIVAR — nunca alinhar** (`importar(alinhar=False)`). O alinhamento
+  🔑 **20/10/2026 — INVERTIDO (1.1.115): enquanto o envio ao PDV está DESLIGADO, o PDV é o
+  dono do cadastro e a busca de vendas ALINHA** (pedido do dono: *"como ainda não estamos
+  enviando nada para o PDV, o preço que deve ser considerado é do PDV; quando as vendas são
+  importadas, os produtos devem ser atualizados, cadastrando os novos e ajustando os produtos
+  que tiveram alteração, inclusive de preço"*). `sincronizar_cadastros` chama
+  `importar(alinhar=do_pdv, precos_tambem=do_pdv, trocar_unidade=False)`, onde `do_pdv` =
+  `_preco_e_do_pdv` (envio desligado). ⚠️ Correção feita AQUI num produto do PDV volta a ser a
+  do PDV na busca seguinte — o conserto é no PDV. ⚠️ A unidade só se COMPLETA (vazia), nunca
+  se troca sozinha: trocar UN por KG com saldo sem converter estoque e custo é a armadilha da
+  troca de unidade; o botão "Importar cardápio" continua trocando, porque ali alguém olha.
+  Com o envio LIGADO, vale o texto abaixo. Resposta: `alinhados` (PDV dono) ou
+  `situacao_mudou` (Botané dono); a frase diz "N atualizado(s) pelo PDV". Cobertura:
+  `smoke_pdv_legal.py` 8g2, os dois lados.
+  (Histórico) **Mas só CRIAR e DESATIVAR — nunca alinhar** (`importar(alinhar=False)`). O alinhamento
   (nome curto, categoria, setor, unidade, NCM, CEST, EAN, preço) continua sendo o botão
   "Importar cardápio", e a razão é a que já estava escrita no código: *o que evita o ping-pong
   é ser MANUAL*. Rodá-lo sozinho, de hora em hora, desfaria **calada** a correção de quem

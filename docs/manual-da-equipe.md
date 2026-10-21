@@ -235,10 +235,12 @@ PDV é criado aqui como **rascunho**, e o que foi desligado lá fica **inativo**
 aqui. Não precisa fazer nada — mas o prato novo entra sem ficha, e prato sem
 ficha não tem custo. Ele aparece na fila de "produzido sem ficha".
 
-⚠️ **O que a busca NÃO faz é alinhar o resto.** Nome curto, categoria, setor,
-unidade e preço continuam como estão aqui — se você corrigiu a categoria de um
-prato à mão, ela fica. Para trazer tudo do PDV de uma vez, use o botão
-**Importar cardápio**, em Integrações: aí sim ele sobrescreve.
+⚠️ **Enquanto o Botané não envia nada ao PDV, quem manda no cadastro é o PDV.**
+A busca de vendas traz também o que mudou lá: nome curto, categoria, setor, NCM,
+CEST, código de barras, situação e **preço**. Corrigiu a categoria de um prato
+aqui? Na próxima busca ela volta a ser a do PDV — o conserto é no PDV. A unidade
+só se preenche quando está vazia (trocar a unidade de um produto com estoque é
+pela tela de troca de unidade).
 
 ⚠️ Produto que apenas **some** da lista do PDV não é desativado aqui. Só o que
 vier marcado como desligado. A lista do PDV já veio incompleta sem avisar, e

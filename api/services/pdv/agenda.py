@@ -117,9 +117,9 @@ def rodar_uma(cur, linha: dict) -> dict:
         # pode ser HORÁRIA, e ler os 630 itens 24 vezes por dia para achar um
         # prato novo é caro sem ser mais útil: prato novo não nasce de hora em
         # hora. O botão "Buscar no PDV" sincroniza sempre — lá é alguém pedindo.
-        # ⚠️ **Só criar e desativar**, nunca alinhar: rodar o alinhamento
-        # sozinho desfaria calada a correção de quem arrumou a categoria de um
-        # prato à mão, que é exatamente o que "ser manual" protegia.
+        # 🔑 **Com o envio ao PDV desligado, o PDV é o dono e a passada ALINHA** os
+        # cadastros (pedido do dono, 20/10/2026). Ligado, só cria e desativa. Quem
+        # decide é `cardapio.sincronizar_cadastros`, não este trecho.
         # 🔑 **O PREÇO é a exceção, e vem junto desde 09/09/2026** (pedido do
         # dono). Ele é o único campo que muda sozinho do outro lado — sobe no
         # caixa, hoje — e sem isto a margem daqui seguia calculada sobre o valor
