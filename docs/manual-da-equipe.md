@@ -251,6 +251,12 @@ aqui? Na próxima busca ela volta a ser a do PDV — o conserto é no PDV. A uni
 só se preenche quando está vazia (trocar a unidade de um produto com estoque é
 pela tela de troca de unidade).
 
+**Quer cuidar das categorias aqui?** Em **Integrações ▸ PDV Legal**, desmarque
+**Trazer as categorias do PDV** e salve. A partir daí nem a busca de vendas nem o
+Importar cardápio criam categoria ou mudam a de produto nenhum — a categoria passa
+a ser só daqui. O que já veio fica como está, e o prato novo do PDV nasce sem
+categoria. Marcar de novo volta ao de antes.
+
 ⚠️ Produto que apenas **some** da lista do PDV não é desativado aqui. Só o que
 vier marcado como desligado. A lista do PDV já veio incompleta sem avisar, e
 desativar por ausência apagaria dezenas de pratos de uma vez.

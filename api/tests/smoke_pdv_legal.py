@@ -100,6 +100,8 @@ ATIVA_ORIGINAL = bool((_antes or {}).get("ativa"))
 # sempre — e cada busca é uma requisição por dia da janela.
 AGENDA_ORIGINAL = (_antes or {}).get("agenda_frequencia") or "MANUAL"
 JANELA_ORIGINAL = (_antes or {}).get("agenda_janela_dias")
+# E trazer ou não as categorias do PDV (a 8g2b desliga).
+CATEGORIAS_ORIGINAL = (_antes or {}).get("trazer_categorias") is not False
 
 
 def devolver_simulado():
@@ -118,7 +120,8 @@ def devolver_o_modo_original():
     chamar("PUT", "/pdv/config",
            {"modo": MODO_ORIGINAL, "ativa": ATIVA_ORIGINAL,
             "agenda_frequencia": AGENDA_ORIGINAL,
-            "agenda_janela_dias": JANELA_ORIGINAL}, token=token)
+            "agenda_janela_dias": JANELA_ORIGINAL,
+            "trazer_categorias": CATEGORIAS_ORIGINAL}, token=token)
 
 
 atexit.register(devolver_o_modo_original)
@@ -866,6 +869,78 @@ if alvo_p and outra:
         checar("mas o agendador marca, e ai ele nao rele o cardapio a cada hora",
                _cardapio.cadastros_de_hoje(_c, 1) is True, False)
         _c.execute("UPDATE integracoes SET cardapio_em = NULL WHERE servico = 'PDV_LEGAL'")
+
+
+print("\n8g2b. trazer ou nao as categorias do PDV")
+# 🔑 Pedido do dono (21/10/2026): *"cria uma opcao se vamos ou nao integrar as
+# categorias do PDV para o Botane; caso desmarcado, para de sincronizar elas"*.
+# Desligada: nem a busca de vendas nem o Importar cardapio CRIAM categoria a partir
+# do grupo, nem GRAVAM categoria no produto. Ligada de novo, volta a valer o de antes.
+st, achados_c = chamar("GET", "/produtos?busca=PDV-10689993&incluir_inativos=true", token=token)
+alvo_c = next((p for p in (achados_c or []) if str(p.get("codigo", "")) == "PDV-10689993"), None)
+st, c = chamar("GET", "/pdv/config", token=token)
+checar("a configuracao diz se traz as categorias (nasce trazendo)",
+       isinstance((c or {}).get("trazer_categorias"), bool), c)
+if alvo_c:
+    with _cur_pdv() as _c:
+        _c.execute("SELECT enviar_ao_pdv FROM integracoes WHERE servico = 'PDV_LEGAL'")
+        _envio_c = bool((_c.fetchone() or {}).get("enviar_ao_pdv"))
+        # O PDV dono do cadastro: e com ele que a busca alinha a categoria.
+        _c.execute("UPDATE integracoes SET enviar_ao_pdv = false WHERE servico = 'PDV_LEGAL'")
+    chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+    st, no_pdv = chamar("GET", f"/produtos/{alvo_c['id']}", token=token)
+    cat_pdv = no_pdv.get("id_categoria")
+    st, cats_c = chamar("GET", "/categorias", token=token)
+    outra_c = next((x for x in (cats_c or []) if x["id"] != cat_pdv), None)
+    st, r = chamar("PUT", "/pdv/config", {"modo": "simulado", "ativa": True,
+                                          "trazer_categorias": False}, token=token)
+    st, c = chamar("GET", "/pdv/config", token=token)
+    checar("desligar pela configuracao grava", st == 200 and c.get("trazer_categorias") is False, c)
+    st, r = chamar("PUT", "/pdv/config", {"modo": "simulado", "ativa": True}, token=token)
+    st, c = chamar("GET", "/pdv/config", token=token)
+    checar("e um PUT sem o campo MANTEM desligado", c.get("trazer_categorias") is False, c)
+    # ⚠️ O grupo do PDV deixa de casar com a categoria dele (renomeada por um instante):
+    # com a opcao LIGADA a importacao criaria uma categoria com o nome do grupo.
+    with _cur_pdv() as _c:
+        _c.execute("SELECT nome FROM categorias WHERE id = %s", (cat_pdv,))
+        _nome_cat = (_c.fetchone() or {}).get("nome")
+        _c.execute("UPDATE categorias SET nome = nome || %s WHERE id = %s", (f" ~{marca}", cat_pdv))
+        _c.execute("SELECT count(*) AS n FROM categorias")
+        _n_cats = _c.fetchone()["n"]
+    try:
+        chamar("PUT", f"/produtos/{alvo_c['id']}", {"id_categoria": outra_c["id"]}, token=token)
+        st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+        st, depois_c = chamar("GET", f"/produtos/{alvo_c['id']}", token=token)
+        checar("desligada, a busca de vendas NAO desfaz a categoria daqui",
+               depois_c.get("id_categoria") == outra_c["id"],
+               (depois_c.get("id_categoria"), outra_c["id"]))
+        checar("e diz que as categorias nao vieram por regra",
+               (r or {}).get("cadastros", {}).get("categorias_do_pdv") is False,
+               (r or {}).get("cadastros"))
+        st, r = chamar("POST", "/pdv/cardapio", token=token)
+        st, depois_b = chamar("GET", f"/produtos/{alvo_c['id']}", token=token)
+        checar("nem o Importar cardapio",
+               st == 200 and depois_b.get("id_categoria") == outra_c["id"],
+               (st, depois_b.get("id_categoria")))
+        checar("e a frase do Importar cardapio avisa", "categorias do PDV estão desligadas"
+               in str((r or {}).get("message")), (r or {}).get("message"))
+        with _cur_pdv() as _c:
+            _c.execute("SELECT count(*) AS n FROM categorias")
+            checar("e nenhuma categoria nasceu do grupo do PDV",
+                   _c.fetchone()["n"] == _n_cats, _n_cats)
+    finally:
+        with _cur_pdv() as _c:
+            _c.execute("UPDATE categorias SET nome = %s WHERE id = %s", (_nome_cat, cat_pdv))
+    # Ligada de novo, a busca volta a trazer a categoria do PDV.
+    chamar("PUT", "/pdv/config", {"modo": "simulado", "ativa": True,
+                                  "trazer_categorias": True}, token=token)
+    st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+    st, religada = chamar("GET", f"/produtos/{alvo_c['id']}", token=token)
+    checar("ligada de novo, a categoria volta a ser a do PDV",
+           religada.get("id_categoria") == cat_pdv, (religada.get("id_categoria"), cat_pdv))
+    with _cur_pdv() as _c:
+        _c.execute("UPDATE integracoes SET enviar_ao_pdv = %s, cardapio_em = NULL "
+                   "WHERE servico = 'PDV_LEGAL'", (_envio_c,))
 
 
 print("\n8g3. o PRECO vem junto da busca de vendas — e o dono dele decide")

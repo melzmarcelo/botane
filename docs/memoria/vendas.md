@@ -420,6 +420,23 @@
   o que SAI*; alinhar os dois é um clique de alguém.
   ⚠️ **Isto mudou em 09/09/2026 — leia o item abaixo antes de confiar no parágrafo acima.**
 
+- 🔑 **Trazer ou não as categorias do PDV** (1.1.119, migração 127, 21/10/2026, pedido do dono:
+  *"cria uma opção se vamos ou não integrar as categorias do PDV para o Botané; caso desmarcado,
+  para de sincronizar elas"*). `integracoes.trazer_categorias`, nasce VERDADEIRO (o comportamento
+  de antes). Desligada, `cardapio.importar` não chama `_Apoio.categoria` — então nada CRIA categoria
+  a partir do `nomeGrupo` — e o `id_categoria` vai nulo, que o `_atualizar` já pula ("o que o PDV não
+  tem não apaga o daqui"); o prato novo nasce sem categoria. Vale para os DOIS caminhos (botão e
+  busca de vendas), por isso a pergunta mora numa função só, `_traz_categorias`, como
+  `_preco_e_do_pdv`.
+  - ⚠️ Desligar não apaga nada; e é só a mão PDV → Botané — o envio da categoria daqui para o PDV
+    (`enviar_ao_pdv`) é outro interruptor.
+  - `PUT /pdv/config` com o campo ausente MANTÉM (mesmo `coalesce` do `enviar_ao_pdv`). As respostas
+    levam `categorias_do_pdv`, e a frase do Importar cardápio diz que elas estão desligadas.
+  - A tela (`#categorias-pdv`) também corrigiu o texto da busca automática, que ainda dizia
+    "categoria, setor e nome só por Importar cardápio" — falso desde 20/10 com o envio desligado.
+  - Cobertura: `smoke_pdv_legal` 8g2b (renomeia por um instante a categoria do grupo, para provar
+    que nenhuma nasce) e `verificar.mjs` 10z (só marca e desmarca na tela, sem salvar).
+
 - 🔑 **O PREÇO passou a vir na busca automática de vendas** (09/09/2026, pedido do dono: *"ao
   rodar a integração com o PDV, antes das vendas busca os novos produtos, pode rodar a
   atualização de preço também?"*). Ele é o **único campo do alinhamento que muda sozinho do

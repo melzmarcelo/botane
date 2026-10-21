@@ -428,6 +428,9 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
     # uma chamada a mais (`tabelapreco/get`), e sem os dois separados a única
     # forma de trazer o preço seria ligar o alinhamento inteiro junto.
     tabela = precos(cliente, filial) if (alinhar or precos_tambem) else {}
+    # 🔑 Com a opção desligada, o grupo do PDV não vira categoria: nada se cria e nada
+    # se grava no produto. Ver `_traz_categorias`.
+    traz_categorias = _traz_categorias(cur, id_unidade)
 
     resumo = {"itens": len(itens), "vinculados": 0, "ja_vinculados": 0,
               "criados": 0, "inativos": 0, "completados": 0,
@@ -437,7 +440,9 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
               "por_ean": 0, "apelidos": 0, "sem_vinculo": 0,
               # ⚠️ EAN que já é de outro cadastro: os dois são o mesmo produto.
               # Não é erro — é o caminho para o botão Vincular.
-              "ean_de_outro": 0, "precos": 0}
+              "ean_de_outro": 0, "precos": 0,
+              # Para a tela poder dizer por que nenhuma categoria mudou.
+              "categorias_do_pdv": traz_categorias}
 
     for item in itens:
         codigo, descricao = item["codigo"], item["descricao"]
@@ -445,7 +450,8 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
             continue
 
         campos = {
-            "id_categoria": apoio.categoria(item["grupo"]),
+            # ⚠️ Desligado, nem chama o `_Apoio`: é ele quem CRIA a categoria que falta.
+            "id_categoria": apoio.categoria(item["grupo"]) if traz_categorias else None,
             "id_setor": apoio.setor(item["setor"]),
             "ncm": item["ncm"] or None,
             "cest": item["cest"] or None,
@@ -580,6 +586,27 @@ def _preco_e_do_pdv(cur, id_unidade: int) -> bool:
     return not (linha or {}).get("enviar_ao_pdv")
 
 
+def _traz_categorias(cur, id_unidade: int) -> bool:
+    """O grupo do cardápio do PDV vira categoria aqui? É `trazer_categorias` quem diz.
+
+    🔑 **Opção da integração** (pedido do dono, 21/10/2026: *"cria uma opção se vamos
+    ou não integrar as categorias do PDV para o Botané; caso desmarcado, para de
+    sincronizar elas"*). Desligada, a importação não CRIA categoria a partir do grupo
+    e não GRAVA categoria no produto — nem no que nasce, nem no que se alinha. O que
+    já está no cadastro fica como está.
+    ⚠️ Mesma razão de `_preco_e_do_pdv` morar numa função só: o botão e a agenda
+    chegam por caminhos diferentes, e a regra copiada nos dois diverge.
+    ⚠️ Sem linha (integração nunca salva), vale o padrão da coluna: trazer.
+    """
+    cur.execute(
+        """SELECT trazer_categorias FROM integracoes
+            WHERE id_unidade = %s AND servico = 'PDV_LEGAL'""",
+        (id_unidade,),
+    )
+    linha = cur.fetchone()
+    return True if not linha else bool(linha["trazer_categorias"])
+
+
 def cadastros_de_hoje(cur, id_unidade: int) -> bool:
     """A AGENDA já sincronizou os cadastros hoje nesta loja?
 
@@ -659,7 +686,9 @@ def sincronizar_cadastros(cur, cliente: ClientePdv, id_usuario: int, filial: str
             "precos": r["precos"],
             # O motivo de zero, quando é por regra e não por não ter mudado
             # nada — senão a única leitura possível é "está quebrado".
-            "precos_do_pdv": do_pdv}
+            "precos_do_pdv": do_pdv,
+            # Idem para a categoria: desligada na integração, não muda por regra.
+            "categorias_do_pdv": r["categorias_do_pdv"]}
 
 
 def marcar_cardapio(cur, id_unidade: int) -> None:

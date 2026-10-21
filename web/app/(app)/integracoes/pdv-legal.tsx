@@ -30,6 +30,8 @@ type Config = {
   importador_disponivel: boolean;
   filiais: string | null;
   enviar_ao_pdv: boolean;
+  /** O grupo do cardápio do PDV vira categoria aqui. */
+  trazer_categorias: boolean;
   agenda_frequencia: string;
   agenda_hora: number;
   agenda_janela_dias: number | null;
@@ -49,6 +51,7 @@ const VAZIO = {
   ativa: false,
   filiais: "",
   enviar_ao_pdv: false,
+  trazer_categorias: true,
   agenda_frequencia: "MANUAL",
   agenda_hora: "4",
   agenda_janela_dias: "",
@@ -78,6 +81,7 @@ export default function PdvLegal() {
         ativa: c.ativa,
         filiais: c.filiais ?? "",
         enviar_ao_pdv: !!c.enviar_ao_pdv,
+        trazer_categorias: c.trazer_categorias !== false,
         agenda_frequencia: c.agenda_frequencia ?? "MANUAL",
         agenda_hora: String(c.agenda_hora ?? 4),
         agenda_janela_dias: c.agenda_janela_dias ? String(c.agenda_janela_dias) : "",
@@ -104,6 +108,7 @@ export default function PdvLegal() {
         ativa: form.ativa,
         filiais: form.filiais,
         enviar_ao_pdv: form.enviar_ao_pdv,
+        trazer_categorias: form.trazer_categorias,
         agenda_frequencia: form.agenda_frequencia,
         agenda_hora: Number(form.agenda_hora || 4),
         // Vazio = janela automática. `Number("")` é 0, que o servidor recusa —
@@ -342,6 +347,42 @@ export default function PdvLegal() {
             </label>
           </section>
 
+          {/* 🔑 **A mão PDV → Botané das categorias** (21/10/2026, pedido do dono: "cria
+              uma opção se vamos ou não integrar as categorias do PDV para o Botané;
+              caso desmarcado, para de sincronizar elas"). Vale para os dois caminhos —
+              o Importar cardápio e a busca de vendas — e desligar não apaga nada. */}
+          <section id="categorias-pdv" className="rounded border border-linha p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                id="pdv-trazer-categorias"
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-erva"
+                disabled={!podeConfigurar}
+                checked={form.trazer_categorias}
+                onChange={(e) => setForm({ ...form, trazer_categorias: e.target.checked })}
+              />
+              <span>
+                <span className="block text-[14.5px] font-semibold">
+                  Trazer as categorias do PDV
+                </span>
+                <span className="mt-0.5 block max-w-[70ch] text-[13px] leading-snug prosa text-suave">
+                  {form.trazer_categorias ? (
+                    <>
+                      O grupo de cada item do cardápio do PDV vira a <b>categoria</b> do
+                      produto aqui — e a categoria é criada se ainda não existe.
+                    </>
+                  ) : (
+                    <>
+                      Desligado, <b>a categoria é só daqui</b>: o Importar cardápio e a busca
+                      de vendas não criam categoria nem mudam a de produto nenhum. O que já
+                      veio fica como está, e o produto novo do PDV nasce sem categoria.
+                    </>
+                  )}
+                </span>
+              </span>
+            </label>
+          </section>
+
           {/* ⚠️ A busca automática existe pela mesma razão que a do Omie: venda
               de sábado que ninguém importa é receita que falta no CMV do fim de
               semana — e a variância sai boa demais, porque o teórico não conta
@@ -355,14 +396,23 @@ export default function PdvLegal() {
             {/* ⚠️ O que a busca faz ALÉM de trazer venda precisa estar escrito:
                 produto novo e preço mudam o CMV, e descobrir isso pelo efeito
                 é descobrir tarde. */}
+            {/* ⚠️ Desde 20/10/2026, com o envio desligado o PDV é o dono do cadastro e a
+                busca ALINHA — este texto dizia o contrário ("só por Importar cardápio"). */}
             <p className="mt-1 max-w-[70ch] text-[13px] leading-snug prosa text-suave">
-              Junto com as vendas ela traz o produto que nasceu no PDV, desativa o que foi
-              desligado lá e
-              {form.enviar_ao_pdv
-                ? " — como o preço daqui é o que vale — não mexe em preço."
-                : " atualiza o preço que mudou no caixa."}{" "}
-              Categoria, setor e nome continuam sendo alinhados só por{" "}
-              <b>Importar cardápio</b>.
+              Junto com as vendas ela traz o produto que nasceu no PDV e desativa o que foi
+              desligado lá.{" "}
+              {form.enviar_ao_pdv ? (
+                <>
+                  Como o cadastro daqui é o que vale, ela não mexe em preço, nome nem
+                  categoria — para alinhar, use <b>Importar cardápio</b>.
+                </>
+              ) : (
+                <>
+                  Como o PDV é o dono do cadastro, ela também atualiza o que mudou lá: preço,
+                  nome curto, setor, fiscais
+                  {form.trazer_categorias ? " e categoria" : " (a categoria não, que está desligada acima)"}.
+                </>
+              )}
             </p>
 
             <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

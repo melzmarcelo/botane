@@ -6989,12 +6989,40 @@ try {
   checar("e a busca automática diz o que faz com ele",
     donoEhACasa
       ? /não mexe em preço/i.test(frasesPreco.agenda)
-      : /atualiza o preço que mudou no caixa/i.test(frasesPreco.agenda),
+      : /atualiza o que mudou lá: preço/i.test(frasesPreco.agenda),
     [donoEhACasa, frasesPreco.agenda.slice(0, 300)]);
-  // ⚠️ E o que NÃO vem sozinho continua escrito, nos dois estados: categoria,
-  // setor e nome mudam AQUI, à mão, e alinhá-los segue sendo um clique.
-  checar("dizendo também que categoria e setor seguem manuais",
-    /Importar cardápio/i.test(frasesPreco.agenda), frasesPreco.agenda.slice(0, 300));
+
+  // 🔑 **Trazer ou não as categorias do PDV** (21/10/2026, pedido do dono). A conta é
+  // cobrada em smoke_pdv_legal; aqui, que a tela oferece a opção, que ela reflete o
+  // servidor, e que a frase (do bloco e da busca automática) muda com ela.
+  // ⚠️ Só se MARCA e desmarca na tela, sem salvar: a configuração aqui é a real.
+  const catPdv = await p.evaluate(() => {
+    const caixa = document.querySelector("#pdv-trazer-categorias");
+    return { tem: !!caixa, ligado: caixa ? caixa.checked : null,
+             texto: document.querySelector("#categorias-pdv")?.innerText ?? "" };
+  });
+  checar("a tela oferece trazer ou não as categorias do PDV",
+    catPdv.tem && /Trazer as categorias do PDV/.test(catPdv.texto), catPdv);
+  checar("e a caixinha das categorias mostra o que o servidor diz",
+    catPdv.ligado === (cfgEnvio?.trazer_categorias !== false),
+    [catPdv.ligado, cfgEnvio?.trazer_categorias]);
+  await p.click("#pdv-trazer-categorias").catch(() => {});
+  await p.waitForFunction((antes) => document.querySelector("#pdv-trazer-categorias")?.checked !== antes,
+    { timeout: 5000 }, catPdv.ligado).catch(() => {});
+  const catTrocada = await p.evaluate(() => ({
+    ligado: document.querySelector("#pdv-trazer-categorias")?.checked ?? null,
+    texto: document.querySelector("#categorias-pdv")?.innerText ?? "",
+    agenda: document.querySelector("#agenda-pdv")?.innerText ?? "",
+  }));
+  checar("desmarcada, a frase diz que a categoria passa a ser só daqui (e marcada, que vem do PDV)",
+    catTrocada.ligado
+      ? /vira a categoria/i.test(catTrocada.texto)
+      : /a categoria é só daqui/i.test(catTrocada.texto), catTrocada);
+  checar("e a busca automática acompanha (com o PDV dono do cadastro)",
+    donoEhACasa || (catTrocada.ligado
+      ? /e categoria/i.test(catTrocada.agenda)
+      : /a categoria não/i.test(catTrocada.agenda)), catTrocada.agenda.slice(0, 300));
+  await p.click("#pdv-trazer-categorias").catch(() => {});
 
   await p.evaluate(() => {
     const sel = document.querySelector("#agenda-pdv select");

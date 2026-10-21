@@ -69,6 +69,9 @@ class ConfigPdv(BaseModel):
     # é o pior possível — a tela de Exportação some do menu e nada explica.
     # É a mesma regra que a credencial já segue aqui: em branco, mantém.
     enviar_ao_pdv: bool | None = None
+    # 🔑 O grupo do cardápio do PDV vira categoria aqui? (21/10/2026, pedido do dono.)
+    # `None` mantém, pela mesma razão do `enviar_ao_pdv`; linha nova nasce trazendo.
+    trazer_categorias: bool | None = None
     agenda_frequencia: Literal["MANUAL", "HORARIA", "DIARIA"] = "MANUAL"
     agenda_hora: int = Field(default=4, ge=0, le=23)
     # Nulo = janela automática (desde a última venda importada, com 2 dias de
@@ -112,7 +115,7 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.pdv", "admin.int
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT modo, ativa, credenciais, ultima_sincronizacao, ultimo_status,
-                      ultima_mensagem, enviar_ao_pdv,
+                      ultima_mensagem, enviar_ao_pdv, trazer_categorias,
                       agenda_frequencia, agenda_hora, agenda_janela_dias,
                       agenda_rodou_em, agenda_ultimo_erro, agenda_id_usuario
                  FROM integracoes WHERE id_unidade = %s AND servico = %s""",
@@ -141,6 +144,7 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.pdv", "admin.int
         # venda — uma casa fechada no domingo tem as duas coisas diferentes, e
         # mostrar a segunda faria parecer que a agenda parou.
         "enviar_ao_pdv": bool(linha["enviar_ao_pdv"]) if linha else False,
+        "trazer_categorias": bool(linha["trazer_categorias"]) if linha else True,
         "agenda_frequencia": linha["agenda_frequencia"] if linha else "MANUAL",
         "agenda_hora": linha["agenda_hora"] if linha else 4,
         "agenda_janela_dias": linha["agenda_janela_dias"] if linha else None,
@@ -197,12 +201,13 @@ def salvar_config(body: ConfigPdv,
         # ligou decidiu aquilo, e é quem responde por ela.
         cur.execute(
             """INSERT INTO integracoes (id_unidade, servico, ativa, modo, credenciais,
-                                        enviar_ao_pdv,
+                                        enviar_ao_pdv, trazer_categorias,
                                         agenda_frequencia, agenda_hora, agenda_janela_dias,
                                         agenda_id_usuario)
                -- Linha NOVA: nulo vira falso — a integração nasce sem envio,
-               -- e ligar é decisão explícita.
+               -- e ligar é decisão explícita. As categorias nascem vindo.
                VALUES (%s, %s, %s, %s, %s, coalesce(%s::boolean, false),
+                       coalesce(%s::boolean, true),
                        %s, %s, %s, %s)
                ON CONFLICT (id_unidade, servico) DO UPDATE
                    SET ativa = EXCLUDED.ativa, modo = EXCLUDED.modo,
@@ -214,16 +219,18 @@ def salvar_config(body: ConfigPdv,
                        -- isso ele entra duas vezes.
                        enviar_ao_pdv = coalesce(%s::boolean,
                                                 integracoes.enviar_ao_pdv),
+                       trazer_categorias = coalesce(%s::boolean,
+                                                    integracoes.trazer_categorias),
                        agenda_frequencia = EXCLUDED.agenda_frequencia,
                        agenda_hora = EXCLUDED.agenda_hora,
                        agenda_janela_dias = EXCLUDED.agenda_janela_dias,
                        agenda_id_usuario = EXCLUDED.agenda_id_usuario,
                        atualizado_em = now()""",
             (id_unidade, SERVICO, body.ativa, body.modo, segredos.cifrar(cred),
-             body.enviar_ao_pdv,
+             body.enviar_ao_pdv, body.trazer_categorias,
              body.agenda_frequencia, body.agenda_hora, body.agenda_janela_dias,
              ctx.id_usuario,
-             body.enviar_ao_pdv),
+             body.enviar_ao_pdv, body.trazer_categorias),
         )
         # ⚠️ Salvar limpa o erro anterior: manter a mensagem velha faria a tela
         # acusar uma falha já tratada, e quem acabou de arrumar a credencial
@@ -237,6 +244,7 @@ def salvar_config(body: ConfigPdv,
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "configurar",
                             depois={"modo": body.modo, "ativa": body.ativa,
                                     "enviar_ao_pdv": body.enviar_ao_pdv,
+                                    "trazer_categorias": body.trazer_categorias,
                                     "agenda": body.agenda_frequencia,
                                     "username": segredos.mascarar(cred.get("username"))},
                             id_unidade=id_unidade)
@@ -461,7 +469,10 @@ def importar_cardapio(
                         + (f", {r['precos']} preço(s) de venda" if r.get("precos") else "")
                         + (f". {r['ean_de_outro']} item(ns) trazem EAN que já é de outro "
                            "cadastro — abra o produto e use Vincular"
-                           if r.get("ean_de_outro") else ""))}
+                           if r.get("ean_de_outro") else "")
+                        # ⚠️ Dito, para o "nenhuma categoria mudou" não se ler como defeito.
+                        + ("" if r.get("categorias_do_pdv", True)
+                           else ". As categorias do PDV estão desligadas: nenhuma foi trazida"))}
 
 
 @router.post("/reconciliar")
