@@ -5297,6 +5297,11 @@ try {
       ?.click();
   });
   await new Promise((r) => setTimeout(r, 2400));
+  // ⚠️ **A prévia ESPERA pelo texto, não por um relógio** (21/10/2026). O cadastro de
+  // produtos da base local cresce a cada rodada (53 mil em outubro) e a prévia dele
+  // passou a levar ~1,8 s no servidor: os 2,4 s fixos acima viraram sorteio.
+  await p.waitForFunction(() => /linha\(s\) neste recorte/.test(
+    document.querySelector('[role="dialog"]')?.innerText ?? ""), { timeout: 15000 }).catch(() => {});
   const janelaExp = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     const rotulos = [...(d?.querySelectorAll("span.rotulo, span.rotulo-campo") ?? [])].map((x) =>
