@@ -408,6 +408,8 @@ class ProdutoResumo(BaseModel):
     status: str
     ativo: bool
     preco_venda: float | None = None
+    # 🔑 O nome do PDV: a venda lançada à mão mostra o produto por ele (22/10/2026).
+    nome_curto: str | None = None
 
 
 class ContagemProdutos(BaseModel):

@@ -245,6 +245,38 @@ checar("o custo teórico é só o do que tem ficha (30,00)",
 checar("e a tela sabe que é parcial", d.get("itens_sem_custo") == 1, d)
 checar("e que há item sem vínculo", d.get("itens_sem_vinculo") == 1, d)
 
+# 🔑 **A linha à mão grava o NOME CURTO como descrição** (22/10/2026, pedido do dono:
+# "considerar o nome como o nome curto, que é igual ao do PDV"). Sem nome curto, cai
+# no nome do cadastro — nunca fica em branco, como ficava.
+checar("a linha à mão sem nome curto grava o nome do cadastro na descrição",
+       item and (item.get("descricao_pdv") or "").upper() == f"Prato venda {marca}".upper(),
+       item and item.get("descricao_pdv"))
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"VD-CRT-{marca}", "nome": f"Prato longo de cadastro {marca}",
+    "nome_curto": f"Curto {marca}", "tipo": "REVENDA", "um_estoque": "UN",
+    "status": "ATIVO",
+}, token=token)
+curto = r.get("id")
+checar("produto com nome curto criado", st == 201, (st, r))
+st, achados = chamar("GET", f"/produtos?busca=Curto {marca}", token=token)
+checar("a busca de produto acha pelo nome curto e o devolve",
+       st == 200 and any(p["id"] == curto and (p.get("nome_curto") or "").upper()
+                         == f"Curto {marca}".upper() for p in (achados or [])),
+       (st, achados))
+st, r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": hoje, "documento": f"CRT-{marca}", "origem": "MANUAL",
+    "itens": [{"id_produto": curto, "quantidade": 1, "valor_unitario": 5}],
+}]}, token=token)
+st, _lc = chamar("GET", f"/vendas?busca=CRT-{marca}", token=token)
+st, dc = chamar("GET", f"/vendas/{(_lc or [{}])[0].get('id')}", token=token)
+ic = ((dc or {}).get("itens") or [{}])[0]
+checar("e a linha à mão grava o nome curto, como o cupom do PDV",
+       (ic.get("descricao_pdv") or "").upper() == f"Curto {marca}".upper(),
+       ic.get("descricao_pdv"))
+for _v in (_lc or []):
+    chamar("DELETE", f"/vendas/{_v['id']}", token=token)
+chamar("DELETE", f"/produtos/{curto}", token=token)
+
 print("\n6. o movimento de estoque, e o estorno do cancelamento")
 # O prato é NA_HORA: a venda produz e baixa no mesmo lançamento, e o saldo dele
 # volta a zero. A prova é o razão apontando para esta venda.

@@ -420,6 +420,20 @@
   o que SAI*; alinhar os dois é um clique de alguém.
   ⚠️ **Isto mudou em 09/09/2026 — leia o item abaixo antes de confiar no parágrafo acima.**
 
+- 🔑 **A venda à mão pelo NOME CURTO** (1.1.120, 22/10/2026, pedido do dono: *"ao lançar um
+  documento de venda a mão, considerar o nome como o nome curto, que é o igual ao do PDV, aí fica
+  mais fácil da visualização e manter a compatibilidade"*).
+  - A linha escolhida na tela chegava só com `id_produto`, e `venda_itens.descricao_pdv`/`codigo_pdv`
+    ficavam NULOS — diferente do cupom do PDV. Agora `_preparar_itens` (MANUAL e PLANILHA, inclusive
+    o "acrescentar itens") preenche o que veio EM BRANCO: descrição = `nome_curto`, senão `nome`;
+    código = `produtos.codigo_pdv`. ⚠️ A descrição colada da planilha fica — é o que o relatório dizia.
+  - ⚠️ Preencher `codigo_pdv` numa linha JÁ vinculada é inofensivo: reconciliação, fila de de-para e
+    alertas só olham `id_produto IS NULL`.
+  - A tela usa `fonteProdutos("", { nomeCurto: true })` (lançar e acrescentar): o rótulo é o nome
+    curto e o detalhe diz "cadastro: <nome>". As outras telas seguem pelo nome de cadastro.
+  - `/produtos` devolve `nome_curto` e a `busca` também casa por ele.
+  - Cobertura: `smoke_vendas` seção 5 (sem nome curto cai no nome; com ele, grava o curto; a busca acha).
+
 - 🔑 **Trazer ou não as categorias do PDV** (1.1.119, migração 127, 21/10/2026, pedido do dono:
   *"cria uma opção se vamos ou não integrar as categorias do PDV para o Botané; caso desmarcado,
   para de sincronizar elas"*). `integracoes.trazer_categorias`, nasce VERDADEIRO (o comportamento

@@ -318,6 +318,20 @@ def _preparar_itens(cur, id_unidade: int, origem: str, data, itens) -> None:
             preco = precos.na_data(cur, item.id_produto, id_unidade, data)
             if preco is not None:
                 item.valor_unitario = float(preco)
+        # 🔑 **A linha da casa leva o NOME CURTO e o código do PDV** (22/10/2026, pedido
+        # do dono: "ao lançar um documento de venda a mão, considerar o nome como o nome
+        # curto, que é igual ao do PDV"). A linha escolhida à mão chegava só com o
+        # `id_produto`, e o item ficava sem descrição — diferente do cupom do PDV, que
+        # traz as duas. ⚠️ Só preenche o que veio EM BRANCO: a descrição colada da
+        # planilha é o que o relatório dizia, e fica.
+        if origem in ("MANUAL", "PLANILHA") and item.id_produto and (
+                not item.descricao or not item.codigo):
+            cur.execute("SELECT nome, nome_curto, codigo_pdv FROM produtos WHERE id = %s",
+                        (item.id_produto,))
+            p = cur.fetchone()
+            if p:
+                item.descricao = item.descricao or (p["nome_curto"] or p["nome"])[:200]
+                item.codigo = item.codigo or p["codigo_pdv"]
 
 
 def _gravar_item(cur, id_unidade: int, id_venda: int, venda, item, id_usuario: int,

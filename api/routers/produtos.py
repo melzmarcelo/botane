@@ -235,7 +235,8 @@ def listar(
         linhas = pagina(
             cur,
             """
-            SELECT p.id, p.codigo, p.nome, p.tipo, c.nome AS categoria, s.nome AS setor,
+            SELECT p.id, p.codigo, p.nome, p.nome_curto, p.tipo, c.nome AS categoria,
+                   s.nome AS setor,
                    p.um_estoque, p.producao_propria, p.controla_estoque, p.controla_lote,
                    p.status, p.ativo,
                    -- ⚠️ Nem filtrava por loja: com um preço da casa e um da
@@ -261,6 +262,8 @@ def listar(
                AND (NOT %s OR __EM_USO__)
                AND (%s::varchar IS NULL
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
+                    -- 🔑 Quem lança a venda digita o nome do PDV (22/10/2026).
+                    OR lower(coalesce(p.nome_curto, '')) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%')
                     OR coalesce(p.codigo_barras, '') LIKE '%%' || %s || '%%')
              ORDER BY p.ativo DESC, lower(p.nome)
@@ -276,7 +279,7 @@ def listar(
              sem_ficha,
              # `em_uso` e as três vezes em que a condição pergunta pela loja.
              em_uso, id_unidade, id_unidade, id_unidade,
-             busca, busca, busca, busca),
+             busca, busca, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )
     return linhas

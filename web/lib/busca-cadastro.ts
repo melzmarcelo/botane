@@ -59,6 +59,7 @@ type ProdutoBruto = {
   categoria: string | null;
   tipo: string;
   controla_estoque: boolean;
+  nome_curto?: string | null;
 };
 
 /**
@@ -73,7 +74,16 @@ type ProdutoBruto = {
  * sabe fazer nao se faz no navegador — `controla_estoque`, `tipo` e
  * `excluir_id` sao parametros de `/produtos`.
  */
-export function fonteProdutos(extra = ""): FonteBusca {
+export function fonteProdutos(
+  extra = "",
+  /**
+   * 🔑 **O produto pelo NOME CURTO, que é o do PDV** (22/10/2026, pedido do dono: "ao
+   * lançar um documento de venda a mão, considerar o nome como o nome curto"). Liga só
+   * onde se lança venda: o nome de cadastro desce para o detalhe, para ninguém confundir
+   * dois pratos de mesmo nome curto.
+   */
+  { nomeCurto = false }: { nomeCurto?: boolean } = {},
+): FonteBusca {
   return {
     titulo: "Buscar produto",
     placeholder: "código ou nome",
@@ -86,13 +96,20 @@ export function fonteProdutos(extra = ""): FonteBusca {
         `/produtos?${q}${extra ? `&${extra}` : ""}`,
       );
       return {
-        itens: itens.map((p) => ({
-          id: p.id,
-          codigo: p.codigo,
-          nome: p.nome,
-          detalhe: [p.um_estoque, p.categoria].filter(Boolean).join(" · ") || null,
-          bruto: p as unknown as Record<string, unknown>,
-        })),
+        itens: itens.map((p) => {
+          const curto = nomeCurto && p.nome_curto?.trim() && p.nome_curto.trim() !== p.nome
+            ? p.nome_curto.trim()
+            : null;
+          return {
+            id: p.id,
+            codigo: p.codigo,
+            nome: curto ?? p.nome,
+            detalhe:
+              [curto ? `cadastro: ${p.nome}` : null, p.um_estoque, p.categoria]
+                .filter(Boolean).join(" · ") || null,
+            bruto: p as unknown as Record<string, unknown>,
+          };
+        }),
         // ⚠️ Cru, inclusive o nulo: quem chama e que sabe o que ja tinha.
         total,
       };

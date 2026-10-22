@@ -28,7 +28,8 @@ import ExplicaTela from "@/components/explica-tela";
  * direto daria duas contas de CMV conforme quem lançou.
  */
 
-const PRODUTOS = fonteProdutos();
+// 🔑 Pelo nome curto, o mesmo do PDV — e é ele que a linha grava (22/10/2026).
+const PRODUTOS = fonteProdutos("", { nomeCurto: true });
 const PESSOAS = fontePessoas();
 
 type ItemManual = {

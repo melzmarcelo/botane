@@ -20,7 +20,8 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
 
-const PRODUTOS = fonteProdutos();
+// 🔑 Pelo nome curto, o mesmo do PDV — e é ele que a linha grava (22/10/2026).
+const PRODUTOS = fonteProdutos("", { nomeCurto: true });
 
 type Linha = { id_produto: string; rotulo: string; quantidade: string; valor_unitario: string };
 const VAZIA: Linha = { id_produto: "", rotulo: "", quantidade: "", valor_unitario: "" };
