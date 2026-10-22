@@ -2926,9 +2926,9 @@ try {
 
   // E o Imprimir de verdade: com a Brother salva, o Reimprimir do QR não abre aba —
   // o PDF vai para um quadro invisível e é mandado à impressora.
-  const { dados: cfgAntes } = await api("GET", "/etiquetas/configuracao", null, token);
+  const { dados: cfgEtiquetaAntes } = await api("GET", "/etiquetas/configuracao", null, token);
   await api("PUT", "/etiquetas/configuracao",
-    { ...cfgAntes, impressora: "BROTHER_QL", rolo: "DK-22205", comprimento_mm: 40 }, token);
+    { ...cfgEtiquetaAntes, impressora: "BROTHER_QL", rolo: "DK-22205", comprimento_mm: 40 }, token);
   const { dados: emitidaDireta } = await api("POST", "/etiquetas", {
     evento: "PRODUCAO", id_produto: prodVal.id, quantidade: 1,
   }, token);
@@ -2949,7 +2949,7 @@ try {
   };
   checar("com a Brother, Reimprimir manda direto: quadro invisível e nenhuma aba nova",
     impressaoDireta.quadro && impressaoDireta.abas === 0, impressaoDireta);
-  await api("PUT", "/etiquetas/configuracao", cfgAntes, token);
+  await api("PUT", "/etiquetas/configuracao", cfgEtiquetaAntes, token);
   await p.evaluate(() => { try { localStorage.removeItem("botane.etiquetas.impressao"); } catch {} });
 
   // 🔑 **"Usei uma parte"** (06/10/2026, pedido do dono: *"temos somente como
