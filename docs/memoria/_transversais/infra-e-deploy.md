@@ -68,6 +68,12 @@
 
 ## Armadilhas já pagas
 
+- 🔴 **Deploy que não chega ao ar: olhar o BUILD antes de suspeitar do autodeploy**
+  (22/10/2026). O `/saude` ficou na 1.1.119 depois de dois pushes, e a causa era o buildpack
+  Python da DO pedindo 3.13.17, que dava 404 no armazenamento deles. O `api/.python-version` foi
+  preso em `3.13.13` até eles subirem o arquivo — ver `docs/deploy.md`. ⚠️ Para descobrir qual
+  versão existe: `HEAD` em `https://apps-buildpack-python.fra1.digitaloceanspaces.com/python-<v>-ubuntu-22.04-amd64.tar.zst`.
+
 - 🔴 **Bibliotecas Python com 79 avisos de segurança** (validação de 29/09/2026): starlette 0.38
   (negação de serviço no envio de arquivo — e o corpo é lido ANTES da checagem de login),
   python-multipart, pyjwt, cryptography, pillow, python-dotenv. Subiram para fastapi 0.142.1 +

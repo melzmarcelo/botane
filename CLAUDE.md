@@ -79,7 +79,9 @@ pedem `--com-login` e senha digitada, então ficam fora de uma rodada automátic
 - ⚠️ **A versão do Python vai em `api/.python-version`, NUNCA em `runtime.txt`** — o buildpack
   da DO recusa o segundo, que foi descontinuado, e o primeiro deploy morre no build. Só o
   número maior (`3.13`), sem prefixo e sem a versão de correção: prender a correção impede o
-  app de receber atualização de segurança. O Python online é o mesmo de casa; o Node não
+  app de receber atualização de segurança. 🔴 **Hoje está preso em `3.13.13`, de propósito e
+  por pouco tempo** — o buildpack da DO pedia uma 3.13.17 que não existe lá (ver `docs/deploy.md`).
+  O Python online é o mesmo de casa; o Node não
   (local 24, `.nvmrc` 22, que é LTS e o que o `engines` já pedia).
 - ⚠️ **Filesystem efêmero no App Platform**: `api/uploads/` (logo) e `api/arquivos/emails/`
   somem a cada deploy. Nada insubstituível, mas a saída definitiva é o Spaces —

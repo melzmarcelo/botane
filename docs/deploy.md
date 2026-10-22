@@ -108,6 +108,14 @@ recusa o `runtime.txt` — ele foi descontinuado, e a mensagem de erro é clara 
 arquivo leva só o número maior (`3.13`), sem `python-` na frente e sem a versão de correção:
 prender a correção impede o app de receber atualização de segurança a cada build.
 
+🔴 **PRESO TEMPORARIAMENTE em `3.13.13`** (22/10/2026). O buildpack Python v5.358.5 da DO
+traduz `3.13` em 3.13.17, e o arquivo dessa versão NÃO existe no armazenamento deles
+(`apps-buildpack-python.fra1.digitaloceanspaces.com/python-3.13.17-…` → 404; 3.13.14 a 3.13.17
+também 404, 3.13.13 existe). O build morria em um segundo, antes do nosso código, e dois pushes
+seguidos (1.1.120 e 1.1.121) não chegaram ao ar sem nada avisando além do painel.
+**Para desfazer**: quando `curl -I` da URL da versão que o buildpack pedir der 200, voltar o
+arquivo para `3.13`.
+
 O Python online é **o mesmo de casa** (3.13). O Node não: local é 24, e o `.nvmrc` declara
 **22**, que é LTS e é o que o `engines` do `package.json` já pedia. Para uma build de Next a
 diferença é baixa, mas é divergência — e é uma das coisas que o `verificar_deploy.py`
