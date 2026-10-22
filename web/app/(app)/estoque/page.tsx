@@ -127,6 +127,11 @@ export default function PaginaEstoque() {
   const [produtoSaldo, setProdutoSaldo] = useState<{ id: number; rotulo: string } | null>(null);
   const [idLocal, setIdLocal] = useEstadoNaUrl<string>("local", "");
   const [comSaldo, setComSaldo] = useEstadoNaUrl<boolean>("comSaldo", true);
+  // 🔑 **Só os negativos, ou só os abaixo do mínimo** (22/10/2026, pedido do dono). É para
+  // onde levam o cartão do painel de estoque e o alerta da tela inicial — e a contagem
+  // deles é a desta lista. ⚠️ Com a situação escolhida, "só com saldo" não corta: o
+  // produto ZERADO abaixo do mínimo é justamente o que mais falta.
+  const [situacao, setSituacao] = useEstadoNaUrl<"" | "negativo" | "minimo">("situacao", "");
   // 🔑 **A visão de EMPRESA.** Toda tela do sistema responde por uma loja, e
   // está certo — quem opera opera numa de cada vez. Mas quem responde pelas
   // duas precisava trocar de loja no seletor e somar de cabeça para saber
@@ -177,7 +182,7 @@ export default function PaginaEstoque() {
   const pagSaldos = usePaginacao("saldos", {
     // ⚠️ `rede` entra como filtro: trocar de modo muda o número de linhas, e
     // quem estava na página 7 cairia numa tela vazia sem nada explicando.
-    filtros: [busca, produtoSaldo?.id, idLocal, comSaldo, visao, inativos],
+    filtros: [busca, produtoSaldo?.id, idLocal, comSaldo, visao, inativos, situacao],
   });
   const pagMov = usePaginacao("razao", {
     padrao: 100,
@@ -197,7 +202,11 @@ export default function PaginaEstoque() {
       const q = new URLSearchParams(pagSaldos.parametros);
       if (produtoSaldo) q.set("id_produto", String(produtoSaldo.id));
       else if (busca.trim()) q.set("busca", busca.trim());
-      if (comSaldo) q.set("apenas_com_saldo", "true");
+      if (comSaldo && !situacao) q.set("apenas_com_saldo", "true");
+      if (situacao === "minimo") q.set("abaixo_do_minimo", "true");
+      // ⚠️ A rede não tem o filtro de negativo: lá a linha é a soma das lojas, e a
+      // prateleira negativa de uma some na soma — o seletor esconde a opção.
+      if (situacao === "negativo" && !rede) q.set("negativos", "true");
       if (rede) {
         // ⚠️ O local sai do pedido de propósito: na visão de empresa a linha é
         // o produto, e mandar um filtro que o servidor não usa faria a tela
@@ -236,7 +245,7 @@ export default function PaginaEstoque() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagSaldos.pronto, busca, produtoSaldo, idLocal, comSaldo, visao, inativos,
+  }, [pagSaldos.pronto, busca, produtoSaldo, idLocal, comSaldo, visao, inativos, situacao,
       pagSaldos.offset, pagSaldos.porPagina]);
 
   const temFiltroMov = !!(movBusca || produtoMov || movTipo || movLocal || movInicio
@@ -421,6 +430,19 @@ export default function PaginaEstoque() {
                   onChange={(e) => setComSaldo(e.target.checked)}
                 />
                 <span className="text-[14px]">só com saldo</span>
+              </label>
+              <label className="sm:w-[200px]">
+                <span className="rotulo-campo">Situação</span>
+                <select
+                  id="situacao-saldos"
+                  className="campo mt-1.5"
+                  value={situacao}
+                  onChange={(e) => setSituacao(e.target.value as typeof situacao)}
+                >
+                  <option value="">todas</option>
+                  {!rede && <option value="negativo">saldo negativo</option>}
+                  <option value="minimo">abaixo do mínimo</option>
+                </select>
               </label>
               {/* 🔑 **Três granularidades da mesma pergunta.** Por prateleira
                   responde "onde está" — é o que quem conta precisa. Por produto

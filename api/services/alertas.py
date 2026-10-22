@@ -11,7 +11,7 @@ Cada alerta responde três coisas: **o que é**, **quanto é** e **o que fazer**
 import relogio
 from datetime import date, timedelta
 
-from services import periodos, produtos_em_uso
+from services import painel_estoque, periodos, produtos_em_uso
 from services.custos import dec
 
 CRITICO, ATENCAO, AVISO = "critico", "atencao", "aviso"
@@ -38,22 +38,21 @@ def levantar(cur, id_unidade: int) -> list[dict]:
                (id_unidade,)).get("alerta_validade_dias", 15)
 
     # ---------------------------------------------------------------- estoque
-    r = _um(cur, """
-        SELECT count(*) AS n FROM estoque_saldos s
-          JOIN produtos p ON p.id = s.id_produto
-         WHERE s.id_unidade = %s AND p.ativo AND s.quantidade < 0""", (id_unidade,))
-    juntar("estoque.negativo", CRITICO, "Produto com saldo negativo", r.get("n"),
+    # 🔑 **As MESMAS contagens do painel de estoque, e o link leva à lista JÁ filtrada**
+    # (22/10/2026, pedido do dono: "ao clicar, ir para a listagem para poder tomar a melhor
+    # decisão"). Antes o link abria Saldos inteiro, e o "abaixo do mínimo" contava
+    # PRATELEIRA enquanto a lista por produto mostrava PRODUTO — o número do alerta não era
+    # o da lista. Agora negativo é por prateleira e mínimo é por produto (a soma da loja),
+    # nos três lugares.
+    cont = painel_estoque.contagens(cur, id_unidade)
+    juntar("estoque.negativo", CRITICO, "Produto com saldo negativo",
+           cont["negativos"]["prateleiras"],
            "Saiu mais do que havia — falta lançar uma entrada ou a contagem está errada.",
-           "conferir no estoque", "/estoque")
+           "conferir no estoque", "/estoque?visao=prateleira&situacao=negativo")
 
-    r = _um(cur, """
-        SELECT count(*) AS n FROM estoque_saldos s
-          JOIN produtos p ON p.id = s.id_produto
-         WHERE s.id_unidade = %s AND p.ativo AND p.estoque_minimo IS NOT NULL
-           AND s.quantidade >= 0 AND s.quantidade < p.estoque_minimo""", (id_unidade,))
-    juntar("estoque.minimo", ATENCAO, "Abaixo do estoque mínimo", r.get("n"),
+    juntar("estoque.minimo", ATENCAO, "Abaixo do estoque mínimo", cont["abaixo_do_minimo"],
            "Vai faltar antes da próxima entrega se ninguém comprar.",
-           "ver quais", "/estoque")
+           "ver quais", "/estoque?visao=produto&situacao=minimo")
 
     # O que falta e a casa PRODUZ não se resolve comprando: entra na agenda.
     # Separado do alerta acima de propósito — a ação é outra, e um alerta que

@@ -5,6 +5,44 @@
 
 ## O que já existe
 
+- 🔑 **O PAINEL de estoque** (`/estoque/painel`, 1.1.122, 22/10/2026, pedido do dono: *"algo assim
+  [o painel de vendas] para o estoque … visão para [negativo e abaixo do mínimo], que ao clicar,
+  vá para a listagem para poder tomar a melhor decisão … uma visão por produto … com gráfico e
+  dados fáceis … uma visão de perdas … identificar os motivos"*). `services/painel_estoque.py`,
+  rotas `GET /estoque/painel`, `/estoque/painel/produto/{id}` e `/estoque/painel/perdas`, chave
+  `estoque.saldos` (não mostra nada que Saldos e o razão já não mostrem).
+  - 🔑 **O número do cartão é o tamanho da lista** para onde ele leva: NEGATIVO é por PRATELEIRA
+    (`/estoque?visao=prateleira&situacao=negativo` → `saldos?negativos=true`) e ABAIXO DO MÍNIMO é
+    por PRODUTO, a soma da loja (`visao=produto&situacao=minimo` → `saldos-agrupados?abaixo_do_minimo`).
+    As condições moram UMA vez (`painel_estoque.contagens`) e o alerta da tela inicial passou a
+    usá-las, com o link já filtrado. ⚠️ Antes o alerta de mínimo contava PRATELEIRA (só as de saldo
+    ≥ 0) e levava a Saldos inteiro: o número não era o de lista nenhuma.
+  - ⚠️ Com a Situação escolhida, "só com saldo" não corta: o zerado abaixo do mínimo é o que mais falta.
+  - **Abaixo do mínimo**, ordenado pelo que acaba primeiro: consumo/dia (líquido dos últimos 30
+    dias: venda, produção, consumo interno e perda — transferência, ajuste e conversão NÃO são
+    consumo), "acaba em" (nulo sem consumo, nunca infinito), o custo de repor e de quem comprar
+    (ou "a casa produz", para o PARA_ESTOQUE).
+  - **Parado**: saldo > 0 e nenhuma saída de consumo há 60 dias (`DIAS_PARADO`).
+  - ⚠️ **"Valor em estoque" conta o INATIVO com saldo** (como o CMV) e o cartão diz quanto; a
+    quebra por categoria tem a linha "Produtos inativos" para as barras somarem o cartão — medido
+    na base local, R$ 97 mil no cartão contra R$ 15 mil nas barras antes disso.
+  - **Por produto**: a série é o saldo ao FIM de cada ponto pela fotografia do razão — o último da
+    corrente (`coalesce(ordem_cadeia, id)`), acompanhado numa passada porque o conjunto só cresce.
+    Barras de entradas e saídas com o ESTORNO desfazendo o original (senão discordam do "por
+    tipo", que é líquido). O último ponto tem de ser o saldo de hoje — a suíte cobra.
+  - **Perdas** (`SAIDA_PERDA`): LÍQUIDAS de estorno, como `cmv._soma_movimentos` — o estorno entra
+    na data dele, com motivo/produto/prateleira do ORIGINAL. Por motivo (`id_motivo=0` = sem
+    motivo), setor (o da prateleira, senão o do produto — a regra do CMV por setor), categoria,
+    prateleira, origem (Ajustes, etiqueta, remessa) e produto; clicar filtra. 🔑 Ao lado, a
+    **falta da contagem** (`AJUSTE_INVENTARIO_SAIDA`): é perda sem nome, e quando ela passa da
+    registrada o problema não é o desperdício conhecido. E a perda como % de tudo o que saiu.
+  - ⚠️ Produto com toda a perda estornada não conta em "produtos" (o total é o tamanho da lista).
+  - Gráficos em SVG à mão (`estoque/painel/graficos.tsx`): o saldo em DEGRAU (nível, não evento),
+    entradas para cima e saídas para baixo. Reaproveita `BarrasDeitadas`/`GraficoBarras` e
+    `periodo.ts` do painel de vendas.
+  - Cobertura: `smoke_painel_estoque.py` (44, cenário conferido à mão no cabeçalho) e
+    `verificar.mjs` (cartões, o cartão de negativos = a lista, as abas).
+
 - 🔑 **A contagem só nasce em local DA LOJA** (06/10/2026, bateria de duas lojas).
   `POST /inventarios` conferia só se o local existia: com a matriz no seletor e uma prateleira
   da filial no filtro, a contagem nascia como da matriz apontando para um local alheio. Agora é

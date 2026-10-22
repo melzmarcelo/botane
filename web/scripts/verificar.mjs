@@ -1085,6 +1085,43 @@ try {
     await assentar(300);
   }
 
+  // 🔑 **O painel de estoque** (22/10/2026, pedido do dono): os cartões que pedem decisão
+  // levam à lista de Saldos JÁ filtrada, e as abas de produto e perdas abrem.
+  await p.goto(`${WEB}/estoque/painel`, { waitUntil: "networkidle2" });
+  await p.waitForSelector("#painel-estoque-indicadores", { timeout: 30000 }).catch(() => {});
+  const cartoes = await p.evaluate(() =>
+    [...document.querySelectorAll("[data-indicador]")].map((e) => e.getAttribute("data-indicador")));
+  checar("o painel de estoque mostra os seis cartões",
+    ["valor", "negativos", "minimo", "parados", "validade", "perdas"].every((c) => cartoes.includes(c)),
+    JSON.stringify(cartoes));
+  const linkNegativo = await p.$eval('[data-indicador="negativos"]', (e) => e.getAttribute("href"))
+    .catch(() => null);
+  if (linkNegativo) {
+    // ⚠️ O número do cartão é o tamanho da lista para onde ele leva.
+    const noCartao = await p.$eval('[data-indicador="negativos"] .mono', (e) => e.textContent?.trim());
+    await p.goto(`${WEB}${linkNegativo}`, { waitUntil: "networkidle2" });
+    await p.waitForSelector("#situacao-saldos", { timeout: 30000 }).catch(() => {});
+    await assentar(800);
+    const naLista = await p.evaluate(() => ({
+      situacao: document.querySelector("#situacao-saldos")?.value,
+      linhas: document.body.innerText.match(/(\d+) linha\(s\)/)?.[1],
+    }));
+    checar("o cartão de negativos leva à lista filtrada, com o mesmo número",
+      naLista.situacao === "negativo" && naLista.linhas === noCartao,
+      JSON.stringify({ noCartao, ...naLista }));
+  } else {
+    checar("sem negativo, o cartão não promete lista", true);
+  }
+  await p.goto(`${WEB}/estoque/painel?aba=perdas`, { waitUntil: "networkidle2" });
+  await p.waitForSelector("#painel-perdas-resumo", { timeout: 30000 }).catch(() => {});
+  checar("a aba de perdas abre com o resumo e os motivos",
+    await p.evaluate(() => !!document.querySelector("#painel-perdas-resumo")
+      && /Por motivo/.test(document.body.innerText)));
+  await p.goto(`${WEB}/estoque/painel?aba=produto`, { waitUntil: "networkidle2" });
+  await assentar(500);
+  checar("a aba por produto pede o produto antes de mostrar",
+    await p.evaluate(() => /Escolha um produto/.test(document.body.innerText)));
+
   // 🔑 **Alteracao multipla** (09/09/2026, pedido do dono): marcar varios e
   // mudar tipo, categoria, setor ou a ativacao de uma vez. O catalogo tem 2.229
   // produtos vindos do Omie sem categoria nem setor, e um a um sao quatro

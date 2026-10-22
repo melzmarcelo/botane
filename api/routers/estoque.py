@@ -4,7 +4,7 @@ Nenhum endpoint aqui escreve em `estoque_movimentos` na mão — todos passam po
 `services.estoque.lancar`, que é onde ficam a trava e o cálculo do médio.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -26,10 +26,69 @@ from models.estoque import (
 )
 from paginacao import com_total, pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
+import relogio
 from services import estoque as motor
+from services import painel_estoque
 from services import transferencias as transito_servico
 
 router = APIRouter(prefix="/estoque", tags=["estoque"])
+
+
+# ------------------------------------------------------------------ o painel
+# 🔑 O painel de estoque (22/10/2026, pedido do dono) — ver `services/painel_estoque.py`.
+# ⚠️ A chave é a de CONSULTAR o estoque, a mesma de Saldos: o painel não mostra nada que a
+# lista de saldos e o razão já não mostrem a quem tem `estoque.saldos`.
+
+def _periodo(inicio: date | None, fim: date | None, padrao_dias: int = 30) -> tuple[date, date]:
+    """O recorte, com o padrão de até hoje e o teto de dois anos (a regra do painel de vendas)."""
+    hoje = relogio.hoje_da_casa()
+    fim = fim or (inicio + timedelta(days=padrao_dias - 1) if inicio else hoje)
+    inicio = inicio or fim - timedelta(days=padrao_dias - 1)
+    if fim < inicio:
+        raise HTTPException(status_code=400, detail="O fim do período vem antes do início.")
+    if (fim - inicio).days > 731:
+        raise HTTPException(status_code=400,
+                            detail="O recorte passa de dois anos — estreite o período.")
+    return inicio, fim
+
+
+@router.get("/painel")
+def painel(limite: int = Query(15, ge=1, le=100),
+           ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> dict:
+    """A visão geral: negativos, abaixo do mínimo, parados, validade e perdas do mês."""
+    with get_cursor() as cur:
+        return painel_estoque.visao_geral(cur, unidade_atual(cur, ctx), limite)
+
+
+@router.get("/painel/produto/{id_produto}")
+def painel_produto(id_produto: int, inicio: date | None = None, fim: date | None = None,
+                   agrupar: str = "dia",
+                   ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> dict:
+    """Como anda o estoque de um produto — sem datas, os últimos 30 dias."""
+    inicio, fim = _periodo(inicio, fim)
+    with get_cursor() as cur:
+        r = painel_estoque.produto(cur, unidade_atual(cur, ctx), id_produto, inicio, fim,
+                                   agrupar)
+    if r is None:
+        raise HTTPException(status_code=404, detail="Produto não encontrado.")
+    return r
+
+
+@router.get("/painel/perdas")
+def painel_perdas(inicio: date | None = None, fim: date | None = None,
+                  agrupar: str = "dia",
+                  id_motivo: int | None = Query(None, ge=0),
+                  id_categoria: int | None = None, id_setor: int | None = None,
+                  id_local: int | None = None, id_produto: int | None = None,
+                  limite: int = Query(20, ge=1, le=500),
+                  ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> dict:
+    """Onde a casa perde mercadoria, e por quê. `id_motivo=0` é "sem motivo"."""
+    inicio, fim = _periodo(inicio, fim)
+    with get_cursor() as cur:
+        return painel_estoque.perdas(
+            cur, unidade_atual(cur, ctx), inicio, fim, agrupar,
+            {"motivo": id_motivo, "categoria": id_categoria, "setor": id_setor,
+             "local": id_local, "produto": id_produto}, limite)
 
 
 @router.get("/saldos", response_model=list[SaldoResponse])
@@ -41,6 +100,9 @@ def saldos(
     id_local: int | None = None,
     apenas_com_saldo: bool = False,
     abaixo_do_minimo: bool = False,
+    # 🔑 Só as prateleiras NEGATIVAS (22/10/2026): é para onde o cartão do painel e o
+    # alerta levam — a contagem deles é `painel_estoque.SQL_NEGATIVOS`, a mesma condição.
+    negativos: bool = False,
     # Produto desativado com saldo continua existindo — mas só aparece quando
     # pedido, senão o inventário do dia a dia fica cheio de coisa fora de linha.
     incluir_inativos: bool = False,
@@ -68,13 +130,14 @@ def saldos(
                AND (%s::int IS NULL OR s.id_local = %s)
                AND (NOT %s OR s.quantidade <> 0)
                AND (NOT %s OR (p.estoque_minimo IS NOT NULL AND s.quantidade < p.estoque_minimo))
+               AND (NOT %s OR s.quantidade < 0)
                AND (%s::varchar IS NULL
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
              ORDER BY lower(p.nome), l.nome
             """,
             (id_unidade, incluir_inativos, id_produto, id_produto, id_local, id_local,
-             apenas_com_saldo, abaixo_do_minimo, busca, busca, busca),
+             apenas_com_saldo, abaixo_do_minimo, negativos, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )
         # ⚠️ **Uma consulta só, casada em memória** — e não uma subconsulta por
@@ -96,6 +159,8 @@ def saldos_agrupados(
     id_setor: int | None = None,
     apenas_com_saldo: bool = False,
     abaixo_do_minimo: bool = False,
+    # O produto com ALGUMA prateleira negativa (a soma pode até ser positiva).
+    negativos: bool = False,
     incluir_inativos: bool = False,
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -177,11 +242,12 @@ def saldos_agrupados(
             HAVING (NOT %s OR sum(s.quantidade) <> 0)
                AND (NOT %s OR (p.estoque_minimo IS NOT NULL
                                AND sum(s.quantidade) < p.estoque_minimo))
+               AND (NOT %s OR bool_or(s.quantidade < 0))
              ORDER BY lower(p.nome)
         """
         params = (id_unidade, incluir_inativos, id_produto, id_produto,
                   id_setor, id_setor, busca, busca, busca,
-                  apenas_com_saldo, abaixo_do_minimo)
+                  apenas_com_saldo, abaixo_do_minimo, negativos)
         linhas = pagina(cur, sql, params, limite=limite, offset=offset, resposta=resposta)
 
         # Uma consulta a mais para a PAGINA, nao uma por linha — a mesma

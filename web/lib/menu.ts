@@ -106,6 +106,9 @@ export const MENU: GrupoMenu[] = [
     grupo: "Estoque",
     icone: "caixas",
     itens: [
+      // 🔑 A visão para decidir (22/10/2026) — a mesma chave de Saldos: não mostra nada que
+      // a lista e o razão já não mostrem.
+      { href: "/estoque/painel", nome: "Painel", icone: "grafico", chave: "estoque.saldos" },
       { href: "/estoque", nome: "Saldos e movimentos", icone: "caixas", chave: "estoque.saldos" },
       {
         href: "/ajustes",
