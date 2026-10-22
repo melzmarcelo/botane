@@ -173,9 +173,13 @@ st, r = enviar_xml(f"nota{marca}.xml", xml_nfe(chave, marca[-5:], [
     (f"TORTO DO FORNECEDOR {marca}", f"F3{marca}", EAN_TORTO, 1, 10, "UN"),
 ]), token)
 checar("a nota entra pelo XML", st in (200, 201), (st, r))
-st, lista = chamar("GET", f"/notas?busca={marca[-5:]}", token=token)
+# ⚠️ Busca pela MARCA inteira (está no nome do emitente), não pelo número: o número
+# são 5 hexas da marca e já casou com outra nota da base ("985574" contém "85574") —
+# a suíte pegava a nota errada.
+st, lista = chamar("GET", f"/notas?busca={marca}", token=token)
 # /notas devolve LISTA crua em alguns caminhos e paginado em outros.
 itens_nota = lista.get("itens", []) if isinstance(lista, dict) else (lista or [])
+itens_nota = [n for n in itens_nota if marca in (n.get("nome_emitente") or "").upper()]
 id_nota = itens_nota[0]["id"] if itens_nota else None
 if id_nota:
     notas.append(id_nota)
