@@ -299,6 +299,7 @@ export function Confirmacao({
   titulo,
   children,
   rotuloConfirmar = "Confirmar",
+  rotuloCancelar = "Cancelar",
   perigo = false,
   ocupado = false,
   aoConfirmar,
@@ -307,6 +308,8 @@ export function Confirmacao({
   titulo: string;
   children: ReactNode;
   rotuloConfirmar?: string;
+  /** Quando a pergunta é um convite e não um "tem certeza?": "Agora não". */
+  rotuloCancelar?: string;
   perigo?: boolean;
   ocupado?: boolean;
   aoConfirmar: () => void;
@@ -317,7 +320,7 @@ export function Confirmacao({
       <div className="text-[15px] leading-snug">{children}</div>
       <div className="mt-5 flex flex-wrap justify-end gap-2">
         <button type="button" className="btn btn-secundario" onClick={aoCancelar}>
-          Cancelar
+          {rotuloCancelar}
         </button>
         <button
           type="button"

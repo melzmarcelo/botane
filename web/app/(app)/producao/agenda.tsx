@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { diaLocal, somarDias } from "@/lib/datas";
@@ -107,6 +108,9 @@ export default function AgendaProducao({
   // é produzir o que se planejou, e quem digitar por cima está corrigindo.
   const [saida, setSaida] = useState<Record<number, string>>({});
   const [confirmando, setConfirmando] = useState<Linha | null>(null);
+  /** A produção que acabou de sair, à espera do "emitir as etiquetas?". */
+  const [etiquetar, setEtiquetar] = useState<{ id: number; produto: string } | null>(null);
+  const router = useRouter();
   /**
    * 🔑 **As prateleiras DESTE produto, e não as da casa** (15/09/2026, pedido do
    * dono: *"quando agendo uma produção, os setores/prateleira deveriam ser
@@ -245,11 +249,13 @@ export default function AgendaProducao({
     }
     setOcupado(true);
     try {
-      const r = await api.post<{ message: string }>(`/producao-agenda/${l.id}/produzir`, {
+      const r = await api.post<{ message: string; id: number }>(`/producao-agenda/${l.id}/produzir`, {
         quantidade: valor,
       });
       aviso.sucesso(r.message);
       setConfirmando(null);
+      // 🔑 O que acabou de sair do fogão é o que se etiqueta (pedido do dono, 22/10/2026).
+      if (pode("etiquetas.imprimir")) setEtiquetar({ id: r.id, produto: l.produto });
       setSaida((a) => {
         const { [l.id]: _fora, ...resto } = a;
         return resto;
@@ -599,6 +605,33 @@ export default function AgendaProducao({
           </p>
         </Confirmacao>
       )}
+
+      {etiquetar && <PerguntaEtiquetas producao={etiquetar} aoFechar={() => setEtiquetar(null)}
+                                       aoEmitir={() => router.push(`/etiquetas?producao=${etiquetar.id}`)} />}
     </div>
+  );
+}
+
+/**
+ * 🔑 **Produziu? Etiqueta.** (22/10/2026, pedido do dono: *"ao produzir pela tela da
+ * agenda, após criar em produzir, pedir se deseja emitir as etiquetas, se sim, ir para a
+ * tela de etiquetas"*). "Sim" abre Etiquetas já com a produção — produto, lote, local e
+ * quantidade vêm dela. Só aparece para quem pode imprimir etiqueta.
+ */
+export function PerguntaEtiquetas({ producao, aoEmitir, aoFechar }: {
+  producao: { id: number; produto: string };
+  aoEmitir: () => void;
+  aoFechar: () => void;
+}) {
+  return (
+    <Confirmacao titulo="Emitir as etiquetas?" rotuloConfirmar="Emitir etiquetas"
+                 rotuloCancelar="Agora não" aoConfirmar={aoEmitir} aoCancelar={aoFechar}>
+      <p id="pergunta-etiquetas">
+        <b>{producao.produto}</b> foi produzido. Deseja emitir as etiquetas de validade agora?
+      </p>
+      <p className="mt-2 text-[13.5px] text-suave">
+        A tela de etiquetas abre com esta produção: produto, lote e quantidade já preenchidos.
+      </p>
+    </Confirmacao>
   );
 }

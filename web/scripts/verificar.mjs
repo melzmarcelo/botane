@@ -2656,6 +2656,60 @@ try {
     await assentar(500);
   }
 
+  // 🔑 **Produziu pela agenda? "Emitir as etiquetas?"** (22/10/2026, pedido do dono:
+  // *"ao produzir pela tela da agenda, após criar em produzir, pedir se deseja emitir as
+  // etiquetas, se sim, ir para a tela de etiquetas"*). Uma linha própria, com o insumo
+  // em estoque, produzida de verdade pela tela.
+  {
+    const m = String(Date.now()).slice(-5);
+    const { dados: insEtq } = await api("POST", "/produtos",
+      { nome: `Etq agenda insumo ${m}`, tipo: "INSUMO", um_estoque: "KG" }, token);
+    const { dados: prodEtq } = await api("POST", "/produtos",
+      { nome: `Etq agenda preparo ${m}`, tipo: "PRODUZIDO", um_estoque: "UN",
+        modo_producao: "PARA_ESTOQUE" }, token);
+    aoTerminar.push(() => api("DELETE", `/produtos/${prodEtq.id}`, null, token));
+    aoTerminar.push(() => api("DELETE", `/produtos/${insEtq.id}`, null, token));
+    const { dados: fichaEtq } = await api("POST", "/fichas", {
+      id_produto: prodEtq.id, rendimento_qtd: 1, rendimento_um: "UN", porcoes: 1,
+      itens: [{ id_insumo: insEtq.id, qtd_bruta: 0.2, um: "KG" }],
+    }, token);
+    await api("POST", `/fichas/${fichaEtq.id}/homologar`, null, token);
+    await api("POST", "/estoque/entradas",
+      { id_produto: insEtq.id, quantidade: 5, custo_unitario: 10 }, token);
+    const { dados: linhaEtq } = await api("POST", "/producao-agenda",
+      { id_produto: prodEtq.id, data_prevista: diaLocal(0), quantidade: 2 }, token);
+    await irPara(p, `${WEB}/producao`);
+    await p.waitForSelector(`a[href="/producao/${linhaEtq?.id}"]`, { timeout: 20000 }).catch(() => {});
+    await p.evaluate((id) => {
+      const li = document.querySelector(`a[href="/producao/${id}"]`)?.closest("li");
+      [...(li?.querySelectorAll("button") ?? [])].find((b) => b.textContent?.trim() === "Produzir")?.click();
+    }, linhaEtq?.id);
+    await p.waitForSelector('[role="dialog"]', { timeout: 10000 }).catch(() => {});
+    await p.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')]
+      .find((b) => b.textContent?.trim() === "Produzir")?.click());
+    await p.waitForSelector("#pergunta-etiquetas", { timeout: 15000 }).catch(() => {});
+    const pergunta = await p.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]');
+      return d ? { titulo: d.getAttribute("aria-label"), texto: d.innerText } : null;
+    });
+    checar("depois de produzir pela agenda, pergunta se quer emitir as etiquetas",
+      pergunta?.titulo === "Emitir as etiquetas?" && pergunta.texto.includes(`ETQ AGENDA PREPARO ${m}`)
+        && /Agora não/.test(pergunta.texto), pergunta);
+    await Promise.all([
+      p.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
+      p.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')]
+        .find((b) => b.textContent?.trim() === "Emitir etiquetas")?.click()),
+    ]);
+    await p.waitForFunction(() => /Produção #\d+/.test(document.body.innerText), { timeout: 15000 }).catch(() => {});
+    const naEtiqueta = await p.evaluate(() => ({
+      url: location.pathname + location.search, producao: /Produção #\d+/.test(document.body.innerText),
+    }));
+    checar("e o sim abre Etiquetas já com a produção",
+      /^\/etiquetas\?producao=\d+$/.test(naEtiqueta.url) && naEtiqueta.producao, naEtiqueta);
+    await irPara(p, `${WEB}/producao`);
+    await assentar(800);
+  }
+
   // Contagem CEGA: o esperado não aparece na tela nem sai do servidor.
   // ⚠️ Só há uma contagem aberta por local: sem fechar a de cima, o POST volta
   // 409 e o bloco inteiro passaria em silêncio — checagem que não roda é pior

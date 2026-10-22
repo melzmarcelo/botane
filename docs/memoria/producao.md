@@ -7,7 +7,18 @@
 
 - 🔑 **Produção nasce com lote e validade** (28/09/2026) quando o produto controla lote e tem
   validade conhecida — regra e armadilhas em [`etiquetas.md`](etiquetas.md). A tela de Produção
-  e o aviso da agenda oferecem "Imprimir etiquetas" logo depois de produzir.
+  oferece "Imprimir etiquetas" logo depois de produzir.
+
+- 🔑 **Produziu pela AGENDA, a tela pergunta "Emitir as etiquetas?"** (22/10/2026, 1.1.124,
+  pedido do dono: *"ao produzir pela tela da agenda, após criar em produzir, pedir se deseja
+  emitir as etiquetas, se sim, ir para a tela de etiquetas"*). Vale na lista da agenda
+  (`producao/agenda.tsx`) e na folha da linha (`producao/[id]`), pelo mesmo componente
+  `PerguntaEtiquetas` (exportado de `agenda.tsx`). "Emitir etiquetas" vai a
+  `/etiquetas?producao=<id da produção>` — o `id` que o `POST /producao-agenda/{id}/produzir`
+  devolve é o da PRODUÇÃO, não o da linha. "Agora não" fica onde está.
+  ⚠️ Só para quem tem `etiquetas.imprimir`; sem ela, nada muda. Na folha, o atalho
+  "imprimir etiquetas" que ficava no aviso (sumia sozinho) deu lugar à pergunta.
+  `Confirmacao` ganhou `rotuloCancelar` para isso. Cobertura: bloco da agenda no `verificar.mjs`.
 
 - 🔑 **O rendimento É a tabela de destinos, e ela mora no cabeçalho** (13/09/2026, pedido do
   dono: *"o rendimento e destinos estão em um grupo separado; podemos colocar junto com o

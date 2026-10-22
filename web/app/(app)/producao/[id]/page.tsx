@@ -17,6 +17,7 @@ import {
   Etiqueta,
   Vazio,
 } from "@/components/ui";
+import { PerguntaEtiquetas } from "../agenda";
 
 /**
  * A folha da produção: o que vai ser preciso para fazer aquilo.
@@ -125,6 +126,8 @@ export default function PaginaOrdemProducao() {
   const [erro, setErro] = useState("");
   const [quantidade, setQuantidade] = useState("");
   const [confirmando, setConfirmando] = useState(false);
+  /** A produção que acabou de sair, à espera do "emitir as etiquetas?". */
+  const [etiquetar, setEtiquetar] = useState<{ id: number; produto: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
   /**
@@ -184,11 +187,11 @@ export default function PaginaOrdemProducao() {
           um: v.um || null,
         })),
       });
-      // 🔑 Com permissão de etiqueta, o atalho do aviso é etiquetar o que acabou de sair.
-      aviso.sucesso(r.message, pode("etiquetas.imprimir")
-        ? { texto: "imprimir etiquetas", ao: () => router.push(`/etiquetas?producao=${r.id}`) }
-        : { texto: "voltar para a agenda", ao: () => router.push("/producao") });
+      aviso.sucesso(r.message, { texto: "voltar para a agenda", ao: () => router.push("/producao") });
       setConfirmando(false);
+      // 🔑 Com permissão de etiqueta, a pergunta (e não só um atalho no aviso, que some
+      // sozinho): "emitir as etiquetas?" — pedido do dono, 22/10/2026.
+      if (pode("etiquetas.imprimir")) setEtiquetar({ id: r.id, produto: linha?.produto ?? "O produto" });
       await carregar();
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível produzir");
@@ -539,6 +542,9 @@ export default function PaginaOrdemProducao() {
           </p>
         </Confirmacao>
       )}
+
+      {etiquetar && <PerguntaEtiquetas producao={etiquetar} aoFechar={() => setEtiquetar(null)}
+                                       aoEmitir={() => router.push(`/etiquetas?producao=${etiquetar.id}`)} />}
     </div>
   );
 }
