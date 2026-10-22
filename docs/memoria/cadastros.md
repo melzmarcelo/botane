@@ -5,6 +5,27 @@
 
 ## O que já existe
 
+- 🔑 **Botão Importar na lista de produtos** (1.1.121, 22/10/2026, pedido do dono: *"colocar um
+  botão Importar … opções do PDV ou do Omie. Aí realiza a busca e mostra os novos produtos, com
+  um checkbox, padrão marcado … Na opção PDV, atualizar os preços também, mas isto não precisa
+  aprovação, somente atualizar"*). `produtos/importar-produtos.tsx`.
+  - Duas rotas por origem: `POST /pdv/produtos-novos` e `POST /omie/produtos-novos` LISTAM o
+    que não existe aqui; `…/produtos-novos/importar` com `{codigos}` cria SÓ os marcados, em
+    rascunho, pelos MESMOS importadores (`cardapio.importar(so_codigos=…)` e
+    `importador.importar_catalogo(so_codigos=…)`). Com `so_codigos`, o resto do cardápio/catálogo
+    nem é alinhado nem completado — quem marcou alguns não pediu a varredura inteira.
+  - "Já existe" é a mesma cascata do importador, sem nome: PDV = código do PDV (campo ou
+    apelido), EAN, `PDV-<codigo>` (`cardapio._ja_existe`); Omie = `codigo_omie` ou apelido
+    (`importador._do_catalogo_ja_existe`, que o `importar_catalogo` também passou a usar).
+  - ⚠️ **A busca do PDV GRAVA os preços** dos que já existem — é a parte sem aprovação — mas
+    segue o dono do preço (`_preco_e_do_pdv`): com o envio ao PDV ligado, não traz e a frase diz
+    por quê. O prato que nasce leva o preço do PDV (`precos_tambem=True`).
+  - ⚠️ **Desmarcar não é "nunca trazer".** A busca de vendas do PDV e a sincronização do Omie
+    continuam criando o que é novo lá, como sempre; o desmarcado só não nasce AGORA.
+  - Permissão: `integracao.pdv` / `integracao.omie` (as dos botões que já importavam); a tela
+    só oferece a origem que a pessoa pode usar.
+  - Cobertura: `smoke_pdv_legal` 8g4 e `smoke_omie` 5b.
+
 - 🔑 **As validades por situação moram no cadastro do produto** (aba Estoque, cartão "Validade
   por situação", 06/10/2026) — vieram de Etiquetas → Configuração. A decisão e as armadilhas
   estão na memória do módulo dono da regra: [`etiquetas.md`](etiquetas.md). ⚠️ A tela do produto

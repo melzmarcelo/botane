@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import AlteracaoMultipla from "./alteracao-multipla";
+import ImportarProdutos from "./importar-produtos";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import {
@@ -26,6 +27,12 @@ export default function PaginaProdutos() {
   const aviso = useAviso();
   const { pode } = useSessao();
   const podeEditar = pode("cadastros.produtos");
+  // 🔑 O botão Importar (22/10/2026): cada origem com a permissão da integração dela.
+  const origensImportar = [
+    ...(pode("integracao.pdv") ? (["pdv"] as const) : []),
+    ...(pode("integracao.omie") ? (["omie"] as const) : []),
+  ];
+  const [importando, setImportando] = useState(false);
 
   const [lista, setLista] = useState<ProdutoResumo[] | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -137,6 +144,16 @@ export default function PaginaProdutos() {
               recorte nenhum. Agora a janela pergunta tipo, categoria, setor e
               situação antes de gerar. */}
           <BotaoExportar relatorio="produtos" />
+          {origensImportar.length > 0 && (
+            <button
+              id="importar-produtos"
+              type="button"
+              className="btn btn-secundario"
+              onClick={() => setImportando(true)}
+            >
+              Importar
+            </button>
+          )}
           {/* 🔑 **O caminho para a colheita de EAN vive AQUI** (08/09/2026), e
               não em Integrações: o código de barras é campo do cadastro, e quem
               vai preenchê-lo em lote está olhando a lista de produtos. Mesmo
@@ -180,6 +197,17 @@ export default function PaginaProdutos() {
             Limpar seleção
           </button>
         </div>
+      )}
+
+      {importando && (
+        <ImportarProdutos
+          origens={origensImportar}
+          aoFechar={() => setImportando(false)}
+          aoImportar={() => {
+            void carregar();
+            api.get<Contagem>("/produtos/contagem").then(setContagem).catch(() => {});
+          }}
+        />
       )}
 
       {alterando && (

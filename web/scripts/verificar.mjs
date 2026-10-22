@@ -1066,6 +1066,25 @@ try {
       (a) => a.textContent?.includes("Código de barras das notas")));
   checar("o caminho para a colheita de EAN esta na lista de produtos", temCaminhoEan);
 
+  // 🔑 **O botao Importar** (22/10/2026, pedido do dono): pergunta PDV ou Omie antes de
+  // buscar. ⚠️ So abre e fecha: a busca do PDV grava preco, e a bateria nao escolhe.
+  const btnImportar = await p.$("#importar-produtos");
+  checar("a lista de produtos tem o botao Importar", !!btnImportar);
+  if (btnImportar) {
+    await btnImportar.click();
+    await p.waitForSelector("#importar-de-pdv, #importar-de-omie", { timeout: 15000 })
+      .catch(() => {});
+    const origens = await p.evaluate(() => ({
+      pdv: !!document.querySelector("#importar-de-pdv"),
+      omie: !!document.querySelector("#importar-de-omie"),
+      pergunta: /De onde você quer importar produtos/.test(document.body.innerText),
+    }));
+    checar("e ele pergunta de onde: PDV ou Omie",
+      origens.pdv && origens.omie && origens.pergunta, JSON.stringify(origens));
+    await p.keyboard.press("Escape");
+    await assentar(300);
+  }
+
   // 🔑 **Alteracao multipla** (09/09/2026, pedido do dono): marcar varios e
   // mudar tipo, categoria, setor ou a ativacao de uma vez. O catalogo tem 2.229
   // produtos vindos do Omie sem categoria nem setor, e um a um sao quatro

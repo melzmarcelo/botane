@@ -1030,6 +1030,85 @@ if alvo_pr and do_pdv is not None:
     _envio(envio_original)
 
 
+print("\n8g4. o botao Importar do cadastro: os novos, marcados, e o preco que ja entra")
+# 🔑 Pedido do dono (22/10/2026): a busca mostra os produtos do PDV que nao existem
+# aqui, a pessoa desmarca o que nao quer, e so o marcado nasce. O preco vem junto,
+# sem aprovacao. ⚠️ Usa o PANETONE (fora do cardapio, sem EAN, sem preco) como o
+# "novo": o dono atual dele e afastado por um instante e devolvido no fim.
+NOVO_PDV = "10689997"
+_dono_pan = _dono_do_codigo(NOVO_PDV)
+with _cur_pdv() as _c:
+    _c.execute("SELECT id, codigo FROM produtos WHERE codigo = %s", (f"PDV-{NOVO_PDV}",))
+    _casa_pan = _c.fetchone()
+_soltar_codigo(NOVO_PDV)
+if _casa_pan:
+    with _cur_pdv() as _c:
+        _c.execute("UPDATE produtos SET codigo = %s WHERE id = %s",
+                   (f"SMK-PAN-{_casa_pan['id']}", _casa_pan["id"]))
+try:
+    with _cur_pdv() as _c:
+        _c.execute("SELECT enviar_ao_pdv FROM integracoes WHERE servico = 'PDV_LEGAL'")
+        _envio_antes = bool((_c.fetchone() or {}).get("enviar_ao_pdv"))
+    _envio(False)
+    if alvo_pr and do_pdv is not None:
+        _por_o_preco(do_pdv + 3)
+    st, rn = chamar("POST", "/pdv/produtos-novos", token=token)
+    codigos_novos = [x["codigo"] for x in (rn or {}).get("novos") or []]
+    checar("a busca de novos responde", st == 200, (st, rn))
+    checar("e lista o item que nao tem cadastro", NOVO_PDV in codigos_novos, codigos_novos)
+    checar("e nao lista o que ja tem", "10689993" not in codigos_novos, codigos_novos)
+    if alvo_pr and do_pdv is not None:
+        checar("o preco do PDV entra ja na busca, sem aprovacao", _preco_agora() == do_pdv,
+               (_preco_agora(), do_pdv))
+        checar("e a frase conta o preco", (rn.get("precos") or 0) >= 1, rn.get("message"))
+    with _cur_pdv() as _c:
+        _c.execute("SELECT 1 FROM produtos WHERE codigo = %s", (f"PDV-{NOVO_PDV}",))
+        checar("a busca nao cria produto nenhum", not _c.fetchone())
+
+    # ⚠️ Com o Botane dono do preco, a busca nao o toca — e diz por que.
+    if alvo_pr and do_pdv is not None:
+        _envio(True)
+        _por_o_preco(do_pdv + 3)
+        st, rn2 = chamar("POST", "/pdv/produtos-novos", token=token)
+        checar("com o envio ligado, o preco daqui fica", _preco_agora() == do_pdv + 3,
+               (_preco_agora(), do_pdv + 3))
+        checar("e a frase explica", "envio ao PDV" in (rn2 or {}).get("message", ""),
+               (rn2 or {}).get("message"))
+        _por_o_preco(do_pdv)
+        _envio(False)
+
+    st, ri = chamar("POST", "/pdv/produtos-novos/importar", {"codigos": [NOVO_PDV]},
+                    token=token)
+    checar("importar os marcados responde", st == 200, (st, ri))
+    checar("e cria so o marcado", (ri or {}).get("criados") == 1, ri)
+    with _cur_pdv() as _c:
+        _c.execute("SELECT id, status, codigo_pdv FROM produtos WHERE codigo = %s",
+                   (f"PDV-{NOVO_PDV}",))
+        _criado = _c.fetchone()
+    checar("o produto nasce rascunho, com o codigo do PDV",
+           bool(_criado) and _criado["status"] == "RASCUNHO"
+           and _criado["codigo_pdv"] == NOVO_PDV, _criado)
+    st, rn3 = chamar("POST", "/pdv/produtos-novos", token=token)
+    checar("e sai da lista de novos",
+           NOVO_PDV not in [x["codigo"] for x in (rn3 or {}).get("novos") or []], rn3)
+    st, rv = chamar("POST", "/pdv/produtos-novos/importar", {"codigos": []}, token=token)
+    checar("lista vazia e recusada", st == 422, (st, rv))
+finally:
+    # Devolve: apaga o que nasceu aqui e devolve o codigo e o vinculo ao dono de antes.
+    _soltar_codigo(NOVO_PDV)
+    with _cur_pdv() as _c:
+        _c.execute("DELETE FROM produtos WHERE codigo = %s AND NOT EXISTS "
+                   "(SELECT 1 FROM venda_itens vi WHERE vi.id_produto = produtos.id)",
+                   (f"PDV-{NOVO_PDV}",))
+        if _casa_pan:
+            _c.execute("UPDATE produtos SET codigo = %s WHERE id = %s",
+                       (_casa_pan["codigo"], _casa_pan["id"]))
+        if _dono_pan and _dono_pan.get("onde") == "principal":
+            _c.execute("UPDATE produtos SET codigo_pdv = %s WHERE id = %s",
+                       (NOVO_PDV, _dono_pan["id"]))
+    _envio(_envio_antes)
+
+
 print("\n8h. reconciliar liga as vendas que estavam pendentes")
 st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
 st, r = chamar("POST", "/pdv/reconciliar", token=token)

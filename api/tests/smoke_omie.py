@@ -353,6 +353,74 @@ st, pend = chamar("GET", "/notas/pendencias", token=token)
 checar("o item de café saiu da fila de pendências",
        not any(p["id"] == item_cafe["id"] for p in pend))
 
+print("5b. o botão Importar do cadastro: os novos do catálogo, e só os marcados")
+# 🔑 Pedido do dono (22/10/2026): a busca lista o que o Omie tem e o cadastro não, e
+# só o que ficar marcado nasce. ⚠️ Antes da carga inteira (6), que cria todos.
+# ⚠️ **A precondição garantida, não suposta**: rodadas anteriores já criaram o catálogo
+# da fixture, e então não sobra "novo" nenhum. Dois itens (700005 e 700006) são
+# afastados por um instante — código do Omie, apelido e código da casa — e devolvidos
+# no fim desta seção.
+def _cur_banco():
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER
+    return psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
+                            dbname=DB_NAME, sslmode=DB_SSLMODE, cursor_factory=RealDictCursor)
+
+
+AFASTADOS = {"700005": "FRETE-EMB", "700006": "DESCONTO-EMB"}
+_guardados = []
+_con = _cur_banco()
+with _con, _con.cursor() as _c:
+    for _omie, _cod in AFASTADOS.items():
+        _c.execute("SELECT id, codigo, codigo_omie FROM produtos "
+                   "WHERE codigo_omie = %s OR codigo = %s", (_omie, _cod))
+        for _p in _c.fetchall():
+            _guardados.append(dict(_p))
+            _c.execute("UPDATE produtos SET codigo_omie = NULL, codigo = %s WHERE id = %s",
+                       (f"SMK5B-{_p['id']}", _p["id"]))
+        _c.execute("SELECT * FROM codigos_externos "
+                   "WHERE sistema = 'OMIE_PRODUTO' AND codigo = %s", (_omie,))
+        for _a in _c.fetchall():
+            _guardados.append({"apelido": dict(_a)})
+        _c.execute("DELETE FROM codigos_externos WHERE sistema = 'OMIE_PRODUTO' AND codigo = %s",
+                   (_omie,))
+_con.close()
+
+st, rn = chamar("POST", "/omie/produtos-novos", token=token)
+novos_omie = (rn or {}).get("novos") or []
+checar("a busca de novos do Omie responde", st == 200, (st, rn))
+checar("e acha produto do catálogo que não está aqui", len(novos_omie) >= 1, rn)
+if novos_omie:
+    escolhido = novos_omie[0]["codigo"]
+    st, ri = chamar("POST", "/omie/produtos-novos/importar", {"codigos": [escolhido]},
+                    token=token)
+    checar("importar o marcado responde", st == 200, (st, ri))
+    checar("e cria só ele", (ri or {}).get("criados") == 1, ri)
+    st, rn2 = chamar("POST", "/omie/produtos-novos", token=token)
+    restantes = [x["codigo"] for x in (rn2 or {}).get("novos") or []]
+    checar("o importado sai da lista", escolhido not in restantes, restantes)
+    checar("e os desmarcados continuam nela", len(restantes) == len(novos_omie) - 1,
+           (len(restantes), len(novos_omie)))
+
+# Devolve: apaga o que esta seção criou e põe código, código do Omie e apelido de volta.
+_con = _cur_banco()
+with _con, _con.cursor() as _c:
+    for _omie, _cod in AFASTADOS.items():
+        _c.execute("DELETE FROM produtos WHERE (codigo_omie = %s OR codigo = %s) "
+                   "AND id <> ALL(%s)", (_omie, _cod, [g["id"] for g in _guardados if "id" in g]))
+    for _g in _guardados:
+        if "apelido" in _g:
+            _linha = _g["apelido"]
+            _c.execute(f"INSERT INTO codigos_externos ({', '.join(_linha)}) "
+                       f"VALUES ({', '.join(['%s'] * len(_linha))}) ON CONFLICT DO NOTHING",
+                       list(_linha.values()))
+        else:
+            _c.execute("UPDATE produtos SET codigo = %s, codigo_omie = %s WHERE id = %s",
+                       (_g["codigo"], _g["codigo_omie"], _g["id"]))
+_con.close()
+
 print("6. carga do catálogo e conferência cruzada")
 st, r = chamar("POST", "/omie/importar-catalogo", token=token)
 checar("importa o catálogo", st == 200, r)

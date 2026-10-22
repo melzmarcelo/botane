@@ -364,10 +364,63 @@ def _gravar_preco(cur, id_produto: int, preco: float, id_usuario: int,
 
     return precos.gravar(cur, id_produto, preco, id_usuario, id_unidade)
 
+def _ja_existe(cur, item: dict) -> int | None:
+    """O produto daqui que já é este item do cardápio — pelas três portas do `importar`.
+
+    O código do PDV (campo ou apelido), o EAN e o `PDV-<codigo>` de quem nasceu daqui e
+    perdeu o vínculo. ⚠️ Nada por nome: é a mesma regra de não adivinhar.
+    """
+    codigo = item["codigo"]
+    id_produto = vinculo.por_codigo(cur, codigo)
+    if not id_produto and item["ean"]:
+        cur.execute("SELECT id FROM produtos WHERE codigo_barras = %s", (item["ean"],))
+        achado = cur.fetchone()
+        id_produto = achado["id"] if achado else None
+    if not id_produto:
+        cur.execute("SELECT id FROM produtos WHERE codigo = %s", (f"PDV-{codigo}"[:40],))
+        achado = cur.fetchone()
+        id_produto = achado["id"] if achado else None
+    return id_produto
+
+
+def novos(cur, cliente: ClientePdv, id_usuario: int, filial: str, id_unidade: int) -> dict:
+    """Os itens do cardápio que ainda não existem aqui — e os preços, já atualizados.
+
+    🔑 **O botão Importar do cadastro de produtos** (pedido do dono, 22/10/2026: *"realiza
+    a busca e mostra os novos produtos, com um checkbox … Na opção PDV, atualizar os preços
+    também, mas isto não precisa aprovação, somente atualizar"*). A lista é só PERGUNTA:
+    nada se cria aqui. O preço é a exceção pedida, e grava já na busca.
+    ⚠️ **O preço segue o dono** (`_preco_e_do_pdv`): com o envio ao PDV ligado o preço é
+    daqui, e trazer o de lá desfaria o que alguém digitou. A resposta diz qual foi o caso.
+    """
+    itens = baixar(cliente)
+    do_pdv = _preco_e_do_pdv(cur, id_unidade)
+    tabela = precos(cliente, filial)
+    lista, atualizados = [], 0
+    for item in itens:
+        codigo = item["codigo"]
+        if not codigo:
+            continue
+        id_produto = _ja_existe(cur, item)
+        preco = tabela.get(str(codigo))
+        if id_produto:
+            if do_pdv and preco and _gravar_preco(cur, id_produto, preco, id_usuario,
+                                                  id_unidade):
+                atualizados += 1
+            continue
+        lista.append({"codigo": str(codigo), "nome": item["nome_longo"] or item["descricao"],
+                      "nome_curto": item["nome_cupom"] or None,
+                      "grupo": item["grupo"] or None, "ativo": item["ativo"],
+                      "preco": preco})
+    lista.sort(key=lambda x: (not x["ativo"], (x["nome"] or "").lower()))
+    return {"itens": len(itens), "novos": lista, "precos": atualizados,
+            "precos_do_pdv": do_pdv, "com_preco": bool(tabela)}
+
+
 def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
              criar_ausentes: bool = True, id_unidade: int = 1,
              alinhar: bool = True, precos_tambem: bool = False,
-             trocar_unidade: bool = True) -> dict:
+             trocar_unidade: bool = True, so_codigos: set[str] | None = None) -> dict:
     """Traz o cardápio e liga o que o CÓDIGO manda ligar.
 
     🔑 **`alinhar` separa as duas coisas que esta função faz** (01/09/2026,
@@ -403,8 +456,14 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
     eles, e um item sem cadastro é uma venda sem vínculo que ninguém consegue
     resolver depois. Inativo fecha os dois lados: o vínculo existe, o histórico
     fecha, e a fila de "falta ficha" mostra só os que ainda se vendem.
+
+    🔑 **`so_codigos` é a escolha do botão Importar** (22/10/2026): só esses itens passam
+    pelo laço, e o resto do cardápio fica como está — quem desmarcou um item não pediu
+    que ele nascesse, nem que os já cadastrados fossem alinhados.
     """
     itens = baixar(cliente)
+    if so_codigos is not None:
+        itens = [i for i in itens if str(i["codigo"]) in so_codigos]
     apoio = _Apoio(cur)
 
     # 🔑 **O preço vem, mesmo com o Botané sendo o dono dele** — decisão do dono,

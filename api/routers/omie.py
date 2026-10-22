@@ -269,6 +269,44 @@ def importar_catalogo(ctx: Contexto = Depends(requer_permissao("integracao.omie"
                    if faltou else "")}
 
 
+class ImportarNovos(BaseModel):
+    """Os produtos que a pessoa deixou marcados na lista de novos (código do Omie)."""
+    codigos: list[str] = Field(min_length=1, max_length=10000)
+
+
+@router.post("/produtos-novos")
+def produtos_novos(ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> dict:
+    """Os produtos do catálogo do Omie que ainda não estão aqui. Só leitura.
+
+    🔑 Botão Importar do cadastro de produtos (22/10/2026, pedido do dono). POST porque
+    varre o catálogo inteiro lá fora, e GET convida a repetir sem querer.
+    """
+    with get_cursor() as cur:
+        cliente = _cliente(cur, unidade_atual(cur, ctx))
+        r = importador.novos_do_catalogo(cur, cliente)
+    faltou = r.get("faltou_varrer") or {}
+    return r | {"message": f"{len(r['novos'])} produto(s) do Omie ainda não cadastrado(s)"
+                + (f". ⚠️ A varredura parou no limite: {faltou['trazidos']} de "
+                   f"{faltou['total_no_omie']}" if faltou else "")}
+
+
+@router.post("/produtos-novos/importar")
+def importar_produtos_novos(
+    body: ImportarNovos,
+    ctx: Contexto = Depends(requer_permissao("integracao.omie")),
+) -> dict:
+    """Cria, em rascunho, só os marcados — pelo mesmo `importar_catalogo`."""
+    with get_cursor() as cur:
+        cliente = _cliente(cur, unidade_atual(cur, ctx))
+        r = importador.importar_catalogo(cur, cliente, ctx.id_usuario,
+                                         so_codigos={c.strip() for c in body.codigos})
+        auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "importar_novos",
+                            depois=r)
+    return r | {"message": f"{r['criados']} produto(s) do Omie criado(s) em rascunho"
+                + (f" — {r['sem_unidade']} sem unidade conhecida, para conferir"
+                   if r.get("sem_unidade") else "")}
+
+
 @router.post("/importar-fornecedores")
 def importar_fornecedores(
     apenas_completar: bool = False,

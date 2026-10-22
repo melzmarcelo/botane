@@ -411,6 +411,90 @@ def sincronizar(
     }
 
 
+def _filial_do_preco(cur, id_unidade: int, cliente: ClientePdv) -> str:
+    """A filial cuja tabela de preço vale: a primeira configurada, ou a única que há.
+
+    ⚠️ Com várias filiais e nenhuma configurada, nenhuma: preço de outra loja é pior
+    que preço nenhum.
+    """
+    cur.execute(
+        "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
+        (id_unidade, SERVICO),
+    )
+    linha = cur.fetchone()
+    cred = segredos.decifrar(linha["credenciais"]) if linha else {}
+    filial = (cred.get("filiais") or "").split(",")[0].strip()
+    if not filial:
+        try:
+            lista = cliente.get("/filial/get") or []
+        except ErroPdv:
+            lista = []
+        codigos = [str(f.get("codigo")) for f in lista if f.get("codigo")]
+        filial = codigos[0] if len(codigos) == 1 else ""
+    return filial
+
+
+class ImportarNovos(BaseModel):
+    """Os itens que a pessoa deixou marcados na lista de novos."""
+    codigos: list[str] = Field(min_length=1, max_length=5000)
+
+
+@router.post("/produtos-novos")
+def produtos_novos(ctx: Contexto = Depends(requer_permissao("integracao.pdv"))) -> dict:
+    """O que o cardápio tem e o cadastro não — e os preços, que já entram.
+
+    🔑 Botão Importar do cadastro de produtos (22/10/2026, pedido do dono). Ver
+    `cardapio.novos`. ⚠️ É POST porque grava: o preço não pede aprovação.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cliente = _cliente(cur, id_unidade)
+        filial = _filial_do_preco(cur, id_unidade, cliente)
+        try:
+            r = cardapio.novos(cur, cliente, ctx.id_usuario, filial, id_unidade)
+        except ErroPdv as e:
+            raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
+        if r["precos"]:
+            auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "precos_do_pdv",
+                                depois={"precos": r["precos"]}, id_unidade=id_unidade)
+    return r | {"message": (
+        f"{len(r['novos'])} produto(s) do PDV ainda não cadastrado(s)"
+        + (f" · {r['precos']} preço(s) atualizado(s)" if r["precos"] else " · nenhum preço mudou")
+        # ⚠️ Os dois zeros que são regra, não defeito — ditos na frase.
+        + ("" if r["precos_do_pdv"] else
+           ". Os preços não vêm porque o envio ao PDV está ligado: o preço é daqui")
+        + ("" if r["com_preco"] or not r["precos_do_pdv"] else
+           ". A tabela de preços não veio: confira a filial em Integrações"))}
+
+
+@router.post("/produtos-novos/importar")
+def importar_produtos_novos(
+    body: ImportarNovos,
+    ctx: Contexto = Depends(requer_permissao("integracao.pdv")),
+) -> dict:
+    """Cria, em rascunho, só os itens marcados — pelo mesmo `importar` do cardápio."""
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cliente = _cliente(cur, id_unidade)
+        filial = _filial_do_preco(cur, id_unidade, cliente)
+        try:
+            # ⚠️ `precos_tambem`: o prato que nasce leva o preço do PDV, que aqui não tinha
+            # nenhum — não há dono a respeitar num preço que não existe.
+            r = cardapio.importar(cur, cliente, ctx.id_usuario, filial, criar_ausentes=True,
+                                  id_unidade=id_unidade, precos_tambem=True,
+                                  so_codigos={c.strip() for c in body.codigos})
+        except ErroPdv as e:
+            raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
+        # O prato novo pode ter venda antiga esperando por ele.
+        depois = cardapio.reconciliar(cur, id_unidade)
+        auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "importar_novos",
+                            depois={**r, **depois}, id_unidade=id_unidade)
+    return {**r, "reconciliados": depois["vinculados"],
+            "message": (f"{r['criados']} produto(s) do PDV criado(s) em rascunho"
+                        + (f", {depois['vinculados']} venda(s) reconciliada(s)"
+                           if depois["vinculados"] else ""))}
+
+
 @router.post("/cardapio")
 def importar_cardapio(
     criar_ausentes: bool = True,
@@ -434,20 +518,7 @@ def importar_cardapio(
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cliente = _cliente(cur, id_unidade)
-        cur.execute(
-            "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
-            (id_unidade, SERVICO),
-        )
-        linha = cur.fetchone()
-        cred = segredos.decifrar(linha["credenciais"]) if linha else {}
-        filial = (cred.get("filiais") or "").split(",")[0].strip()
-        if not filial:
-            try:
-                lista = cliente.get("/filial/get") or []
-            except ErroPdv:
-                lista = []
-            codigos = [str(f.get("codigo")) for f in lista if f.get("codigo")]
-            filial = codigos[0] if len(codigos) == 1 else ""
+        filial = _filial_do_preco(cur, id_unidade, cliente)
         try:
             r = cardapio.importar(cur, cliente, ctx.id_usuario, filial, criar_ausentes,
                                   id_unidade)

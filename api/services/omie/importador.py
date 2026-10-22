@@ -1537,8 +1537,68 @@ def _completar_produto(cur, id_produto: int, p: dict, id_categoria: int | None,
 TETO_DO_CATALOGO = 200   # páginas de 50: 10.000 produtos
 
 
-def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
+def _do_catalogo_ja_existe(cur, codigo_omie) -> int | None:
+    """O produto daqui que já é este do Omie: a coluna e depois os apelidos.
+
+    🔑 **A COLUNA e depois os APELIDOS** — e sem o segundo o duplicado renascia por
+    esta porta. Ao juntar dois cadastros do mesmo abacate, o código do absorvido vira
+    apelido e a coluna dele é zerada: só a coluna não achava mais nada e o catálogo
+    criava um rascunho novo, desfazendo o trabalho de juntar.
+    ⚠️ Sem `AND ativo`, ao contrário da cascata: aqui a pergunta é "este produto do
+    Omie já existe aqui?", e cadastro inativo existe — completá-lo é certo, duplicá-lo não.
+    """
+    cur.execute("SELECT id FROM produtos WHERE codigo_omie = %s", (codigo_omie,))
+    existente = cur.fetchone()
+    if not existente:
+        cur.execute(
+            """SELECT id_produto AS id FROM codigos_externos
+                WHERE sistema = %s AND codigo = %s""",
+            (vinculo.SISTEMA_PRODUTO, str(codigo_omie)),
+        )
+        existente = cur.fetchone()
+    return existente["id"] if existente else None
+
+
+def novos_do_catalogo(cur, cliente: ClienteOmie) -> dict:
+    """Os produtos do catálogo do Omie que ainda não existem aqui. Não grava nada.
+
+    🔑 **O botão Importar do cadastro de produtos** (pedido do dono, 22/10/2026): a busca
+    mostra os novos com uma caixa marcada em cada, e só os que ficarem marcados nascem
+    (`importar_catalogo(..., so_codigos=...)`).
+    """
+    lista: list[dict] = []
+    truncou: dict = {}
+
+    def parou_no_teto(trazidos, total):
+        truncou.update({"trazidos": trazidos, "total_no_omie": total})
+
+    try:
+        for _dados, registros in cliente.paginar(
+            "geral/produtos", "ListarProdutos", "produto_servico_cadastro",
+            # ⚠️ Os mesmos filtros e o mesmo teto do `importar_catalogo`: sem eles a busca
+            # devolveria zero onde há dois mil (ver lá).
+            param={"apenas_importado_api": "N", "filtrar_apenas_omiepdv": "N"},
+            maximo=TETO_DO_CATALOGO, ao_truncar=parou_no_teto,
+        ):
+            for bruto in registros:
+                p = mapeadores.produto_do_catalogo(bruto)
+                if not p["codigo_omie"] or _do_catalogo_ja_existe(cur, p["codigo_omie"]):
+                    continue
+                lista.append({"codigo": str(p["codigo_omie"]), "codigo_omie": p["codigo"],
+                              "nome": p["nome"], "um": p["um"], "familia": p["familia"],
+                              "ncm": p["ncm"]})
+    except ErroOmie as e:
+        raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
+    lista.sort(key=lambda x: (x["nome"] or "").lower())
+    return {"novos": lista, "modo": cliente.modo, "faltou_varrer": truncou or None}
+
+
+def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int,
+                      so_codigos: set[str] | None = None) -> dict:
     """Traz o catálogo do Omie como **rascunho**.
+
+    🔑 **`so_codigos` é a escolha do botão Importar** (22/10/2026): só esses nascem, e o
+    resto do catálogo nem se completa — quem marcou alguns não pediu a varredura inteira.
 
     É o jeito mais barato de nascer com centenas de insumos cadastrados. Rascunho
     não entra no estoque enquanto não tiver unidade e fator — a trava que protege
@@ -1576,6 +1636,9 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
                 p = mapeadores.produto_do_catalogo(bruto)
                 if not p["codigo_omie"]:
                     continue
+                # ⚠️ Antes de tudo: o que não foi escolhido não conta nem cria categoria.
+                if so_codigos is not None and str(p["codigo_omie"]) not in so_codigos:
+                    continue
                 # ⚠️ A unidade do fornecedor pode não existir na casa (um
                 # catálogo real trouxe "M", de metro). Deixar entrar rebentava a
                 # chave estrangeira e derrubava a importação INTEIRA — 2.198
@@ -1594,26 +1657,13 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
                     if not cur.fetchone():
                         sem_unidade += 1
                         p["um"] = None
+                id_existente = _do_catalogo_ja_existe(cur, p["codigo_omie"])
+                existente = {"id": id_existente} if id_existente else None
+                if existente and so_codigos is not None:
+                    # Nasceu entre a busca e o clique: já está aqui, nada a criar.
+                    atualizados += 1
+                    continue
                 id_categoria = _categoria_da_familia(cur, p["familia"], categorias)
-
-                # 🔑 **A COLUNA e depois os APELIDOS** — e sem o segundo o
-                # duplicado renascia por esta porta. Ao juntar dois cadastros do
-                # mesmo abacate, o código do absorvido vira apelido e a coluna
-                # dele é zerada: esta consulta não achava mais nada e o catálogo
-                # criava um rascunho novo, desfazendo o trabalho de juntar. É o
-                # mesmo defeito que a cascata da nota já tinha, pela outra porta.
-                # ⚠️ Sem `AND ativo`, ao contrário da cascata: aqui a pergunta é
-                # "este produto do Omie já existe aqui?", e cadastro inativo
-                # existe — completá-lo é certo, duplicá-lo não.
-                cur.execute("SELECT id FROM produtos WHERE codigo_omie = %s", (p["codigo_omie"],))
-                existente = cur.fetchone()
-                if not existente:
-                    cur.execute(
-                        """SELECT id_produto AS id FROM codigos_externos
-                            WHERE sistema = %s AND codigo = %s""",
-                        (vinculo.SISTEMA_PRODUTO, str(p["codigo_omie"])),
-                    )
-                    existente = cur.fetchone()
                 if existente:
                     # ⚠️ **Produto que já existe passou a RECEBER o que falta.**
                     # Antes esta linha só contava "atualizado" e seguia sem
