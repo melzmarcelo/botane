@@ -3025,12 +3025,50 @@
       <div class="regra">
         <p class="rotulo">A impressora</p>
         <p>
-          O PDF sai no <strong>tamanho do rolo</strong>, uma página por etiqueta (60×40 por
-          padrão; também 40×40, 50×30, 100×50 ou folha A4 com 21 etiquetas). Na impressora
-          térmica, configure o papel no mesmo tamanho e a escala em 100%. O modelo — tamanho,
-          o que aparece, um texto no rodapé — é de cada loja, em Configuração.
+          Em <strong>Etiquetas ▸ Configuração</strong> cada loja escolhe a
+          <strong>impressora</strong> e o <strong>rolo</strong>, além do que aparece na etiqueta e
+          de um texto no rodapé. A etiqueta sai sempre no tamanho do rolo, uma por página.
         </p>
+        <ul>
+          <li><strong>PDF</strong> — abre o arquivo numa aba, para imprimir em qualquer impressora
+            ou salvar: 60×40 por padrão, também 40×40, 50×30, 100×50 ou folha A4 com 21
+            etiquetas.</li>
+          <li><strong>Brother QL</strong> (QL-800, QL-810W, QL-820NWB) — o botão Imprimir manda
+            <strong>direto para a impressora</strong>, sem abrir o PDF. Rolos DK: contínuo de 62,
+            50 ou 38 mm (o comprimento de cada etiqueta se escolhe; 40 mm por padrão) ou as
+            etiquetas já cortadas 62×29, 62×100, 29×90 e 38×90.</li>
+        </ul>
       </div>
+
+      <h3>Imprimir direto, sem a janela de impressão</h3>
+      <p>
+        Um site não consegue imprimir sem perguntar: com a Brother escolhida, o sistema já pula o
+        PDF, mas o Chrome ainda mostra a janela de imprimir. Para ela sumir, uma vez só, no
+        computador da bancada (com a impressora no cabo USB ou na rede — tanto faz, o driver
+        resolve):
+      </p>
+      <ol>
+        <li>Instale o <strong>driver da Brother</strong> (site da Brother, modelo QL-810W) e, em
+          <em>Configurações ▸ Impressoras</em> do Windows, deixe a QL-810W como
+          <strong>impressora padrão</strong>. Desligue “Permitir que o Windows gerencie minha
+          impressora padrão”, senão ele troca sozinho.</li>
+        <li>Nas <em>Preferências de impressão</em> da QL-810W, escolha o <strong>papel do rolo
+          que está nela</strong> — o mesmo da Configuração (no contínuo de 62 mm, um papel de 62
+          × o comprimento escolhido).</li>
+        <li>Crie um atalho do Chrome na área de trabalho e, em <em>Propriedades ▸ Destino</em>,
+          acrescente depois de <code>chrome.exe"</code>:
+          <code>--kiosk-printing https://sistema.botanedeliecafe.com.br</code></li>
+        <li>Feche <strong>todas</strong> as janelas do Chrome e abra o sistema por esse atalho.
+          Pronto: Imprimir sai direto na etiqueta.</li>
+      </ol>
+      <p>
+        ⚠️ Nesse Chrome, <em>tudo</em> o que se mandar imprimir vai para a impressora padrão, sem
+        pergunta — por isso o atalho é só do computador da bancada. A primeira etiqueta de um
+        rolo novo vale conferir: as cortadas de 29×90 e 38×90 saem deitadas e o driver gira.
+        No celular, a impressão direta depende do app do Botane, que ainda não existe; no
+        Android dá para imprimir na QL-810W pela rede com o <em>Brother Print Service Plugin</em>,
+        escolhendo a PDF.
+      </p>
 
       <h3>O QR do pote</h3>
       <p>
@@ -4110,6 +4148,7 @@
             <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
             <tr><td class="mono">22/10</td><td>Estoque ganhou o <strong>Painel</strong>: negativos, abaixo do mínimo (com em quantos dias acaba e quanto custa repor), parados, validade e perdas do mês — cada cartão leva à lista de Saldos já filtrada; o andamento de cada produto em gráfico; e as perdas por motivo, setor, categoria, prateleira e produto, ao lado da falta da contagem. Saldos ganhou o filtro <strong>Situação</strong></td><td><a href="#ajustes">6</a>, <a href="#alertas">10</a></td></tr>
+            <tr><td class="mono">22/10</td><td>Etiquetas: a Configuração escolhe a <strong>impressora</strong> (PDF ou <strong>Brother QL</strong>) e o <strong>rolo</strong>; com a Brother, Imprimir manda <strong>direto para a impressora</strong>, sem abrir o PDF — e, com o atalho do Chrome, sem nem a janela de imprimir</td><td><a href="#etiquetas">15</a></td></tr>
             <tr><td class="mono">22/10</td><td>Produtos ganhou o botão <strong>Importar</strong>: escolha PDV ou Omie, veja os produtos que ainda não estão no cadastro (todos marcados) e desmarque o que não quer trazer. No PDV, a busca já atualiza os preços de venda</td><td><a href="#produto">2</a></td></tr>
             <tr><td class="mono">22/10</td><td>Na venda <strong>à mão</strong>, o produto aparece e fica gravado pelo <strong>nome curto</strong>, o mesmo do PDV (o nome do cadastro vai na linha de baixo da busca), e a busca acha por ele</td><td><a href="#venda">8</a></td></tr>
             <tr><td class="mono">21/10</td><td>Integrações ▸ PDV Legal ganhou <strong>Trazer as categorias do PDV</strong>: desmarcada, nem a busca de vendas nem o Importar cardápio criam categoria ou mudam a do produto — ela passa a ser só daqui</td><td><a href="#nota">3</a></td></tr>
@@ -4131,7 +4170,7 @@
 
 <footer>
   <p style="margin:0">
-    Manual de referência do sistema, atualizado na versão 1.1.122 (22/10/2026). A
+    Manual de referência do sistema, atualizado na versão 1.1.123 (22/10/2026). A
     versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
     cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>

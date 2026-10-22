@@ -81,6 +81,34 @@
   conta em `impressoes` (etiqueta reimpressa demais é pote duplicado).
   O QR aponta para `WEB_URL/etiquetas/e/<código>`, que exige login.
 
+- 🔑 **Impressora e rolo por loja; a Brother imprime direto** (22/10/2026, 1.1.123, migração
+  128). Pedido do dono: *"na impressão das etiquetas, gostaria que fosse impressa diretamente
+  na impressora de etiquetas do cliente"* (Brother QL-810W, no cabo; rede e celular depois) e
+  *"podemos colocar qual impressora vamos utilizar com seleção, hoje podemos ter a PDF e esta
+  nova de etiquetas. Aí podemos ter a seleção do tipo de rolo também, isto facilita para
+  futuras impressoras"*.
+  - O **catálogo** (`IMPRESSORAS` em `services/etiquetas.py`: impressora → `direta` + rolos com
+    largura/altura da PÁGINA) é a fonte; `GET /etiquetas/impressoras` o entrega à tela, que
+    monta os seletores dele. Impressora nova = entrada no catálogo + o CHECK da 128.
+  - `etiqueta_config` ganhou `impressora` ('PDF' padrão), `rolo` e `comprimento_mm` (só no
+    contínuo; 40 por padrão). ⚠️ **`tamanho` continua sendo o da PDF** — loja que já tinha
+    modelo segue igual. Voltar para a PDF apaga rolo e comprimento.
+  - 🔑 **Quem decide "direta ou PDF" é o servidor**, no cabeçalho `X-Impressao` do
+    `/etiquetas/pdf` (exposto no CORS), pela loja DA etiqueta. A tela guarda o último modo
+    no navegador só como palpite, para não abrir aba à toa — ⚠️ a aba do PDF tem de abrir
+    ANTES do `await` (`api.imprimir`), e fecha se o servidor disser direta.
+  - 🔑 **"Direta" = PDF num iframe fora da tela + `print()`.** Um site NÃO imprime sem a
+    janela de impressão; ela some com o Chrome aberto em `--kiosk-printing` e a impressora
+    como padrão do Windows (passo a passo no manual, seção 15). ⚠️ Com `display:none` o Chrome
+    não carrega o PDF no iframe — por isso fora da tela, com tamanho.
+  - ⚠️ A escala `k` do desenho passou a ser `min(h/40, max(w/60, 1))`: a etiqueta EM PÉ
+    (62×100) não ganha letra de 21 pt; nas deitadas de sempre nada muda.
+  - ⏳ **Falta o teste com a impressora real** (headless não imprime): os DK de 29×90 e 38×90
+    saem deitados e dependem do driver girar. Celular direto só com o app (fase 8, Brother
+    Print SDK); no Android, sem app, o *Brother Print Service Plugin* imprime pela PDF.
+  - Cobertura: `smoke_etiquetas` 5b (catálogo, página 62×50 e 62×29 pelo MediaBox, cabeçalho,
+    recusas) e o bloco de etiquetas do `verificar.mjs`.
+
 - 🔑 **A baixa vale na loja DA ETIQUETA**, não na do seletor: quem lê o QR no celular pode estar
   com outra loja escolhida. Quem não enxerga aquela loja recebe 404.
 

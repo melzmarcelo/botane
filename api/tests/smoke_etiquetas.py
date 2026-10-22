@@ -223,6 +223,56 @@ st, r = chamar("PUT", "/etiquetas/configuracao", {"tamanho": "A4", "texto_extra"
 checar("o modelo muda para folha A4", st == 200 and r.get("tamanho") == "A4", (st, r))
 st, tipo, corpo = baixar(f"/etiquetas/pdf?ids={ids}&reimpressao=true", cozinha)
 checar("e o PDF A4 sai numa página só", st == 200 and paginas(corpo) == 1, (st, paginas(corpo)))
+
+print("\n5b. a impressora de etiquetas (Brother QL) e o rolo")
+
+
+def com_cabecalho(caminho, tk):
+    req = urllib.request.Request(BASE + caminho)
+    req.add_header("Authorization", f"Bearer {tk}")
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.headers.get("X-Impressao"), r.read()
+
+
+def pagina_mm(pdf: bytes):
+    m = re.search(rb"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]", pdf)
+    return (round(float(m[1]) / 72 * 25.4), round(float(m[2]) / 72 * 25.4)) if m else None
+
+
+modo, corpo = com_cabecalho(f"/etiquetas/pdf?ids={etqs[0]['id']}", cozinha)
+checar("na impressora PDF o servidor diz 'pdf'", modo == "pdf", modo)
+st, cat = chamar("GET", "/etiquetas/impressoras", token=cozinha)
+brother = next((i for i in (cat or []) if i["codigo"] == "BROTHER_QL"), {})
+checar("o catálogo traz a PDF e a Brother, com os rolos DK",
+       st == 200 and any(i["codigo"] == "PDF" for i in cat) and brother.get("direta")
+       and any(r["codigo"] == "DK-22205" and r["continuo"] for r in brother.get("rolos", [])),
+       (st, cat))
+st, r = chamar("PUT", "/etiquetas/configuracao",
+               {"impressora": "BROTHER_QL", "rolo": "DK-22205", "comprimento_mm": 50}, token=token)
+checar("a loja escolhe a Brother com o contínuo de 62 mm",
+       st == 200 and r.get("impressora") == "BROTHER_QL" and r.get("rolo") == "DK-22205"
+       and r.get("comprimento_mm") == 50 and r.get("direta") is True, (st, r))
+modo, corpo = com_cabecalho(f"/etiquetas/pdf?ids={etqs[0]['id']},{etqs[1]['id']}", cozinha)
+checar("e o servidor manda imprimir direto", modo == "direta", modo)
+checar("cada página tem 62 × 50 mm (o rolo e o comprimento escolhido)",
+       pagina_mm(corpo) == (62, 50) and paginas(corpo) == 2, (pagina_mm(corpo), paginas(corpo)))
+st, r = chamar("PUT", "/etiquetas/configuracao",
+               {"impressora": "BROTHER_QL", "rolo": "DK-11209", "comprimento_mm": 80}, token=token)
+checar("na etiqueta já cortada o comprimento não vale",
+       st == 200 and r.get("rolo") == "DK-11209" and r.get("comprimento_mm") is None, (st, r))
+modo, corpo = com_cabecalho(f"/etiquetas/pdf?ids={etqs[0]['id']}", cozinha)
+checar("e a página é a da etiqueta: 62 × 29 mm", pagina_mm(corpo) == (62, 29), pagina_mm(corpo))
+st, r = chamar("PUT", "/etiquetas/configuracao",
+               {"impressora": "BROTHER_QL", "rolo": "60x40"}, token=token)
+checar("rolo que a impressora não aceita é recusado (400)", st == 400, (st, r))
+st, r = chamar("PUT", "/etiquetas/configuracao", {"impressora": "ZEBRA", "rolo": "X"}, token=token)
+checar("impressora fora do catálogo também (422)", st == 422, st)
+st, r = chamar("PUT", "/etiquetas/configuracao",
+               {"impressora": "PDF", "tamanho": "50x30", "rolo": "DK-22205"}, token=token)
+checar("de volta à PDF, o rolo se apaga e vale o tamanho",
+       st == 200 and r.get("impressora") == "PDF" and r.get("rolo") is None
+       and r.get("tamanho") == "50x30" and r.get("direta") is False, (st, r))
+
 chamar("PUT", "/etiquetas/configuracao", {"tamanho": "60x40"}, token=token)
 st, r = chamar("PUT", "/etiquetas/configuracao", {"tamanho": "60x40"}, token=cozinha)
 checar("a cozinha não mexe no modelo (403)", st == 403, st)

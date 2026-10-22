@@ -95,7 +95,7 @@ from seguranca import PREFIXO_TOKEN_API, hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.1.122"
+VERSAO = "1.1.123"
 
 
 def conferir_segredo() -> None:
@@ -313,7 +313,8 @@ app.add_middleware(
     # Sem isto o navegador não deixa o front ler o nome do arquivo exportado:
     # em requisição de outra origem, só os cabeçalhos expostos são visíveis.
     # X-Total sustenta a paginação: sem expor, o navegador não o entrega à tela.
-    expose_headers=["Content-Disposition", "X-Total"],
+    # X-Impressao diz se a etiqueta vai direto para a impressora ou abre o PDF.
+    expose_headers=["Content-Disposition", "X-Total", "X-Impressao"],
 )
 
 

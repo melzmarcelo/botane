@@ -2905,6 +2905,53 @@ try {
   checar("e avisa que a validade fica no cadastro, com o atalho para o produto",
     configDeEtiquetas.avisa && configDeEtiquetas.atalho, configDeEtiquetas);
 
+  // 🔑 **Impressora e rolo** (22/10/2026, pedido do dono: *"podemos colocar qual
+  // impressora vamos utilizar com seleção … e a seleção do tipo de rolo também"*). Na
+  // tela, sem salvar: escolher a Brother troca a lista de rolos e mostra o comprimento
+  // do contínuo e o aviso de impressão direta.
+  await p.waitForSelector("#etiqueta-impressora", { timeout: 15000 }).catch(() => {});
+  await p.select("#etiqueta-impressora", "BROTHER_QL").catch(() => {});
+  await p.waitForSelector("#etiqueta-direta", { timeout: 5000 }).catch(() => {});
+  const telaBrother = await p.evaluate(() => ({
+    rolos: [...document.querySelectorAll("#etiqueta-rolo option")].map((o) => o.value),
+    comprimento: !!document.querySelector("#etiqueta-comprimento"),
+    aviso: !!document.querySelector("#etiqueta-direta"),
+  }));
+  checar("escolher a Brother traz os rolos DK, o comprimento do contínuo e o aviso de imprimir direto",
+    telaBrother.rolos.includes("DK-22205") && !telaBrother.rolos.includes("60x40")
+      && telaBrother.comprimento && telaBrother.aviso, telaBrother);
+  await p.select("#etiqueta-rolo", "DK-11209").catch(() => {});
+  checar("e na etiqueta já cortada o comprimento some",
+    !(await p.$("#etiqueta-comprimento")), "");
+
+  // E o Imprimir de verdade: com a Brother salva, o Reimprimir do QR não abre aba —
+  // o PDF vai para um quadro invisível e é mandado à impressora.
+  const { dados: cfgAntes } = await api("GET", "/etiquetas/configuracao", null, token);
+  await api("PUT", "/etiquetas/configuracao",
+    { ...cfgAntes, impressora: "BROTHER_QL", rolo: "DK-22205", comprimento_mm: 40 }, token);
+  const { dados: emitidaDireta } = await api("POST", "/etiquetas", {
+    evento: "PRODUCAO", id_produto: prodVal.id, quantidade: 1,
+  }, token);
+  const poteDireto = emitidaDireta?.etiquetas?.[0] ?? {};
+  await irPara(p, `${WEB}/etiquetas/e/${poteDireto.codigo}`);
+  await p.waitForFunction(
+    () => [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Reimprimir"),
+    { timeout: 15000 }).catch(() => {});
+  const abasAntes = (await navegador.pages()).length;
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Reimprimir")?.click();
+  });
+  await p.waitForSelector('iframe[data-impressao="direta"]', { timeout: 15000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 800));
+  const impressaoDireta = {
+    quadro: !!(await p.$('iframe[data-impressao="direta"]')),
+    abas: (await navegador.pages()).length - abasAntes,
+  };
+  checar("com a Brother, Reimprimir manda direto: quadro invisível e nenhuma aba nova",
+    impressaoDireta.quadro && impressaoDireta.abas === 0, impressaoDireta);
+  await api("PUT", "/etiquetas/configuracao", cfgAntes, token);
+  await p.evaluate(() => { try { localStorage.removeItem("botane.etiquetas.impressao"); } catch {} });
+
   // 🔑 **"Usei uma parte"** (06/10/2026, pedido do dono: *"temos somente como
   // descartar ou baixar tudo, tem como consumir partes?"*). Um pote de 2 kg: pela
   // tela do QR sai 0,5 dizendo quanto SAIU; pelo painel, dizendo quanto SOBROU. A

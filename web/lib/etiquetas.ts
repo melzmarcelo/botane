@@ -125,7 +125,23 @@ export type ConfigEtiqueta = {
   mostrar_quantidade: boolean;
   mostrar_qr: boolean;
   texto_extra: string | null;
+  /** A impressora (migração 128). ⚠️ `tamanho` é o da PDF; nas outras vale o `rolo`. */
+  impressora: "PDF" | "BROTHER_QL";
+  rolo: string | null;
+  /** Só no rolo contínuo: o comprimento de cada etiqueta, em mm. */
+  comprimento_mm: number | null;
+  /** Calculado no servidor: a impressora imprime sem abrir o PDF. */
+  direta?: boolean;
 };
+
+export type RoloDeEtiqueta = {
+  codigo: string; nome: string; largura: number; altura: number | null; continuo: boolean;
+};
+export type ImpressoraDeEtiqueta = {
+  codigo: ConfigEtiqueta["impressora"]; nome: string; direta: boolean; rolos: RoloDeEtiqueta[];
+};
+
+export const impressoras = () => api.get<ImpressoraDeEtiqueta[]>("/etiquetas/impressoras");
 
 export type PainelEtiquetas = {
   ativas: number;
@@ -155,8 +171,31 @@ export const daProducao = (id: number) => api.get<DaProducao>(`/etiquetas/produc
 export const emitir = (corpo: Emissao) =>
   api.post<{ etiquetas: Etiqueta[]; ids: number[]; message: string }>("/etiquetas", corpo);
 
-export const imprimir = (ids: number[], reimpressao = false) =>
-  api.abrir(`/etiquetas/pdf?ids=${ids.join(",")}${reimpressao ? "&reimpressao=true" : ""}`);
+/**
+ * O último modo que o servidor disse (`X-Impressao`), lembrado NESTE navegador só para
+ * não abrir uma aba à toa — quem decide de novo a cada impressão é o servidor.
+ */
+const CHAVE_MODO = "botane.etiquetas.impressao";
+function palpiteDireta(): boolean {
+  try {
+    return localStorage.getItem(CHAVE_MODO) === "direta";
+  } catch {
+    return false;
+  }
+}
+export function lembrarModo(direta: boolean) {
+  try {
+    localStorage.setItem(CHAVE_MODO, direta ? "direta" : "pdf");
+  } catch {
+    // sem armazenamento: o palpite fica "pdf", e o servidor corrige
+  }
+}
+
+export async function imprimir(ids: number[], reimpressao = false): Promise<void> {
+  const modo = await api.imprimir(
+    `/etiquetas/pdf?ids=${ids.join(",")}${reimpressao ? "&reimpressao=true" : ""}`, palpiteDireta());
+  lembrarModo(modo === "direta");
+}
 
 export const painel = () => api.get<PainelEtiquetas>("/etiquetas/painel");
 

@@ -50,6 +50,12 @@ def obter_config(ctx: Contexto = Depends(_VER_VALIDADE)) -> dict:
         return servico.config(cur, unidade_atual(cur, ctx))
 
 
+@router.get("/impressoras")
+def impressoras(ctx: Contexto = Depends(_VER_VALIDADE)) -> list[dict]:
+    """As impressoras que o sistema sabe usar e os rolos de cada uma."""
+    return servico.impressoras()
+
+
 @router.put("/configuracao")
 def salvar_config(body: EtiquetaConfig, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
     with get_cursor() as cur:
@@ -138,8 +144,13 @@ def imprimir(ids: str = Query(min_length=1), reimpressao: bool = False,
     with get_cursor() as cur:
         id_unidade = _loja_da_etiqueta(cur, ctx, lista[0]) if lista else unidade_atual(cur, ctx)
         conteudo = servico.pdf(cur, lista, id_unidade, reimpressao=reimpressao)
+        direta = servico.config(cur, id_unidade)["direta"]
+    # 🔑 `X-Impressao` diz à tela o que fazer com o PDF: `direta` manda para a impressora
+    # sem abrir aba; `pdf` abre o arquivo. Vem daqui, e não só da configuração que a tela
+    # guardou, porque é a loja DA ETIQUETA que decide (o QR pode ser lido em outra).
     return Response(conteudo, media_type="application/pdf",
-                    headers={"Content-Disposition": 'inline; filename="etiquetas.pdf"'})
+                    headers={"Content-Disposition": 'inline; filename="etiquetas.pdf"',
+                             "X-Impressao": "direta" if direta else "pdf"})
 
 
 # ---------------------------------------------------------------- consulta

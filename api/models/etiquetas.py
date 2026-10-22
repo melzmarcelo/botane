@@ -40,6 +40,12 @@ class EtiquetaConfig(BaseModel):
     mostrar_quantidade: bool = True
     mostrar_qr: bool = True
     texto_extra: str | None = Field(default=None, max_length=80)
+    # A impressora e o rolo (migração 128). ⚠️ `tamanho` é o da impressora PDF; nas
+    # outras quem manda é o `rolo`, validado contra `services.etiquetas.IMPRESSORAS`.
+    impressora: Literal["PDF", "BROTHER_QL"] = "PDF"
+    rolo: str | None = Field(default=None, max_length=20)
+    # Só no rolo contínuo: o comprimento de cada etiqueta.
+    comprimento_mm: int | None = Field(default=None, ge=20, le=200)
 
 
 class EmitirEtiquetas(BaseModel):

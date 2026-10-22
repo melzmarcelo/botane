@@ -396,6 +396,68 @@ export const api = {
   },
 
   /**
+   * Imprime um PDF da API: direto na impressora ou abrindo o arquivo numa aba.
+   *
+   * 🔑 **Quem decide é o servidor**, no cabeçalho `X-Impressao` (`direta` | `pdf`). O
+   * palpite `direta` só serve para não abrir a aba à toa: ⚠️ a aba tem de abrir ANTES do
+   * `await` (senão vira popup bloqueado), então ela abre quando o palpite é `pdf` e fecha
+   * se o servidor disser `direta`.
+   * 🔑 **"Direta" é um quadro invisível com o PDF e `print()` nele.** Sozinho, isso ainda
+   * mostra a janela de impressão; ela some com o Chrome aberto em `--kiosk-printing` e a
+   * impressora de etiquetas como padrão do Windows (o manual tem o passo a passo) — um
+   * site não consegue imprimir sem pergunta por conta própria.
+   */
+  async imprimir(caminho: string, palpiteDireta: boolean): Promise<"direta" | "pdf"> {
+    const aba = !palpiteDireta && typeof window !== "undefined" ? window.open("", "_blank") : null;
+    const pegar = async () =>
+      fetch(BASE + caminho, {
+        headers: { Authorization: `Bearer ${lerSessao(CHAVE_ACCESS)}` },
+      });
+    let r = await pegar();
+    if (r.status === 401 && (await renovar())) r = await pegar();
+    if (!r.ok) {
+      aba?.close();
+      const texto = await r.text();
+      let dados: unknown = null;
+      try {
+        dados = texto ? JSON.parse(texto) : null;
+      } catch {
+        dados = null;
+      }
+      throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
+    }
+    const modo = r.headers.get("X-Impressao") === "direta" ? "direta" : "pdf";
+    const url = URL.createObjectURL(await r.blob());
+    if (modo === "pdf" && aba) {
+      aba.location.href = url;
+    } else {
+      // Direta — ou PDF sem aba (o palpite era direta): imprime pelo quadro do mesmo jeito.
+      aba?.close();
+      const quadro = document.createElement("iframe");
+      quadro.setAttribute("aria-hidden", "true");
+      quadro.dataset.impressao = modo;
+      // ⚠️ Fora da tela, mas com tamanho: com `display: none` o Chrome não carrega o PDF.
+      quadro.style.cssText = "position:fixed;left:-10000px;top:0;width:10px;height:10px;border:0;";
+      quadro.onload = () => {
+        setTimeout(() => {
+          try {
+            quadro.contentWindow?.focus();
+            quadro.contentWindow?.print();
+          } catch {
+            // Sem acesso ao quadro: abre o PDF para a pessoa imprimir à mão.
+            window.open(url, "_blank");
+          }
+        }, 300);
+      };
+      quadro.src = url;
+      document.body.appendChild(quadro);
+      setTimeout(() => quadro.remove(), 120000);
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+    return modo;
+  },
+
+  /**
    * @param manterConectado guarda a sessão no navegador (localStorage) em vez
    * de encerrá-la ao fechar. O servidor também precisa saber: é ele que decide
    * a validade do refresh, e o front esquecer não é segurança nenhuma.

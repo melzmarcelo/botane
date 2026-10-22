@@ -36,7 +36,81 @@ TAMANHOS = {  # largura x altura, em mm
 }
 
 _CONFIG_PADRAO = {"tamanho": "60x40", "mostrar_alergenos": True, "mostrar_lote": True,
-                  "mostrar_quantidade": True, "mostrar_qr": True, "texto_extra": None}
+                  "mostrar_quantidade": True, "mostrar_qr": True, "texto_extra": None,
+                  "impressora": "PDF", "rolo": None, "comprimento_mm": None}
+
+# 🔑 **As impressoras e os rolos que cada uma aceita** (22/10/2026, pedido do dono: *"na
+# configuração das etiquetas podemos colocar qual impressora vamos utilizar com seleção,
+# hoje podemos ter a PDF e esta nova de etiquetas. Aí podemos ter a seleção do tipo de
+# rolo também, isto facilita para futuras impressoras"*). Impressora nova = uma entrada
+# aqui (e no CHECK da migração 128); a tela monta os seletores a partir desta lista.
+# * `direta`: a tela manda imprimir sem abrir o PDF numa aba. Sem a janela de impressão só
+#   com o Chrome aberto em `--kiosk-printing` e a impressora como padrão do Windows — um
+#   site não imprime sozinho; o passo a passo está no manual.
+# * `largura`/`altura` são a PÁGINA do PDF, em mm, como a etiqueta é lida (deitada).
+#   No rolo contínuo a altura é o `comprimento_mm` que a loja escolhe.
+# ⚠️ Os DK de 29 e 38 mm de largura com 90 de comprimento saem DEITADOS (90 × 29): o
+# driver da Brother gira a página — conferir na primeira impressão de cada rolo novo.
+IMPRESSORAS = {
+    "PDF": {
+        "nome": "PDF (abre o arquivo para imprimir ou salvar)",
+        "direta": False,
+        "rolos": [
+            {"codigo": "60x40", "nome": "60 × 40 mm", "largura": 60, "altura": 40, "continuo": False},
+            {"codigo": "50x30", "nome": "50 × 30 mm", "largura": 50, "altura": 30, "continuo": False},
+            {"codigo": "40x40", "nome": "40 × 40 mm", "largura": 40, "altura": 40, "continuo": False},
+            {"codigo": "100x50", "nome": "100 × 50 mm", "largura": 100, "altura": 50, "continuo": False},
+            {"codigo": "A4", "nome": "Folha A4 (21 por folha, 60 × 40)", "largura": 210, "altura": 297,
+             "continuo": False},
+        ],
+    },
+    "BROTHER_QL": {
+        "nome": "Brother QL (QL-800, QL-810W, QL-820NWB)",
+        "direta": True,
+        "rolos": [
+            {"codigo": "DK-22205", "nome": "DK-22205 · contínuo 62 mm", "largura": 62,
+             "altura": None, "continuo": True},
+            {"codigo": "DK-22251", "nome": "DK-22251 · contínuo 62 mm preto e vermelho",
+             "largura": 62, "altura": None, "continuo": True},
+            {"codigo": "DK-22223", "nome": "DK-22223 · contínuo 50 mm", "largura": 50,
+             "altura": None, "continuo": True},
+            {"codigo": "DK-22225", "nome": "DK-22225 · contínuo 38 mm", "largura": 38,
+             "altura": None, "continuo": True},
+            {"codigo": "DK-11209", "nome": "DK-11209 · etiqueta 62 × 29 mm", "largura": 62,
+             "altura": 29, "continuo": False},
+            {"codigo": "DK-11202", "nome": "DK-11202 · etiqueta 62 × 100 mm", "largura": 62,
+             "altura": 100, "continuo": False},
+            {"codigo": "DK-11201", "nome": "DK-11201 · etiqueta 29 × 90 mm", "largura": 90,
+             "altura": 29, "continuo": False},
+            {"codigo": "DK-11208", "nome": "DK-11208 · etiqueta 38 × 90 mm", "largura": 90,
+             "altura": 38, "continuo": False},
+        ],
+    },
+}
+COMPRIMENTO_PADRAO = 40  # mm, no rolo contínuo: o mais perto do 60 × 40 de sempre
+
+
+def rolo_do(impressora: str, codigo: str | None) -> dict | None:
+    return next((r for r in IMPRESSORAS[impressora]["rolos"] if r["codigo"] == codigo), None)
+
+
+def impressoras() -> list[dict]:
+    """O catálogo para a tela: cada impressora com os rolos que aceita."""
+    return [{"codigo": k} | v for k, v in IMPRESSORAS.items()]
+
+
+def pagina_mm(cfg: dict) -> tuple[float, float] | None:
+    """O tamanho de cada página do PDF, em mm — None é a folha A4 com 21."""
+    if cfg.get("impressora", "PDF") == "PDF":
+        if cfg["tamanho"] == "A4":
+            return None
+        return TAMANHOS[cfg["tamanho"]]
+    rolo = rolo_do(cfg["impressora"], cfg.get("rolo"))
+    if rolo is None:  # catálogo mudou e a loja ficou com um rolo que não existe mais
+        rolo = IMPRESSORAS[cfg["impressora"]]["rolos"][0]
+    if rolo["continuo"]:
+        return rolo["largura"], cfg.get("comprimento_mm") or COMPRIMENTO_PADRAO
+    return rolo["largura"], rolo["altura"]
 
 
 # ---------------------------------------------------------------- configuração
@@ -44,22 +118,44 @@ _CONFIG_PADRAO = {"tamanho": "60x40", "mostrar_alergenos": True, "mostrar_lote":
 def config(cur, id_unidade: int) -> dict:
     cur.execute(
         """SELECT tamanho, mostrar_alergenos, mostrar_lote, mostrar_quantidade, mostrar_qr,
-                  texto_extra FROM etiqueta_config WHERE id_unidade = %s""", (id_unidade,))
+                  texto_extra, impressora, rolo, comprimento_mm
+             FROM etiqueta_config WHERE id_unidade = %s""", (id_unidade,))
     linha = cur.fetchone()
-    return dict(linha) if linha else dict(_CONFIG_PADRAO)
+    cfg = dict(linha) if linha else dict(_CONFIG_PADRAO)
+    cfg["direta"] = IMPRESSORAS[cfg["impressora"]]["direta"]
+    return cfg
 
 
 def salvar_config(cur, id_unidade: int, dados: dict) -> dict:
+    dados = dict(dados)
+    impressora = dados.get("impressora") or "PDF"
+    if impressora not in IMPRESSORAS:
+        raise HTTPException(status_code=400, detail="Impressora desconhecida")
+    if impressora == "PDF":
+        # A impressora PDF usa o `tamanho` de sempre; rolo e comprimento não valem nela.
+        dados["rolo"] = dados["comprimento_mm"] = None
+    else:
+        rolo = rolo_do(impressora, dados.get("rolo"))
+        if rolo is None:
+            raise HTTPException(status_code=400,
+                                detail="Escolha um dos rolos que esta impressora aceita")
+        dados["comprimento_mm"] = ((dados.get("comprimento_mm") or COMPRIMENTO_PADRAO)
+                                   if rolo["continuo"] else None)
+    dados["impressora"] = impressora
     cur.execute(
         """INSERT INTO etiqueta_config (id_unidade, tamanho, mostrar_alergenos, mostrar_lote,
-                                        mostrar_quantidade, mostrar_qr, texto_extra)
+                                        mostrar_quantidade, mostrar_qr, texto_extra,
+                                        impressora, rolo, comprimento_mm)
            VALUES (%(u)s, %(tamanho)s, %(mostrar_alergenos)s, %(mostrar_lote)s,
-                   %(mostrar_quantidade)s, %(mostrar_qr)s, %(texto_extra)s)
+                   %(mostrar_quantidade)s, %(mostrar_qr)s, %(texto_extra)s,
+                   %(impressora)s, %(rolo)s, %(comprimento_mm)s)
            ON CONFLICT (id_unidade) DO UPDATE SET
                tamanho = EXCLUDED.tamanho, mostrar_alergenos = EXCLUDED.mostrar_alergenos,
                mostrar_lote = EXCLUDED.mostrar_lote,
                mostrar_quantidade = EXCLUDED.mostrar_quantidade,
                mostrar_qr = EXCLUDED.mostrar_qr, texto_extra = EXCLUDED.texto_extra,
+               impressora = EXCLUDED.impressora, rolo = EXCLUDED.rolo,
+               comprimento_mm = EXCLUDED.comprimento_mm,
                atualizado_em = now()""",
         dados | {"u": id_unidade, "texto_extra": (dados.get("texto_extra") or "").strip() or None},
     )
@@ -634,7 +730,10 @@ def _desenhar(c, x: float, y: float, w: float, h: float, e: dict, cfg: dict) -> 
 
     from services.fidelidade_qr import _quebrar
 
-    k = h / (40 * mm)  # 1.0 na etiqueta de 40 mm de altura
+    # 1.0 na etiqueta de 40 mm de altura. ⚠️ Na etiqueta em PÉ (62 × 100 da Brother) a
+    # altura sozinha daria letra de 21 pt numa largura de 62 mm: a largura também limita
+    # (sem mudar as deitadas de sempre, onde ela nunca é o limite abaixo de 1).
+    k = min(h / (40 * mm), max(w / (60 * mm), 1))
     m = 2 * mm
     qr_lado = 0
     if cfg["mostrar_qr"]:
@@ -700,7 +799,8 @@ def pdf(cur, ids: list[int], id_unidade: int, reimpressao: bool = False) -> byte
         e["alergenos"] = _alergenos(cur, e["id_produto"])
         etiquetas.append(e)
     buf = BytesIO()
-    if cfg["tamanho"] == "A4":
+    pagina = pagina_mm(cfg)
+    if pagina is None:
         w, h = 60 * mm, 40 * mm
         c = canvas.Canvas(buf, pagesize=A4)
         colunas, linhas = 3, 7
@@ -718,8 +818,7 @@ def pdf(cur, ids: list[int], id_unidade: int, reimpressao: bool = False) -> byte
             c.setDash()
             _desenhar(c, ex, ey, w, h, e, cfg)
     else:
-        lw, lh = TAMANHOS[cfg["tamanho"]]
-        w, h = lw * mm, lh * mm
+        w, h = pagina[0] * mm, pagina[1] * mm
         c = canvas.Canvas(buf, pagesize=(w, h))
         for n, e in enumerate(etiquetas):
             if n:
