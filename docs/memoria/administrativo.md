@@ -819,3 +819,6 @@ uma prateleira — e o conector só sabia LER as duas coisas.
   - ⚠️ `produtos_duplicados acha o par` passou a conferir na ROTA quando a resposta da ferramenta
     vem `[CORTADO:` — a base local acumulou 160+ "AZEITE EXTRA VIRGEM 500ML" e o par da rodada
     ficava depois do corte de 60 mil caracteres.
+- Integrações ▸ Omie ganhou **"Somente recebidas"** e **"Lançar notas recebidas"** (migração 130,
+  23/10/2026). A regra mora em Compras — ver `compras.md`. ⚠️ No `PUT /omie/config` os dois campos são
+  opcionais: ausentes MANTÊM o que está (como o `trazer_categorias` do PDV).

@@ -137,7 +137,12 @@ async def laco(parar: asyncio.Event) -> None:
                 if f.get("erro"):
                     print(f"[botane] agenda Omie (loja {f['id_unidade']}): {f['erro']}")
                 else:
+                    auto = f.get("lancamento_automatico") or {}
                     print(f"[botane] agenda Omie (loja {f['id_unidade']}): "
-                          f"{f.get('novas', 0)} nota(s) nova(s)")
+                          f"{f.get('novas', 0)} nota(s) nova(s)"
+                          + (f", {auto['lancadas']} recebida(s) lançada(s)"
+                             if auto.get("lancadas") else "")
+                          + (f" — lançamento automático: {auto['erro']}"
+                             if auto.get("erro") else ""))
         except Exception as e:  # noqa: BLE001
             await asyncio.to_thread(erros.registrar, "agenda_omie", e)

@@ -185,8 +185,12 @@ def previa(cur, id_unidade: int, id_usuario: int, id_local: int | None = None,
 
 
 def lancar(cur, id_unidade: int, id_usuario: int, ids: list[int] | None = None,
-           id_local: int | None = None, pode_retroativo: bool = False) -> dict:
+           id_local: int | None = None, pode_retroativo: bool = False,
+           marca: dict | None = None) -> dict:
     """Lança as notas PRONTAS desta loja — todas, ou só as de `ids`.
+
+    `marca` vai junto na auditoria de cada nota — o "lançar notas recebidas" do Omie
+    passa `{"automatico": True}`, para ninguém procurar quem clicou.
 
     ⚠️ **Reclassifica AQUI em vez de confiar na lista da tela.** Entre ver a
     prévia e clicar, alguém pode ter lançado uma daquelas notas, fundido um
@@ -212,7 +216,7 @@ def lancar(cur, id_unidade: int, id_usuario: int, ids: list[int] | None = None,
             continue
         # A mesma linha de auditoria do lançamento nota a nota, com a marca do lote.
         auditoria.registrar(cur, id_usuario, "nota", nota["id"], "lancar",
-                            depois=r | {"lote": True})
+                            depois=r | {"lote": True} | (marca or {}))
         lancadas.append(linha | {"itens_lancados": r["itens_lancados"],
                                  "valor_estoque": r["valor"]})
         fora_de_ordem.update(r.get("fora_de_ordem") or [])

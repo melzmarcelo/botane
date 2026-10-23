@@ -149,7 +149,8 @@ checar("as marcas lidas voltam inteiras, com a etapa, para conferir no ar",
        _lido["marcas"].get("cCancelada") == "S" and _lido["marcas"].get("cEtapa") == "40"
        and "cFaturado" in _lido["marcas"], _lido["marcas"])
 checar("resposta vazia não derruba a leitura",
-       mapeadores.situacao_no_omie(None) == {"cancelada": False, "marcas": {}})
+       mapeadores.situacao_no_omie(None) == {"cancelada": False, "recebida": None,
+                                             "marcas": {}})
 
 
 def ja_chega_cancelada(cur, id_unidade):

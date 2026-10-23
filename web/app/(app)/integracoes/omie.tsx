@@ -8,6 +8,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import NotasOmie from "./notas-omie";
+import OpcoesNotasOmie from "./opcoes-notas-omie";
 
 import { custo } from "@/lib/numeros";
 /**
@@ -38,6 +39,10 @@ type Config = {
   /** Quando o agendador RODOU — não é o mesmo que ter trazido nota. */
   agenda_rodou_em: string | null;
   agenda_ultimo_erro: string | null;
+  so_recebidas: boolean;
+  lancar_recebidas: boolean;
+  lancar_recebidas_desde: string | null;
+  aguardando_recebimento_desde: string | null;
   ultima_sincronizacao: string | null;
   ultimo_status: string | null;
   ultima_mensagem: string | null;
@@ -132,6 +137,7 @@ export default function Omie() {
     app_key: "", app_secret: "", modo: "simulado", ativa: false,
     tag_fornecedor: "Fornecedor",
     agenda_frequencia: "MANUAL", agenda_hora: "3", agenda_janela_dias: "",
+    so_recebidas: false, lancar_recebidas: false,
   });
   const [conferencia, setConferencia] = useState<Conferencia | null>(null);
   // 🔑 **O custo inicial dos produtos.** Medido na base: 2.323 produtos ativos
@@ -150,7 +156,8 @@ export default function Omie() {
                 tag_fornecedor: c.tag_fornecedor ?? "",
                 agenda_frequencia: c.agenda_frequencia ?? "MANUAL",
                 agenda_hora: String(c.agenda_hora ?? 3),
-                agenda_janela_dias: c.agenda_janela_dias ? String(c.agenda_janela_dias) : "" });
+                agenda_janela_dias: c.agenda_janela_dias ? String(c.agenda_janela_dias) : "",
+                so_recebidas: !!c.so_recebidas, lancar_recebidas: !!c.lancar_recebidas });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -179,6 +186,8 @@ export default function Omie() {
         agenda_janela_dias: form.agenda_janela_dias
           ? Number(form.agenda_janela_dias)
           : null,
+        so_recebidas: form.so_recebidas,
+        lancar_recebidas: form.lancar_recebidas,
       });
       aviso.sucesso("Integração salva. A chave fica cifrada e não volta pela tela.");
       await carregar();
@@ -461,6 +470,15 @@ export default function Omie() {
               </div>
             )}
           </section>
+
+          <OpcoesNotasOmie
+            soRecebidas={form.so_recebidas}
+            lancarRecebidas={form.lancar_recebidas}
+            lancarDesde={cfg.lancar_recebidas_desde}
+            aguardandoDesde={cfg.aguardando_recebimento_desde}
+            desabilitado={!podeConfigurar}
+            aoMudar={(campo, valor) => setForm({ ...form, [campo]: valor })}
+          />
 
           <div className="flex flex-wrap gap-2">
             {podeConfigurar && (

@@ -246,6 +246,8 @@ def recebimento_de_nfe(bruto: dict) -> dict:
         # pelo mesmo mapeador, então a busca automática enxerga a marca sem pedir o
         # detalhe (quando a lista a traz).
         "cancelada": situacao_no_omie(bruto)["cancelada"],
+        # Recebida no Omie: True, False, ou None quando a marca não veio.
+        "recebida": situacao_no_omie(bruto)["recebida"],
         "itens": itens,
     }
 
@@ -281,7 +283,15 @@ def situacao_no_omie(bruto: dict | None) -> dict:
         and ((str(chave).lower().startswith("d") and str(valor or "").strip())
              or str(valor).strip().upper() in ("S", "SIM", "TRUE", "1"))
         for chave, valor in marcas.items())
-    return {"cancelada": bool(cancelada), "marcas": marcas}
+    # 🔑 **Recebida** (pedido do dono, 23/10/2026: "somente recebidas" e "lançar
+    # recebidas"). A marca `cRecebido`, não o número da etapa — o de-para das etapas
+    # não está documentado, e no ar a 40 veio com `cRecebido: "N"` e a 80 com "S".
+    # ⚠️ **`None` quando o Omie não mandou a marca** — "não sei" não é "não recebida".
+    # A lista pode não trazê-la; quem precisa decidir pede o detalhe.
+    recebido = next((v for k, v in marcas.items() if str(k).lower() == "crecebido"), None)
+    recebida = (None if recebido is None or not str(recebido).strip()
+                else str(recebido).strip().upper() in ("S", "SIM", "TRUE", "1"))
+    return {"cancelada": bool(cancelada), "recebida": recebida, "marcas": marcas}
 
 
 def item_do_recebimento(bruto: dict, seq: int) -> dict:

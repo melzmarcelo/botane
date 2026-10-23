@@ -1065,8 +1065,14 @@ def atualizar_abertas_do_omie(
                         "nao_encontradas": [n["id"] for n in r["nao_encontradas"]],
                         "falhas": len(r["falhas"])},
                 id_unidade=id_unidade)
+        # 🔑 "Lançar notas recebidas" (130): a releitura é onde a nota recebida no Omie
+        # DEPOIS de importada aparece — sem isto ela esperaria a próxima busca.
+        r["lancamento_automatico"] = importador.lancar_as_recebidas_seguro(cur, id_unidade)
 
+    auto = r.get("lancamento_automatico") or {}
     partes = [f"{r['conferidas']} nota(s) conferida(s) no Omie"]
+    if auto.get("lancadas"):
+        partes.append(f"{auto['lancadas']} recebida(s) lançada(s) no estoque")
     if r["atualizadas"]:
         partes.append(f"{len(r['atualizadas'])} com valor diferente")
     if r["canceladas"]:

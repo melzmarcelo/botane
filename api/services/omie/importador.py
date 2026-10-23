@@ -12,6 +12,7 @@ O caminho, e o que cada passo garante:
 aparece na fila de pendências — importar errado é pior que não importar.
 """
 
+import json
 import relogio
 import unicodedata
 from datetime import date, datetime, timedelta
@@ -876,6 +877,16 @@ def _comparavel(v):
     return str(v).strip() or None
 
 
+def _como_dict(bruto) -> dict | None:
+    """O `bruto` guardado, como dicionário — o driver pode devolvê-lo em texto."""
+    if isinstance(bruto, str):
+        try:
+            bruto = json.loads(bruto)
+        except ValueError:
+            return None
+    return bruto if isinstance(bruto, dict) else None
+
+
 def mudou_no_omie(cur, id_unidade: int, cabecalho: dict) -> dict | None:
     """A nota que já temos está diferente da que o Omie acabou de listar?
 
@@ -899,7 +910,8 @@ def mudou_no_omie(cur, id_unidade: int, cabecalho: dict) -> dict | None:
         return None
     cur.execute(
         f"""SELECT id, status, numero, serie, data_emissao, data_entrada,
-                   valor_produtos, valor_frete, valor_desconto, valor_outros, valor_total
+                   valor_produtos, valor_frete, valor_desconto, valor_outros, valor_total,
+                   bruto
               FROM notas_entrada WHERE {onde}""",
         (valor,),
     )
@@ -917,6 +929,14 @@ def mudou_no_omie(cur, id_unidade: int, cabecalho: dict) -> dict | None:
     # quem resolve é o botão "atualizar do Omie", que pede o detalhe.
     if cabecalho.get("cancelada") and aqui["status"] != "CANCELADA":
         difere["cancelada"] = (False, True)
+    # 🔑 **Recebida lá depois de importada** (23/10/2026): o valor também não muda.
+    # Relida, a nota guarda a marca nova no `bruto` — e é por ele que o "lançar
+    # notas recebidas" decide. ⚠️ Só quando a LISTA traz a marca, como a de cima.
+    # ⚠️ Só nota ABERTA: a lançada não se relê, e "mudou" nela seria um alarme falso
+    # de nota travada.
+    if (cabecalho.get("recebida") is True and aqui["status"] in ("IMPORTADA", "CONCILIADA")
+            and mapeadores.situacao_no_omie(_como_dict(aqui["bruto"]))["recebida"] is not True):
+        difere["recebida"] = (False, True)
     if not difere:
         return None
     return {"id": aqui["id"], "status": aqui["status"], "campos": difere}
@@ -1187,8 +1207,8 @@ def janela(cur, id_unidade: int, desde: date | None = None,
         return relogio.hoje_da_casa() - timedelta(days=dias), f"últimos {dias} dias"
 
     cur.execute(
-        """SELECT ultima_sincronizacao FROM integracoes
-            WHERE id_unidade = %s AND servico = 'OMIE'""",
+        """SELECT ultima_sincronizacao, so_recebidas, aguardando_recebimento_desde
+             FROM integracoes WHERE id_unidade = %s AND servico = 'OMIE'""",
         (id_unidade,),
     )
     linha = cur.fetchone()
@@ -1197,8 +1217,18 @@ def janela(cur, id_unidade: int, desde: date | None = None,
         return (relogio.hoje_da_casa() - timedelta(days=JANELA_PADRAO),
                 f"primeira vez: últimos {JANELA_PADRAO} dias")
     inicio = ultima.date() - timedelta(days=FOLGA_DIAS)
-    return inicio, (f"desde a última sincronização ({ultima.strftime('%d/%m/%Y')}), "
-                    f"com {FOLGA_DIAS} dias de folga")
+    motivo = (f"desde a última sincronização ({ultima.strftime('%d/%m/%Y')}), "
+              f"com {FOLGA_DIAS} dias de folga")
+    # 🔑 **"Somente recebidas": a nota que ainda espera recebimento puxa a janela.**
+    # Ela não foi gravada, então só a janela a traz de volta — e um recebimento que
+    # demora mais que a folga a deixaria para trás, calada. Até `JANELA_PADRAO` dias:
+    # nota que nunca é recebida não pode alargar a busca para sempre.
+    aguardando = linha["aguardando_recebimento_desde"] if linha["so_recebidas"] else None
+    if aguardando and aguardando < inicio:
+        inicio = max(aguardando, relogio.hoje_da_casa() - timedelta(days=JANELA_PADRAO))
+        motivo += (f"; desde {inicio.strftime('%d/%m/%Y')} pela nota mais antiga "
+                   "que esperava recebimento")
+    return inicio, motivo
 
 
 # O módulo das notas de compra. Não é `produtos/notaentrada` — ver o mapeador
@@ -1225,6 +1255,89 @@ def _ja_temos(cur, id_unidade: int, nota: dict) -> bool:
     return cur.fetchone() is not None
 
 
+def _opcoes_de_notas(cur, id_unidade: int) -> dict:
+    """As duas opções de notas da integração (130). Sem linha, as duas desligadas."""
+    cur.execute(
+        """SELECT so_recebidas, lancar_recebidas, lancar_recebidas_desde,
+                  aguardando_recebimento_desde
+             FROM integracoes WHERE id_unidade = %s AND servico = 'OMIE'""",
+        (id_unidade,),
+    )
+    linha = cur.fetchone()
+    return {"so_recebidas": bool(linha and linha["so_recebidas"]),
+            "lancar_recebidas": bool(linha and linha["lancar_recebidas"]),
+            "lancar_recebidas_desde": linha["lancar_recebidas_desde"] if linha else None,
+            "aguardando_recebimento_desde":
+                linha["aguardando_recebimento_desde"] if linha else None}
+
+
+def _lembrar_aguardando(cur, id_unidade: int, inicio: date, mais_antiga: date | None) -> None:
+    """Guarda a data da nota mais antiga que esperava recebimento nesta busca.
+
+    ⚠️ **A busca só responde pelo que varreu.** Uma de janela curta (`dias=1`, no
+    botão) não viu a nota de dez dias atrás que esperava recebimento — apagar a
+    lembrança dela seria esquecê-la sem ninguém ter decidido. A antiga só sai quando
+    a janela desta busca a cobriu.
+    """
+    antes = _opcoes_de_notas(cur, id_unidade)["aguardando_recebimento_desde"]
+    if antes and antes < inicio:
+        mais_antiga = min(antes, mais_antiga) if mais_antiga else antes
+    cur.execute(
+        """UPDATE integracoes SET aguardando_recebimento_desde = %s
+            WHERE id_unidade = %s AND servico = 'OMIE'""",
+        (mais_antiga, id_unidade),
+    )
+
+
+def lancar_as_recebidas(cur, id_unidade: int) -> dict | None:
+    """Lança no estoque as notas RECEBIDAS no Omie — a opção "lançar notas recebidas".
+
+    🔑 Pedido do dono (23/10/2026): *"ao puxar uma nota recebida, já fazer o
+    lançamento no estoque"*. Roda no fim de toda busca (botão e agenda), DEPOIS da
+    religação: o item que achou produto agora já pode ir junto.
+
+    ⚠️ **É o "lançar as conciliadas" (`notas_lote.lancar`), não uma cópia.** Valem as
+    mesmas recusas — item sem produto, produto sem unidade, período fechado — e nota
+    cuja conversão declarada diverge do cadastro fica para uma pessoa conferir. O que
+    não lança fica na fila de sempre, com o motivo na resposta.
+    ⚠️ **Só nota importada DEPOIS de ligar a opção** (`lancar_recebidas_desde`): as
+    conciliadas que já esperavam têm o lote com prévia, e o razão é append-only.
+    ⚠️ **Nunca no período fechado** (`pode_retroativo=False`), seja quem for que assina.
+    🔑 **Assina quem LIGOU a opção** (`agenda_id_usuario`, gravado por quem salvou a
+    integração), e não quem clicou em buscar: o lançamento é decisão de quem
+    configurou, e assim vale igual pelo botão, pela agenda e pela releitura das
+    abertas. É a regra da 034 para a agenda. Sem ninguém ali, não lança — movimento
+    de estoque sem dono é o que a 034 recusou.
+    """
+    opcoes = _opcoes_de_notas(cur, id_unidade)
+    if not opcoes["lancar_recebidas"]:
+        return None
+    cur.execute("""SELECT agenda_id_usuario FROM integracoes
+                    WHERE id_unidade = %s AND servico = 'OMIE'""", (id_unidade,))
+    id_usuario = cur.fetchone()["agenda_id_usuario"]
+    if not id_usuario:
+        return {"lancadas": 0, "fora": [],
+                "erro": "ninguém assina a busca automática — salve a integração de novo"}
+    cur.execute(
+        """SELECT id, bruto FROM notas_entrada
+            WHERE id_unidade = %s AND origem = 'OMIE'
+              AND status IN ('IMPORTADA', 'CONCILIADA')
+              AND importada_em >= coalesce(%s, now())""",
+        (id_unidade, opcoes["lancar_recebidas_desde"]),
+    )
+    ids = [r["id"] for r in cur.fetchall()
+           if mapeadores.situacao_no_omie(_como_dict(r["bruto"]))["recebida"] is True]
+    if not ids:
+        return {"lancadas": 0, "fora": []}
+    # ⚠️ Importado aqui dentro: `notas_lote` importa este módulo.
+    from services import notas_lote
+    r = notas_lote.lancar(cur, id_unidade, id_usuario, ids, marca={"automatico": True})
+    return {"lancadas": r["notas"], "itens": r["itens"], "valor": r["valor"],
+            "fora": [{"id": f["id"], "numero": f["numero"], "fornecedor": f["fornecedor"],
+                      "motivo": f["motivo"]} for f in r["fora"]],
+            "fora_de_ordem": r["fora_de_ordem"]}
+
+
 def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = None,
                 desde: date | None = None, teto_paginas: int = 40) -> dict:
     """Puxa as notas de entrada da janela e grava o que ainda não existe aqui.
@@ -1245,6 +1358,10 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
     sincronização do dia faz zero chamada de detalhe.
     """
     inicio, motivo = janela(cur, id_unidade, desde, dias)
+    so_recebidas = _opcoes_de_notas(cur, id_unidade)["so_recebidas"]
+    # As que ficaram de fora por ainda não terem sido recebidas — e a data da mais
+    # antiga, que a próxima busca automática precisa alcançar (ver `janela`).
+    aguardando, aguardando_desde = 0, None
     novas, repetidas, paginas, antigas, falhas = 0, 0, 0, 0, 0
     # 🔑 O que o ajuste no Omie produz aqui: as que foram reescritas e as que
     # NÃO puderam ser, por já estarem no razão. As segundas importam mais — elas
@@ -1306,6 +1423,12 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
                                    mapeadores.recebimento_de_nfe(detalhe), detalhe)
                     atualizadas += 1
                     continue
+                # 🔑 **"Somente recebidas"**: decidida pela LISTA quando ela traz a
+                # marca — sem gastar a chamada do detalhe numa nota que não entra.
+                if so_recebidas and cabecalho.get("recebida") is False:
+                    aguardando += 1
+                    aguardando_desde = min(filter(None, (aguardando_desde, data)), default=None)
+                    continue
                 try:
                     detalhe = cliente.chamar(MODULO_NOTAS, ITENS_DA_NOTA,
                                              {"nIdReceb": int(cabecalho["id_omie"])})
@@ -1319,6 +1442,13 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
                         raise
                     continue
                 nota = mapeadores.recebimento_de_nfe(detalhe)
+                # ⚠️ Pelo DETALHE quando a lista não disse. Sem a marca nem aqui
+                # ("não sei"), a nota entra: deixar de fora uma compra por falta de
+                # um campo seria pior que trazer uma nota antes da hora.
+                if so_recebidas and nota.get("recebida") is False:
+                    aguardando += 1
+                    aguardando_desde = min(filter(None, (aguardando_desde, data)), default=None)
+                    continue
                 _id, nova = gravar_nota(cur, id_unidade, nota, detalhe)
                 novas += 1 if nova else 0
                 repetidas += 0 if nova else 1
@@ -1331,7 +1461,12 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
                    cliente.modo, paginas)
         raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
 
+    if so_recebidas:
+        _lembrar_aguardando(cur, id_unidade, inicio, aguardando_desde)
+
     recado = f"{novas} nova(s), {repetidas} já existiam — {motivo}"
+    if aguardando:
+        recado += f"; {aguardando} ainda não recebida(s) no Omie, ficaram para depois"
     if atualizadas:
         recado += f"; {atualizadas} atualizada(s) com o ajuste do Omie"
     # ⚠️ A travada entra na frase mesmo sendo "nada aconteceu": é justamente o
@@ -1370,6 +1505,7 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
             "paginas": paginas, "modo": cliente.modo,
             "desde": inicio, "janela": motivo, "fornecedores_completados": completados,
             "fora_da_janela": antigas, "sem_detalhe": falhas,
+            "aguardando_recebimento": aguardando,
             # Só preenchido quando a varredura parou no teto de páginas: sem
             # isso, "0 nova(s)" não se distingue de "não deu tempo de chegar lá".
             "faltou_varrer": truncou or None}
@@ -2365,8 +2501,31 @@ def sincronizar_completo(cur, id_unidade: int, cliente: ClienteOmie,
         r["religados"] = 0
         r["erro_ao_religar"] = f"{type(e).__name__}: {e}"
 
+    # 🔑 **"Lançar notas recebidas"** — depois da religação, para o item que acabou
+    # de achar produto ir junto.
+    r["lancamento_automatico"] = lancar_as_recebidas_seguro(cur, id_unidade)
+
     r["cadastros"] = cadastros
     return r
+
+
+def lancar_as_recebidas_seguro(cur, id_unidade: int) -> dict | None:
+    """`lancar_as_recebidas` com ponto de retorno — o que a busca e a releitura chamam.
+
+    ⚠️ Falhar aqui não pode levar junto as notas que acabaram de entrar ou de ser
+    relidas. O inesperado vai para `erros_sistema`, com o traceback: engolido na
+    agenda, ninguém saberia que as notas pararam de ser lançadas.
+    """
+    cur.execute("SAVEPOINT lancar_recebidas")
+    try:
+        r = lancar_as_recebidas(cur, id_unidade)
+        cur.execute("RELEASE SAVEPOINT lancar_recebidas")
+        return r
+    except Exception as e:  # noqa: BLE001
+        cur.execute("ROLLBACK TO SAVEPOINT lancar_recebidas")
+        from services import erros
+        erros.registrar("lancar_recebidas", e, id_unidade=id_unidade)
+        return {"lancadas": 0, "fora": [], "erro": f"{type(e).__name__}: {e}"}
 
 
 def _nota_nova_com_produto_desconhecido(cur, id_unidade: int) -> bool:

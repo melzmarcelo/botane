@@ -427,3 +427,28 @@
   igualdade"*). Sem `compras.notas` abre direto; releitura que falha abre o lote COM o aviso de que a
   prévia pode estar velha.
 - ⚠️ O `verificar.mjs` agora CONFIRMA a sincronização (traz as novas e relê as abertas da base local).
+- 🔑 **Duas opções de notas na integração do Omie** (migração 130, pedido do dono, 23/10/2026: *"1-Lançar
+  notas recebidas (ao puxar uma nota recebida, já fazer o lançamento no estoque) 2-Somente recebidas
+  (irá buscar somente as notas recebidas)"*). Colunas em `integracoes`: `so_recebidas`,
+  `lancar_recebidas`, `lancar_recebidas_desde`, `aguardando_recebimento_desde`. Nascem desligadas.
+  - **"Recebida" é a marca `infoCadastro.cRecebido = "S"`**, não o número da etapa (`cEtapa`): o de-para
+    das etapas não está documentado. No ar, em 23/10/2026: NF 30018 com etapa 40, `cFaturado S`,
+    `cRecebido N`; NF 3040633 com etapa 80, `cRecebido S`. `situacao_no_omie` devolve `recebida`
+    True/False/**None** — sem a marca é "não sei", e "não sei" ENTRA (perder compra por falta de campo
+    é pior). ⚠️ Não se sabe se a LISTA (`ListarRecebimentos`) traz `infoCadastro`: quando traz, a não
+    recebida é pulada sem pedir o detalhe; quando não, o detalhe decide (uma chamada por nota
+    pendente a cada busca).
+  - **Somente recebidas**: a não recebida NÃO é gravada. Como nada aqui lembra dela, a busca guarda a
+    data da mais antiga em `aguardando_recebimento_desde` e a `janela` automática recua até ela (teto
+    `JANELA_PADRAO`, 60 dias). Busca de janela curta que não a alcançou não a apaga
+    (`_lembrar_aguardando`). Notas já importadas antes de ligar continuam na fila.
+  - **Lançar notas recebidas** (`importador.lancar_as_recebidas`): é o `notas_lote.lancar` (mesmas
+    recusas, e a de conversão divergente fica para conferir), no fim de `sincronizar_completo` (botão e
+    agenda, depois da religação) e da releitura das abertas (`POST /notas/atualizar-do-omie`).
+    ⚠️ **Só nota importada DEPOIS de ligar** (`lancar_recebidas_desde`): no ar havia 29 conciliadas
+    esperando — ligar não pode despejá-las no razão. ⚠️ **Assina quem ligou** (`agenda_id_usuario`, o
+    último a salvar a integração), não quem clicou. ⚠️ Nunca retroativo a período fechado. Auditoria
+    `lancar` com `automatico: true`.
+  - Recebida no Omie DEPOIS de importada: `mudou_no_omie` a relê quando a lista traz a marca; senão a
+    releitura das abertas resolve.
+  - Cobertura: `smoke_notas_recebidas.py` (transação desfeita, Omie de mentira; a parte 5 pela API).

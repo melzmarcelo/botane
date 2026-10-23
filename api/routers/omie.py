@@ -49,6 +49,10 @@ class ConfigOmie(BaseModel):
     # folga). Preencher só faz sentido para quem quer varrer um mês a cada
     # rodada — e aí custa mais cota.
     agenda_janela_dias: int | None = Field(default=None, ge=1, le=365)
+    # 🔑 As duas opções de notas (130). ⚠️ `None` = manter o que está: quem salva a
+    # credencial por outro caminho não desliga as opções sem querer.
+    so_recebidas: bool | None = None
+    lancar_recebidas: bool | None = None
 
 
 def _cliente(cur, id_unidade: int) -> ClienteOmie:
@@ -73,7 +77,9 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.omie", "admin.in
         cur.execute(
             """SELECT modo, ativa, credenciais, ultima_sincronizacao, ultimo_status,
                       ultima_mensagem, agenda_frequencia, agenda_hora,
-                      agenda_janela_dias, agenda_rodou_em, agenda_ultimo_erro
+                      agenda_janela_dias, agenda_rodou_em, agenda_ultimo_erro,
+                      so_recebidas, lancar_recebidas, lancar_recebidas_desde,
+                      aguardando_recebimento_desde
                  FROM integracoes WHERE id_unidade = %s AND servico = %s""",
             (id_unidade, SERVICO),
         )
@@ -108,6 +114,12 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.omie", "admin.in
         "agenda_janela_dias": linha["agenda_janela_dias"] if linha else None,
         "agenda_rodou_em": linha["agenda_rodou_em"] if linha else None,
         "agenda_ultimo_erro": linha["agenda_ultimo_erro"] if linha else None,
+        "so_recebidas": bool(linha and linha["so_recebidas"]),
+        "lancar_recebidas": bool(linha and linha["lancar_recebidas"]),
+        # Desde quando a opção vale: nota importada antes disso não é lançada sozinha.
+        "lancar_recebidas_desde": linha["lancar_recebidas_desde"] if linha else None,
+        "aguardando_recebimento_desde":
+            linha["aguardando_recebimento_desde"] if linha else None,
         "historico": historico,
     }
 
@@ -142,8 +154,11 @@ def salvar_config(body: ConfigOmie,
         cur.execute(
             """INSERT INTO integracoes (id_unidade, servico, ativa, modo, credenciais,
                                         agenda_frequencia, agenda_hora, agenda_janela_dias,
-                                        agenda_id_usuario)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                        agenda_id_usuario, so_recebidas, lancar_recebidas,
+                                        lancar_recebidas_desde)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,
+                       coalesce(%s::boolean, false), coalesce(%s::boolean, false),
+                       CASE WHEN %s::boolean THEN now() END)
                ON CONFLICT (id_unidade, servico) DO UPDATE
                    SET ativa = EXCLUDED.ativa, modo = EXCLUDED.modo,
                        credenciais = EXCLUDED.credenciais,
@@ -151,10 +166,20 @@ def salvar_config(body: ConfigOmie,
                        agenda_hora = EXCLUDED.agenda_hora,
                        agenda_janela_dias = EXCLUDED.agenda_janela_dias,
                        agenda_id_usuario = EXCLUDED.agenda_id_usuario,
+                       so_recebidas = coalesce(%s::boolean, integracoes.so_recebidas),
+                       lancar_recebidas = coalesce(%s::boolean, integracoes.lancar_recebidas),
+                       -- 🔑 Ligar marca o instante; manter ligada mantém; desligar
+                       -- limpa. Só o que for importado DEPOIS de ligar é lançado.
+                       lancar_recebidas_desde = CASE
+                           WHEN NOT coalesce(%s::boolean, integracoes.lancar_recebidas)
+                               THEN NULL
+                           ELSE coalesce(integracoes.lancar_recebidas_desde, now()) END,
                        atualizado_em = now()""",
             (id_unidade, SERVICO, body.ativa, body.modo, segredos.cifrar(cred),
              body.agenda_frequencia, body.agenda_hora, body.agenda_janela_dias,
-             ctx.id_usuario),
+             ctx.id_usuario, body.so_recebidas, body.lancar_recebidas,
+             body.lancar_recebidas,
+             body.so_recebidas, body.lancar_recebidas, body.lancar_recebidas),
         )
         # ⚠️ Ligar o agendamento limpa o erro anterior: manter a mensagem velha
         # faria a tela acusar uma falha que já foi tratada — e quem acabou de
@@ -168,6 +193,8 @@ def salvar_config(body: ConfigOmie,
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "configurar",
                             depois={"modo": body.modo, "ativa": body.ativa,
                                     "agenda": body.agenda_frequencia,
+                                    "so_recebidas": body.so_recebidas,
+                                    "lancar_recebidas": body.lancar_recebidas,
                                     "app_key": segredos.mascarar(cred.get("app_key"))},
                             id_unidade=id_unidade)
     return {"message": "Integração salva"}
@@ -240,12 +267,23 @@ def sincronizar(dias: int | None = Query(default=None, ge=1, le=365),
     erro_catalogo = (cadastros or {}).get("erro")
     religados = r.get("religados") or 0
     faltou = (cadastros or {}).get("faltou_varrer") or {}
+    auto = r.get("lancamento_automatico") or {}
+    aguardando = r.get("aguardando_recebimento") or 0
     return r | {"message": (
         (f"{criados} produto(s) novo(s) do catálogo. " if criados else "")
         + f"{r['novas']} nota(s) nova(s) importada(s) — "
           f"{r['janela']}, {r['repetidas']} já existiam"
         # O que a fila ganhou sem ninguém clicar em nada.
         + (f". {religados} item(ns) pendente(s) encontraram o produto" if religados else "")
+        + (f". {aguardando} ainda não recebida(s) no Omie, ficam para a próxima busca"
+           if aguardando else "")
+        # 🔑 O que entrou no estoque sem ninguém clicar — e o que ficou, com o porquê
+        # na resposta (`lancamento_automatico.fora`).
+        + (f". {auto['lancadas']} nota(s) recebida(s) lançada(s) no estoque"
+           if auto.get("lancadas") else "")
+        + (f". {len(auto['fora'])} recebida(s) ficaram para lançar à mão"
+           if auto.get("fora") else "")
+        + (f". ⚠️ O lançamento automático não rodou: {auto['erro']}" if auto.get("erro") else "")
         + (f". ⚠️ O catálogo não veio: {erro_catalogo}" if erro_catalogo else "")
         # ⚠️ Dito na frase: catálogo cortado é produto novo que não chega, calado.
         + (f". ⚠️ O catálogo do Omie tem {faltou.get('total_no_omie')} produtos e só "
