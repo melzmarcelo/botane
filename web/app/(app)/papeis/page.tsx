@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import ExplicaTela from "@/components/explica-tela";
+import BotaoExportar from "@/components/exportar";
 
 type Permissao = { chave: string; modulo: string; descricao: string; ordem: number };
 type Papel = {
@@ -106,13 +107,18 @@ export default function PaginaPapeis() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <p className="rotulo">Administração</p>
-        <h1 className="mt-1 text-[30px] font-bold tracking-tight">Papéis e permissões</h1>
-        <ExplicaTela>
-          Os papéis de fábrica vêm prontos e não são editáveis — copie um e ajuste a cópia.
-          Ver custo é permissão à parte de ver a ficha.
-        </ExplicaTela>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="rotulo">Administração</p>
+          <h1 className="mt-1 text-[30px] font-bold tracking-tight">Papéis e permissões</h1>
+          <ExplicaTela>
+            Os papéis de fábrica vêm prontos e não são editáveis — copie um e ajuste a cópia.
+            Ver custo é permissão à parte de ver a ficha.
+          </ExplicaTela>
+        </div>
+        {/* 🔑 O mesmo relatório da tela de Usuários, aberto na visão por papel. */}
+        <BotaoExportar relatorio="acessos" rotulo="Permissões por papel"
+                       iniciais={{ detalhe_acessos: "papeis" }} />
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

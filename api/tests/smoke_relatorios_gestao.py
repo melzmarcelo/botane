@@ -454,12 +454,132 @@ st, pdf = chamar("GET", f"/exportar/pedidos.pdf?{q}&detalhe_pedidos=produto", to
 checar("e o PDF sai", st == 200 and pdf[:5] == b"%PDF-", st)
 
 
+print("\n14. fidelidade: o participante com o cartao, e o premio emitido no periodo")
+FONE_FID = f"4798{marca}{marca[:1]}"
+with get_cursor() as cur:
+    cur.execute("""INSERT INTO reserva_clientes (id_unidade, telefone, nome)
+                   VALUES (%s, %s, %s) RETURNING id""", (U, FONE_FID, f"REL FIEL {marca}"))
+    CLIENTE = cur.fetchone()["id"]
+    cur.execute("""INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, selos)
+                   VALUES (%s, %s, %s, 3)""", (CLIENTE, U, hoje))
+    cur.execute("""INSERT INTO fidelidade_premios (id_cliente, id_unidade, codigo, premio, visitas,
+                                                   dias_consumo, vence_em, vale_de)
+                   VALUES (%s, %s, %s, 'Um almoço grátis', 10, '{1,2,3,4,5}',
+                           %s::date + 30, %s::date + 1)""",
+                (CLIENTE, U, f"R{marca}", hoje, hoje))
+    cur.execute("SELECT visitas FROM fidelidade_config WHERE id = 1")
+    VISITAS = cur.fetchone()["visitas"]
+
+
+def _limpar_fidelidade():
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM reserva_clientes WHERE id = %s", (CLIENTE,))
+
+
+atexit.register(_limpar_fidelidade)
+st, linhas = csv(f"/exportar/fidelidade.csv?inicio={hoje}&fim={hoje}")
+fiel = linha_com(linhas, f"REL FIEL {marca}")
+checar("o participante aparece com os 3 selos e o que falta",
+       st == 200 and fiel and coluna(linhas, "Selos no cartão", fiel) == "3"
+       and coluna(linhas, "Faltam", fiel) == str(max(VISITAS - 3, 0)), (st, fiel))
+checar("e com 1 premio a usar", fiel and coluna(linhas, "Prêmios a usar", fiel) == "1", fiel)
+premio = linha_com(linhas, f"R{marca}")
+checar("o premio emitido hoje vai no quadro, 'a usar'",
+       premio and "a usar" in premio, premio)
+# ⚠️ Período de 2001 no quadro dos prêmios: o prêmio de hoje mora lá, e o nome do
+# cliente apareceria nele mesmo fora da lista de participantes.
+st, linhas = csv("/exportar/fidelidade.csv?recorte_fidelidade=vencidos"
+                 "&inicio=2001-01-01&fim=2001-01-31")
+checar("no recorte 'vencidos', ele nao entra",
+       st == 200 and not linha_com(linhas, f"REL FIEL {marca}"), st)
+st, pdf = chamar("GET", "/exportar/fidelidade.pdf", token=token, cru=True)
+checar("e o PDF sai", st == 200 and pdf[:5] == b"%PDF-", st)
+
+
+print("\n15. usuarios e acessos: por usuario e por papel")
+st, linhas = csv("/exportar/acessos.csv")
+adm = linha_com(linhas, ADMIN[0])
+checar("o admin aparece ativo, com o papel Administrador",
+       st == 200 and adm and coluna(linhas, "Situação", adm) == "ativo"
+       and "Administrador" in coluna(linhas, "Papéis (loja)", adm), (st, adm))
+checar("e nenhuma coluna de senha",
+       not any("senha" in c.lower() for l in linhas[:6] for c in l), linhas[:6])
+st, linhas = csv("/exportar/acessos.csv?detalhe_acessos=papeis")
+checar("por papel: o Administrador tem a chave da auditoria",
+       st == 200 and any("Administrador" in l and "admin.auditoria" in l for l in linhas),
+       linhas[:8])
+st, pdf = chamar("GET", "/exportar/acessos.pdf", token=token, cru=True)
+checar("e o PDF sai", st == 200 and pdf[:5] == b"%PDF-", st)
+
+
+print("\n16. auditoria: a criacao do produto da suite, com o que mudou")
+st, linhas = csv(f"/exportar/auditoria.csv?inicio={hoje}&fim={hoje}&entidades=produto")
+criou = next((l for l in linhas if "produto" in l and str(PROD) in l and "criar" in l), None)
+checar("o produto criado hoje aparece, pela tela",
+       st == 200 and criou and coluna(linhas, "Por onde", criou) == "tela", (st, criou))
+checar("com o nome no 'o que mudou'",
+       criou and f"INSUMO RELATORIO {marca}" in coluna(linhas, "O que mudou", criou), criou)
+st, linhas = csv(f"/exportar/auditoria.csv?inicio={hoje}&fim={hoje}&entidades=venda")
+checar("filtrado por outra entidade, ele some",
+       st == 200 and not any("produto" in l and str(PROD) in l and "criar" in l
+                             for l in linhas), st)
+st, pdf = chamar("GET", f"/exportar/auditoria.pdf?inicio={hoje}&fim={hoje}&entidades=produto",
+                 token=token, cru=True)
+checar("e o PDF sai", st == 200 and pdf[:5] == b"%PDF-", st)
+
+
+print("\n17. etiquetas emitidas: linha a linha, com a vencida marcada")
+with get_cursor() as cur:
+    etqs = []
+    for i, (horas, evento) in enumerate(((-2, "ABERTURA"), (48, "PRODUCAO"))):
+        cur.execute(
+            """INSERT INTO etiquetas (codigo, id_unidade, id_produto, evento, conservacao,
+                                      feito_em, vence_em, quantidade, quantidade_inicial, um,
+                                      responsavel)
+               VALUES (%s, %s, %s, %s, 'REFRIGERADO', now() - interval '3 hours',
+                       now() + make_interval(hours => %s), 1.5, 2, 'UN', %s) RETURNING id""",
+            (f"Z{marca[-4:]}{i}", U, PROD, evento, horas, f"REL RESP {marca}"))
+        etqs.append(cur.fetchone()["id"])
+
+
+def _limpar_etiquetas():
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM etiquetas WHERE id = ANY(%s)", (etqs,))
+
+
+atexit.register(_limpar_etiquetas)
+q = f"inicio={hoje}&fim={hoje}"
+st, linhas = csv(f"/exportar/etiquetas.csv?{q}&busca_etiqueta=INSUMO RELATORIO {marca}")
+vencida = linha_com(linhas, f"Z{marca[-4:]}0")
+nova = linha_com(linhas, f"Z{marca[-4:]}1")
+checar("as duas etiquetas saem, uma por linha",
+       st == 200 and vencida and nova, (st, linhas[:10]))
+checar("a que passou do prazo sai como VENCIDA, a outra no prazo",
+       vencida and "VENCIDA" in coluna(linhas, "Situação", vencida)
+       and nova and coluna(linhas, "Situação", nova) == "no prazo", (vencida, nova))
+checar("com o inicial 2 e o que resta 1,5",
+       vencida and abs(numero(coluna(linhas, "Inicial", vencida)) - 2) < 0.001
+       and abs(numero(coluna(linhas, "Resta", vencida)) - 1.5) < 0.001, vencida)
+st, linhas = csv(f"/exportar/etiquetas.csv?{q}&situacao_etiqueta=vencida"
+                 f"&busca_etiqueta=INSUMO RELATORIO {marca}")
+checar("pedindo so as vencidas, a do prazo some",
+       st == 200 and linha_com(linhas, f"Z{marca[-4:]}0")
+       and not linha_com(linhas, f"Z{marca[-4:]}1"), linhas[:10])
+st, linhas = csv(f"/exportar/etiquetas.csv?{q}&eventos_etiqueta=PRODUCAO"
+                 f"&busca_etiqueta=INSUMO RELATORIO {marca}")
+checar("pelo evento: so a produzida",
+       st == 200 and linha_com(linhas, f"Z{marca[-4:]}1")
+       and not linha_com(linhas, f"Z{marca[-4:]}0"), linhas[:10])
+st, pdf = chamar("GET", f"/exportar/etiquetas.pdf?{q}", token=token, cru=True)
+checar("e o PDF de conferencia sai", st == 200 and pdf[:5] == b"%PDF-", st)
+
+
 print("\n11. quem nao tem a chave nao baixa")
 tk = garantir_cozinha(chamar, token)
 st_c, cat_c = chamar("GET", "/exportar/catalogo", token=tk)
 chaves_c = {c["chave"] for c in cat_c or []}
 for chave in ("compras", "margem", "recebimentos", "producao", "vendas-documentos",
-              "reservas-dia", "pedidos"):
+              "reservas-dia", "pedidos", "fidelidade", "acessos", "auditoria"):
     if chave not in chaves_c:
         st, r = chamar("GET", f"/exportar/{chave}.csv", token=tk)
         checar(f"{chave} sem a chave: 403", st == 403, (st, r))
@@ -469,8 +589,10 @@ checar("e o catalogo da cozinha so oferece o que ela pode baixar",
            for c in chaves_c & {"compras", "perdas", "margem", "recebimentos"}), chaves_c)
 
 
-# ⚠️ Pedidos antes do resto: o item do pedido aponta para o produto da suíte.
+# ⚠️ Pedidos e etiquetas antes do resto: os dois apontam para o produto da suíte.
 _limpar_pedidos()
+_limpar_etiquetas()
+_limpar_fidelidade()
 _limpar_reservas()
 _limpar()
 print(f"\n{ok} passaram, {len(falhas)} falharam")

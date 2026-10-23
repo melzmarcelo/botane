@@ -147,3 +147,10 @@ As perguntas do estudo ficaram sem resposta e a implementação seguiu com o pad
 5. Nenhuma carga inicial de validades: a tabela da responsável técnica ainda precisa ser digitada.
 6. Sem visualização no navegador (extensão desconectada): telas validadas só por `tsc` e
    compilação — falta o teste visual e o teste com a impressora real.
+
+## Lista das etiquetas emitidas (23/10/2026)
+
+🔑 Pedido do dono: *"listar todas as etiquetas emitidas … linha a linha, não quadrado para
+colar, e sim um pdf para conferência"*. É o relatório `etiquetas` do catálogo de exportação
+(botão "Lista de etiquetas" no Painel de validades, PDF por padrão). Detalhes e armadilhas em
+[`_transversais/exportacao-e-relatorios.md`](_transversais/exportacao-e-relatorios.md).

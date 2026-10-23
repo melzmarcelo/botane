@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import ExplicaTela from "@/components/explica-tela";
+import BotaoExportar from "@/components/exportar";
 import Alteracoes from "./alteracoes";
 import ErrosDoSistema from "./erros";
 
@@ -29,14 +30,18 @@ export default function PaginaAuditoria() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <p className="rotulo">Administração</p>
-        <h1 className="mt-1 text-[30px] font-bold tracking-tight">Auditoria</h1>
-        <ExplicaTela>
-          Quem mudou o quê, quando, e o valor antes e depois. Senha e credencial nunca entram
-          aqui — o registro é filtrado antes de gravar. Na aba Erros, o que o sistema tentou
-          fazer e não conseguiu.
-        </ExplicaTela>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="rotulo">Administração</p>
+          <h1 className="mt-1 text-[30px] font-bold tracking-tight">Auditoria</h1>
+          <ExplicaTela>
+            Quem mudou o quê, quando, e o valor antes e depois. Senha e credencial nunca entram
+            aqui — o registro é filtrado antes de gravar. Na aba Erros, o que o sistema tentou
+            fazer e não conseguiu.
+          </ExplicaTela>
+        </div>
+        {/* 🔑 O registro do período em planilha ou PDF (23/10/2026). */}
+        <BotaoExportar relatorio="auditoria" rotulo="Baixar auditoria" />
       </header>
 
       <nav className="flex flex-wrap gap-1 border-b border-linha">

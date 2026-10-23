@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { Vinculo, lojasDosVinculos } from "./formulario";
 import ExplicaTela from "@/components/explica-tela";
+import BotaoExportar from "@/components/exportar";
 
 /**
  * A lista de quem tem acesso — só a lista.
@@ -115,9 +116,13 @@ export default function PaginaUsuarios() {
             o servidor, não a tela.
           </ExplicaTela>
         </div>
-        <Link href="/usuarios/novo" className="btn btn-primario">
-          Novo usuário
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {/* 🔑 Para revisar os acessos de vez em quando (23/10/2026). */}
+          <BotaoExportar relatorio="acessos" rotulo="Usuários e acessos" />
+          <Link href="/usuarios/novo" className="btn btn-primario">
+            Novo usuário
+          </Link>
+        </div>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

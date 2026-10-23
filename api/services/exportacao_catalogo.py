@@ -25,6 +25,7 @@ Nesses dois o corte é feito **sobre as linhas devolvidas**, e é por isso que a
 escolha em id vira nome antes de comparar.
 """
 
+import json
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -2346,6 +2347,371 @@ def _pedidos(cur, id_unidade: int, f: dict) -> Saida:
         anexos=anexos)
 
 
+# ---------------------------------------------------------------------------
+# A quarta leva (23/10/2026, itens 10, 11 e 12): fidelidade, acessos e auditoria
+# ---------------------------------------------------------------------------
+
+RECORTES_FIDELIDADE = {"todos": "Todos os participantes", "com_premio": "Com prêmio a usar",
+                       "vencendo": "Com prêmio vencendo em 7 dias",
+                       "vencidos": "Com prêmio vencido sem uso"}
+DETALHES_ACESSOS = {"usuarios": "Por usuário (papéis e último acesso)",
+                    "papeis": "Por papel (o que cada papel pode fazer)"}
+
+
+def _opcoes_usuarios(cur, _id_unidade: int) -> list[dict]:
+    cur.execute("SELECT id, nome FROM usuarios ORDER BY lower(nome)")
+    return [{"valor": r["id"], "nome": r["nome"]} for r in cur.fetchall()]
+
+
+def _opcoes_entidades(cur, _id_unidade: int) -> list[dict]:
+    # ⚠️ As que EXISTEM no registro, não uma lista escrita: entidade nova entra sozinha.
+    cur.execute("SELECT DISTINCT entidade FROM auditoria ORDER BY 1")
+    return [{"valor": r["entidade"], "nome": r["entidade"]} for r in cur.fetchall()]
+
+
+FILTROS["recorte_fidelidade"] = {
+    "tipo": "escolha", "rotulo": "Quem entra", "ajuda": "todos os participantes",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in RECORTES_FIDELIDADE.items()]}
+FILTROS["periodo_premios"] = {"tipo": "periodo", "rotulo": "Prêmios emitidos entre",
+                              "ajuda": "o mês corrente, se não escolher"}
+FILTROS["detalhe_acessos"] = {
+    "tipo": "escolha", "rotulo": "Como mostrar", "ajuda": "por usuário",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in DETALHES_ACESSOS.items()]}
+FILTROS["usuarios"] = {"tipo": "multipla", "rotulo": "Quem fez", "ajuda": "todos",
+                       "opcoes": _opcoes_usuarios}
+FILTROS["entidades"] = {"tipo": "multipla", "rotulo": "O que foi mexido", "ajuda": "tudo",
+                        "opcoes": _opcoes_entidades}
+
+
+def _fidelidade(cur, _id_unidade: int, f: dict) -> Saida:
+    """Os participantes da fidelidade com o cartão de cada um, e os prêmios do período.
+
+    🔑 Pedido do dono (lista de relatórios, item 10, 23/10/2026).
+    ⚠️ **O programa é da REDE** (091): a lista não recorta por loja, igual ao painel.
+    🔑 A consulta é a MESMA do painel (`fidelidade.consulta_participantes`): número
+    diferente entre a tela e o papel seria a primeira pergunta de quem confere.
+    """
+    from services import fidelidade as fid
+
+    recorte = f.get("recorte_fidelidade") or "todos"
+    if recorte not in RECORTES_FIDELIDADE:
+        recorte = "todos"
+    sql, params = fid.consulta_participantes(None, None if recorte == "todos" else recorte)
+    # ⚠️ A config ANTES da consulta: `config` usa o mesmo cursor, e chamada entre o
+    # execute e o fetchall troca o resultado — a lista saía vazia.
+    visitas_cartao = fid.config(cur)["visitas"]
+    cur.execute(sql, params)
+    linhas = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["faltam"] = max(visitas_cartao - int(d["no_cartao"] or 0), 0)
+        linhas.append(d)
+
+    inicio, fim = (f.get("inicio") or relogio.hoje_da_casa().replace(day=1),
+                   f.get("fim") or relogio.hoje_da_casa())
+    hoje = relogio.hoje_da_casa()
+    cur.execute(
+        """SELECT p.codigo, c.nome AS cliente, p.premio, p.emitido_em::date AS emitido,
+                  p.vence_em, p.usado_em::date AS usado, u.nome AS entregue_por,
+                  un.nome AS loja_uso
+             FROM fidelidade_premios p
+             JOIN reserva_clientes c ON c.id = p.id_cliente
+             LEFT JOIN usuarios u ON u.id = p.usado_por
+             LEFT JOIN unidades un ON un.id = p.id_unidade_uso
+            WHERE p.emitido_em::date BETWEEN %s AND %s
+            ORDER BY p.emitido_em, p.codigo""", (inicio, fim))
+    premios = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["situacao"] = ("usado" if d["usado"] else "vencido" if d["vence_em"] < hoje
+                         else "a usar")
+        premios.append(d)
+    resumo = [("Participantes", len(linhas)),
+              ("Visitas para um prêmio", visitas_cartao),
+              ("Com prêmio a usar", sum(1 for l in linhas if l["disponiveis"])),
+              ("Com prêmio vencido sem uso", sum(1 for l in linhas if l["vencidos"])),
+              (f"Prêmios emitidos de {_intervalo(inicio, fim)}", len(premios)),
+              ("… já usados", sum(1 for p in premios if p["situacao"] == "usado")),
+              ("… vencidos sem uso", sum(1 for p in premios if p["situacao"] == "vencido"))]
+    return Saida(
+        linhas,
+        [("nome", "Participante"), ("telefone", "Telefone"), ("no_cartao", "Selos no cartão"),
+         ("faltam", "Faltam"), ("visitas", "Visitas"), ("ultima_visita", "Última visita"),
+         ("disponiveis", "Prêmios a usar"), ("proximo_vencimento", "Vence em"),
+         ("vencidos", "Vencidos"), ("usados", "Usados")],
+        f"Fidelidade — {RECORTES_FIDELIDADE[recorte].lower()}", resumo, inicio, fim,
+        anexos=[(premios, [("codigo", "Código"), ("cliente", "Cliente"), ("premio", "Prêmio"),
+                           ("emitido", "Emitido"), ("vence_em", "Vence"),
+                           ("situacao", "Situação"), ("usado", "Usado em"),
+                           ("entregue_por", "Entregue por"), ("loja_uso", "Loja")],
+                 f"Prêmios emitidos de {_intervalo(inicio, fim)}", None)] if premios else [])
+
+
+def _acessos(cur, _id_unidade: int, f: dict) -> Saida:
+    """Quem entra no sistema e o que pode fazer — para revisar os acessos de vez em quando.
+
+    🔑 Pedido do dono (lista de relatórios, item 11, 23/10/2026). Duas visões: por
+    usuário (papéis, loja, último acesso, bloqueio) e por papel (cada permissão dele,
+    agrupada pelo módulo).
+    ⚠️ Nada de senha ou hash: só o que a tela de Usuários já mostra.
+    """
+    detalhe = f.get("detalhe_acessos") or "usuarios"
+    if detalhe not in DETALHES_ACESSOS:
+        detalhe = "usuarios"
+    cur.execute(
+        """SELECT p.id, p.nome, p.descricao, p.sistema,
+                  (SELECT count(*) FROM papel_permissoes pp WHERE pp.id_papel = p.id) AS permissoes,
+                  (SELECT count(DISTINCT up.id_usuario) FROM usuario_papeis up
+                     JOIN usuarios u ON u.id = up.id_usuario AND u.ativo
+                    WHERE up.id_papel = p.id) AS usuarios
+             FROM papeis p ORDER BY lower(p.nome)""")
+    papeis = [dict(r) for r in cur.fetchall()]
+    for p in papeis:
+        p["de_sistema"] = "sim" if p["sistema"] else ""
+    quadro_papeis = (papeis, [("nome", "Papel"), ("de_sistema", "Do sistema"),
+                              ("usuarios", "Usuários ativos"), ("permissoes", "Permissões"),
+                              ("descricao", "Descrição")], "Papéis", None)
+
+    if detalhe == "papeis":
+        cur.execute(
+            """SELECT pa.nome AS papel, pe.modulo, pe.descricao, pe.chave
+                 FROM papel_permissoes pp
+                 JOIN papeis pa ON pa.id = pp.id_papel
+                 JOIN permissoes pe ON pe.chave = pp.chave
+                ORDER BY lower(pa.nome), pe.ordem, pe.chave""")
+        linhas = [dict(r) for r in cur.fetchall()]
+        return Saida(
+            linhas,
+            [("papel", "Papel"), ("modulo", "Módulo"), ("descricao", "O que pode"),
+             ("chave", "Chave")],
+            "Acessos por papel", [("Papéis", len(papeis)), ("Permissões concedidas", len(linhas))],
+            anexos=[quadro_papeis])
+
+    agora = relogio.agora_da_casa()
+    cur.execute(
+        """SELECT u.id, u.nome, u.email, u.ativo, u.ultimo_acesso, u.bloqueado_ate,
+                  u.trocar_senha,
+                  string_agg(pa.nome || coalesce(' (' || un.nome || ')', ''), ', '
+                             ORDER BY pa.nome) AS papeis
+             FROM usuarios u
+             LEFT JOIN usuario_papeis up ON up.id_usuario = u.id
+             LEFT JOIN papeis pa ON pa.id = up.id_papel
+             LEFT JOIN unidades un ON un.id = up.id_unidade
+            GROUP BY u.id
+            ORDER BY u.ativo DESC, lower(u.nome)""")
+    linhas = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["situacao"] = "ativo" if d["ativo"] else "inativo"
+        bloqueado = d["bloqueado_ate"] and d["bloqueado_ate"] > agora
+        d["observacao"] = _junta("bloqueado por tentativas" if bloqueado else None,
+                                 "vai trocar a senha" if d["trocar_senha"] else None,
+                                 "sem papel" if not d["papeis"] else None)
+        # A sessão do banco já está no fuso da casa (regra 6): a hora vem certa.
+        d["ultimo"] = (d["ultimo_acesso"].strftime("%d/%m/%Y %H:%M")
+                       if d["ultimo_acesso"] else "nunca entrou")
+        linhas.append(d)
+    ativos = [l for l in linhas if l["ativo"]]
+    return Saida(
+        linhas,
+        [("nome", "Usuário"), ("email", "E-mail"), ("situacao", "Situação"),
+         ("papeis", "Papéis (loja)"), ("ultimo", "Último acesso"),
+         ("observacao", "Observação")],
+        "Usuários e acessos",
+        [("Usuários ativos", len(ativos)), ("Inativos", len(linhas) - len(ativos)),
+         ("Ativos que nunca entraram", sum(1 for l in ativos if not l["ultimo_acesso"])),
+         ("Ativos sem papel", sum(1 for l in ativos if not l["papeis"]))],
+        anexos=[quadro_papeis])
+
+
+def _mudou(antes, depois) -> str:
+    """O que mudou, numa linha: "campo: velho → novo"; criação e exclusão, os campos."""
+    def curto(v) -> str:
+        t = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, default=str)
+        return t if len(t) <= 60 else t[:57] + "…"
+
+    a = antes if isinstance(antes, dict) else {}
+    d = depois if isinstance(depois, dict) else {}
+    partes = []
+    for k in list(dict.fromkeys([*a, *d])):
+        if k in a and k in d:
+            if a[k] != d[k]:
+                partes.append(f"{k}: {curto(a[k])} → {curto(d[k])}")
+        elif k in d:
+            partes.append(f"{k}={curto(d[k])}")
+        else:
+            partes.append(f"{k} (era {curto(a[k])})")
+    # " · " e não ";": o ponto e vírgula é o separador da planilha da casa.
+    texto = " · ".join(partes)
+    return texto if len(texto) <= 400 else texto[:397] + "…"
+
+
+def _auditoria(cur, _id_unidade: int, f: dict) -> Saida:
+    """O registro de quem fez o quê, no período — com o que mudou escrito por extenso.
+
+    🔑 Pedido do dono (lista de relatórios, item 12, 23/10/2026). Para quando aparece
+    uma dúvida ("quem mudou o preço do pão?").
+    ⚠️ **A origem diz POR ONDE**: "tela" (nula, migração 077) ou "claude" (chave de
+    máquina). É a coluna que responde "o que o Claude fez ontem?".
+    ⚠️ Credencial nunca chega aqui: `auditoria._limpar` já a tira na gravação.
+    """
+    inicio, fim = _periodo(f)
+    usuarios = _lista(f.get("usuarios"))
+    entidades = _lista(f.get("entidades"))
+    cur.execute(
+        """SELECT a.em, a.entidade, a.id_entidade, a.acao, a.antes, a.depois, a.origem,
+                  u.nome AS usuario, un.nome AS loja
+             FROM auditoria a
+             LEFT JOIN usuarios u ON u.id = a.id_usuario
+             LEFT JOIN unidades un ON un.id = a.id_unidade
+            WHERE a.em >= %(inicio)s::date AND a.em < %(fim)s::date + 1
+              AND (%(usuarios)s::int[] IS NULL OR a.id_usuario = ANY(%(usuarios)s))
+              AND (%(entidades)s::text[] IS NULL OR a.entidade = ANY(%(entidades)s))
+            ORDER BY a.em, a.id""",
+        {"inicio": inicio, "fim": fim, "entidades": entidades,
+         "usuarios": [int(u) for u in usuarios] if usuarios else None})
+    linhas = []
+    por_pessoa: dict[str, dict] = {}
+    por_entidade: dict[str, dict] = {}
+    for r in cur.fetchall():
+        d = dict(r)
+        d["quando"] = d["em"].strftime("%d/%m/%Y %H:%M:%S")
+        d["usuario"] = d["usuario"] or "(sistema)"
+        d["origem_txt"] = d["origem"] or "tela"
+        d["mudou"] = _mudou(d["antes"], d["depois"])
+        linhas.append(d)
+        g = por_pessoa.setdefault(d["usuario"], {"chave": d["usuario"], "eventos": 0})
+        g["eventos"] += 1
+        g = por_entidade.setdefault(d["entidade"], {"chave": d["entidade"], "eventos": 0})
+        g["eventos"] += 1
+    return Saida(
+        linhas,
+        [("quando", "Quando"), ("usuario", "Quem"), ("origem_txt", "Por onde"),
+         ("entidade", "O quê"), ("id_entidade", "Id"), ("acao", "Ação"),
+         ("loja", "Loja"), ("mudou", "O que mudou")],
+        f"Auditoria — {_intervalo(inicio, fim)}",
+        [("Eventos", len(linhas)), ("Pessoas", len(por_pessoa)),
+         ("Pelo Claude", sum(1 for l in linhas if l["origem"] == "claude"))],
+        inicio, fim,
+        anexos=[(sorted(por_pessoa.values(), key=lambda g: -g["eventos"]),
+                 [("chave", "Quem"), ("eventos", "Eventos")], "Por pessoa", None),
+                (sorted(por_entidade.values(), key=lambda g: -g["eventos"]),
+                 [("chave", "O quê"), ("eventos", "Eventos")], "Por assunto", None)]
+        if linhas else [])
+
+
+# ---------------------------------------------------------------------------
+# As etiquetas emitidas (23/10/2026, pedido do dono, fora da lista de 12)
+# ---------------------------------------------------------------------------
+
+# ⚠️ Textos CURTOS de propósito: a linha tem quinze colunas, e no PDF a largura de
+# cada uma é proporcional ao texto — a situação longa espremia o código da etiqueta.
+SITUACOES_ETIQUETA = {"vigente": "no prazo", "vencida": "VENCIDA", "USADA": "usada",
+                      "DESCARTADA": "descartada", "SUBSTITUIDA": "substituída"}
+_CONSERVACAO_CURTA = {"REFRIGERADO": "refrig.", "CONGELADO": "congel.", "AMBIENTE": "ambiente"}
+FILTROS["situacao_etiqueta"] = {
+    "tipo": "multipla", "rotulo": "Situação", "ajuda": "todas",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in SITUACOES_ETIQUETA.items()]}
+FILTROS["eventos_etiqueta"] = {
+    "tipo": "multipla", "rotulo": "Evento", "ajuda": "produzido, aberto e descongelado",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in
+                              (("PRODUCAO", "Produzido"), ("ABERTURA", "Aberto"),
+                               ("DESCONGELAMENTO", "Descongelado"))]}
+FILTROS["busca_etiqueta"] = {"tipo": "texto", "rotulo": "Produto, código ou lote contém",
+                             "ajuda": "todas as etiquetas"}
+FILTROS["periodo_etiqueta"] = {"tipo": "periodo", "rotulo": "Emitidas entre",
+                               "ajuda": "o mês corrente, se não escolher"}
+
+
+def _etiquetas(cur, id_unidade: int, f: dict) -> Saida:
+    """Todas as etiquetas emitidas no período, LINHA A LINHA — o papel da conferência.
+
+    🔑 Pedido do dono (23/10/2026): *"listar todas as etiquetas emitidas … linha a linha,
+    não quadrado para colar, e sim um pdf para conferência"*. A folha de etiquetas (os
+    quadrados) é a rota de impressão; isto é a LISTA delas, para conferir a câmara fria.
+    ⚠️ O período é o da EMISSÃO (`feito_em`): "o que se etiquetou na semana". A
+    situação "vencida" é a ativa que passou do prazo AGORA — o banco não a guarda,
+    porque ela muda sozinha com o relógio.
+    ⚠️ "Resta" é a `quantidade` (migração 107: o que sobrou no pote); "Inicial", a de
+    nascença. A diferença é o que saiu por uso parcial.
+    """
+    from services import etiquetas as etq
+
+    inicio, fim = (f.get("inicio") or relogio.hoje_da_casa().replace(day=1),
+                   f.get("fim") or relogio.hoje_da_casa())
+    situacoes = _lista(f.get("situacao_etiqueta"))
+    eventos = _lista(f.get("eventos_etiqueta"))
+    locais = [int(x) for x in _lista(f.get("locais")) or []] or None
+    busca = (f.get("busca_etiqueta") or "").strip()
+    cur.execute(
+        """SELECT e.codigo, p.codigo AS cod_produto, p.nome AS produto, e.evento,
+                  e.conservacao, e.feito_em, e.vence_em, e.status, e.quantidade,
+                  coalesce(e.quantidade_inicial, e.quantidade) AS inicial, e.um,
+                  l.nome AS local, e.lote, e.responsavel, e.baixada_em, e.motivo,
+                  e.impressoes, (e.status = 'ATIVA' AND e.vence_em < now()) AS vencida
+             FROM etiquetas e
+             JOIN produtos p ON p.id = e.id_produto
+             LEFT JOIN locais_estoque l ON l.id = e.id_local
+            WHERE e.id_unidade = %(u)s
+              AND e.feito_em::date BETWEEN %(inicio)s AND %(fim)s
+              AND (%(eventos)s::text[] IS NULL OR e.evento = ANY(%(eventos)s))
+              AND (%(locais)s::int[] IS NULL OR e.id_local = ANY(%(locais)s))
+              AND (%(busca)s = '' OR p.nome ILIKE '%%' || %(busca)s || '%%'
+                   OR p.codigo ILIKE '%%' || %(busca)s || '%%'
+                   OR e.codigo ILIKE '%%' || %(busca)s || '%%'
+                   OR e.lote ILIKE '%%' || %(busca)s || '%%')
+            ORDER BY e.feito_em, e.id""",
+        {"u": id_unidade, "inicio": inicio, "fim": fim, "eventos": eventos,
+         "locais": locais, "busca": busca})
+    linhas = []
+    for r in cur.fetchall():
+        d = dict(r)
+        chave = (("vencida" if d["vencida"] else "vigente") if d["status"] == "ATIVA"
+                 else d["status"])
+        if situacoes and chave not in situacoes:
+            continue
+        d["situacao"] = SITUACOES_ETIQUETA.get(chave, chave)
+        # ⚠️ Evento e conservação numa célula: a linha já tem quinze colunas, e no papel
+        # deitado cada coluna a mais aperta o nome do produto.
+        d["evento_txt"] = (f"{etq.EVENTOS.get(d['evento'], d['evento'])} · "
+                           f"{_CONSERVACAO_CURTA.get(d['conservacao'], d['conservacao'])}")
+        d["feito"] = d["feito_em"].strftime("%d/%m/%y %H:%M")
+        d["vence"] = d["vence_em"].strftime("%d/%m/%y %H:%M")
+        d["baixada"] = d["baixada_em"].strftime("%d/%m/%y %H:%M") if d["baixada_em"] else None
+        d["confere"] = "[   ]"
+        d["_chave"] = chave
+        linhas.append(d)
+
+    por_sit: dict[str, dict] = {}
+    for l in linhas:
+        g = por_sit.setdefault(l["_chave"], {"chave": l["situacao"], "etiquetas": 0})
+        g["etiquetas"] += 1
+    por_produto: dict[str, dict] = {}
+    for l in linhas:
+        g = por_produto.setdefault(l["produto"], {"chave": l["produto"], "etiquetas": 0,
+                                                  "ativas": 0})
+        g["etiquetas"] += 1
+        g["ativas"] += 1 if l["status"] == "ATIVA" else 0
+    resumo = [("Emitidas no período", len(linhas)),
+              ("Ativas no prazo", sum(1 for l in linhas if l["_chave"] == "vigente")),
+              ("Ativas VENCIDAS", sum(1 for l in linhas if l["_chave"] == "vencida")),
+              ("Usadas", sum(1 for l in linhas if l["_chave"] == "USADA")),
+              ("Descartadas", sum(1 for l in linhas if l["_chave"] == "DESCARTADA"))]
+    return Saida(
+        linhas,
+        [("confere", "OK"), ("codigo", "Etiqueta"), ("produto", "Produto"),
+         ("evento_txt", "Evento"), ("feito", "Feita em"),
+         ("vence", "Vence em"), ("situacao", "Situação"), ("inicial", "Inicial"),
+         ("quantidade", "Resta"), ("um", "Un."), ("local", "Local"), ("lote", "Lote"),
+         ("responsavel", "Responsável"), ("baixada", "Baixada em"), ("motivo", "Motivo")],
+        f"Etiquetas emitidas — {_intervalo(inicio, fim)}", resumo, inicio, fim,
+        anexos=[([por_sit[k] for k in SITUACOES_ETIQUETA if k in por_sit],
+                 [("chave", "Situação"), ("etiquetas", "Etiquetas")], "Por situação", None),
+                (sorted(por_produto.values(), key=lambda g: (-g["etiquetas"], g["chave"])),
+                 [("chave", "Produto"), ("etiquetas", "Etiquetas"), ("ativas", "Ativas")],
+                 "Por produto", None)] if linhas else [])
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -2484,6 +2850,30 @@ RELATORIOS: dict[str, Relatorio] = {
         "com os totais por situação e por modo.",
         "pedidos.ver", "pedidos", ("periodo", "situacao_pedido", "detalhe_pedidos"),
         _pedidos),
+    # 🔑 A quarta leva (23/10/2026, itens 10, 11 e 12).
+    "fidelidade": Relatorio(
+        "Fidelidade",
+        "Os participantes com os selos do cartão e os prêmios, e os prêmios emitidos no "
+        "período: usados, vencidos e a usar.",
+        "fidelidade.operar", "fidelidade", ("recorte_fidelidade", "periodo_premios"),
+        _fidelidade),
+    "acessos": Relatorio(
+        "Usuários e acessos",
+        "Quem entra no sistema, com que papel e quando entrou pela última vez — ou o que "
+        "cada papel pode fazer.",
+        "admin.usuarios", "acessos", ("detalhe_acessos",), _acessos),
+    "auditoria": Relatorio(
+        "Auditoria",
+        "Quem fez o quê no período, por onde (tela ou Claude) e o que mudou.",
+        "admin.auditoria", "auditoria", ("periodo", "usuarios", "entidades"), _auditoria),
+    # 🔑 A lista das etiquetas para conferência (23/10/2026, pedido do dono).
+    "etiquetas": Relatorio(
+        "Etiquetas emitidas",
+        "Cada etiqueta emitida no período, linha a linha: produto, evento, feita e vence, "
+        "situação, quanto resta, local, lote e responsável — para conferir.",
+        "etiquetas.imprimir", "etiquetas",
+        ("periodo_etiqueta", "situacao_etiqueta", "eventos_etiqueta", "locais",
+         "busca_etiqueta"), _etiquetas),
 }
 
 

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import CabecalhoTela from "@/components/cabecalho-tela";
+import BotaoExportar from "@/components/exportar";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Cartao } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
@@ -89,7 +90,19 @@ export default function PainelDeValidades() {
         caminho="Etiquetas"
         titulo="Painel de validades"
         explica="O que venceu, o que vence hoje e amanhã. Dê baixa no que foi usado e descarte o que passou — o descarte lança a perda no estoque, com o valor."
-        acoes={<Link href="/etiquetas" className="btn btn-primario">Imprimir etiquetas</Link>}
+        acoes={
+          <div className="flex flex-wrap gap-2">
+            {/* 🔑 A LISTA das etiquetas emitidas, linha a linha, para conferir — não a
+                folha de quadrados para colar (23/10/2026, pedido do dono). O evento e a
+                busca da tela vêm junto. */}
+            <BotaoExportar relatorio="etiquetas" rotulo="Lista de etiquetas" formatoPadrao="pdf"
+                           iniciais={{
+                             ...(evento ? { eventos_etiqueta: [evento] } : {}),
+                             ...(busca.trim() ? { busca_etiqueta: busca.trim() } : {}),
+                           }} />
+            <Link href="/etiquetas" className="btn btn-primario">Imprimir etiquetas</Link>
+          </div>
+        }
       />
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 

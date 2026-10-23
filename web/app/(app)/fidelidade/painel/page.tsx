@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ExplicaTela from "@/components/explica-tela";
+import BotaoExportar from "@/components/exportar";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
@@ -86,14 +87,20 @@ export default function PainelDaFidelidade() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <p className="rotulo">Portal de Clientes · Fidelidade</p>
-        <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Painel</h1>
-        <ExplicaTela>
-          O programa inteiro: quem participa, quantos selos cada um tem, os prêmios e as
-          validades. Clique num cliente para ver tudo dele — e, com permissão, dar selos,
-          retirar um lançamento errado ou ajustar o vencimento de um prêmio.
-        </ExplicaTela>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="rotulo">Portal de Clientes · Fidelidade</p>
+          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Painel</h1>
+          <ExplicaTela>
+            O programa inteiro: quem participa, quantos selos cada um tem, os prêmios e as
+            validades. Clique num cliente para ver tudo dele — e, com permissão, dar selos,
+            retirar um lançamento errado ou ajustar o vencimento de um prêmio.
+          </ExplicaTela>
+        </div>
+        {/* 🔑 Participantes e prêmios em PDF ou planilha (23/10/2026); o recorte da
+            tela vira o da janela. */}
+        <BotaoExportar relatorio="fidelidade" rotulo="Relatório da fidelidade"
+                       iniciais={filtro ? { recorte_fidelidade: filtro } : {}} />
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

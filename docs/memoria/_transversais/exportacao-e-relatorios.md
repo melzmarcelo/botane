@@ -261,7 +261,30 @@
     dia" da tela. Recusado/cancelado APARECE e fica fora dos totais. "Por produto" agrupa por
     `id_produto` (nome congelado do item) com % do total. Quadros por situação (todas), por
     origem e modo, e por dia. Botão na lista de Pedidos (o dia da tela vira o período).
-  - Restam da lista: 10 (fidelidade), 11 (usuários e acessos), 12 (auditoria).
+- 🔑 **Quarta leva** (23/10/2026, itens 10, 11 e 12 — a lista de 12 fecha aqui).
+  - `fidelidade` (`fidelidade.operar`, filtros `recorte_fidelidade` + `periodo_premios`): a
+    MESMA consulta do painel (`fidelidade.consulta_participantes`), da REDE (o programa não é
+    por loja); "Faltam" = visitas do cartão − selos. Anexo: prêmios EMITIDOS no período
+    (usado / vencido / a usar, quem entregou e onde). ⚠️ `periodo_premios` é `tipo: periodo`
+    com outro rótulo: a janela grava `inicio`/`fim` igual.
+  - `acessos` (`admin.usuarios`, filtro `detalhe_acessos`): por usuário (papéis com a loja do
+    escopo, último acesso, bloqueio, "sem papel") ou por papel (cada permissão, por módulo).
+    Quadro "Papéis" nos dois. Botão em Usuários e em Papéis (este já na visão por papel).
+  - `auditoria` (`admin.auditoria`, filtros `periodo` + `usuarios` + `entidades`): "Por onde"
+    = `origem` (nula = tela; `claude`). "O que mudou" escrito por `_mudou` (campo: antes →
+    depois; só os que mudaram; cortado em 400). Entidades das opções saem do DISTINCT.
+- 🔑 **`etiquetas` — a lista das emitidas** (`etiquetas.imprimir`, 23/10/2026, pedido do
+  dono: *"linha a linha, não quadrado para colar, e sim um pdf para conferência"*). Botão
+  no Painel de validades, PDF por padrão. Período = `feito_em`; "vencida" é a ATIVA com
+  `vence_em < now()` (derivada, o banco não guarda). Textos curtos de propósito (situação,
+  conservação abreviada, data com ano de 2 dígitos): a linha tem 15 colunas.
+- 🔑 **`exportacao._larguras` mede na fonte** (mesmo dia): `stringWidth` em vez de contar
+  letras, +9 pt de recuo, cabeçalho pela MAIOR PALAVRA; se não cabe, as colunas curtas
+  (≤ 70 pt) ficam com o que pedem e as longas encolhem, desde que recebam ao menos metade.
+  Antes, código em maiúsculas, "2,00" e lote quebravam; a compras item a item caiu de 25
+  para 22 páginas. Vale para TODO PDF tabular.
+- (terceira leva, continuação) A lista de 12 está completa; transferências entre lojas
+  seguem fora enquanto houver uma loja só no ar.
 - 🔑 **Quatro relatórios de gestão** (1.1.125, 23/10/2026, pedido do dono: *"Gostaria de mais
   relatorios e planilhas"* — da lista proposta, escolheu 1, 2, 3 e 6). Suíte própria:
   `smoke_relatorios_gestao.py`.

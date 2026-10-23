@@ -185,6 +185,13 @@ class _Filtros:
         situacao_reserva: list[str] | None = Query(default=None),
         situacao_pedido: list[str] | None = Query(default=None),
         detalhe_pedidos: str | None = None,
+        recorte_fidelidade: str | None = None,
+        detalhe_acessos: str | None = None,
+        usuarios: list[int] | None = Query(default=None),
+        entidades: list[str] | None = Query(default=None),
+        situacao_etiqueta: list[str] | None = Query(default=None),
+        eventos_etiqueta: list[str] | None = Query(default=None),
+        busca_etiqueta: str | None = None,
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
@@ -202,6 +209,10 @@ class _Filtros:
             "detalhe_producao": detalhe_producao, "origem_producao": origem_producao,
             "origem_venda": origem_venda, "situacao_reserva": situacao_reserva,
             "situacao_pedido": situacao_pedido, "detalhe_pedidos": detalhe_pedidos,
+            "recorte_fidelidade": recorte_fidelidade, "detalhe_acessos": detalhe_acessos,
+            "usuarios": usuarios, "entidades": entidades,
+            "situacao_etiqueta": situacao_etiqueta, "eventos_etiqueta": eventos_etiqueta,
+            "busca_etiqueta": busca_etiqueta,
         }
 
     def preenchidos(self) -> dict:

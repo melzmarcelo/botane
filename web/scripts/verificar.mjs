@@ -5571,7 +5571,13 @@ try {
                                 ["/vendas", "Lista de vendas"],
                                 // A terceira leva (23/10/2026).
                                 ["/reservas/agenda?visao=dia", "Reservas do dia (PDF)"],
-                                ["/pedidos", "Relatório de pedidos"]]) {
+                                ["/pedidos", "Relatório de pedidos"],
+                                // A quarta leva e a lista de etiquetas (23/10/2026).
+                                ["/fidelidade/painel", "Relatório da fidelidade"],
+                                ["/usuarios", "Usuários e acessos"],
+                                ["/papeis", "Permissões por papel"],
+                                ["/auditoria", "Baixar auditoria"],
+                                ["/etiquetas/painel", "Lista de etiquetas"]]) {
     await irPara(p, `${WEB}${tela}`);
     await assentar(2000);
     const tem = await p.evaluate((r) => [...document.querySelectorAll("main button")]

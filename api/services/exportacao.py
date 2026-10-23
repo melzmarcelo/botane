@@ -30,6 +30,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import (
     Flowable,
@@ -268,15 +269,39 @@ def _larguras(linhas: list[dict], colunas: list[tuple[str, str]],
     a lição do `<th>` de largura fixa já tinha ensinado a evitar na tela.
     ⚠️ A medida sai de uma AMOSTRA: percorrer 400.000 linhas só para medir texto
     custaria mais que desenhar o documento.
+    🔑 **Mede na FONTE, não em letras, e protege a coluna curta** (23/10/2026, lista
+    de etiquetas). Contar caracteres errava duas vezes numa tabela de quinze colunas:
+    "E7HDVT" em maiúsculas é mais largo que seis letras médias, e a célula ainda tem o
+    recuo dos dois lados — o código da etiqueta, a quantidade e o lote quebravam em
+    duas linhas. Agora cada coluna pede a largura real do seu texto mais o recuo; se
+    tudo cabe, a sobra se reparte na proporção. Se NÃO cabe, as colunas curtas (até
+    ~70 pt: códigos, datas, números) ficam com o que pedem e só as longas (produto,
+    observação) encolhem — quebrar o nome do produto em duas linhas é legível;
+    quebrar "2,00" não é.
+    ⚠️ O cabeçalho pesa pela MAIOR PALAVRA, não pela frase: "Qtd em estoque" pode
+    quebrar em duas linhas; se pesasse inteiro, a coluna de número reclamava espaço
+    só pelo título, e quem encolhia era a descrição.
     """
-    pesos = []
+    recuo, piso, teto, curta = 9.0, 24.0, 145.0, 70.0
+    pede = []
     for chave, cabecalho in colunas:
-        maior = len(cabecalho)
+        w = max((stringWidth(p, "Helvetica-Bold", 7) for p in cabecalho.split()), default=0)
         for linha in linhas[:400]:
-            maior = max(maior, len(_valor_pdf(linha.get(chave))))
-        pesos.append(min(max(maior, 6), 34))
-    total = sum(pesos)
-    return [disponivel * p / total for p in pesos]
+            w = max(w, stringWidth(_valor_pdf(linha.get(chave)), "Helvetica", 7.5))
+            if w >= teto:
+                break
+        pede.append(min(max(w + recuo, piso), teto + recuo))
+    total = sum(pede)
+    if total <= disponivel:
+        return [disponivel * p / total for p in pede]
+    curtas = {i for i, p in enumerate(pede) if p <= curta}
+    resto = disponivel - sum(pede[i] for i in curtas)
+    soma_longas = sum(p for i, p in enumerate(pede) if i not in curtas)
+    # ⚠️ Só protege enquanto as longas ainda recebem METADE do que pedem; abaixo disso,
+    # encolhe tudo por igual (uma coluna de produto com 2 cm não serve a ninguém).
+    if soma_longas and resto >= soma_longas / 2:
+        return [p if i in curtas else resto * p / soma_longas for i, p in enumerate(pede)]
+    return [disponivel * p / total for p in pede]
 
 
 def _junta_rodape(emitido_por: str | None) -> str:
