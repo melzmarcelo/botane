@@ -115,6 +115,8 @@ export default function PaginaContasAReceber() {
               detalhe: ["sintetico"],
             }}
           />
+          {/* 🔑 O que foi recebido no período, por forma de pagamento (23/10/2026). */}
+          <BotaoExportar relatorio="recebimentos" rotulo="Recebimentos" />
           <Link href="/vendas/por-pessoa" className="btn btn-secundario">
             Consumo por pessoa
           </Link>

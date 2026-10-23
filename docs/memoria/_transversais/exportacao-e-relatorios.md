@@ -232,6 +232,27 @@
     `busca_pessoa` (texto próprio — o `busca` dos outros diz "Produto contém"). Pessoa é da CASA:
     a loja não entra.
   - Cobertura: `smoke_exportacoes.py` (cabeçalho do cadastro e seção 4b).
+- 🔑 **Quatro relatórios de gestão** (1.1.125, 23/10/2026, pedido do dono: *"Gostaria de mais
+  relatorios e planilhas"* — da lista proposta, escolheu 1, 2, 3 e 6). Suíte própria:
+  `smoke_relatorios_gestao.py`.
+  - `compras` (`compras.notas`): `detalhe_compras` (escolha: nota, fornecedor, produto, item),
+    `situacao_nota` (padrão: lançadas + pendentes; cancelada só se pedir), `busca_fornecedor`
+    (texto), categorias/setores (só valem nas visões por item). ⚠️ Data =
+    `coalesce(data_entrada, data_emissao)`, a régua de `memoria_calculo.conciliacao_compras`.
+    Custo do item = valor − desconto + frete e outros rateados.
+  - `perdas` (`estoque.saldos`): SAIDA_PERDA + AJUSTE_INVENTARIO_SAIDA/ENTRADA e os ESTORNOS
+    deles (achados por `id_estorno_de`, herdando o motivo do original). ⚠️ No razão a
+    quantidade tem sinal e `custo_total` NÃO: valor perdido = custo com o sinal de
+    `-quantidade`. `motivos` é texto (`m<id>`, `sem_motivo`, `inventario`, `ajuste`): motivo do
+    cadastro e origem do ajuste respondem a mesma pergunta. Nota: o motivo "Consumo interno"
+    do cadastro aparece aqui porque é motivo de PERDA lançado como perda.
+  - `margem` (`precificacao.analisar`): `precificacao.analise` ganhou `inicio`/`fim` (troca a
+    janela de `dias`) e devolve `food_cost_pct` e `receita`. Uma conta só de margem na casa.
+  - `recebimentos` (`consumo.periodos`): lotes RECEBIDOS pela `recebido_em`; anexo "Por forma
+    de pagamento". Filtros `formas` e `pessoas`.
+  - ⚠️ Os filtros novos foram declarados também em `routers/exportacoes._Filtros` (a lição de
+    sempre). ⚠️ `sum()` de lista vazia é o INT 0, sem `.quantize`: os totais começam em
+    `Decimal(0)` — a primeira versão das perdas deu 500 num recorte sem sobra.
 - 🔑 **O relatório `vendas` — Estudo de vendas** (1.1.116, 21/10/2026): a MESMA conta do painel
   de vendas (`painel_vendas.painel`, ver `vendas.md`). Os produtos na frente (até 5.000), e
   atrás a evolução, o dia da semana, a hora, a categoria e o setor. Filtro novo `agrupar`

@@ -171,6 +171,14 @@ class _Filtros:
         # 🔑 O estudo de vendas (21/10/2026): de quanto em quanto a evolução se
         # agrupa. Texto, pelo mesmo motivo da `aba`: valor desconhecido cai no dia.
         agrupar: str | None = None,
+        # 🔑 Os relatórios de 23/10/2026: compras, perdas e recebimentos. Texto onde é
+        # escolha única (valor desconhecido cai no padrão), lista onde é múltipla.
+        situacao_nota: list[str] | None = Query(default=None),
+        busca_fornecedor: str | None = Query(default=None, max_length=80),
+        detalhe_compras: str | None = None,
+        motivos: list[str] | None = Query(default=None),
+        detalhe_perdas: str | None = None,
+        formas: list[str] | None = Query(default=None),
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
@@ -182,6 +190,9 @@ class _Filtros:
             "situacao_consumo": situacao_consumo, "pessoas": pessoas, "detalhe": detalhe,
             "tipo_pessoa": tipo_pessoa, "situacao_pessoa": situacao_pessoa,
             "busca_pessoa": busca_pessoa, "agrupar": agrupar,
+            "situacao_nota": situacao_nota, "busca_fornecedor": busca_fornecedor,
+            "detalhe_compras": detalhe_compras, "motivos": motivos,
+            "detalhe_perdas": detalhe_perdas, "formas": formas,
         }
 
     def preenchidos(self) -> dict:

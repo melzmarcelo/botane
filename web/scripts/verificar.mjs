@@ -5555,6 +5555,20 @@ try {
     [...chavesCat]);
   checar("e a memória por produto também", chavesCat.has("memoria-produto"),
     [...chavesCat]);
+  // 🔑 Os quatro de gestão (23/10/2026), cada um com o botão na sua tela.
+  checar("compras, perdas, margem e recebimentos estão no catálogo",
+    ["compras", "perdas", "margem", "recebimentos"].every((c) => chavesCat.has(c)),
+    [...chavesCat]);
+  for (const [tela, rotulo] of [["/compras", "Relatório de compras"],
+                                ["/ajustes", "Perdas e ajustes"],
+                                ["/precificacao", "Margem dos pratos"],
+                                ["/receber", "Recebimentos"]]) {
+    await irPara(p, `${WEB}${tela}`);
+    await assentar(2000);
+    const tem = await p.evaluate((r) => [...document.querySelectorAll("main button")]
+      .some((b) => b.textContent?.trim() === r), rotulo);
+    checar(`${tela} oferece "${rotulo}"`, tem);
+  }
   // ⚠️ Uma DATA, não um período: o inventário responde "quanto valia o estoque
   // NAQUELE dia", e duas pontas fariam escolher um intervalo para uma pergunta
   // que tem uma data só.

@@ -144,6 +144,56 @@ def _opcoes_situacao_consumo(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": v, "nome": n} for v, n in SITUACOES_CONSUMO.items()]
 
 
+# 🔑 Os quatro relatórios de 23/10/2026 (pedido do dono: "mais relatorios e planilhas"):
+# compras, perdas e ajustes, margem dos pratos e recebimentos.
+SITUACOES_NOTA = {
+    "lancada": "Lançadas no estoque",
+    "pendente": "Ainda não lançadas (importadas ou conciliadas)",
+    "cancelada": "Canceladas",
+}
+DETALHES_COMPRAS = {
+    "nota": "Por nota — uma linha por nota fiscal",
+    "fornecedor": "Por fornecedor — quanto se comprou de cada um",
+    "produto": "Por produto — quanto, por quanto e de quantos fornecedores",
+    "item": "Item a item — cada linha de cada nota",
+}
+DETALHES_PERDAS = {
+    "motivo": "Por motivo — quanto se perdeu por cada razão",
+    "produto": "Por produto — o que mais se perde",
+    "movimento": "Movimento a movimento — cada perda e cada ajuste",
+}
+
+
+def _opcoes_situacao_nota(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in SITUACOES_NOTA.items()]
+
+
+def _opcoes_detalhe_compras(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in DETALHES_COMPRAS.items()]
+
+
+def _opcoes_detalhe_perdas(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in DETALHES_PERDAS.items()]
+
+
+def _opcoes_motivos(cur, _id_unidade: int) -> list[dict]:
+    """Os motivos de perda do cadastro, mais as três origens que não têm motivo.
+
+    ⚠️ O valor é TEXTO (`m12`, `sem_motivo`, `inventario`, `ajuste`): o motivo do
+    cadastro e a origem do ajuste respondem à mesma pergunta — "por que saiu" —, e
+    dois filtros para ela fariam escolher duas vezes.
+    """
+    cur.execute("SELECT id, nome FROM perda_motivos ORDER BY lower(nome)")
+    return ([{"valor": f"m{r['id']}", "nome": r["nome"]} for r in cur.fetchall()]
+            + [{"valor": "sem_motivo", "nome": "Perda sem motivo informado"},
+               {"valor": "inventario", "nome": "Diferença de inventário"},
+               {"valor": "ajuste", "nome": "Ajuste de saldo"}])
+
+
+def _opcoes_formas(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in receber_motor.FORMAS.items()]
+
+
 def _opcoes_classes(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": c, "nome": f"Classe {c}"} for c in ("A", "B", "C")]
 
@@ -281,6 +331,20 @@ FILTROS: dict[str, dict] = {
                 "ajuda": "dia, semana ou mês", "opcoes": _opcoes_agrupar},
     "busca_pessoa": {"tipo": "texto", "rotulo": "Nome ou CNPJ contém",
                      "ajuda": "parte do nome, do nome fantasia ou do CNPJ"},
+    # 🔑 Os de 23/10/2026.
+    "situacao_nota": {"tipo": "multipla", "rotulo": "Situação da nota",
+                      "ajuda": "lançadas e ainda não lançadas (canceladas ficam de fora)",
+                      "opcoes": _opcoes_situacao_nota},
+    "busca_fornecedor": {"tipo": "texto", "rotulo": "Fornecedor contém",
+                         "ajuda": "parte do nome ou do CNPJ"},
+    "detalhe_compras": {"tipo": "escolha", "rotulo": "Como agrupar",
+                        "ajuda": "por nota", "opcoes": _opcoes_detalhe_compras},
+    "motivos": {"tipo": "multipla", "rotulo": "Motivos", "ajuda": "todos os motivos",
+                "opcoes": _opcoes_motivos},
+    "detalhe_perdas": {"tipo": "escolha", "rotulo": "Como agrupar",
+                       "ajuda": "por motivo", "opcoes": _opcoes_detalhe_perdas},
+    "formas": {"tipo": "multipla", "rotulo": "Formas de pagamento", "ajuda": "todas",
+               "opcoes": _opcoes_formas},
 }
 
 
@@ -1403,6 +1467,401 @@ def _vendas(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _situacoes_nota(f: dict) -> list[str]:
+    """Situação escolhida → status do banco. Sem escolha: tudo menos cancelada."""
+    escolhidas = _lista(f.get("situacao_nota")) or ["lancada", "pendente"]
+    status = []
+    if "lancada" in escolhidas:
+        status.append("LANCADA")
+    if "pendente" in escolhidas:
+        status += ["IMPORTADA", "CONCILIADA"]
+    if "cancelada" in escolhidas:
+        status.append("CANCELADA")
+    return status or ["LANCADA", "IMPORTADA", "CONCILIADA"]
+
+
+_ROTULO_STATUS_NOTA = {"LANCADA": "lançada", "IMPORTADA": "importada",
+                       "CONCILIADA": "conciliada", "CANCELADA": "cancelada"}
+
+
+def _compras(cur, id_unidade: int, f: dict) -> Saida:
+    """O que se comprou no período: por nota, por fornecedor, por produto ou item a item.
+
+    🔑 **A data é a de ENTRADA da nota (ou a de emissão, se não houver)** — a mesma
+    régua de `memoria_calculo.conciliacao_compras`. Com outra, o total deste
+    relatório e a linha "Compras" da memória do CMV discordariam por notas na
+    virada do mês, e a conversa com o contador começaria pela diferença errada.
+    ⚠️ **O custo do item é o que ENTRA no estoque**: valor − desconto + frete e
+    outros rateados. É o que o custo médio usa; o valor de tabela da nota sozinho
+    faria o fornecedor do frete caro parecer o mais barato.
+    """
+    inicio, fim = _periodo(f)
+    detalhe = f.get("detalhe_compras") or "nota"
+    if detalhe not in DETALHES_COMPRAS:
+        detalhe = "nota"
+    status = _situacoes_nota(f)
+    busca = (f.get("busca_fornecedor") or "").strip() or None
+    params = {"u": id_unidade, "inicio": inicio, "limite": fim + timedelta(days=1),
+              "status": status, "busca": f"%{busca}%" if busca else None,
+              "categorias": _lista(f.get("categorias")), "setores": _lista(f.get("setores"))}
+    filtro_nota = """n.id_unidade = %(u)s AND n.status = ANY(%(status)s)
+              AND coalesce(n.data_entrada, n.data_emissao) >= %(inicio)s
+              AND coalesce(n.data_entrada, n.data_emissao) < %(limite)s
+              AND (%(busca)s::text IS NULL
+                   OR coalesce(fo.nome, n.nome_emitente) ILIKE %(busca)s
+                   OR coalesce(n.cnpj_emitente, '') ILIKE %(busca)s)"""
+    # ⚠️ Categoria e setor são do PRODUTO: só valem nas visões por item. Na nota e no
+    # fornecedor eles cortariam metade de uma nota e o total deixaria de ser o dela.
+    filtro_item = """(%(categorias)s::int[] IS NULL OR p.id_categoria = ANY(%(categorias)s))
+              AND (%(setores)s::int[] IS NULL OR p.id_setor = ANY(%(setores)s))"""
+    custo_item = ("(i.valor_total - i.valor_desconto + i.valor_frete_rateado "
+                  "+ i.valor_outros_rateado)")
+
+    if detalhe == "nota":
+        cur.execute(
+            f"""SELECT coalesce(n.data_entrada, n.data_emissao) AS data,
+                       n.numero, n.serie, coalesce(fo.nome, n.nome_emitente) AS fornecedor,
+                       n.cnpj_emitente AS cnpj, n.status, n.origem,
+                       (SELECT count(*) FROM nota_itens i WHERE i.id_nota = n.id) AS itens,
+                       n.valor_produtos, n.valor_desconto, n.valor_frete, n.valor_outros,
+                       n.valor_total
+                  FROM notas_entrada n
+                  LEFT JOIN fornecedores fo ON fo.id = n.id_fornecedor
+                 WHERE {filtro_nota}
+                 ORDER BY 1, n.numero""", params)
+        linhas = [{**dict(r), "status": _ROTULO_STATUS_NOTA.get(r["status"], r["status"]),
+                   "nota": (f"{r['numero']}" + (f"/{r['serie']}" if r["serie"] else "")
+                            if r["numero"] else "—")}
+                  for r in cur.fetchall()]
+        colunas = [("data", "Entrada"), ("nota", "Nota"), ("fornecedor", "Fornecedor"),
+                   ("cnpj", "CNPJ"), ("status", "Situação"), ("itens", "Itens"),
+                   ("valor_produtos", "Produtos"), ("valor_desconto", "Desconto"),
+                   ("valor_frete", "Frete"), ("valor_outros", "Outros (IPI, ST)"),
+                   ("valor_total", "Total da nota")]
+        total = sum((Decimal(str(l["valor_total"] or 0)) for l in linhas), Decimal(0))
+        resumo = [("Notas", len(linhas)), ("Total das notas", total),
+                  ("Fornecedores", len({l["fornecedor"] for l in linhas}))]
+    elif detalhe == "fornecedor":
+        cur.execute(
+            f"""SELECT coalesce(fo.nome, n.nome_emitente) AS fornecedor,
+                       max(n.cnpj_emitente) AS cnpj, count(*) AS notas,
+                       sum(n.valor_total) AS total,
+                       max(coalesce(n.data_entrada, n.data_emissao)) AS ultima
+                  FROM notas_entrada n
+                  LEFT JOIN fornecedores fo ON fo.id = n.id_fornecedor
+                 WHERE {filtro_nota}
+                 GROUP BY 1
+                 ORDER BY sum(n.valor_total) DESC""", params)
+        linhas = [dict(r) for r in cur.fetchall()]
+        total = sum((Decimal(str(l["total"] or 0)) for l in linhas), Decimal(0))
+        for l in linhas:
+            l["media"] = (Decimal(str(l["total"])) / l["notas"]).quantize(Decimal("0.01"))
+            l["participacao"] = (Decimal(str(l["total"] or 0)) * 100 / total
+                                 ).quantize(Decimal("0.01")) if total else None
+        colunas = [("fornecedor", "Fornecedor"), ("cnpj", "CNPJ"), ("notas", "Notas"),
+                   ("total", "Total comprado"), ("participacao", "% do total"),
+                   ("media", "Média por nota"), ("ultima", "Última compra")]
+        resumo = [("Fornecedores", len(linhas)), ("Notas", sum(l["notas"] for l in linhas)),
+                  ("Total das notas", total)]
+    elif detalhe == "produto":
+        cur.execute(
+            f"""SELECT coalesce(p.codigo, '') AS codigo,
+                       coalesce(p.nome, i.descricao_fornecedor || ' (sem produto)') AS produto,
+                       c.nome AS categoria,
+                       coalesce(p.um_estoque, i.um_nota) AS um,
+                       sum(coalesce(i.quantidade_convertida, i.quantidade)) AS quantidade,
+                       sum({custo_item}) AS custo,
+                       min(i.custo_aquisicao_unitario) AS menor_unitario,
+                       max(i.custo_aquisicao_unitario) AS maior_unitario,
+                       count(DISTINCT n.id) AS notas,
+                       count(DISTINCT coalesce(fo.nome, n.nome_emitente)) AS fornecedores
+                  FROM nota_itens i
+                  JOIN notas_entrada n ON n.id = i.id_nota
+                  LEFT JOIN fornecedores fo ON fo.id = n.id_fornecedor
+                  LEFT JOIN produtos p ON p.id = i.id_produto
+                  LEFT JOIN categorias c ON c.id = p.id_categoria
+                 WHERE {filtro_nota} AND {filtro_item}
+                 GROUP BY 1, 2, 3, 4
+                 ORDER BY sum({custo_item}) DESC""", params)
+        linhas = [dict(r) for r in cur.fetchall()]
+        for l in linhas:
+            q = Decimal(str(l["quantidade"] or 0))
+            l["medio"] = (Decimal(str(l["custo"] or 0)) / q).quantize(Decimal("0.000001")) if q else None
+        colunas = [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
+                   ("quantidade", "Quantidade"), ("um", "Unidade"), ("custo", "Custo total"),
+                   ("medio", "Custo médio"), ("menor_unitario", "Menor unitário"),
+                   ("maior_unitario", "Maior unitário"), ("notas", "Notas"),
+                   ("fornecedores", "Fornecedores")]
+        total = sum((Decimal(str(l["custo"] or 0)) for l in linhas), Decimal(0))
+        resumo = [("Produtos", len(linhas)), ("Custo total dos itens", total)]
+    else:
+        cur.execute(
+            f"""SELECT coalesce(n.data_entrada, n.data_emissao) AS data,
+                       n.numero AS nota, coalesce(fo.nome, n.nome_emitente) AS fornecedor,
+                       i.descricao_fornecedor AS na_nota, p.codigo, p.nome AS produto,
+                       i.quantidade, i.um_nota, i.valor_unitario, i.valor_total,
+                       i.valor_desconto,
+                       (i.valor_frete_rateado + i.valor_outros_rateado) AS frete_outros,
+                       {custo_item} AS custo,
+                       i.quantidade_convertida, p.um_estoque, i.custo_aquisicao_unitario,
+                       i.variacao_preco_pct
+                  FROM nota_itens i
+                  JOIN notas_entrada n ON n.id = i.id_nota
+                  LEFT JOIN fornecedores fo ON fo.id = n.id_fornecedor
+                  LEFT JOIN produtos p ON p.id = i.id_produto
+                 WHERE {filtro_nota} AND {filtro_item}
+                 ORDER BY 1, n.numero, i.seq""", params)
+        linhas = [dict(r) for r in cur.fetchall()]
+        colunas = [("data", "Entrada"), ("nota", "Nota"), ("fornecedor", "Fornecedor"),
+                   ("na_nota", "Descrição na nota"), ("codigo", "Código"),
+                   ("produto", "Produto"), ("quantidade", "Qtd na nota"), ("um_nota", "Un."),
+                   ("valor_unitario", "Unitário"), ("valor_total", "Valor"),
+                   ("valor_desconto", "Desconto"), ("frete_outros", "Frete e outros"),
+                   ("custo", "Custo"), ("quantidade_convertida", "Qtd em estoque"),
+                   ("um_estoque", "Un. estoque"), ("custo_aquisicao_unitario", "Custo un."),
+                   ("variacao_preco_pct", "Variação %")]
+        total = sum((Decimal(str(l["custo"] or 0)) for l in linhas), Decimal(0))
+        resumo = [("Itens", len(linhas)), ("Custo total dos itens", total)]
+
+    escolhidas = ", ".join(SITUACOES_NOTA[s].split(" (")[0].lower()
+                           for s in (_lista(f.get("situacao_nota")) or ["lancada", "pendente"])
+                           if s in SITUACOES_NOTA)
+    resumo.append(("Notas consideradas", escolhidas))
+    if busca:
+        resumo.append(("Fornecedor contém", busca))
+    return Saida(linhas, colunas,
+                 f"Compras — {_intervalo(inicio, fim)} — {DETALHES_COMPRAS[detalhe].split(' — ')[0].lower()}",
+                 resumo, inicio, fim)
+
+
+_TIPOS_PERDA = ("SAIDA_PERDA", "AJUSTE_INVENTARIO_SAIDA", "AJUSTE_INVENTARIO_ENTRADA")
+_ORIGEM_PERDA = {"ETIQUETA": "etiqueta", "MANUAL": "lançada à mão", "REMESSA": "remessa",
+                 "INVENTARIO": "inventário", "AJUSTE_LOTE": "ajuste de saldo"}
+
+
+def _perdas(cur, id_unidade: int, f: dict) -> Saida:
+    """Quanto se perdeu no período, e por quê — perdas, inventário e ajustes de saldo.
+
+    🔑 **A conta é LÍQUIDA**: a sobra de inventário (ajuste de entrada) entra
+    negativa, e o estorno de uma perda devolve o que ela tinha tirado. Perda
+    estornada não é perda — e contá-la faria o relatório brigar com o razão.
+    ⚠️ No razão a quantidade tem sinal e o `custo_total` não: o valor perdido é o
+    custo com o sinal da SAÍDA (`-quantidade`), o que já resolve sobra e estorno.
+    ⚠️ **O estorno herda o motivo do ORIGINAL** e é datado onde aconteceu: um estorno
+    em outubro de uma perda de setembro abate outubro, como no CMV.
+    """
+    inicio, fim = _periodo(f)
+    detalhe = f.get("detalhe_perdas") or "motivo"
+    if detalhe not in DETALHES_PERDAS:
+        detalhe = "motivo"
+    cur.execute(
+        """SELECT m.data_movimento, o.tipo, o.origem_tipo, o.id_motivo_perda,
+                  pm.nome AS motivo_cadastro, p.codigo, p.nome AS produto, p.um_estoque,
+                  c.nome AS categoria, l.nome AS local, u.nome AS usuario,
+                  -m.quantidade AS quantidade,
+                  CASE WHEN m.quantidade < 0 THEN m.custo_total ELSE -m.custo_total END AS valor,
+                  m.id_estorno_de IS NOT NULL AS estorno, coalesce(m.observacao, '') AS observacao
+             FROM estoque_movimentos m
+             JOIN estoque_movimentos o ON o.id = coalesce(m.id_estorno_de, m.id)
+             JOIN produtos p ON p.id = m.id_produto
+             LEFT JOIN categorias c ON c.id = p.id_categoria
+             LEFT JOIN locais_estoque l ON l.id = m.id_local
+             LEFT JOIN perda_motivos pm ON pm.id = o.id_motivo_perda
+             LEFT JOIN usuarios u ON u.id = m.id_usuario
+            WHERE m.id_unidade = %(u)s AND o.tipo = ANY(%(tipos)s)
+              AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
+              AND (%(locais)s::int[] IS NULL OR m.id_local = ANY(%(locais)s))
+              AND (%(setores)s::int[] IS NULL OR p.id_setor = ANY(%(setores)s))
+              AND (%(categorias)s::int[] IS NULL OR p.id_categoria = ANY(%(categorias)s))
+            ORDER BY m.data_movimento, m.id""",
+        {"u": id_unidade, "tipos": list(_TIPOS_PERDA), "inicio": inicio,
+         "limite": fim + timedelta(days=1), "locais": _lista(f.get("locais")),
+         "setores": _lista(f.get("setores")), "categorias": _lista(f.get("categorias"))})
+    movs = []
+    for r in cur.fetchall():
+        d = dict(r)
+        if d["tipo"] == "SAIDA_PERDA":
+            chave = f"m{d['id_motivo_perda']}" if d["id_motivo_perda"] else "sem_motivo"
+            motivo = d["motivo_cadastro"] or "Perda sem motivo informado"
+        elif d["origem_tipo"] == "INVENTARIO":
+            chave, motivo = "inventario", "Diferença de inventário"
+        else:
+            chave, motivo = "ajuste", "Ajuste de saldo"
+        d.update(chave=chave, motivo=motivo,
+                 origem=_ORIGEM_PERDA.get(d["origem_tipo"], (d["origem_tipo"] or "").lower()))
+        movs.append(d)
+    motivos = _lista(f.get("motivos"))
+    if motivos:
+        movs = [m for m in movs if m["chave"] in set(motivos)]
+
+    # ⚠️ `Decimal(0)` como início: soma vazia do Python é o INT 0, sem `.quantize`.
+    valores = [Decimal(str(m["valor"] or 0)) for m in movs]
+    perdido = sum((v for v in valores if v > 0), Decimal(0))
+    sobrou = -sum((v for v in valores if v < 0), Decimal(0))
+    liquido = perdido - sobrou
+
+    if detalhe == "motivo":
+        grupos: dict[str, dict] = {}
+        for m in movs:
+            g = grupos.setdefault(m["motivo"], {"motivo": m["motivo"], "movimentos": 0,
+                                                "produtos": set(), "valor": Decimal(0)})
+            g["movimentos"] += 1
+            g["produtos"].add(m["produto"])
+            g["valor"] += Decimal(str(m["valor"] or 0))
+        linhas = sorted(grupos.values(), key=lambda g: -g["valor"])
+        for g in linhas:
+            g["produtos"] = len(g["produtos"])
+            g["participacao"] = (g["valor"] * 100 / liquido).quantize(Decimal("0.01")) \
+                if liquido else None
+        colunas = [("motivo", "Motivo"), ("movimentos", "Movimentos"),
+                   ("produtos", "Produtos"), ("valor", "Valor perdido"),
+                   ("participacao", "% do total")]
+    elif detalhe == "produto":
+        grupos = {}
+        for m in movs:
+            g = grupos.setdefault(m["produto"], {
+                "codigo": m["codigo"], "produto": m["produto"], "categoria": m["categoria"],
+                "um_estoque": m["um_estoque"], "quantidade": Decimal(0), "valor": Decimal(0),
+                "_motivos": {}})
+            g["quantidade"] += Decimal(str(m["quantidade"] or 0))
+            g["valor"] += Decimal(str(m["valor"] or 0))
+            g["_motivos"][m["motivo"]] = g["_motivos"].get(m["motivo"], 0) + \
+                Decimal(str(m["valor"] or 0))
+        linhas = sorted(grupos.values(), key=lambda g: -g["valor"])
+        for g in linhas:
+            g["principal"] = max(g.pop("_motivos").items(), key=lambda kv: kv[1])[0]
+        colunas = [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
+                   ("quantidade", "Quantidade perdida"), ("um_estoque", "Unidade"),
+                   ("valor", "Valor perdido"), ("principal", "Motivo que mais pesou")]
+    else:
+        linhas = [{**m, "data": m["data_movimento"],
+                   "motivo": m["motivo"] + (" (estorno)" if m["estorno"] else "")}
+                  for m in movs]
+        colunas = [("data", "Quando"), ("codigo", "Código"), ("produto", "Produto"),
+                   ("local", "Local"), ("motivo", "Motivo"), ("origem", "Origem"),
+                   ("quantidade", "Quantidade"), ("um_estoque", "Unidade"),
+                   ("valor", "Valor"), ("usuario", "Quem"), ("observacao", "Observação")]
+
+    for l in linhas:
+        l["valor"] = Decimal(str(l["valor"] or 0)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+    return Saida(
+        linhas, colunas,
+        f"Perdas e ajustes — {_intervalo(inicio, fim)} — "
+        f"{DETALHES_PERDAS[detalhe].split(' — ')[0].lower()}",
+        [("Perdas e faltas", perdido.quantize(Decimal("0.01"))),
+         ("Sobras (abatem)", sobrou.quantize(Decimal("0.01"))),
+         ("Perda líquida", liquido.quantize(Decimal("0.01"))),
+         ("Movimentos", len(movs))],
+        inicio, fim)
+
+
+_SITUACAO_MARGEM = {"prejuizo": "prejuízo", "abaixo": "abaixo da margem",
+                    "sem_preco": "sem preço", "sem_custo": "sem custo (sem ficha)",
+                    "sem_conta": "taxas + margem passam de 100%", "na_margem": "na margem"}
+
+
+def _margem(cur, id_unidade: int, f: dict) -> Saida:
+    """Cada prato vendido no período: custo, preço, CMV %, lucro e o piso do preço.
+
+    🔑 **É a análise da Precificação, recortada pelo período** (`precificacao.analise`):
+    a mesma conta, as mesmas taxas e a mesma margem-alvo da configuração da loja.
+    Um segundo cálculo de margem aqui discordaria da tela de preços na primeira
+    taxa nova. ⚠️ O custo é o de HOJE (precifica-se para a frente); o volume é o do
+    período. A ordem é a da tela: prejuízo e abaixo da margem na frente.
+    """
+    from services import precificacao
+
+    inicio, fim = _periodo(f)
+    r = precificacao.analise(cur, id_unidade, limite=2000, inicio=inicio, fim=fim)
+    itens = r["itens"]
+    cats = _nomes(_opcoes_categorias(cur, id_unidade), _lista(f.get("categorias")))
+    sets_ = _nomes(_opcoes_setores(cur, id_unidade), _lista(f.get("setores")))
+    if cats is not None:
+        itens = [i for i in itens if i["categoria"] in cats]
+    if sets_ is not None:
+        itens = [i for i in itens if i["setor"] in sets_]
+    linhas = [{**i, "situacao": _SITUACAO_MARGEM.get(i["situacao"], i["situacao"]),
+               "lucro_total": (round(i["lucro"] * i["vendido"], 2)
+                               if i["lucro"] is not None else None)} for i in itens]
+    com_conta = [i for i in itens if i["lucro"] is not None]
+    receita = sum(i["receita"] or 0 for i in com_conta)
+    custo = sum((i["custo_direto"] or 0) * i["vendido"] for i in com_conta)
+    resumo = [("Pratos", len(linhas)),
+              ("Abaixo da margem", sum(1 for i in itens if i["situacao"] in ("abaixo", "prejuizo"))),
+              ("Com prejuízo", sum(1 for i in itens if i["situacao"] == "prejuizo")),
+              ("Sem custo (sem ficha)", sum(1 for i in itens if i["situacao"] == "sem_custo")),
+              ("CMV % (pratos com conta)", round(custo / receita * 100, 2) if receita else None),
+              ("Lucro no período", round(sum(l["lucro_total"] or 0 for l in linhas), 2))]
+    if not r["configurada"]:
+        resumo.append(("Atenção", "a precificação desta loja não foi configurada — "
+                                  "sem taxas nem margem-alvo, o lucro é só preço − custo"))
+    return Saida(
+        linhas,
+        [("codigo", "Código"), ("nome", "Prato"), ("categoria", "Categoria"),
+         ("setor", "Setor"), ("vendido", "Vendido"), ("receita", "Receita"),
+         ("custo_direto", "Custo"), ("preco", "Preço"), ("food_cost_pct", "CMV %"),
+         ("soma_pct", "Taxas %"), ("lucro", "Lucro un."), ("lucro_pct", "Lucro %"),
+         ("lucro_total", "Lucro no período"), ("margem_alvo_pct", "Margem-alvo %"),
+         ("sugerido", "Preço mínimo"), ("situacao", "Situação")],
+        f"Margem dos pratos — {_intervalo(inicio, fim)}", resumo, inicio, fim)
+
+
+def _recebimentos(cur, id_unidade: int, f: dict) -> Saida:
+    """Os lotes de cobrança RECEBIDOS no período, com o total por forma de pagamento.
+
+    🔑 A data é a do RECEBIMENTO (a que se informou na baixa), não a do lote: é o
+    dinheiro que entrou naquele período. O quadro por forma vem como anexo — é o
+    que se confere com o extrato e com a folha.
+    """
+    inicio, fim = _periodo(f)
+    formas = _lista(f.get("formas"))
+    pessoas = _lista(f.get("pessoas"))
+    cur.execute(
+        """SELECT l.id AS lote, l.recebido_em, fo.nome AS pessoa, l.desde, l.ate,
+                  l.cupons, l.total_cheio, l.desconto, l.total, l.forma_pagamento,
+                  ub.nome AS baixou, l.observacao_baixa
+             FROM consumo_lotes l
+             JOIN fornecedores fo ON fo.id = l.id_pessoa
+             LEFT JOIN usuarios ub ON ub.id = l.id_usuario_baixou
+            WHERE l.id_unidade = %(u)s AND l.status = 'RECEBIDO'
+              AND l.recebido_em BETWEEN %(inicio)s AND %(fim)s
+              AND (%(formas)s::text[] IS NULL OR l.forma_pagamento = ANY(%(formas)s))
+              AND (%(pessoas)s::int[] IS NULL OR l.id_pessoa = ANY(%(pessoas)s))
+            ORDER BY l.recebido_em, lower(fo.nome)""",
+        {"u": id_unidade, "inicio": inicio, "fim": fim, "formas": formas,
+         "pessoas": [int(p) for p in pessoas] if pessoas else None})
+    linhas = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["forma"] = receber_motor.FORMAS.get(d["forma_pagamento"] or "", "—")
+        d["periodo"] = (f"{d['desde']:%d/%m/%Y} a " if d["desde"] else "até ") + f"{d['ate']:%d/%m/%Y}"
+        linhas.append(d)
+    por_forma: dict[str, dict] = {}
+    for l in linhas:
+        g = por_forma.setdefault(l["forma"], {"forma": l["forma"], "lotes": 0,
+                                              "total": Decimal(0)})
+        g["lotes"] += 1
+        g["total"] += Decimal(str(l["total"] or 0))
+    total = sum((Decimal(str(l["total"] or 0)) for l in linhas), Decimal(0))
+    quadro = sorted(por_forma.values(), key=lambda g: -g["total"])
+    for g in quadro:
+        g["participacao"] = (g["total"] * 100 / total).quantize(Decimal("0.01")) if total else None
+    return Saida(
+        linhas,
+        [("recebido_em", "Recebido em"), ("lote", "Lote"), ("pessoa", "Pessoa"),
+         ("periodo", "Documentos de"), ("cupons", "Docs"), ("total_cheio", "Valor cheio"),
+         ("desconto", "Desconto"), ("total", "Recebido"), ("forma", "Forma"),
+         ("baixou", "Baixa por"), ("observacao_baixa", "Observação")],
+        f"Recebimentos do consumo — {_intervalo(inicio, fim)}",
+        [("Lotes recebidos", len(linhas)), ("Total recebido", total),
+         ("Pessoas", len({l["pessoa"] for l in linhas}))],
+        inicio, fim,
+        anexos=[(quadro, [("forma", "Forma"), ("lotes", "Lotes"), ("total", "Total"),
+                          ("participacao", "% do total")],
+                 "Por forma de pagamento", None)] if quadro else [],
+    )
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -1487,6 +1946,31 @@ RELATORIOS: dict[str, Relatorio] = {
         "Os produtos com um preço aqui e outro na tabela do PDV: o código de lá, o "
         "preço que está no caixa e o que deveria estar.",
         "precificacao.analisar", "precos-pdv", (), _precos_pdv),
+    # 🔑 Os quatro de 23/10/2026 (pedido do dono: "mais relatorios e planilhas").
+    "compras": Relatorio(
+        "Compras",
+        "O que se comprou no período: por nota, por fornecedor, por produto ou item a item.",
+        "compras.notas", "compras",
+        ("periodo", "detalhe_compras", "situacao_nota", "busca_fornecedor",
+         "categorias", "setores"), _compras),
+    "perdas": Relatorio(
+        "Perdas e ajustes",
+        "Quanto se perdeu e por quê: perdas por motivo, diferenças de inventário e "
+        "ajustes de saldo — com as sobras abatendo.",
+        "estoque.saldos", "perdas",
+        ("periodo", "detalhe_perdas", "motivos", "locais", "setores", "categorias"),
+        _perdas),
+    "margem": Relatorio(
+        "Margem dos pratos",
+        "Cada prato vendido no período: custo, preço, CMV %, lucro e o preço mínimo "
+        "para a margem da casa.",
+        "precificacao.analisar", "margem-pratos", ("periodo", "categorias", "setores"),
+        _margem),
+    "recebimentos": Relatorio(
+        "Recebimentos do consumo",
+        "Os lotes de cobrança recebidos no período, com o total por forma de pagamento.",
+        "consumo.periodos", "recebimentos", ("periodo", "formas", "pessoas"),
+        _recebimentos),
 }
 
 

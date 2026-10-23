@@ -362,7 +362,10 @@ export default function PaginaEstoque() {
               />
             </>
           ) : (
-            <BotaoExportar relatorio="movimentos" iniciais={semeaduraDoRazao} />
+            <>
+              <BotaoExportar relatorio="movimentos" iniciais={semeaduraDoRazao} />
+              <BotaoExportar relatorio="perdas" rotulo="Perdas e ajustes" />
+            </>
           )}
         </div>
         }

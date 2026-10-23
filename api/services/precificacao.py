@@ -322,7 +322,7 @@ def _f(v):
 
 
 def analise(cur, id_unidade: int, dias: int = 30, limite: int = 200,
-            id_produto: int | None = None) -> dict:
+            id_produto: int | None = None, inicio=None, fim=None) -> dict:
     """Os produtos vendidos nos últimos `dias`: quais estão abaixo da margem, e quanto isso pesa.
 
     🔑 **A ordem é a do IMPACTO no mês** (diferença × quantidade vendida), com
@@ -332,6 +332,8 @@ def analise(cur, id_unidade: int, dias: int = 30, limite: int = 200,
     na última venda: precifica-se para a frente, com o que os ingredientes
     custam agora.
     ⚠️ **O volume é o que passou**: o impacto é "se vender a mesma quantidade".
+    🔑 `inicio`/`fim` trocam a janela de `dias` por um período fechado — é o recorte
+    do relatório "Margem dos pratos" (23/10/2026).
     """
     k = config(cur, id_unidade)
     cur.execute(
@@ -345,14 +347,16 @@ def analise(cur, id_unidade: int, dias: int = 30, limite: int = 200,
               LEFT JOIN categorias c ON c.id = p.id_categoria
               LEFT JOIN setores s ON s.id = p.id_setor
              WHERE v.id_unidade = %(u)s AND NOT v.cancelada AND p.ativo
-               AND v.data >= current_date - %(dias)s
+               AND (CASE WHEN %(inicio)s::date IS NULL THEN v.data >= current_date - %(dias)s
+                         ELSE v.data BETWEEN %(inicio)s AND %(fim)s END)
                -- ⚠️ A lista é cortada pelos que mais faturam; fixar UM produto é o que
                -- deixa perguntar por ele quando ele não está entre os primeiros.
                AND (%(p)s::int IS NULL OR p.id = %(p)s)
              GROUP BY p.id, p.codigo, p.nome, p.id_categoria, p.id_setor, c.nome, s.nome
              ORDER BY sum(vi.valor_total) DESC
              LIMIT %(limite)s""",
-        {"u": id_unidade, "dias": dias, "limite": limite, "p": id_produto},
+        {"u": id_unidade, "dias": dias, "limite": limite, "p": id_produto,
+         "inicio": inicio, "fim": fim},
     )
     produtos = [dict(r) for r in cur.fetchall()]
 
@@ -388,6 +392,8 @@ def analise(cur, id_unidade: int, dias: int = 30, limite: int = 200,
             "margem_alvo_pct": _f(conta["margem_pct"]), "soma_pct": _f(conta["soma_pct"]),
             "lucro": _f(conta["leitura"]["lucro"]) if conta["leitura"] else None,
             "lucro_pct": _f(conta["leitura"]["lucro_pct"]) if conta["leitura"] else None,
+            "food_cost_pct": _f(conta["leitura"]["food_cost_pct"]) if conta["leitura"] else None,
+            "receita": _f(p["receita"]),
             # Positiva: falta para chegar ao piso. Negativa: é a FOLGA — não é sugestão de baixar.
             "diferenca": _f(diferenca),
             "vendido": float(qtd),

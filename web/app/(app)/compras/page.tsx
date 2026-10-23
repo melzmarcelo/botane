@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import BotaoExportar from "@/components/exportar";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -390,6 +391,8 @@ export default function PaginaCompras() {
             <Link href="/compras/nova" className="btn btn-secundario">
               Digitar nota
             </Link>
+            {/* 🔑 Compras do período, por nota, fornecedor ou produto (23/10/2026). */}
+            <BotaoExportar relatorio="compras" rotulo="Relatório de compras" />
             {/* 🔑 O lote fica sempre à vista para quem lança: a janela é que diz
                 quantas estão prontas, quantas travam e o que destrava. */}
             {pode("compras.lancar") && (

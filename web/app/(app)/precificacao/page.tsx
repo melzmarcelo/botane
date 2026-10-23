@@ -159,6 +159,8 @@ export default function PaginaPrecificacao() {
                 de exportação autoriza. */}
             <BotaoExportar relatorio="precos-pdv" rotulo="Preços a acertar no PDV"
                            formatoPadrao="pdf" />
+            {/* 🔑 A mesma conta desta tela, por período, para levar (23/10/2026). */}
+            <BotaoExportar relatorio="margem" rotulo="Margem dos pratos" />
             <Link href="/precificacao/configuracao" className="btn btn-secundario">
               Configuração
             </Link>

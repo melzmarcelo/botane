@@ -15,6 +15,7 @@ import { custo, qtd, textoParaNumero } from "@/lib/numeros";
 import CustoGeral from "./custo-geral";
 import CustoReferencia from "./custo-referencia";
 import ExplicaTela from "@/components/explica-tela";
+import BotaoExportar from "@/components/exportar";
 import LinkProduto from "@/components/link-produto";
 
 /**
@@ -477,16 +478,20 @@ export default function PaginaAjustes() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <p className="rotulo">Estoque</p>
-        <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
-          Ajustes de estoque
-        </h1>
-        <ExplicaTela>
-          O lançamento feito à mão, para o que não nasce de um documento. Nota de entrada,
-          produção, contagem e venda têm caminho próprio — e nada aqui é apagado: correção
-          entra como estorno.
-        </ExplicaTela>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="rotulo">Estoque</p>
+          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
+            Ajustes de estoque
+          </h1>
+          <ExplicaTela>
+            O lançamento feito à mão, para o que não nasce de um documento. Nota de entrada,
+            produção, contagem e venda têm caminho próprio — e nada aqui é apagado: correção
+            entra como estorno.
+          </ExplicaTela>
+        </div>
+        {/* 🔑 Quanto se perdeu, e por quê (23/10/2026). */}
+        <BotaoExportar relatorio="perdas" rotulo="Perdas e ajustes" />
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
