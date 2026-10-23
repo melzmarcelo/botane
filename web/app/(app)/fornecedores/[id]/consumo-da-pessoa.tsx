@@ -6,16 +6,16 @@ import { useEffect, useState } from "react";
 import { Aviso, Carregando, Cartao, Vazio } from "@/components/ui";
 import { ErroApi } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
-import { consumoNoCicloAberto, type ConsumoNoCiclo } from "@/lib/consumo";
+import { consumoEmAberto, type ConsumoEmAberto } from "@/lib/consumo";
 import { TabelaPorDocumento } from "../../vendas/por-pessoa/tabelas-documento";
-import { dataBr } from "../../vendas/tipos";
 
 /**
- * O consumo desta pessoa no ciclo ABERTO — o que ela está devendo agora.
+ * O consumo desta pessoa ainda não cobrado — o que ela está devendo agora.
  *
  * 🔑 **Pedido do dono (26/09/2026):** *"no cadastro da pessoa, incluir um item referente a
- * consumos no período aberto atual."* Os mesmos números do relatório de consumo por pessoa
- * (a rota usa a mesma consulta), por documento, com os itens.
+ * consumos no período aberto atual."* Desde 22/10/2026 não há período: é o que está EM
+ * ABERTO (sem lote de cobrança), e o que já foi mandado em lote aparece ao lado. Os
+ * mesmos números do relatório de consumo por pessoa (a rota usa a mesma consulta).
  *
  * ⚠️ **Sem a permissão do relatório, o cartão não aparece** — e isso não é erro: ver a
  * ficha da pessoa não é o mesmo que ver o que ela deve. Por isso o 403 some calado, e
@@ -31,13 +31,13 @@ export default function ConsumoDaPessoa({
   id: number;
   soFornecedor: boolean;
 }) {
-  const [dados, setDados] = useState<ConsumoNoCiclo | null>(null);
+  const [dados, setDados] = useState<ConsumoEmAberto | null>(null);
   const [erro, setErro] = useState("");
   const [semPermissao, setSemPermissao] = useState(false);
 
   useEffect(() => {
     let vivo = true;
-    consumoNoCicloAberto(id)
+    consumoEmAberto(id)
       .then((d) => vivo && setDados(d))
       .catch((e) => {
         if (!vivo) return;
@@ -50,20 +50,15 @@ export default function ConsumoDaPessoa({
   }, [id]);
 
   if (semPermissao) return null;
-  if (dados && soFornecedor && !dados.documentos.length) return null;
-
-  const ciclo = dados?.periodo;
-  const rotulo = ciclo
-    ? ciclo.nome || `${dataBr(ciclo.inicio)} a ${dataBr(ciclo.fim)}`
-    : null;
+  if (dados && soFornecedor && !dados.documentos.length && !dados.lotes_em_cobranca) return null;
 
   return (
     <Cartao
-      titulo="Consumo no ciclo aberto"
-      descricao={rotulo ? `Ciclo ${rotulo} — o que ainda vai ser cobrado.` : undefined}
+      titulo="Consumo em aberto"
+      descricao="O que esta pessoa consumiu e ainda não foi cobrado."
       acao={
-        <Link href="/vendas/por-pessoa" className="link-acao text-[13px]">
-          relatório completo
+        <Link href="/receber" className="link-acao text-[13px]">
+          contas a receber
         </Link>
       }
     >
@@ -71,20 +66,16 @@ export default function ConsumoDaPessoa({
         <Aviso tipo="erro">{erro}</Aviso>
       ) : !dados ? (
         <Carregando />
-      ) : !ciclo ? (
-        <Vazio>
-          Não há ciclo de consumo aberto nesta loja. Os ciclos se abrem em{" "}
-          <Link href="/consumo" className="link-registro">Consumo</Link>.
-        </Vazio>
-      ) : !dados.documentos.length ? (
-        <Vazio>Nenhum consumo desta pessoa no ciclo aberto.</Vazio>
+      ) : !dados.documentos.length && !dados.lotes_em_cobranca ? (
+        <Vazio>Nada em aberto nem em cobrança.</Vazio>
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             {[
               { r: "Valor cheio", v: dados.total_cheio },
               { r: "Desconto", v: dados.desconto },
               { r: "A cobrar", v: dados.total },
+              { r: `Em cobrança (${dados.lotes_em_cobranca} lote(s))`, v: dados.em_cobranca },
             ].map((t) => (
               <div key={t.r} className="rounded-[10px] border border-[var(--color-linha)] px-4 py-3">
                 <b className="block text-[22px] tabular-nums">{reais(t.v)}</b>
@@ -92,7 +83,9 @@ export default function ConsumoDaPessoa({
               </div>
             ))}
           </div>
-          <TabelaPorDocumento linhas={dados.documentos} comItens />
+          {dados.documentos.length > 0 && (
+            <TabelaPorDocumento linhas={dados.documentos} comItens />
+          )}
         </div>
       )}
     </Cartao>

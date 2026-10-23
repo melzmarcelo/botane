@@ -3803,18 +3803,16 @@ try {
   checar("e a escolha entre sintetico e analitico",
     /sint[eé]tico/i.test(textoConsumo) && /anal[ií]tico/i.test(textoConsumo),
     textoConsumo.slice(0, 400));
-  // 🔑 **O recorte e o CICLO, nao um par de datas** (08/09/2026, pedido do
-  // dono). ⚠️ O fechamento leva tudo que estava em aberto ate a data final,
-  // inclusive consumo anterior ao inicio do ciclo: filtrar por data mostraria
-  // um conjunto diferente do que foi cobrado, e esta tela E o documento da
-  // cobranca. A checagem cobra os DOIS lados — o seletor entrou e as datas
-  // sairam — porque so a primeira metade passaria com os dois na tela.
-  checar("o filtro e o ciclo de consumo, com 'em aberto' como padrao",
-    /Ciclo de consumo/i.test(textoConsumo) && /Em aberto/i.test(textoConsumo),
-    textoConsumo.slice(0, 500));
+  // 🔑 **O recorte e a SITUACAO nas contas a receber, mais as datas** (22/10/2026:
+  // o ciclo saiu). "Em aberto" e o padrao.
+  const situacaoConsumo = await p.$eval("#consumo-situacao",
+    (s) => s.options[s.selectedIndex]?.textContent ?? "").catch(() => "");
+  checar("o filtro e a situacao, com 'em aberto' como padrao",
+    /^Em aberto/i.test(situacaoConsumo), situacaoConsumo);
   const camposData = await p.evaluate(
     () => document.querySelectorAll('input[type="date"]').length);
-  checar("e os dois campos de data sairam da tela", camposData === 0, camposData);
+  checar("e os dois campos de data voltaram, para recortar os documentos",
+    camposData === 2, camposData);
 
   // 🔑 **O botao de baixar** (04/09/2026, pedido do dono: "tem a opcao de baixar
   // o arquivo do consumo por pessoa"). ⚠️ Ele so aparece se o CATALOGO do
@@ -3825,21 +3823,21 @@ try {
       (b) => b.textContent?.trim() === "Baixar"));
   checar("com o botao de baixar o arquivo", temBaixar);
 
-  // 🔑 **O periodo de consumo** (04/09/2026): abre, acumula e fecha no
-  // pagamento. ⚠️ Este bloco monta o proprio cenario e desfaz no fim — periodo
-  // aberto e um singleton por loja, e um que sobrasse faria a proxima rodada
-  // recusar o `abrir` de qualquer outra suite.
+  // 🔑 **Contas a receber** (22/10/2026) substitui os periodos de consumo. ⚠️ O
+  // endereco antigo `/consumo` continua levando para la: estava no menu e nos
+  // favoritos. O fluxo do lote pela tela e cobrado mais abaixo, com a venda da pessoa.
   await p.goto(`${WEB}/consumo`, { waitUntil: "networkidle2" });
-  await p.waitForFunction(() => /Per[ií]odos de consumo/i.test(document.body.innerText),
+  await p.waitForFunction(() => /Contas a receber/i.test(document.body.innerText),
     { timeout: 20000, polling: 300 }).catch(() => {});
   const textoCiclos = await textoVisivel(p);
-  checar("a tela de periodos de consumo abre",
-    /Per[ií]odos de consumo/i.test(textoCiclos), textoCiclos.slice(0, 140));
-  // 🔑 O numero que a casa quer saber antes de fechar: quanto ha para cobrar.
-  checar("dizendo quanto esta em aberto agora",
-    /Em aberto agora/i.test(textoCiclos), textoCiclos.slice(0, 400));
-  checar("e qual e o ciclo atual", /Ciclo atual/i.test(textoCiclos),
+  checar("o endereco antigo dos periodos leva a Contas a receber",
+    /\/receber$/.test(new URL(p.url()).pathname) && /Contas a receber/i.test(textoCiclos),
+    { url: p.url(), texto: textoCiclos.slice(0, 140) });
+  checar("dizendo quanto esta em aberto e quanto esta em cobranca",
+    /Em aberto/i.test(textoCiclos) && /Em cobran[cç]a/i.test(textoCiclos),
     textoCiclos.slice(0, 400));
+  checar("e com a lista dos lotes de cobranca", /Lotes de cobran[cç]a/i.test(textoCiclos),
+    textoCiclos.slice(0, 600));
 
   // ⚠️ **Meu consumo nao exige permissao nenhuma**, como a Ajuda: ninguem
   // precisa de autorizacao para ver a propria divida. A checagem entra pelo
@@ -3928,34 +3926,8 @@ try {
     nome: `CUPOM PESSOA ${m6}`, fornecedor: false,
     cupom_base: "VENDA", cupom_desconto_pct: 20,
   }, token);
-  // 🔑 **Venda com pessoa exige ciclo de consumo ABERTO** (08/09/2026). Sem
-  // isto o lancamento abaixo volta 400 e as seis checagens do cupom caem em
-  // cascata, acusando a tela de nao mostrar o que ela nunca recebeu.
-  // ⚠️ **As datas nascem depois do ultimo ciclo existente**: um ciclo real da
-  // casa sobrepondo o do teste faz `abrir` devolver 409 por sobreposicao.
-  // ⚠️ E o ciclo so se apaga se foi ESTA bateria que o abriu — um ciclo da casa
-  // nao e lixo de teste.
-  const { dados: ciclos } = await api("GET", "/consumo/periodos", null, token);
-  let cicloDaBateria = null;
-  if (!ciclos.aberto) {
-    const ultimo = (ciclos.periodos || []).reduce(
-      (mx, x) => (!mx || x.fim > mx ? x.fim : mx), null);
-    const base = new Date(ultimo ? `${ultimo}T12:00:00` : Date.now());
-    if (ultimo) base.setDate(base.getDate() + 1);
-    // ⚠️ Local, nao UTC — ver a nota do `diaLocal` no topo do arquivo.
-    const dia = (d) => d.toLocaleDateString("sv-SE");
-    const fim = new Date(base);
-    fim.setDate(fim.getDate() + 29);
-    const novo = await api("POST", "/consumo/periodos", {
-      inicio: dia(base), fim: dia(fim), nome: `Ciclo bateria ${m6}`,
-    }, token);
-    cicloDaBateria = novo.dados?.id ?? null;
-    if (cicloDaBateria) {
-      aoTerminar.push(() => api("DELETE", `/consumo/periodos/${cicloDaBateria}`, null, token));
-    }
-  }
-  checar("ha ciclo de consumo aberto para a venda com pessoa",
-    !!(ciclos.aberto || cicloDaBateria), { aberto: ciclos.aberto, cicloDaBateria });
+  // 🔑 Desde 22/10/2026 a venda com pessoa NÃO precisa de ciclo aberto: entra na
+  // data e fica em aberto até o lote de cobrança.
   await api("POST", "/vendas/importar", { vendas: [{
     data: hoje6, documento: `PESSOA-${m6}`, origem: "MANUAL",
     id_pessoa: pessoaCupom.dados.id,
@@ -3984,6 +3956,73 @@ try {
     // ele nasceu.
     checar("e a regra que valia no dia, escrita no cabecalho",
       /20% de desconto/i.test(textoPessoa), textoPessoa.slice(0, 400));
+
+    // 🔑 **Contas a receber pela TELA** (22/10/2026, pedido do dono): a venda da
+    // pessoa aparece em aberto, vira lote marcando a pessoa, e o lote recebe baixa
+    // por permuta. ⚠️ O lote se cancela no fim deste bloco: venda em lote não se
+    // cancela, e a limpeza da bateria cancela esta venda.
+    const idPessoaCupom = pessoaCupom.dados.id;
+    await irPara(p, `${WEB}/receber`);
+    await p.waitForSelector(`#receber-em-aberto tr[data-pessoa="${idPessoaCupom}"]`,
+      { timeout: 20000 }).catch(() => {});
+    const linhaReceber = await p.evaluate((id) =>
+      document.querySelector(`#receber-em-aberto tr[data-pessoa="${id}"]`)?.innerText ?? "",
+      idPessoaCupom);
+    checar("a venda da pessoa aparece EM ABERTO em Contas a receber, com os 80,00",
+      new RegExp(`CUPOM PESSOA ${m6}`, "i").test(linhaReceber) && /80,00/.test(linhaReceber),
+      linhaReceber);
+    // ⚠️ **Clique pelo DOM, não por coordenada** (22/10/2026): numa lista longa a
+    // barra fixa do topo cobria a caixinha, o clique caía nela e a pessoa não era
+    // marcada.
+    await p.evaluate((id) => {
+      const cx = document.querySelector(
+        `#receber-em-aberto tr[data-pessoa="${id}"] input[type="checkbox"]`);
+      if (cx instanceof HTMLElement) cx.click();
+    }, idPessoaCupom);
+    await p.waitForFunction(
+      () => /Gerar 1 lote/.test(document.querySelector("#receber-gerar")?.textContent ?? ""),
+      { timeout: 5000 }).catch(() => {});
+    const rotuloGerar = await p.$eval("#receber-gerar", (b) => b.textContent?.trim()).catch(() => "");
+    checar("marcar a pessoa troca o botao para o lote so dela",
+      /Gerar 1 lote/.test(rotuloGerar), rotuloGerar);
+    // 🔴 **Sem a pessoa marcada, NÃO confirma.** Sem esta trava, a falha acima virava
+    // "gerar lotes de todos" — e a bateria cobrava todas as pessoas da base (aconteceu:
+    // 64 lotes na base local, cancelados à mão).
+    if (/Gerar 1 lote/.test(rotuloGerar)) {
+      await p.click("#receber-gerar").catch(() => {});
+      await p.waitForSelector("#receber-confirma", { timeout: 5000 }).catch(() => {});
+      const confirma = await p.$eval("#receber-confirma", (e) => e.innerText).catch(() => "");
+      checar("a confirmacao diz para quem, ate quando e o total",
+        new RegExp(`CUPOM PESSOA ${m6}`, "i").test(confirma) && /80,00/.test(confirma), confirma);
+      if (new RegExp(`CUPOM PESSOA ${m6}`, "i").test(confirma)) {
+        await p.evaluate(() => [...document.querySelectorAll("button")]
+          .find((b) => b.textContent?.trim() === "Gerar")?.click());
+      }
+    }
+    await assentar(1500);
+    const { dados: lotesPessoa } = await api("GET",
+      `/receber/lotes?status=ABERTO&id_pessoa=${idPessoaCupom}`, null, token);
+    const loteTela = (lotesPessoa?.lotes ?? [])[0];
+    checar("o lote nasce pela tela, em cobranca, com os 80,00",
+      loteTela && Number(loteTela.total) === 80, lotesPessoa);
+    if (loteTela) {
+      await irPara(p, `${WEB}/receber/lotes/${loteTela.id}`);
+      await p.waitForSelector("#lote-total", { timeout: 15000 }).catch(() => {});
+      const total = await p.$eval("#lote-total", (e) => e.textContent).catch(() => "");
+      checar("a tela do lote mostra o valor a cobrar", /80,00/.test(total ?? ""), total);
+      const temPdf = await p.$("#lote-pdf");
+      checar("e oferece baixar o PDF para mandar a pessoa", !!temPdf);
+      await p.click("#lote-dar-baixa").catch(() => {});
+      await p.waitForSelector("#baixa-forma", { timeout: 5000 }).catch(() => {});
+      await p.select("#baixa-forma", "PERMUTA").catch(() => {});
+      await p.click("#baixa-confirmar").catch(() => {});
+      await p.waitForSelector("#lote-baixa", { timeout: 10000 }).catch(() => {});
+      const baixa = await p.$eval("#lote-baixa", (e) => e.textContent).catch(() => "");
+      checar("a baixa pela tela fica registrada, por permuta", /Permuta/.test(baixa ?? ""), baixa);
+      // Desfaz: estorna a baixa e cancela o lote, para a venda poder ser cancelada.
+      await api("POST", `/receber/lotes/${loteTela.id}/estornar-baixa`, {}, token);
+      await api("POST", `/receber/lotes/${loteTela.id}/cancelar`, {}, token);
+    }
   }
 
   // A conta: 10 pratos a 5,00 de custo = 50,00 de CMV teórico; receita 300,00.
@@ -7456,11 +7495,14 @@ try {
   // mesma cara da frase explicativa — e esconder o ASSUNTO da tela atras de
   // "saber mais" teria sido a leitura mecanica desta tarefa. Cinco telas
   // ficaram de fora de proposito; esta e a guarda de uma delas.
-  await irPara(p, `${WEB}/consumo`);
-  await p.waitForSelector("h1", { timeout: 15000 }).catch(() => {});
-  await assentar(900);
+  // 🔑 Desde 22/10/2026 a guarda é a do LOTE de cobrança (o período saiu): o
+  // cabeçalho dele traz a pessoa e as datas dos documentos.
+  await irPara(p, `${WEB}/receber`);
+  await p.waitForSelector('[data-filtro-lote="todos"]', { timeout: 15000 }).catch(() => {});
+  await p.click('[data-filtro-lote="todos"]').catch(() => {});
+  await p.waitForSelector('#receber-lotes a[href^="/receber/lotes/"]', { timeout: 8000 }).catch(() => {});
   const primeiroPeriodo = await p.evaluate(() => {
-    const l = [...document.querySelectorAll("a")].find((a) => /\/consumo\/\d+$/.test(a.getAttribute("href") ?? ""));
+    const l = [...document.querySelectorAll("a")].find((a) => /\/receber\/lotes\/\d+$/.test(a.getAttribute("href") ?? ""));
     if (l) l.click();
     return !!l;
   });
@@ -7473,7 +7515,7 @@ try {
     // certa o tempo todo (o CDP mostrou os dados chegando em 1,1 s).
     await p
       .waitForFunction(
-        () => /\/consumo\/\d+$/.test(location.pathname)
+        () => /\/receber\/lotes\/\d+$/.test(location.pathname)
           && !/carregando/i.test(document.querySelector("main")?.innerText ?? "carregando"),
         { timeout: 20000 },
       )
@@ -8319,7 +8361,7 @@ try {
     return {
       grupoCmv: grupos.some((g) => /^cmv/i.test(g)),
       grupoVendas: grupos.some((g) => /^vendas/i.test(g)),
-      cmv: link("/cmv"), periodos: link("/consumo"), documentos: link("/vendas"),
+      cmv: link("/cmv"), periodos: link("/receber"), documentos: link("/vendas"),
     };
   });
   checar("o CMV e item direto no menu, nao pasta",
@@ -8343,8 +8385,9 @@ try {
   checar("os grupos do menu estao na ordem pedida pelo dono",
     ordemMenu.length >= 7 && ordemMenu.every(([, i], k) => k === 0 || i > ordemMenu[k - 1][1]),
     ordemMenu);
-  checar("e Vendas e um grupo com Periodos e Documentos",
-    menuVendas.grupoVendas && /Per[íi]odos/.test(menuVendas.periodos ?? "")
+  // 🔑 "Períodos" virou "Contas a receber" (22/10/2026).
+  checar("e Vendas e um grupo com Contas a receber e Documentos",
+    menuVendas.grupoVendas && /Contas a receber/.test(menuVendas.periodos ?? "")
       && /Documentos/.test(menuVendas.documentos ?? ""), menuVendas);
 
   // 🔑 **Nenhum nome de tela pode ser cortado** (15/09/2026, relatado pelo dono:
@@ -10671,25 +10714,7 @@ try {
     .some((b) => b.textContent?.trim() === "Baixar"));
   checar("e a tela oferece baixar o relatório de pessoas", temRelatorio);
 
-  // O ciclo de consumo se renomeia.
-  const { dados: ciclos2010 } = await api("GET", "/consumo/periodos", null, token);
-  const umCiclo = (ciclos2010?.periodos ?? [])[0];
-  if (umCiclo) {
-    await irPara(p, `${WEB}/consumo`);
-    await p.waitForSelector(`[data-renomear-periodo="${umCiclo.id}"]`, { timeout: 10000 }).catch(() => {});
-    await p.click(`[data-renomear-periodo="${umCiclo.id}"]`).catch(() => {});
-    await p.waitForSelector("#periodo-nome", { timeout: 5000 }).catch(() => {});
-    await p.$eval("#periodo-nome", (el) => { el.select(); }).catch(() => {});
-    await p.type("#periodo-nome", `Ciclo tela ${m2010}`).catch(() => {});
-    await p.click("#periodo-nome-salvar").catch(() => {});
-    await assentar(1500);
-    const { dados: cicloDepois } = await api("GET", `/consumo/periodos/${umCiclo.id}`, null, token);
-    checar("o ciclo de consumo se renomeia pela tela",
-      cicloDepois?.periodo?.nome === `Ciclo tela ${m2010}`, cicloDepois?.periodo);
-    await api("PUT", `/consumo/periodos/${umCiclo.id}`, { nome: umCiclo.nome }, token);
-  } else {
-    checar("o ciclo de consumo se renomeia pela tela", true, "(sem ciclo na base)");
-  }
+  // (O "renomear o ciclo de consumo" de 20/10 saiu com o ciclo, em 22/10/2026.)
 
   // A venda lançada à mão aceita itens novos.
   const { dados: prodAcr } = await api("POST", "/produtos", {

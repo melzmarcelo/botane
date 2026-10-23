@@ -1,29 +1,31 @@
-"""Modelos do período de consumo."""
+"""Modelos das contas a receber do consumo (lotes de cobrança)."""
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
-class PeriodoAbrir(BaseModel):
-    """O ciclo que o administrador abre: de tal dia a tal dia."""
-
-    inicio: date
-    fim: date
-    # Opcional: o par de datas já identifica o ciclo. Serve para "Setembro/1ª
-    # quinzena" quando a casa quiser chamar pelo nome.
-    nome: str | None = Field(default=None, max_length=60)
-    observacao: str | None = None
+FormaPagamento = Literal["PIX", "DINHEIRO", "CARTAO", "TRANSFERENCIA", "FOLHA", "PERMUTA",
+                         "OUTRO"]
 
 
-class PeriodoFechar(BaseModel):
-    observacao: str | None = None
+class LotesGerar(BaseModel):
+    """Gerar lotes: um por pessoa, com o que está em aberto até `ate`.
 
-
-class PeriodoRenomear(BaseModel):
-    """O nome do ciclo, aberto ou fechado (pedido do dono, 20/10/2026).
-
-    ⚠️ Vazio volta a ser "sem nome": a tela mostra as datas, que já identificam.
+    ⚠️ Sem `ids_pessoa`, são todas as pessoas com algo em aberto no recorte.
+    `ids_venda` escolhe documentos a dedo e só vale com UMA pessoa.
     """
 
-    nome: str | None = Field(default=None, max_length=60)
+    ate: date
+    de: date | None = None
+    ids_pessoa: list[int] | None = Field(default=None, max_length=500)
+    ids_venda: list[int] | None = Field(default=None, max_length=2000)
+    observacao: str | None = Field(default=None, max_length=500)
+
+
+class LoteReceber(BaseModel):
+    """A baixa do lote inteiro (decisão do dono: não há baixa parcial)."""
+
+    recebido_em: date
+    forma_pagamento: FormaPagamento
+    observacao: str | None = Field(default=None, max_length=500)

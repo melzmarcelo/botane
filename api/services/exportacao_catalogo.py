@@ -39,7 +39,7 @@ from models.produtos import TIPOS
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
 from services import consumo_pessoa as consumo_motor
-from services import consumo_periodo as ciclo_motor
+from services import receber as receber_motor
 from services import estoque as estoque_motor
 from services import exportacao
 from services import memoria_calculo as memoria
@@ -127,21 +127,21 @@ def _opcoes_detalhe(_cur, _id_unidade: int) -> list[dict]:
             {"valor": "analitico", "nome": "Analítico — item a item"}]
 
 
-def _opcoes_ciclo(cur, id_unidade: int) -> list[dict]:
-    """Os ciclos de consumo, mais "em aberto" na frente.
+SITUACOES_CONSUMO = {
+    "aberto": "Em aberto — ainda não cobrado",
+    "cobranca": "Em cobrança — num lote ainda não pago",
+    "recebido": "Recebido — num lote com baixa",
+    "todos": "Todos — com ou sem lote",
+}
 
-    🔑 **"Em aberto" e uma opcao de verdade, nao a ausencia de escolha.** E
-    o que a casa tem a receber e ainda nao cobrou -- a pergunta mais frequente
-    de todas -- e e o unico recorte possivel numa loja que nunca abriu um ciclo.
-    Sem ela, o filtro ficaria vazio no primeiro dia e o relatorio, inalcancavel.
+
+def _opcoes_situacao_consumo(_cur, _id_unidade: int) -> list[dict]:
+    """A situação do documento nas contas a receber (22/10/2026).
+
+    🔑 **"Em aberto" vem primeiro e é o padrão**: é o que a casa tem a receber e
+    ainda não cobrou, a pergunta mais frequente deste relatório.
     """
-    opcoes = [{"valor": "aberto", "nome": "Em aberto — ainda nao cobrado"}]
-    for c in ciclo_motor.para_escolher(cur, id_unidade):
-        rotulo = c["nome"] or f"{c['inicio'].strftime('%d/%m/%Y')} a {c['fim'].strftime('%d/%m/%Y')}"
-        if c["status"] == "ABERTO":
-            rotulo += " (ciclo aberto)"
-        opcoes.append({"valor": str(c["id"]), "nome": rotulo})
-    return opcoes
+    return [{"valor": v, "nome": n} for v, n in SITUACOES_CONSUMO.items()]
 
 
 def _opcoes_classes(_cur, _id_unidade: int) -> list[dict]:
@@ -251,14 +251,16 @@ FILTROS: dict[str, dict] = {
     # os dois faria quem recebe separar de novo.
     "detalhe": {"tipo": "multipla", "rotulo": "Detalhe", "ajuda": "sintético",
                 "opcoes": _opcoes_detalhe},
-    # ⚠️ **Ciclo, nao intervalo de datas.** O consumo se cobra por ciclo
-    # fechado, e o fechamento leva tudo que estava em aberto ate a data final --
-    # inclusive consumo anterior ao inicio dele. Um par de datas aqui devolveria
-    # um conjunto diferente do que foi cobrado, e este arquivo E o documento da
-    # cobranca. Multipla como `detalhe`, e pelo mesmo motivo: e o vocabulario da
-    # janela, mas o relatorio usa so a PRIMEIRA.
-    "ciclo": {"tipo": "multipla", "rotulo": "Ciclo", "ajuda": "em aberto",
-              "opcoes": _opcoes_ciclo},
+    # 🔑 **Situação + datas, no lugar do ciclo** (22/10/2026, contas a receber).
+    # O documento de UM lote sai pela rota do lote (`/exportar/lote-consumo`),
+    # que recorta pelo lote e não por data.
+    "situacao_consumo": {"tipo": "escolha", "rotulo": "Situação",
+                         "ajuda": "em aberto — o que ainda não foi cobrado",
+                         "opcoes": _opcoes_situacao_consumo},
+    # ⚠️ Sem datas são TODAS — não o mês corrente, como nos outros relatórios: a
+    # dívida de agosto ainda não cobrada é justamente a que não pode sumir.
+    "periodo_consumo": {"tipo": "periodo", "rotulo": "Datas dos documentos",
+                        "ajuda": "todas as datas, se não escolher"},
     # ⚠️ **Mesmo `tipo: periodo`, com OPÇÕES** — e é isso que muda a cara dele na
     # janela: o front, vendo opções num filtro de período, troca os dois campos
     # de data por um seletor dos ciclos e grava `inicio`/`fim` do valor
@@ -266,7 +268,7 @@ FILTROS: dict[str, dict] = {
     "periodo_cmv": {"tipo": "periodo", "rotulo": "Período",
                     "ajuda": "os períodos do ciclo da loja — o mesmo recorte do painel",
                     "opcoes": _opcoes_periodo_cmv},
-    # ⚠️ **Escolha ÚNICA, não múltipla.** `detalhe` e `ciclo` são múltiplas e
+    # ⚠️ **Escolha ÚNICA, não múltipla.** `detalhe` (e o antigo `ciclo`) são múltiplas e
     # usam só a primeira, o que sempre foi um remendo do vocabulário da janela;
     # com doze opções isso viraria doze caixinhas para uma escolha só.
     "aba": {"tipo": "escolha", "rotulo": "O que levar junto",
@@ -1217,18 +1219,21 @@ def _memoria_produto(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
-def _nome_do_ciclo(periodo: dict | None) -> str:
-    """Como o ciclo se chama no cabecalho do arquivo.
+def _nome_do_recorte(situacao: str, de: date | None, ate: date | None) -> str:
+    """Como o recorte se chama no cabecalho do arquivo.
 
-    ⚠️ O arquivo entregue ao funcionario precisa DIZER de que ciclo ele fala.
-    Sem isso, dois arquivos de ciclos diferentes sao indistinguiveis depois de
-    salvos -- e a conversa vira "mas eu ja paguei esse".
+    ⚠️ O arquivo entregue ao funcionario precisa DIZER do que ele fala. Sem
+    isso, dois arquivos diferentes sao indistinguiveis depois de salvos -- e a
+    conversa vira "mas eu ja paguei esse".
     """
-    if periodo is None:
-        return "em aberto"
-    if periodo["nome"]:
-        return periodo["nome"]
-    return _intervalo(periodo["inicio"], periodo["fim"])
+    nome = SITUACOES_CONSUMO.get(situacao, situacao).split(" — ")[0].lower()
+    if de and ate:
+        return f"{nome}, de {_intervalo(de, ate)}"
+    if ate:
+        return f"{nome}, até {ate.strftime('%d/%m/%Y')}"
+    if de:
+        return f"{nome}, desde {de.strftime('%d/%m/%Y')}"
+    return nome
 
 
 def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
@@ -1242,17 +1247,24 @@ def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
     # ⚠️ Um documento por arquivo: sintético e analítico respondem perguntas
     # diferentes, e juntá-los faria quem recebe separar de novo.
     detalhe = (_lista(f.get("detalhe")) or ["sintetico"])[0]
-    # ⚠️ **"em aberto" e a ausencia de ciclo, e as duas viram o mesmo `None`**
-    # -- nao escolher nada e escolher "em aberto" precisam dar o MESMO arquivo,
-    # senao o padrao da janela responderia uma pergunta que ninguem fez.
-    escolha = (_lista(f.get("ciclo")) or ["aberto"])[0]
-    periodo = None
-    if escolha != "aberto":
-        periodo = ciclo_motor.por_id(cur, id_unidade, int(escolha))
-        if not periodo:
-            raise HTTPException(status_code=404, detail="Ciclo não encontrado.")
+    # 🔑 **O LOTE (interno, `_lote`) manda sobre tudo**: é o documento da cobrança
+    # mandado à pessoa, e recorta pelo lote, não por data nem situação.
+    lote = f.get("_lote")
+    if lote:
+        filtro = {"id_lote": lote["id"]}
+        nome_recorte = receber_motor.rotulo(lote)
+        pessoas = None
+    else:
+        # ⚠️ Não escolher nada e escolher "em aberto" dão o MESMO arquivo, senão o
+        # padrão da janela responderia uma pergunta que ninguém fez.
+        situacao = f.get("situacao_consumo") or "aberto"
+        if situacao not in SITUACOES_CONSUMO:
+            situacao = "aberto"
+        de, ate = f.get("inicio"), f.get("fim")
+        filtro = {"situacao": situacao, "de": de, "ate": ate}
+        nome_recorte = _nome_do_recorte(situacao, de, ate)
     linhas = consumo_motor.apurar(
-        cur, id_unidade, periodo,
+        cur, id_unidade, filtro,
         [int(p) for p in pessoas] if pessoas else None, detalhe)
 
     # ⚠️ Os totais saem das linhas ANTES de achatar: no "com os itens" cada cupom
@@ -1302,10 +1314,16 @@ def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
 
     return Saida(
         linhas, colunas,
-        f"Consumo por pessoa — {_nome_do_ciclo(periodo)} — {nomes.get(detalhe, detalhe)}",
+        (f"{nome_recorte} — {nomes.get(detalhe, detalhe)}" if lote else
+         f"Consumo por pessoa — {nome_recorte} — {nomes.get(detalhe, detalhe)}"),
         [("Valor cheio", round(cheio, 2)),
          ("Desconto", round(cheio - total, 2)),
-         ("A cobrar", round(total, 2))],
+         ("A cobrar", round(total, 2))]
+        + ([("Situação", receber_motor.SITUACOES.get(lote["status"], lote["status"]))]
+           + ([("Recebido em", lote["recebido_em"].strftime("%d/%m/%Y")),
+               ("Forma", receber_motor.FORMAS.get(lote["forma_pagamento"] or "", "—"))]
+              if lote["status"] == "RECEBIDO" else [])
+           if lote else []),
     )
 
 
@@ -1456,7 +1474,7 @@ RELATORIOS: dict[str, Relatorio] = {
         "O que cada um consumiu, quanto custaria e quanto está sendo cobrado — "
         "o documento para cobrar o funcionário.",
         "cmv.relatorios", "vendas",
-        ("ciclo", "pessoas", "detalhe"), _consumo_pessoa),
+        ("situacao_consumo", "periodo_consumo", "pessoas", "detalhe"), _consumo_pessoa),
     "precos": Relatorio(
         "Evolução de preço",
         "O que subiu, quanto pesou e com quem sai mais barato, com o peso por setor junto.",

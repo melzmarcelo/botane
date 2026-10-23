@@ -31,8 +31,6 @@ import urllib.request
 
 sys.path.insert(0, ".")
 
-from comum import garantir_ciclo_de_consumo  # noqa: E402
-
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 
@@ -84,10 +82,6 @@ token = r["access_token"]
 
 marca = str(time.time_ns() // 100)[-6:]
 criados: dict = {"produtos": [], "vendas": []}
-# 🔑 **Venda com pessoa exige ciclo de consumo ABERTO** (08/09/2026).
-# ⚠️ O ciclo so se apaga se foi ESTA suite que o abriu: um ciclo da casa
-# nao e lixo de teste, e apaga-lo levaria junto o ciclo em curso dela.
-ciclo_da_suite = garantir_ciclo_de_consumo(chamar, token)
 
 
 def _limpar():
@@ -97,8 +91,6 @@ def _limpar():
     for p in criados["produtos"]:
         if p:
             chamar("DELETE", f"/produtos/{p}", token=token)
-    if ciclo_da_suite:
-        chamar("DELETE", f"/consumo/periodos/{ciclo_da_suite}", token=token)
 
 
 atexit.register(_limpar)
@@ -245,19 +237,18 @@ st, cat = chamar("GET", "/exportar/catalogo", token=token)
 alvo = next((c for c in (cat or []) if c["chave"] == "consumo-pessoa"), None)
 checar("o relatorio esta no catalogo", alvo is not None,
        [c["chave"] for c in (cat or [])])
-# ⚠️ **`ciclo`, nao `periodo`.** O recorte deste relatorio e o ciclo de
-# consumo, nao um intervalo de datas: o fechamento leva tudo que estava em
-# aberto ate a data final, inclusive consumo anterior ao inicio dele, e um par
-# de datas devolveria um conjunto diferente do que foi cobrado.
-checar("com ciclo, pessoas e detalhe",
-       alvo and {f["nome"] for f in alvo["filtros"]} == {"ciclo", "pessoas", "detalhe"},
+# 🔑 **Situacao + datas, no lugar do ciclo** (22/10/2026, contas a receber).
+checar("com situacao, datas, pessoas e detalhe",
+       alvo and {f["nome"] for f in alvo["filtros"]}
+       == {"situacao_consumo", "periodo_consumo", "pessoas", "detalhe"},
        alvo and [f["nome"] for f in alvo["filtros"]])
-ciclo_f = next((f for f in (alvo or {}).get("filtros", []) if f["nome"] == "ciclo"), None)
-# 🔑 "Em aberto" precisa ser uma OPCAO, e nao a ausencia de escolha: e a
-# pergunta mais frequente, e o unico recorte possivel antes do primeiro ciclo.
-checar("e o filtro de ciclo oferece 'em aberto'",
-       ciclo_f and any(o["valor"] == "aberto" for o in ciclo_f.get("opcoes", [])),
-       ciclo_f)
+situacao_f = next((f for f in (alvo or {}).get("filtros", [])
+                   if f["nome"] == "situacao_consumo"), None)
+# 🔑 "Em aberto" e a PRIMEIRA opcao: e a pergunta mais frequente.
+checar("e a situacao comeca por 'em aberto' e oferece cobranca e recebido",
+       situacao_f and situacao_f["opcoes"][0]["valor"] == "aberto"
+       and {"cobranca", "recebido", "todos"} <= {o["valor"] for o in situacao_f["opcoes"]},
+       situacao_f)
 st, csv = chamar("GET", "/exportar/consumo-pessoa.csv",
                  token=token, cru=True)
 checar("a planilha sai", st == 200 and isinstance(csv, bytes) and len(csv) > 100, st)
@@ -303,20 +294,20 @@ if pessoas_op:
 else:
     checar("e escolher UMA pessoa encurta o arquivo", True, "sem pessoa com politica")
 
-# 🔑 **O ciclo carimbado e outro conjunto.** "em aberto" e o que ainda nao foi
-# cobrado; um ciclo fechado e o que ja foi. Pedir um ciclo e receber o aberto
-# entregaria ao funcionario a cobranca errada.
-ciclos = [o["valor"] for o in (ciclo_f or {}).get("opcoes", []) if o["valor"] != "aberto"]
-if ciclos:
-    doCiclo = _baixar(f"?ciclo={ciclos[0]}")
-    checar("e pedir um ciclo fechado traz outro conjunto, nao o em aberto",
-           doCiclo.splitlines()[0] != cheio.splitlines()[0], doCiclo.splitlines()[:1])
-else:
-    # ⚠️ Nao e falha: numa base sem ciclo fechado nao ha o que comparar. O que
-    # a suite garante aqui e que "aberto" continua respondendo.
-    checar("e pedir um ciclo fechado traz outro conjunto, nao o em aberto",
-           "em aberto" in _baixar("?ciclo=aberto").splitlines()[0],
-           "sem ciclo fechado nesta base")
+# 🔑 **A situacao e as datas MUDAM o arquivo.** O cupom do funcionario e de
+# 04/09/2026: um recorte que termina antes nao o traz, e o cabecalho diz o recorte.
+so_dele = f"&pessoas={funcionario}"
+antes = _baixar(f"?situacao_consumo=aberto&inicio=2026-01-01&fim=2026-09-03{so_dele}")
+no_dia = _baixar(f"?situacao_consumo=aberto&inicio=2026-09-04&fim=2026-09-04{so_dele}")
+checar("as datas recortam: antes do dia o cupom nao vem, no dia vem",
+       f"FUNCIONARIO {marca}" not in antes and f"FUNCIONARIO {marca}" in no_dia,
+       (antes[:200], no_dia[:200]))
+checar("e o cabecalho diz o recorte",
+       "em aberto, de 04/09/2026 a 04/09/2026" in no_dia.splitlines()[0],
+       no_dia.splitlines()[:1])
+recebidos = _baixar(f"?situacao_consumo=recebido{so_dele}")
+checar("e 'recebido' nao traz o que ainda esta em aberto",
+       f"FUNCIONARIO {marca}" not in recebidos, recebidos[:200])
 
 
 print("\n9. o preco cheio nao se aceita de fora")
@@ -337,19 +328,20 @@ checar("o cheio mandado pelo cliente e descartado",
        (df.get("itens") or [{}])[0].get("valor_unitario_cheio"))
 
 
-print("\n9b. o consumo no ciclo aberto, para o cadastro da pessoa (26/09/2026)")
+print("\n9b. o consumo em aberto, para o cadastro da pessoa (26/09 e 22/10/2026)")
 # 🔑 Pedido do dono: *"no cadastro da pessoa, incluir um item referente a consumos no
-# periodo aberto atual"*. A mesma consulta do relatorio — o cartao nao pode discordar.
-st, ca = chamar("GET", f"/vendas/por-pessoa/{funcionario}/ciclo-aberto", token=token)
-checar("a rota responde com o ciclo aberto", st == 200 and (ca.get("periodo") or {}).get(
-    "status") == "ABERTO", (st, ca.get("periodo")))
+# periodo aberto atual"*. Sem periodo desde 22/10: e o que esta EM ABERTO. A mesma
+# consulta do relatorio — o cartao nao pode discordar.
+st, ca = chamar("GET", f"/vendas/por-pessoa/{funcionario}/em-aberto", token=token)
+checar("a rota responde, com o que esta em cobranca junto",
+       st == 200 and "em_cobranca" in ca, (st, ca))
 checar("com o cupom da pessoa, por documento e com os itens",
        any(d.get("documento") == f"CUPOM{marca}" and d.get("itens_do_documento")
            for d in ca.get("documentos") or []), ca.get("documentos"))
-checar("e o MESMO total do relatorio do ciclo aberto",
+checar("e o MESMO total do relatorio do que esta em aberto",
        perto(ca.get("total"), rel.get("total")) and perto(ca.get("desconto"), 20),
        (ca.get("total"), rel.get("total"), ca.get("desconto")))
-st, cv = chamar("GET", "/vendas/por-pessoa/999999/ciclo-aberto", token=token)
+st, cv = chamar("GET", "/vendas/por-pessoa/999999/em-aberto", token=token)
 checar("pessoa sem consumo: lista vazia, sem erro",
        st == 200 and cv.get("documentos") == [] and perto(cv.get("total"), 0), (st, cv))
 

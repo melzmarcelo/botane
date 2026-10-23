@@ -110,25 +110,9 @@ export default function PaginaLancarVenda() {
   // da receita e do CMV teórico — só o custo pesa. Quem decide é o servidor.
   const [consumoInterno, setConsumoInterno] = useState(false);
 
-  // 🔑 **Consumo de pessoa exige ciclo ABERTO** (08/09/2026, pedido do dono):
-  // o consumo só se lança dentro de um ciclo, porque é nele que a dívida se
-  // acumula e por ele que ela se cobra.
-  // ⚠️ **A tela avisa; quem recusa é o servidor.** Esconder o botão bastaria
-  // para o caminho da tela e para nenhum outro — e a regra vale para todos.
-  // Aqui o valor é só para dizer ANTES, em vez de deixar a pessoa montar o
-  // cupom inteiro e descobrir no clique.
-  // ⚠️ **Só bloqueia quando o servidor DISSE que não há ciclo.** Enquanto a
-  // resposta não chega, e se a pergunta falhar, o padrão é não atrapalhar:
-  // travar a tela por não ter conseguido perguntar impediria também a venda sem
-  // pessoa, que não tem nada a ver com ciclo. O servidor recusa de todo jeito.
-  const [semCiclo, setSemCiclo] = useState(false);
-  useEffect(() => {
-    api
-      .get<{ aberto: unknown | null }>("/vendas/periodo-aberto")
-      .then((r) => setSemCiclo(!r.aberto))
-      .catch(() => setSemCiclo(false));
-  }, []);
-  const faltaCiclo = !!pessoa && semCiclo;
+  // 🔑 **Consumo de pessoa NÃO exige mais ciclo** (22/10/2026, pedido do dono):
+  // o documento entra na data em que aconteceu e fica em aberto até a casa gerar
+  // o lote de cobrança da pessoa, em Contas a receber.
 
   const mudaAlgo =
     !!politica && (politica.cupom_base === "CUSTO" || Number(politica.cupom_desconto_pct) > 0);
@@ -442,30 +426,12 @@ export default function PaginaLancarVenda() {
           </label>
         )}
 
-        {/* 🔑 **Sem ciclo aberto, o consumo não se lança** (08/09/2026, pedido
-            do dono). ⚠️ A mensagem diz o CAMINHO, não só que não deu: quem está
-            lançando uma venda não vai adivinhar que o conserto mora em outra
-            tela. O link leva direto para lá. */}
-        {faltaCiclo && (
-          <div className="mt-4">
-            <Aviso tipo="erro">
-              Não há <b>ciclo de consumo aberto</b> nesta loja, e o consumo de uma
-              pessoa precisa cair em um — é nele que a dívida se acumula e por ele
-              que ela é cobrada.{" "}
-              <Link href="/consumo" className="link-registro">
-                Abrir um ciclo em Consumo
-              </Link>
-              , ou lançar esta venda sem informar a pessoa.
-            </Aviso>
-          </div>
-        )}
-
         {/* ⚠️ **A consequência dita ANTES de lançar** (pedido do dono:
             "apresente uma mensagem", "demonstrando isto"). Um cupom que sai por
             outro valor sem explicar por quê é indistinguível de erro de
             digitação — e o servidor repete a frase na resposta, para valer
             também para quem lançou por outro caminho. */}
-        {mudaAlgo && !faltaCiclo && (
+        {mudaAlgo && (
           <div className="mt-4">
             <Aviso tipo="info">
               Esta venda vai sair{" "}
@@ -640,7 +606,7 @@ export default function PaginaLancarVenda() {
               <button
                 className="btn btn-primario"
                 type="submit"
-                aria-busy={ocupado} disabled={ocupado || !prontos.length || faltaCiclo}
+                aria-busy={ocupado} disabled={ocupado || !prontos.length}
               >
                 {ocupado ? "Lançando…" : `Lançar ${prontos.length || ""} item(ns)`}
               </button>
@@ -727,7 +693,7 @@ export default function PaginaLancarVenda() {
               <button
                 className="btn btn-primario"
                 type="submit"
-                aria-busy={ocupado} disabled={ocupado || !previa.linhas.length || faltaCiclo}
+                aria-busy={ocupado} disabled={ocupado || !previa.linhas.length}
               >
                 {ocupado ? "Importando…" : "Importar"}
               </button>

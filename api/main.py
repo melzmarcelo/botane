@@ -79,6 +79,7 @@ from routers import (
     produto_cardapio,
     produtos,
     publico,
+    receber,
     transferencias,
     tokens_api,
     usuarios,
@@ -95,7 +96,7 @@ from seguranca import PREFIXO_TOKEN_API, hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.1.124"
+VERSAO = "1.1.125"
 
 
 def conferir_segredo() -> None:
@@ -497,6 +498,7 @@ app.include_router(estoque.router)
 app.include_router(inventario.router)
 app.include_router(transferencias.router)
 app.include_router(consumo.router)
+app.include_router(receber.router)
 app.include_router(vendas.router)
 app.include_router(cmv.router)
 app.include_router(notas.router)

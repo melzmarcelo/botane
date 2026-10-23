@@ -790,7 +790,7 @@
         <tbody>
           <tr><td><strong>Cadastros</strong></td><td>Produtos, fichas técnicas, pessoas, tabelas de apoio, exportação para o PDV</td></tr>
           <tr><td><strong>Notas de entrada</strong></td><td>Item direto: as notas de compra</td></tr>
-          <tr><td><strong>Vendas</strong></td><td><strong>Períodos</strong> (os ciclos de consumo) e <strong>Documentos</strong> (os cupons do PDV e os lançados à mão, com Lançar, Consumo por pessoa e Sem vínculo)</td></tr>
+          <tr><td><strong>Vendas</strong></td><td><strong>Contas a receber</strong> (o consumo em aberto, os lotes de cobrança e a baixa), <strong>Painel</strong> e <strong>Documentos</strong> (os cupons do PDV e os lançados à mão, com Lançar, Consumo por pessoa e Sem vínculo)</td></tr>
           <tr><td><strong>Estoque</strong></td><td>Saldos e movimentos, ajustes, remessas entre lojas, produção, inventário</td></tr>
           <tr><td><strong>CMV</strong></td><td>Item direto: o painel de CMV</td></tr>
           <tr><td><strong>Precificação</strong></td><td>A análise e o aplicar dos preços, o preço × custo de um produto no tempo e a configuração da loja (impostos, taxas, custo operacional, margem)</td></tr>
@@ -2930,39 +2930,61 @@
         sem dono, é perda.
       </p>
 
-      <h3>O período de consumo: abre, acumula, fecha no pagamento</h3>
+      <h3>Contas a receber: em aberto, lote de cobrança e baixa</h3>
       <p>
-        Em <strong>Vendas ▸ Períodos</strong> abre-se o ciclo de cobrança (por exemplo, o mês). Todo
-        consumo de pessoa lançado enquanto ele está aberto se acumula nele; ao
-        <strong>fechar</strong>, cada pessoa ganha o seu recibo e o consumo fica carimbado como
-        cobrado.
+        O consumo de uma pessoa se lança na <strong>data em que aconteceu</strong> — não há período
+        para abrir nem fechar. Ele fica <strong>em aberto</strong> até a casa cobrar. Em
+        <strong>Vendas ▸ Contas a receber</strong>:
       </p>
+      <div class="fluxo">
+        <span>Consumo lançado</span> <em>→</em> <span>em aberto</span> <em>→</em>
+        <span>lote de cobrança (em cobrança)</span> <em>→</em> <span class="destino">baixa = recebido</span>
+      </div>
+      <ol>
+        <li><strong>O que está em aberto:</strong> por pessoa, com desde quando, o valor cheio, o
+          desconto, o a cobrar e o que já está em cobrança. As datas <em>De</em> e <em>Até</em>
+          recortam os documentos; <strong>Baixar relatório</strong> leva o mesmo recorte para PDF ou
+          planilha.</li>
+        <li><strong>Gerar o lote:</strong> marque as pessoas (ou nenhuma, para todas da lista) e
+          clique em <em>Gerar</em>. Cada pessoa ganha <strong>o seu lote</strong>, com tudo o que ela
+          tinha em aberto até a data <em>Até</em> (em branco, hoje). Em <em>documentos</em>, na linha
+          da pessoa, dá para conferir e desmarcar documentos antes de gerar o lote dela.</li>
+        <li><strong>Mandar o relatório:</strong> abra o lote e clique em <strong>Baixar PDF</strong> (ou
+          Planilha) — o documento nomeia o lote e a pessoa, com cada cupom e os itens. O envio é
+          por fora (WhatsApp, e-mail).</li>
+        <li><strong>Dar baixa:</strong> quando o pagamento chegar, <strong>Dar baixa</strong> com a data
+          e a forma — Pix, dinheiro, cartão, transferência, desconto em folha, <strong>permuta</strong>
+          ou outro — e uma observação, se quiser.</li>
+      </ol>
       <div class="regra">
-        <p class="rotulo">Consumo de pessoa só se lança com ciclo aberto</p>
+        <p class="rotulo">A baixa é sempre do lote inteiro</p>
         <p>
-          É no ciclo que a dívida se acumula. Sem ciclo aberto, a tela avisa e aponta para
-          Vendas ▸ Períodos. A venda de balcão, sem pessoa, continua entrando normalmente.
+          Se a pessoa pagou só uma parte, <strong>tire do lote</strong> o documento que ficou para
+          depois: ele volta para em aberto e entra no próximo lote. Enquanto está num lote, o
+          documento não aceita item novo nem cancelamento — o lote é o que foi mandado à pessoa.
         </p>
       </div>
       <ul>
-        <li>Um ciclo aberto por loja. O fechamento leva tudo o que está em aberto <em>até</em> a data final — inclusive o que ficou de antes, e a tela mostra isso antes do clique.</li>
-        <li>O recibo é congelado: o que se cobrou naquele dia não muda se alguém corrigir uma venda antiga.</li>
-        <li>Só o último ciclo fechado se reabre. O ciclo aberto com datas erradas se exclui (nada foi carimbado nele).</li>
-        <li>O <strong>nome</strong> do ciclo se muda a qualquer hora, aberto ou fechado (“renomear”, na lista) — só o nome: as datas e o que foi cobrado ficam.</li>
+        <li>Um documento está em um lote só: gerar de novo, ou dois cliques ao mesmo tempo, não cobra duas vezes.</li>
+        <li>O valor do lote fica congelado: é o que foi mandado à pessoa.</li>
+        <li><strong>Cancelar lote</strong> devolve os documentos para em aberto (o lote fica no histórico como cancelado). Baixa feita por engano se desfaz em <strong>Estornar baixa</strong>.</li>
+        <li>Os períodos fechados antes desta mudança viraram lotes <strong>recebidos</strong>, com o mesmo valor do recibo; o endereço antigo de <em>Períodos</em> leva a Contas a receber.</li>
       </ul>
 
       <h3>Quem consumiu o quê</h3>
       <p>
-        <strong>Vendas ▸ Documentos ▸ Consumo por pessoa</strong> recorta por ciclo e mostra, por pessoa, o total — ou
-        <strong>por documento</strong>, ou <strong>por documento com os itens</strong>. As três
-        formas existem na tela e no PDF, e dá para filtrar qualquer pessoa que tenha consumo,
-        com política ou sem.
+        <strong>Vendas ▸ Documentos ▸ Consumo por pessoa</strong> recorta pela situação — <em>em
+        aberto</em>, <em>em cobrança</em>, <em>recebido</em> ou todos — e pelas datas dos
+        documentos, e mostra, por pessoa, o total — ou <strong>por documento</strong>, ou
+        <strong>por documento com os itens</strong>. As três formas existem na tela e no PDF, e dá
+        para filtrar qualquer pessoa que tenha consumo, com política ou sem.
       </p>
       <p>
-        Na ficha da pessoa (Cadastros ▸ Pessoas), o cartão <strong>Consumo no ciclo
-        aberto</strong> mostra os documentos dela no ciclo atual. E cada um vê a própria conta em
-        <strong>Meu consumo</strong>, no menu do usuário — sem permissão nenhuma, desde que o
-        usuário esteja ligado à sua pessoa.
+        Na ficha da pessoa (Cadastros ▸ Pessoas), o cartão <strong>Consumo em aberto</strong>
+        mostra os documentos dela ainda não cobrados e quanto está em cobrança. E cada um vê a
+        própria conta em <strong>Meu consumo</strong>, no menu do usuário — o que está em aberto, os
+        lotes em cobrança e o que já pagou —, sem permissão nenhuma, desde que o usuário esteja
+        ligado à sua pessoa.
       </p>
     </section>
 
@@ -3982,10 +4004,10 @@
               <td>Cadastros ▸ Pessoas</td>
             </tr>
             <tr>
-              <td>Ciclo de consumo e recibos</td>
-              <td>Abrir e fechar o período</td>
-              <td><code>consumo_periodos</code>, <code>consumo_periodo_pessoas</code></td>
-              <td>Vendas ▸ Períodos</td>
+              <td>Contas a receber do consumo</td>
+              <td>Gerar o lote, dar baixa</td>
+              <td><code>consumo_lotes</code> (e <code>vendas.id_consumo_lote</code>)</td>
+              <td>Vendas ▸ Contas a receber</td>
             </tr>
             <tr>
               <td>Validade por evento e conservação</td>
@@ -4150,6 +4172,7 @@
             <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
             <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">22/10</td><td>Sem <strong>períodos de consumo</strong>: o consumo se lança em qualquer data e fica em aberto; em <strong>Vendas ▸ Contas a receber</strong> gera-se o <strong>lote de cobrança</strong> de cada pessoa, baixa-se o relatório para mandar e, quando o pagamento chega, dá-se <strong>baixa</strong> (inclusive por permuta)</td><td><a href="#pessoas">14</a></td></tr>
             <tr><td class="mono">22/10</td><td>Estoque ganhou o <strong>Painel</strong>: negativos, abaixo do mínimo (com em quantos dias acaba e quanto custa repor), parados, validade e perdas do mês — cada cartão leva à lista de Saldos já filtrada; o andamento de cada produto em gráfico; e as perdas por motivo, setor, categoria, prateleira e produto, ao lado da falta da contagem. Saldos ganhou o filtro <strong>Situação</strong></td><td><a href="#ajustes">6</a>, <a href="#alertas">10</a></td></tr>
             <tr><td class="mono">22/10</td><td>Produziu pela <strong>agenda</strong>? O sistema pergunta se quer <strong>emitir as etiquetas</strong> e, no sim, abre Etiquetas já com a produção</td><td><a href="#etiquetas">15</a></td></tr>
             <tr><td class="mono">22/10</td><td>Etiquetas: a Configuração escolhe a <strong>impressora</strong> (PDF ou <strong>Brother QL</strong>) e o <strong>rolo</strong>; com a Brother, Imprimir manda <strong>direto para a impressora</strong>, sem abrir o PDF — e, com o atalho do Chrome, sem nem a janela de imprimir</td><td><a href="#etiquetas">15</a></td></tr>
@@ -4174,7 +4197,7 @@
 
 <footer>
   <p style="margin:0">
-    Manual de referência do sistema, atualizado na versão 1.1.124 (22/10/2026). A
+    Manual de referência do sistema, atualizado na versão 1.1.125 (22/10/2026). A
     versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
     cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>

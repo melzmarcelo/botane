@@ -582,9 +582,9 @@ checar("definir_preco_da_loja grava o preço", not erro, r)
 checar("a chave que altera enxerga o lote de vendas, preços e CMV",
        {"lancar_vendas", "cancelar_venda", "baixar_vendas_sem_baixa", "simular_preco",
         "aplicar_precos", "criar_grupo_de_cmv", "atualizar_grupo_de_cmv",
-        "remover_grupo_de_cmv", "fechar_cmv", "reabrir_cmv", "abrir_periodo_de_consumo",
-        "fechar_periodo_de_consumo", "reabrir_periodo_de_consumo",
-        "remover_periodo_de_consumo"} <= nomes_gravam, sorted(nomes_gravam))
+        "remover_grupo_de_cmv", "fechar_cmv", "reabrir_cmv", "gerar_lotes_de_cobranca",
+        "receber_lote", "estornar_baixa_do_lote", "cancelar_lote_de_cobranca",
+        "tirar_documento_do_lote"} <= nomes_gravam, sorted(nomes_gravam))
 checar("e o do portal de clientes",
        {"criar_reserva", "alterar_reserva", "mudar_status_da_reserva", "bloquear_reservas",
         "desbloquear_reservas", "definir_dia_de_reserva", "criar_salao", "atualizar_salao",

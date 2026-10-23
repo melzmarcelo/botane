@@ -84,7 +84,8 @@ OPERACAO = [
     # (`id_consumo_periodo`), e `consumo_periodo_pessoas` aponta para as duas.
     # Truncar as vendas sem elas deixaria recibo de cobrança de venda que não
     # existe mais — e o Postgres nem chegaria lá, recusaria o comando.
-    "consumo_periodo_pessoas", "consumo_periodos",
+    # Os lotes de cobrança (129) apontam para os dois lados também.
+    "consumo_lotes", "consumo_periodo_pessoas", "consumo_periodos",
     "venda_itens", "vendas", "cmv_movimentacao", "cmv_fechamentos",
     # cadastro de produto e o que depende dele
     # ⚠️ `ficha_modos` (migração 072, antes `ficha_locais`/066) entra AQUI, junto

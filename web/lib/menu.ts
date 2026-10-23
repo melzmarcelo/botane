@@ -89,9 +89,11 @@ export const MENU: GrupoMenu[] = [
       // ⚠️ **Não entra com `cmv.painel`.** Esta tela mostra o que cada PESSOA
       // deve — dívida individual, não número de negócio — e a chave do painel é
       // a mais larga da casa. Fica com as mesmas do servidor.
+      // 🔑 Contas a receber (22/10/2026) substitui "Períodos" — o consumo em aberto,
+      // os lotes de cobrança e a baixa.
       {
-        href: "/consumo",
-        nome: "Períodos",
+        href: "/receber",
+        nome: "Contas a receber",
         icone: "calendario",
         chave: ["consumo.periodos", "cmv.relatorios"],
       },

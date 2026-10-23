@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import type { Formas, Lote } from "@/lib/receber";
 import { dataBr } from "../vendas/tipos";
 
 /**
@@ -31,29 +32,19 @@ type Cupom = {
   total: number;
 };
 
-type Fechado = {
-  id: number;
-  nome: string | null;
-  inicio: string;
-  fim: string;
-  fechado_em: string | null;
-  cupons: number;
-  itens: number;
-  total_cheio: number;
-  desconto: number;
-  total: number;
-};
-
 type MeuConsumo = {
   vinculado: boolean;
   pessoa: { id: number; nome: string; cupom_base: string | null;
             cupom_desconto_pct: number | null } | null;
-  periodo: { id: number; nome: string | null; inicio: string; fim: string } | null;
   cupons: Cupom[];
   total: number;
   total_cheio: number;
   desconto: number;
-  historico: Fechado[];
+  /** 🔑 Os lotes já mandados e ainda não pagos (22/10/2026). */
+  em_cobranca: Lote[];
+  /** Os lotes pagos — o recibo de cada um, do jeito que foi cobrado. */
+  historico: Lote[];
+  formas: Formas;
 };
 
 export default function PaginaMeuConsumo() {
@@ -89,7 +80,7 @@ export default function PaginaMeuConsumo() {
     );
   }
 
-  const { pessoa, periodo, cupons, historico } = dados;
+  const { pessoa, cupons, historico, em_cobranca: emCobranca, formas } = dados;
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,7 +99,7 @@ export default function PaginaMeuConsumo() {
         <Cartao titulo="Em aberto">
           <p className="text-[26px] font-bold tabular-nums">{reais(dados.total)}</p>
           <p className="mt-1 text-[13px] text-suave">
-            {cupons.length} cupom(ns) ainda não fechados
+            {cupons.length} cupom(ns) ainda não cobrados
           </p>
         </Cartao>
         <Cartao titulo="Valor cheio">
@@ -125,19 +116,19 @@ export default function PaginaMeuConsumo() {
         </Cartao>
       </div>
 
-      {/* 🔑 O ciclo em curso, para a pessoa saber ATÉ QUANDO o que ela consumir
-          entra nesta conta — que é a pergunta natural de quem vai pagar. */}
-      {periodo && (
-        <Aviso tipo="info">
-          O período aberto vai de <b>{dataBr(periodo.inicio)}</b> a{" "}
-          <b>{dataBr(periodo.fim)}</b>
-          {periodo.nome ? ` (${periodo.nome})` : ""}. O que estiver em aberto entra no
-          fechamento dele.
-        </Aviso>
+      {/* 🔑 **O que já foi mandado e espera o pagamento** (22/10/2026): o lote é a
+          cobrança que a pessoa recebeu, e é por ele que ela confere o valor. */}
+      {emCobranca.length > 0 && (
+        <Cartao
+          titulo="Em cobrança"
+          descricao="Lotes que já foram enviados a você e aguardam o pagamento."
+        >
+          <TabelaDeLotes lotes={emCobranca} formas={formas} />
+        </Cartao>
       )}
 
       <Cartao
-        titulo="O que ainda não foi fechado"
+        titulo="O que ainda não foi cobrado"
         descricao="Cada cupom, com o que custaria e o que está sendo cobrado."
       >
         {!cupons.length ? (
@@ -177,47 +168,64 @@ export default function PaginaMeuConsumo() {
 
       {historico.length > 0 && (
         <Cartao
-          titulo="Períodos já fechados"
-          descricao="O recibo de cada ciclo, do jeito que foi cobrado."
+          titulo="Já pago"
+          descricao="O recibo de cada lote, do jeito que foi cobrado."
         >
-          <div className="grid-rolante">
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th>Período</th>
-                  <th className="num">Cupons</th>
-                  <th className="num">Cheio</th>
-                  <th className="num">Desconto</th>
-                  <th className="num">Cobrado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historico.map((h) => (
-                  <tr key={h.id}>
-                    <td className="whitespace-nowrap">
-                      {h.nome || `${dataBr(h.inicio)} a ${dataBr(h.fim)}`}
-                      {h.nome && (
-                        <span className="block text-[12.5px] text-suave">
-                          {dataBr(h.inicio)} a {dataBr(h.fim)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="num tabular-nums">{h.cupons}</td>
-                    <td className="num tabular-nums text-suave">{reais(h.total_cheio)}</td>
-                    <td className="num tabular-nums">{reais(h.desconto)}</td>
-                    <td className="num font-semibold tabular-nums">{reais(h.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TabelaDeLotes lotes={historico} formas={formas} pago />
         </Cartao>
       )}
 
       <p className="text-[13px] text-suave">
-        Dúvida sobre um cupom? Fale com quem cuida do fechamento — cada linha aqui é um
+        Dúvida sobre um cupom? Fale com quem cuida das cobranças — cada linha aqui é um
         cupom lançado no sistema. <Link href="/ajuda" className="underline">Ajuda</Link>
       </p>
+    </div>
+  );
+}
+
+function TabelaDeLotes({ lotes, formas, pago = false }: {
+  lotes: Lote[];
+  formas: Formas;
+  pago?: boolean;
+}) {
+  return (
+    <div className="grid-rolante">
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Lote</th>
+            <th>{pago ? "Pago em" : "Enviado em"}</th>
+            <th className="num">Cupons</th>
+            <th className="num">Cheio</th>
+            <th className="num">Desconto</th>
+            <th className="num">{pago ? "Pago" : "A pagar"}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lotes.map((l) => (
+            <tr key={l.id}>
+              <td className="whitespace-nowrap">
+                Nº {l.id}
+                <span className="block text-[12.5px] text-suave">
+                  {l.desde ? `${dataBr(l.desde)} a ` : "até "}{dataBr(l.ate)}
+                </span>
+              </td>
+              <td className="whitespace-nowrap">
+                {pago && l.recebido_em ? dataBr(l.recebido_em) : dataBr(l.criado_em.slice(0, 10))}
+                {pago && l.forma_pagamento && (
+                  <span className="block text-[12.5px] text-suave">
+                    {formas[l.forma_pagamento] ?? l.forma_pagamento}
+                  </span>
+                )}
+              </td>
+              <td className="num tabular-nums">{l.cupons}</td>
+              <td className="num tabular-nums text-suave">{reais(l.total_cheio)}</td>
+              <td className="num tabular-nums">{reais(l.desconto)}</td>
+              <td className="num font-semibold tabular-nums">{reais(l.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

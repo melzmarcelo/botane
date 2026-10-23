@@ -330,24 +330,43 @@ FERRAMENTAS: list[Ferramenta] = [
          "limite": _lim(25, 200), "offset": _OFFSET}),
 
     # ------------------------------------------------------------- consumo
+    # 🔑 Contas a receber (22/10/2026): o período de consumo deu lugar aos lotes de
+    # cobrança — em aberto (sem lote) → em cobrança (lote ABERTO) → recebido.
     Ferramenta(
-        "consumo_periodos", "Períodos de consumo",
-        "Os períodos de consumo da casa (o que a equipe consumiu e o que será cobrado).",
-        "/consumo/periodos"),
+        "contas_a_receber", "Consumo em aberto (contas a receber)",
+        "O que cada pessoa da casa consumiu e ainda não foi cobrado, com o que já está em "
+        "cobrança. Recorte opcional pelas datas dos documentos.",
+        "/receber/em-aberto",
+        {"de": Param("string", _DATA + " Sem ele, desde o começo."),
+         "ate": Param("string", _DATA + " Sem ele, até hoje."),
+         "id_pessoa": Param("integer", "Só esta pessoa.")}),
     Ferramenta(
-        "consumo_periodo", "Um período de consumo",
-        "Um período de consumo aberto por pessoa, com o cheio, o desconto e o a cobrar.",
-        "/consumo/periodos/{id_periodo}",
-        {"id_periodo": Param("integer", "Id do período.", obrigatorio=True)}),
+        "lotes_de_cobranca", "Lotes de cobrança",
+        "Os lotes de cobrança do consumo (um por pessoa): em cobrança, recebidos e cancelados.",
+        "/receber/lotes",
+        {"status": Param("string", "Só esta situação (ABERTO = em cobrança).",
+                         enum=["ABERTO", "RECEBIDO", "CANCELADO"]),
+         "id_pessoa": Param("integer", "Só esta pessoa."),
+         "limite": _lim(50, 1000)}),
+    Ferramenta(
+        "lote_de_cobranca", "Um lote de cobrança",
+        "Um lote: valor, situação, baixa e os documentos com os itens.",
+        "/receber/lotes/{id_lote}",
+        {"id_lote": Param("integer", "Id do lote.", obrigatorio=True)}),
     Ferramenta(
         "meu_consumo", "O meu consumo",
-        "O consumo da própria pessoa conectada no período aberto.",
+        "O consumo da própria pessoa conectada: em aberto, em cobrança e o que já pagou.",
         "/consumo/meu"),
     Ferramenta(
         "consumo_por_pessoa", "Consumo por pessoa",
-        "O que cada pessoa consumiu no período: sintético (totais) ou analítico (item a item).",
+        "O que cada pessoa consumiu: sintético (totais) ou analítico (item a item), pela "
+        "situação nas contas a receber e, se quiser, pelas datas.",
         "/vendas/por-pessoa",
-        {"id_periodo": Param("integer", "Período; sem ele, o aberto."),
+        {"situacao": Param("string", "Situação do documento.", padrao="aberto",
+                           enum=["aberto", "cobranca", "recebido", "todos"]),
+         "de": Param("string", _DATA),
+         "ate": Param("string", _DATA),
+         "id_lote": Param("integer", "Só os documentos deste lote."),
          "id_pessoa": Param("integer", "Só esta pessoa."),
          "detalhe": Param("string", "Nível do detalhe.", padrao="sintetico",
                           enum=["sintetico", "analitico"])}),
@@ -889,34 +908,50 @@ FERRAMENTAS: list[Ferramenta] = [
                                 obrigatorio=True)},
         metodo="POST"),
     Ferramenta(
-        "abrir_periodo_de_consumo", "Abrir um período de consumo",
-        "Abre um ciclo de consumo das pessoas da casa (o que cada um consumiu e vai pagar).",
-        "/consumo/periodos",
-        {"inicio": Param("string", "Primeiro dia, AAAA-MM-DD.", obrigatorio=True,
-                         no_corpo=True),
-         "fim": Param("string", "Último dia, AAAA-MM-DD.", obrigatorio=True, no_corpo=True),
-         "nome": Param("string", "Nome do ciclo.", no_corpo=True),
-         "observacao": Param("string", "Recado.", no_corpo=True)},
+        "gerar_lotes_de_cobranca", "Gerar lotes de cobrança do consumo",
+        "Gera um lote por pessoa com o que ela tem em aberto até a data `ate`. Sem "
+        "`ids_pessoa`, de todas as pessoas com algo em aberto. ⚠️ Mostre antes o "
+        "`contas_a_receber` do mesmo recorte.",
+        "/receber/lotes",
+        {"ate": Param("string", "Data de corte, AAAA-MM-DD.", obrigatorio=True, no_corpo=True),
+         "de": Param("string", "Só documentos desde esta data.", no_corpo=True),
+         "ids_pessoa": Param("array", "As pessoas (de `contas_a_receber`).", no_corpo=True,
+                             itens={"type": "integer"}),
+         "observacao": Param("string", "Recado do lote.", no_corpo=True)},
         metodo="POST"),
     Ferramenta(
-        "fechar_periodo_de_consumo", "Fechar um período de consumo",
-        "Fecha o ciclo de consumo: os valores de cada pessoa ficam congelados para a "
-        "cobrança. ⚠️ Mostre antes o `consumo_periodo`.",
-        "/consumo/periodos/{id_periodo}/fechar",
-        {"id_periodo": Param("integer", "Id (de `consumo_periodos`).", obrigatorio=True),
-         "observacao": Param("string", "Recado do fechamento.", no_corpo=True)},
+        "receber_lote", "Dar baixa num lote de cobrança",
+        "O lote INTEIRO foi pago: data e forma do pagamento. Não há baixa parcial — o que "
+        "não foi pago sai antes com `tirar_documento_do_lote`.",
+        "/receber/lotes/{id_lote}/receber",
+        {"id_lote": Param("integer", "Id (de `lotes_de_cobranca`).", obrigatorio=True),
+         "recebido_em": Param("string", "Data do pagamento, AAAA-MM-DD.", obrigatorio=True,
+                              no_corpo=True),
+         "forma_pagamento": Param("string", "Como foi pago.", obrigatorio=True, no_corpo=True,
+                                  enum=["PIX", "DINHEIRO", "CARTAO", "TRANSFERENCIA", "FOLHA",
+                                        "PERMUTA", "OUTRO"]),
+         "observacao": Param("string", "Recado da baixa.", no_corpo=True)},
         metodo="POST"),
     Ferramenta(
-        "reabrir_periodo_de_consumo", "Reabrir um período de consumo",
-        "Reabre um ciclo de consumo fechado.",
-        "/consumo/periodos/{id_periodo}/reabrir",
-        {"id_periodo": Param("integer", "Id (de `consumo_periodos`).", obrigatorio=True)},
+        "estornar_baixa_do_lote", "Estornar a baixa de um lote",
+        "Desfaz a baixa: o lote volta a estar em cobrança.",
+        "/receber/lotes/{id_lote}/estornar-baixa",
+        {"id_lote": Param("integer", "Id (de `lotes_de_cobranca`).", obrigatorio=True)},
         metodo="POST"),
     Ferramenta(
-        "remover_periodo_de_consumo", "Remover um período de consumo",
-        "Apaga um ciclo de consumo aberto por engano.",
-        "/consumo/periodos/{id_periodo}",
-        {"id_periodo": Param("integer", "Id (de `consumo_periodos`).", obrigatorio=True)},
+        "cancelar_lote_de_cobranca", "Cancelar um lote de cobrança",
+        "Desfaz um lote em cobrança: os documentos voltam a ficar em aberto.",
+        "/receber/lotes/{id_lote}/cancelar",
+        {"id_lote": Param("integer", "Id (de `lotes_de_cobranca`).", obrigatorio=True)},
+        metodo="POST"),
+    Ferramenta(
+        "tirar_documento_do_lote", "Tirar um documento de um lote",
+        "Tira um documento do lote em cobrança; ele volta a ficar em aberto e o valor do lote "
+        "é refeito.",
+        "/receber/lotes/{id_lote}/documentos/{id_venda}",
+        {"id_lote": Param("integer", "Id do lote.", obrigatorio=True),
+         "id_venda": Param("integer", "Id do documento (de `lote_de_cobranca`).",
+                           obrigatorio=True)},
         metodo="DELETE"),
 
     # ------------------------------------------- lote 4: portal de clientes

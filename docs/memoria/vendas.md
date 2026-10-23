@@ -1,9 +1,49 @@
 # Vendas
 
-> Vendas, PDV e os períodos de consumo.
+> Vendas, PDV e as contas a receber do consumo (ex-períodos de consumo).
 > Leia antes de mexer neste módulo.
 
 ## O que já existe
+
+- 🔑 **CONTAS A RECEBER substituiu o período de consumo** (1.1.125, migração 129, 22/10/2026,
+  pedido do dono: *"tirar esta questão de períodos [...] o usuário possa lançar os documentos
+  para a data que for necessário. Ai ter uma espécie de contas a receber [...] gerar um lote, e
+  quando receber, fazer a baixa destes documentos"*). Decidido com ele: **um lote por pessoa**
+  (gerados de várias de uma vez), **baixa só do lote inteiro**, **permuta** entre as formas,
+  relatório **baixado e mandado por fora**.
+  - **Ciclo do documento:** em aberto (`vendas.id_consumo_lote` nulo) → em cobrança (lote
+    ABERTO) → recebido (lote RECEBIDO). `services/receber.py`, `routers/receber.py` (`/receber`),
+    telas `/receber` e `/receber/lotes/[id]`; `/consumo` só redireciona.
+  - ⚠️ **Quem impede cobrar duas vezes é o UPDATE** (`... AND id_consumo_lote IS NULL`), não
+    uma checagem antes: dois cliques simultâneos disputam as mesmas linhas e o segundo não acha
+    nada. Lote que ficou vazio é apagado ali mesmo. A suíte cobra com três threads.
+  - ⚠️ **Documento em lote não muda**: `_por_que_esta_em_lote` (routers/vendas.py) recusa
+    acrescentar item e CANCELAR a venda — o lote é o que foi mandado à pessoa. Para mexer, tira-se
+    o documento do lote (`DELETE /receber/lotes/{id}/documentos/{id_venda}`), que é também o
+    caminho do "pagou só uma parte". Tirar o último cancela o lote.
+  - O valor do lote é congelado no lote (`cupons`, `total`…) e só se recalcula ao criar e ao
+    tirar documento — nos dois casos o lote ainda não foi pago.
+  - Qualquer lote estorna a baixa (não há a cadeia do "só o último" do período); cancelado fica
+    no histórico, e a auditoria guarda os documentos que estavam nele.
+  - 🔑 **O que estava no ar foi preservado**: cada (período FECHADO, pessoa) virou um lote
+    RECEBIDO com o valor do recibo (`consumo_periodo_pessoas`), forma OUTRO, baixa na data do
+    fechamento, `id_consumo_periodo` apontando a origem (índice único parcial = idempotente).
+    O período ABERTO não carimbava nada: os documentos dele só passaram a ficar em aberto.
+    `consumo_periodos`, `consumo_periodo_pessoas` e `vendas.id_consumo_periodo` ficaram como
+    histórico; o serviço `consumo_periodo.py` saiu. Ensaio da conversão feito numa transação
+    desfeita (rodada duas vezes: mesmos lotes).
+  - Mesma chave: `consumo.periodos` gera lote e dá baixa; `cmv.relatorios` vê.
+  - **Relatório Consumo por pessoa:** o filtro `ciclo` virou `situacao` (aberto/cobranca/
+    recebido/todos) + datas (`de`/`ate` na tela, `inicio`/`fim` no arquivo) e `id_lote`. Sem
+    datas no arquivo são TODAS (não o mês corrente). O documento de um lote sai em
+    `/exportar/lote-consumo/{id}.pdf|.csv` (o mesmo `_consumo_pessoa`, recortado pelo `_lote`).
+  - Conector: as quatro ferramentas de período viraram `contas_a_receber`, `lotes_de_cobranca`,
+    `lote_de_cobranca`, `gerar_lotes_de_cobranca`, `receber_lote`, `estornar_baixa_do_lote`,
+    `cancelar_lote_de_cobranca`, `tirar_documento_do_lote`.
+  - Cobertura: `smoke_receber.py` (ex-`smoke_consumo_periodo`), `smoke_consumo_pessoa.py`,
+    `verificar.mjs` (lote e baixa pela tela, logo após o cupom da pessoa).
+  - ⚠️ **As entradas abaixo sobre período/ciclo de consumo são HISTÓRIA** — a regra que vale é
+    esta. O "consumo exige ciclo aberto" (08/09) caiu junto.
 
 - 🔑 **O PAINEL de vendas** (`/vendas/painel`, 1.1.116, 21/10/2026, pedido do dono: *"uma página
   de dashboard [...] ao clicar sobre os registros das vendas na tela de início, iria para esta

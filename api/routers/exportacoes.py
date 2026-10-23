@@ -30,6 +30,7 @@ from services import custos
 from services import estoque as estoque_motor
 from services import exportacao
 from services import exportacao_catalogo as catalogo_motor
+from services import receber as receber_motor
 
 router = APIRouter(prefix="/exportar", tags=["exportações"])
 
@@ -145,9 +146,10 @@ class _Filtros:
         # para evitar: "a tela ofereceria um filtro que o servidor ignora, o
         # arquivo sairia com mais linhas do que se pediu, e nada denunciaria".
         # Nada denunciou mesmo -- o documento e o da COBRANCA do funcionario.
-        # ⚠️ `ciclo` e texto, nao inteiro: "aberto" e uma opcao de verdade ao
-        # lado dos ids, e e o padrao numa loja que nunca fechou um ciclo.
-        ciclo: list[str] | None = Query(default=None),
+        # 🔑 **O ciclo saiu (22/10/2026)**: o recorte do consumo é a SITUAÇÃO do
+        # documento nas contas a receber (+ `inicio`/`fim`). Texto, e valor
+        # desconhecido cai em "aberto", como a `aba`.
+        situacao_consumo: str | None = None,
         pessoas: list[int] | None = Query(default=None),
         detalhe: list[str] | None = Query(default=None),
         busca: str | None = None,
@@ -176,7 +178,7 @@ class _Filtros:
             "tipos_movimento": tipos_movimento, "situacao": situacao,
             "classes": classes, "produtos": produtos, "busca": busca, "dias": dias,
             "provisorio": provisorio,
-            "ciclo": ciclo, "pessoas": pessoas, "detalhe": detalhe,
+            "situacao_consumo": situacao_consumo, "pessoas": pessoas, "detalhe": detalhe,
             "tipo_pessoa": tipo_pessoa, "situacao_pessoa": situacao_pessoa,
             "busca_pessoa": busca_pessoa, "agrupar": agrupar,
         }
@@ -203,6 +205,36 @@ def catalogo(ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
     """O que ESTA pessoa pode exportar, e com que filtros — a fonte do diálogo."""
     with get_cursor() as cur:
         return catalogo_motor.catalogo(cur, unidade_atual(cur, ctx), ctx.pode)
+
+
+@router.get("/lote-consumo/{nome}")
+def lote_consumo(nome: str, formato: str | None = None,
+                 detalhe: str = Query(default="documento_itens",
+                                      pattern="^(sintetico|analitico|documento|documento_itens)$"),
+                 ctx: Contexto = Depends(contexto_atual)) -> Response:
+    """O documento de UM lote de cobrança — o que se manda à pessoa (22/10/2026).
+
+    🔑 **O mesmo relatório do Consumo por pessoa**, recortado pelo LOTE: as
+    colunas, o timbre e as somas são os de sempre, e o cabeçalho nomeia o lote —
+    dois arquivos de lotes diferentes não se confundem depois de salvos.
+    ⚠️ **Mesmas chaves da tela de Contas a receber**: o lote é o que alguém deve.
+    """
+    _exige_alguma(ctx, "consumo.periodos", "cmv.relatorios")
+    bruto, ext = _partir(nome, formato)
+    id_lote = _id_do_caminho(bruto, "Lote")
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        lote = receber_motor.lote(cur, id_unidade, id_lote)
+        if not lote:
+            raise HTTPException(status_code=404, detail="Lote não encontrado")
+        saida = catalogo_motor.montar(cur, "consumo-pessoa", id_unidade,
+                                      {"_lote": lote, "detalhe": [detalhe]})
+        timbre = catalogo_motor.papel_timbrado(cur)
+        auditoria.registrar(cur, ctx.id_usuario, "exportacao", "lote-consumo", "exportar",
+                            depois={"formato": ext, "lote": id_lote, "detalhe": detalhe},
+                            id_unidade=id_unidade)
+    base = f"lote-{id_lote}-{exportacao.slug(lote['pessoa']) or 'consumo'}"
+    return _render(saida, base, ext, timbre, ctx.nome)
 
 
 @router.get("/inventario/{nome}")

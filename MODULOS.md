@@ -21,7 +21,7 @@ entregue.
 | [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas` |
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes`, `preco_custo`, `custo_referencia` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `duas_lojas`, `alertas`, `lotes` |
-| [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal`, `rotulos_cabem` |
+| [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `receber`, `pdv_legal`, `rotulos_cabem` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo`, `erros` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `cmv_conferencia`, `grupos_cmv`, `ciclos`, `relatorios` |
 | [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao`, `cardapio_vivo`, `cardapio_pedido`, `cardapio_testes` |
@@ -101,15 +101,15 @@ Saldos, movimentos, ajustes, inventário e transferências entre lojas.
 
 ## Vendas
 
-- **Rotas:** `vendas.py`, `consumo.py`, `pdv.py`
-- **Serviços:** `consumo_pessoa.py`, `consumo_periodo.py`, `painel_vendas.py`, `services/pdv/`
-- **Telas:** `vendas/`, `vendas/painel/`, `vendas/[id]/`, `vendas/lancar/`, `vendas/por-pessoa/`, `vendas/sem-vinculo/`, `consumo/`, `meu-consumo/`
+- **Rotas:** `vendas.py`, `consumo.py` (Meu consumo), `receber.py`, `pdv.py`
+- **Serviços:** `consumo_pessoa.py`, `receber.py`, `painel_vendas.py`, `services/pdv/`
+- **Telas:** `vendas/`, `vendas/painel/`, `vendas/[id]/`, `vendas/lancar/`, `vendas/por-pessoa/`, `vendas/sem-vinculo/`, `receber/`, `receber/lotes/[id]/`, `meu-consumo/` (`consumo/` só redireciona)
 - **Permissões:** `cmv.painel`, `cmv.relatorios`, `cmv.fechamento`, `consumo.periodos`
 
-⚠️ **"Em aberto" é a venda SEM carimbo de período** (`vendas.id_consumo_periodo`),
-nunca uma conta de datas.
-
-⚠️ **Consumo de pessoa exige ciclo ABERTO** (08/09/2026) — venda de balcão, não.
+🔑 **Contas a receber (22/10/2026, migração 129) substituiu o período de consumo.**
+"Em aberto" é a venda com pessoa SEM lote (`vendas.id_consumo_lote`), nunca uma
+conta de datas. Um lote por pessoa; baixa só do lote inteiro. O consumo de pessoa
+NÃO exige mais ciclo aberto.
 
 🔑 **O PDV mora AQUI, e não em Integrações** (decidido em 09/09/2026). É a única
 integração que não fica com as outras, e a razão é o que ela alimenta: o Omie

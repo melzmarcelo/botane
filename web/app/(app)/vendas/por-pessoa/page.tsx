@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
-import { Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import BotaoExportar from "@/components/exportar";
 import { fontePessoas, ItemBusca } from "@/lib/busca-cadastro";
@@ -56,34 +56,25 @@ type LinhaAnalitica = {
   total: number;
 };
 
-type Ciclo = {
-  id: number;
-  nome: string | null;
-  inicio: string;
-  fim: string;
-  status: "ABERTO" | "FECHADO";
-};
-
 type Totais = {
-  periodo: Ciclo | null;
-  periodos: Ciclo[];
   total_cheio: number;
   total: number;
   desconto: number;
 };
 
 /**
- * 🔑 **O ciclo se escolhe, as datas não.** O consumo se cobra por ciclo fechado,
- * e o fechamento leva tudo que estava em aberto até a data final — inclusive
- * consumo anterior ao início dele. Um par de datas aqui mostraria um conjunto
- * diferente do que foi cobrado, e esta tela É o documento da cobrança.
+ * 🔑 **A situação do documento nas contas a receber, e as datas** (22/10/2026). O
+ * ciclo de consumo saiu: o documento está em aberto (sem lote), em cobrança (num
+ * lote ainda não pago) ou recebido. O documento de UM lote sai da tela do lote.
  */
-const EM_ABERTO = "aberto";
+type Situacao = "aberto" | "cobranca" | "recebido" | "todos";
 
-function rotuloDoCiclo(c: Ciclo) {
-  const base = c.nome || `${dataBr(c.inicio)} a ${dataBr(c.fim)}`;
-  return c.status === "ABERTO" ? `${base} (ciclo aberto)` : base;
-}
+const SITUACOES: { valor: Situacao; nome: string }[] = [
+  { valor: "aberto", nome: "Em aberto — ainda não cobrado" },
+  { valor: "cobranca", nome: "Em cobrança — num lote ainda não pago" },
+  { valor: "recebido", nome: "Recebido — num lote com baixa" },
+  { valor: "todos", nome: "Todos — com ou sem lote" },
+];
 
 /**
  * ⚠️ **União discriminada, nunca `LinhaSintetica & LinhaAnalitica`.** A
@@ -193,26 +184,32 @@ function TabelaAnalitica({ linhas }: { linhas: LinhaAnalitica[] }) {
 }
 
 export default function PaginaConsumoPorPessoa() {
-  // ⚠️ **"Em aberto" é o padrão, e é uma escolha de verdade** — é o que a casa
-  // tem a receber e ainda não cobrou, a pergunta mais frequente desta tela, e o
-  // único recorte possível numa loja que nunca fechou um ciclo.
-  const [ciclo, setCiclo] = useState<string>(EM_ABERTO);
+  // ⚠️ **"Em aberto" é o padrão** — é o que a casa tem a receber e ainda não
+  // cobrou, a pergunta mais frequente desta tela.
+  const [situacao, setSituacao] = useState<Situacao>("aberto");
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
   const [pessoa, setPessoa] = useState<{ id: number; rotulo: string } | null>(null);
   const [detalhe, setDetalhe] = useState<Detalhe>("sintetico");
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
 
   const carregar = useCallback(async () => {
     setCarregando(true);
+    setErro("");
     try {
-      const q = new URLSearchParams({ detalhe });
-      if (ciclo !== EM_ABERTO) q.set("id_periodo", ciclo);
+      const q = new URLSearchParams({ detalhe, situacao });
+      if (de) q.set("de", de);
+      if (ate) q.set("ate", ate);
       if (pessoa) q.set("id_pessoa", String(pessoa.id));
       setDados(await api.get<Resposta>("/vendas/por-pessoa?" + q.toString()));
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível carregar o relatório");
     } finally {
       setCarregando(false);
     }
-  }, [ciclo, detalhe, pessoa]);
+  }, [situacao, de, ate, detalhe, pessoa]);
 
   useEffect(() => {
     carregar();
@@ -248,31 +245,44 @@ export default function PaginaConsumoPorPessoa() {
           relatorio="consumo-pessoa"
           rotulo="Baixar"
           iniciais={{
-            ciclo: [ciclo],
+            situacao_consumo: situacao,
+            inicio: de,
+            fim: ate,
             pessoas: pessoa ? [pessoa.id] : [],
             detalhe: [detalhe],
           }}
         />
+        <Link href="/receber" className="btn btn-secundario">
+          Contas a receber
+        </Link>
       </div>
 
       <Cartao
-        titulo="Ciclo de consumo"
+        titulo="Recorte"
         descricao="Cupom cancelado não entra: não se cobra o que foi cancelado."
       >
         <div className="grid gap-4 sm:grid-cols-3">
-          <Campo rotulo="Ciclo" dica="o que ainda não foi cobrado, se não escolher">
+          <Campo rotulo="Situação" dica="o que ainda não foi cobrado, se não escolher">
             <select
+              id="consumo-situacao"
               className="campo"
-              value={ciclo}
-              onChange={(e) => setCiclo(e.target.value)}
+              value={situacao}
+              onChange={(e) => setSituacao(e.target.value as Situacao)}
             >
-              <option value={EM_ABERTO}>Em aberto — ainda não cobrado</option>
-              {(dados?.periodos ?? []).map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {rotuloDoCiclo(c)}
+              {SITUACOES.map((s) => (
+                <option key={s.valor} value={s.valor}>
+                  {s.nome}
                 </option>
               ))}
             </select>
+          </Campo>
+          <Campo rotulo="Documentos de" dica="todas as datas, se em branco">
+            <input id="consumo-de" className="campo" type="date" value={de}
+              onChange={(e) => setDe(e.target.value)} />
+          </Campo>
+          <Campo rotulo="Até">
+            <input id="consumo-ate" className="campo" type="date" value={ate}
+              onChange={(e) => setAte(e.target.value)} />
           </Campo>
           <Campo rotulo="Pessoa" dica="em branco traz todas">
             <BuscaCadastro
@@ -330,10 +340,12 @@ export default function PaginaConsumoPorPessoa() {
               : linhas.length + " documento(s)"
         }
       >
-        {carregando ? (
+        {erro ? (
+          <Aviso tipo="erro">{erro}</Aviso>
+        ) : carregando ? (
           <p className="text-suave">carregando…</p>
         ) : !dados || !dados.linhas.length ? (
-          <Vazio>Nenhum consumo com pessoa informada neste período.</Vazio>
+          <Vazio>Nenhum consumo com pessoa informada neste recorte.</Vazio>
         ) : dados.detalhe === "sintetico" ? (
           <TabelaSintetica linhas={dados.linhas} />
         ) : dados.detalhe === "analitico" ? (

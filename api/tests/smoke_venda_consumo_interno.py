@@ -21,7 +21,7 @@ from datetime import date
 sys.path.insert(0, ".")
 sys.path.insert(0, "tests")
 
-from comum import garantir_ciclo_de_consumo, garantir_local  # noqa: E402
+from comum import garantir_local  # noqa: E402
 from database import get_cursor, init_pool  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
@@ -64,7 +64,6 @@ init_pool()
 marca = str(time.time_ns() // 100)[-6:]
 hoje = date.today()
 local = garantir_local(chamar, token)
-ciclo_da_suite = garantir_ciclo_de_consumo(chamar, token)
 
 
 def apuracao():
@@ -156,8 +155,6 @@ with get_cursor() as cur:
 chamar("DELETE", f"/produtos/{produto}", token=token)
 if pessoa:
     chamar("DELETE", f"/fornecedores/{pessoa}", token=token)
-if ciclo_da_suite:
-    chamar("DELETE", f"/consumo/periodos/{ciclo_da_suite}", token=token)
 
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for x in falhas:

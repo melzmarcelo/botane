@@ -35,7 +35,7 @@ from datetime import date, timedelta
 
 sys.path.insert(0, "tests")
 sys.path.insert(0, ".")
-from comum import garantir_categorias, garantir_ciclo_de_consumo, garantir_cozinha  # noqa: E402
+from comum import garantir_categorias, garantir_cozinha  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -129,12 +129,11 @@ st, r = chamar("POST", "/vendas/importar", {"vendas": [
     cupom("F", d1 - timedelta(days=7), [(p2, 2, 5)], hora="10:00:00"),
 ]}, token=token)
 checar("as vendas entraram", st in (200, 201) and not (r or {}).get("erros"), (st, r))
-# Consumo interno pede a pessoa e um periodo de consumo aberto.
+# Consumo interno pede a pessoa (o ciclo de consumo saiu em 22/10/2026).
 # ⚠️ **Uma pessoa PROPRIA da suite, nunca "a primeira da lista"** (21/10/2026): a
 # primeira era o fornecedor que a bateria do navegador abre, e a ficha dele ganhou
-# uma segunda tabela (o consumo no ciclo) — a checagem "dez linhas por pagina"
+# uma segunda tabela (o consumo em aberto) — a checagem "dez linhas por pagina"
 # passou a contar as duas e acusou a ficha.
-garantir_ciclo_de_consumo(chamar, token)
 NOME_PESSOA = "Smoke painel de vendas"
 st, achadas = chamar("GET", f"/fornecedores?incluir_inativos=true&busca={NOME_PESSOA}", token=token)
 pessoa = next((x["id"] for x in (achadas or []) if x.get("nome", "").lower() == NOME_PESSOA.lower()),

@@ -22,7 +22,6 @@ from models.cmv import (AcrescentarItensRequest, ImportarVendasRequest, PreviaCu
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
 from services import consumo_pessoa as consumo
-from services import consumo_periodo as ciclo
 from services import estoque as motor_estoque
 from services import painel_vendas
 from services import precos
@@ -456,19 +455,10 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
 
-        # 🔑 **Consumo de pessoa exige ciclo ABERTO** (pedido do dono,
-        # 08/09/2026). O consumo so se lanca dentro de um ciclo: e nele que a
-        # divida se acumula e por ele que ela se cobra.
-        #
-        # ⚠️ **A checagem e do SERVIDOR, e vale para todo caminho.** A tela de
-        # lancamento avisa antes, mas ela nao e a unica porta: a importacao do
-        # PDV chega aqui tambem. Uma venda com pessoa gravada fora de ciclo
-        # ficaria em aberto para sempre, sem nunca aparecer num fechamento.
-        #
-        # ⚠️ Isto INVERTE a decisao de 04/09 ("o consumo nao espera o ciclo
-        # existir"), a pedido de quem usa. O preco e o previsto la: sem ciclo
-        # aberto, a casa para de registrar consumo de pessoa -- e a mensagem
-        # abaixo precisa dizer exatamente o que fazer, ou vira um "nao deu".
+        # 🔑 **Consumo de pessoa NÃO exige mais ciclo** (22/10/2026, pedido do
+        # dono): o período de consumo deu lugar às contas a receber. A venda com
+        # pessoa entra na data em que aconteceu e fica EM ABERTO (sem lote) até a
+        # casa gerar o lote de cobrança dela — ver `services/receber.py`.
         # ⚠️ **Consumo interno é de ALGUÉM** (migração 095): é o campo que a tela só
         # habilita depois de escolher a pessoa. Sem ela, "consumo interno" seria
         # mercadoria saindo sem dono — isso é perda, e tem tela própria.
@@ -476,12 +466,6 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
             raise HTTPException(
                 status_code=422,
                 detail="Consumo interno precisa de uma pessoa: informe para quem é o lançamento.")
-        if any(v.id_pessoa for v in body.vendas) and not ciclo.periodo_aberto(cur, id_unidade):
-            raise HTTPException(
-                status_code=400,
-                detail="Nao ha periodo de consumo aberto nesta loja. "
-                       "Abra um periodo em Consumo antes de lancar venda com pessoa.",
-            )
 
         for venda in body.vendas:
             if venda.documento:
@@ -638,13 +622,35 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
     }
 
 
+def _por_que_esta_em_lote(cur, venda: dict, para: str) -> str | None:
+    """Se a venda está num lote de cobrança, a frase que diz qual e o que fazer.
+
+    🔑 **Documento em lote não muda** (22/10/2026): o lote é o que foi mandado à
+    pessoa, e um item a mais ou um cancelamento faria o valor cobrado deixar de
+    bater com o relatório que ela recebeu. Cancelado não conta — o lote cancelado
+    já devolveu os documentos.
+    """
+    if not venda.get("id_consumo_lote"):
+        return None
+    cur.execute("SELECT id, status FROM consumo_lotes WHERE id = %s",
+                (venda["id_consumo_lote"],))
+    l = cur.fetchone()
+    if not l:
+        return None
+    if l["status"] == "RECEBIDO":
+        return (f"Esta venda está no lote de cobrança nº {l['id']}, que já foi recebido. "
+                f"Estorne a baixa e tire o documento do lote para {para}.")
+    return (f"Esta venda está no lote de cobrança nº {l['id']}, em cobrança. Tire o "
+            f"documento do lote (Contas a receber) para {para}.")
+
+
 def _por_que_nao_edita(cur, id_unidade: int, venda: dict) -> str | None:
     """Por que esta venda NÃO aceita item novo — ou nada, se aceita.
 
     🔑 **A regra do dono (20/10/2026):** *"permitir editar um documento, adicionar mais
     itens, desde que o período que ele esteja já não foi fechado"*. Fechado aqui é
     qualquer um dos dois que fotografam a venda: o PERÍODO do CMV (o fechamento
-    congela a apuração) e o CICLO de consumo da pessoa (o recibo já foi cobrado).
+    congela a apuração) e o LOTE de cobrança da pessoa (foi mandado a ela).
     ⚠️ **Venda do PDV não se edita aqui.** O cupom é do PDV, e a importação seguinte o
     compararia com um documento que o PDV nunca emitiu; a correção é lá.
     ⚠️ **Sem exceção para `estoque.retroativo`**: o pedido é "desde que não foi fechado",
@@ -655,13 +661,9 @@ def _por_que_nao_edita(cur, id_unidade: int, venda: dict) -> str | None:
     if venda["origem"] not in ("MANUAL", "PLANILHA"):
         return ("Esta venda veio do PDV: o cupom é dele, e a correção se faz lá — a próxima "
                 "busca traz o documento corrigido.")
-    if venda["id_consumo_periodo"]:
-        cur.execute("SELECT nome, inicio, fim FROM consumo_periodos WHERE id = %s",
-                    (venda["id_consumo_periodo"],))
-        c = cur.fetchone() or {}
-        nome = c.get("nome") or (f"{c['inicio']:%d/%m/%Y} a {c['fim']:%d/%m/%Y}" if c else "")
-        return (f"Esta venda já foi cobrada no ciclo de consumo {nome}. Reabra o ciclo "
-                "para acrescentar itens.")
+    motivo_lote = _por_que_esta_em_lote(cur, venda, "acrescentar itens")
+    if motivo_lote:
+        return motivo_lote
     cur.execute(
         """SELECT inicio, fim, ciclo FROM cmv_fechamentos
             WHERE id_unidade = %s AND status = 'FECHADO' AND %s BETWEEN inicio AND fim""",
@@ -694,7 +696,7 @@ def acrescentar_itens(id_venda: int, body: AcrescentarItensRequest,
         cur.execute(
             """SELECT v.id, v.data, v.hora, v.origem, v.documento, v.cancelada, v.id_pessoa,
                       v.consumo_interno, v.cupom_base, v.cupom_desconto_pct,
-                      v.id_consumo_periodo, v.valor_total, f.nome AS pessoa
+                      v.id_consumo_lote, v.valor_total, f.nome AS pessoa
                  FROM vendas v
                  LEFT JOIN fornecedores f ON f.id = v.id_pessoa
                 WHERE v.id = %s AND v.id_unidade = %s
@@ -767,13 +769,19 @@ def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
         # ⚠️ A loja entra na busca: sem ela, um id de outra loja seria cancelado
         # por quem nem enxerga aquela venda na tela.
         id_unidade = unidade_atual(cur, ctx)
-        cur.execute("SELECT cancelada FROM vendas WHERE id = %s AND id_unidade = %s",
+        cur.execute("SELECT cancelada, id_consumo_lote FROM vendas "
+                    "WHERE id = %s AND id_unidade = %s FOR UPDATE",
                     (id_venda, id_unidade))
         venda = cur.fetchone()
         if not venda:
             raise HTTPException(status_code=404, detail="Venda não encontrada")
         if venda["cancelada"]:
             raise HTTPException(status_code=400, detail="Esta venda já está cancelada.")
+        # ⚠️ Documento em lote de cobrança não se cancela: o lote foi mandado à
+        # pessoa com ele dentro (22/10/2026).
+        motivo_lote = _por_que_esta_em_lote(cur, dict(venda), "cancelar")
+        if motivo_lote:
+            raise HTTPException(status_code=409, detail=motivo_lote)
 
         # 🔑 **A produção que a venda disparou volta JUNTO** (110). O produto
         # NA_HORA produz e baixa no mesmo lançamento; a baixa nasce com origem
@@ -1070,30 +1078,16 @@ def sem_vinculo(busca: str | None = None, ctx: Contexto = Depends(_ver)) -> list
         return [dict(r) for r in cur.fetchall()]
 
 
-@router.get("/periodo-aberto")
-def periodo_aberto(ctx: Contexto = Depends(_editar)) -> dict:
-    """O ciclo de consumo em curso, ou nada.
-
-    🔑 **Existe para a tela de lancamento avisar ANTES**, e nao depois de a
-    pessoa montar o cupom inteiro e apertar salvar.
-
-    ⚠️ Mora aqui, e nao em `/consumo`, por causa da chave: aquele router pede
-    `consumo.periodos` ou `cmv.relatorios`, e quem lanca venda tem
-    `cmv.fechamento` ou `cmv.painel`. Buscado la, o aviso daria 403 justamente
-    para quem precisa dele. Aqui devolve so a existencia e as datas -- nenhum
-    valor de ninguem.
-    """
-    with get_cursor() as cur:
-        return {"aberto": ciclo.periodo_aberto(cur, unidade_atual(cur, ctx))}
-
-
 # ⚠️ **`/{id_venda}` vem DEPOIS de `/sem-vinculo`, e a ordem é o que faz as duas
 # funcionarem.** O FastAPI casa as rotas na ordem em que foram declaradas: com o
 # parâmetro na frente, "sem-vinculo" viraria um id e o pedido morreria em 422
 # antes de chegar à fila de de-para.
 @router.get("/por-pessoa")
 def por_pessoa(
-    id_periodo: int | None = Query(default=None),
+    situacao: str = Query(default="aberto", pattern="^(aberto|cobranca|recebido|todos)$"),
+    de: date | None = None,
+    ate: date | None = None,
+    id_lote: int | None = None,
     id_pessoa: int | None = Query(default=None),
     detalhe: str = Query(default="sintetico",
                          pattern="^(sintetico|analitico|documento|documento_itens)$"),
@@ -1119,27 +1113,25 @@ def por_pessoa(
     "a política não tocou nesta linha": tratá-lo como zero faria o relatório
     anunciar um desconto de 100%.
     """
+    if de and ate and ate < de:
+        raise HTTPException(status_code=400, detail="A data final é anterior à inicial.")
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
-        periodo = None
-        if id_periodo is not None:
-            periodo = ciclo.por_id(cur, id_unidade, id_periodo)
-            if not periodo:
-                raise HTTPException(status_code=404, detail="Período não encontrado.")
+        if id_lote is not None:
+            cur.execute("SELECT 1 FROM consumo_lotes WHERE id = %s AND id_unidade = %s",
+                        (id_lote, id_unidade))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Lote não encontrado.")
+        # 🔑 **O recorte é a SITUAÇÃO do documento e as datas** (22/10/2026): o ciclo
+        # saiu com as contas a receber. Ver `consumo_pessoa.recorte`.
         # ⚠️ A consulta mora no serviço porque a EXPORTAÇÃO usa a mesma: escrita
         # duas vezes, a tela e o arquivo entregue ao funcionário divergiriam
         # numa discussão sobre dinheiro.
-        linhas = consumo.apurar(cur, id_unidade, periodo,
+        filtro = {"situacao": situacao, "de": de, "ate": ate, "id_lote": id_lote}
+        linhas = consumo.apurar(cur, id_unidade, filtro,
                                 [id_pessoa] if id_pessoa else None, detalhe)
         return {
-            # 🔑 **A tela recebe os ciclos junto com os dados.** Ela nao pode
-            # busca-los em `/consumo/periodos`: aquele router pede
-            # `consumo.periodos` ou `cmv.relatorios`, e este relatorio abre
-            # tambem para `cmv.painel` -- quem entrasse por essa chave veria a
-            # tela com o filtro vazio e nenhuma explicacao. Vindo daqui, as
-            # opcoes sao exatamente as que este endpoint sabe atender.
-            "periodo": periodo,
-            "periodos": ciclo.para_escolher(cur, id_unidade),
+            "situacao": situacao, "de": de, "ate": ate, "id_lote": id_lote,
             "detalhe": detalhe,
             "linhas": linhas,
             "total_cheio": round(sum(float(l["total_cheio"] or 0) for l in linhas), 2),
@@ -1149,34 +1141,39 @@ def por_pessoa(
         }
 
 
-@router.get("/por-pessoa/{id_pessoa}/ciclo-aberto")
-def consumo_no_ciclo_aberto(id_pessoa: int, ctx: Contexto = Depends(_ver)) -> dict:
-    """O consumo desta pessoa no ciclo ABERTO — para o cartão do cadastro dela.
+@router.get("/por-pessoa/{id_pessoa}/em-aberto")
+def consumo_em_aberto(id_pessoa: int, ctx: Contexto = Depends(_ver)) -> dict:
+    """O consumo desta pessoa ainda não cobrado, e o que está em cobrança — para o
+    cartão do cadastro dela.
 
     🔑 **Pedido do dono (26/09/2026):** *"no cadastro da pessoa, incluir um item
-    referente a consumos no período aberto atual."* Quem abre a ficha de alguém quer
-    saber quanto ele está devendo AGORA, sem ir ao relatório e escolher filtro.
+    referente a consumos no período aberto atual."* Desde 22/10/2026 não há período:
+    o cartão mostra o que está EM ABERTO (sem lote) e soma o que já foi mandado em
+    lote e ainda não voltou.
     ⚠️ **A mesma consulta do relatório** (`consumo_pessoa.apurar`, por documento com
-    os itens), recortada pelo ciclo aberto como o relatório recorta — o cartão e o
-    PDF entregue ao funcionário não podem discordar.
+    os itens) — o cartão e o PDF entregue ao funcionário não podem discordar.
     ⚠️ **Mesma chave do relatório**: consumo é dinheiro de alguém, e ver a ficha da
     pessoa (`cadastros.fornecedores`) não é o mesmo que ver o que ela deve.
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
-        periodo = ciclo.periodo_aberto(cur, id_unidade)
-        if not periodo:
-            return {"periodo": None, "documentos": [], "total_cheio": 0, "desconto": 0,
-                    "total": 0}
-        docs = consumo.apurar(cur, id_unidade, periodo, [id_pessoa], "documento_itens")
+        docs = consumo.apurar(cur, id_unidade, {"situacao": "aberto"}, [id_pessoa],
+                              "documento_itens")
+        cur.execute(
+            """SELECT count(*) AS lotes, coalesce(sum(total), 0) AS total
+                 FROM consumo_lotes
+                WHERE id_unidade = %s AND id_pessoa = %s AND status = 'ABERTO'""",
+            (id_unidade, id_pessoa))
+        cobranca = dict(cur.fetchone())
     cheio = round(sum(float(d["total_cheio"] or 0) for d in docs), 2)
     total = round(sum(float(d["total"] or 0) for d in docs), 2)
     return {
-        "periodo": periodo,
         "documentos": docs,
         "total_cheio": cheio,
         "desconto": round(cheio - total, 2),
         "total": total,
+        "lotes_em_cobranca": cobranca["lotes"],
+        "em_cobranca": float(cobranca["total"]),
     }
 
 
@@ -1291,14 +1288,20 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
         movimentos = [dict(r) for r in cur.fetchall()]
 
         # 🔑 Se aceita item novo, e por que não (20/10/2026) — a regra é do servidor.
-        cur.execute("SELECT id_consumo_periodo FROM vendas WHERE id = %s", (id_venda,))
-        por_que_nao = _por_que_nao_edita(
-            cur, id_unidade, dict(venda) | dict(cur.fetchone() or {}))
+        # 🔑 E o lote de cobrança em que ela está (22/10/2026), para a tela dizer.
+        cur.execute(
+            """SELECT v.id_consumo_lote, l.status AS lote_status
+                 FROM vendas v LEFT JOIN consumo_lotes l ON l.id = v.id_consumo_lote
+                WHERE v.id = %s""",
+            (id_venda,))
+        do_lote = dict(cur.fetchone() or {})
+        por_que_nao = _por_que_nao_edita(cur, id_unidade, dict(venda) | do_lote)
 
     custo = sum(float(i["quantidade"]) * float(i["custo_ficha_unitario"] or 0) for i in itens)
     receita = sum(float(i["valor_total"] or 0) for i in itens)
     return {
         **dict(venda),
+        **do_lote,
         "pode_acrescentar": por_que_nao is None,
         "por_que_nao_acrescenta": por_que_nao,
         "itens": itens,

@@ -37,8 +37,6 @@ import urllib.request
 
 sys.path.insert(0, ".")
 
-from comum import garantir_ciclo_de_consumo  # noqa: E402
-
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 
@@ -95,11 +93,6 @@ token = r["access_token"]
 # verdade. Com a letra na frente, nenhum documento pode casar.
 marca = "P" + str(time.time_ns() // 100)[-6:]
 criados: dict = {"pessoas": [], "usuarios": [], "produtos": []}
-# 🔑 **Venda com pessoa exige ciclo de consumo ABERTO** (08/09/2026).
-# ⚠️ O ciclo so se apaga se foi ESTA suite que o abriu: um ciclo da casa
-# nao e lixo de teste, e apaga-lo levaria junto o ciclo em curso dela.
-ciclo_da_suite = garantir_ciclo_de_consumo(chamar, token)
-
 
 def _limpar():
     try:
@@ -109,8 +102,6 @@ def _limpar():
             chamar("DELETE", f"/produtos/{p}", token=token)
         for f in criados["pessoas"]:
             chamar("DELETE", f"/fornecedores/{f}", token=token)
-        if ciclo_da_suite:
-            chamar("DELETE", f"/consumo/periodos/{ciclo_da_suite}", token=token)
     except Exception:
         pass
 

@@ -15,36 +15,49 @@ discussão sobre dinheiro.
 from datetime import date
 
 
-def recorte(periodo: dict | None) -> tuple[str, tuple]:
-    """O WHERE que isola um ciclo, e os parametros dele.
+SITUACOES = ("aberto", "cobranca", "recebido", "todos")
 
-    🔑 **A selecao e pelo CARIMBO, nunca pelas datas** (`vendas.id_consumo_periodo`).
-    E a mesma regra que a migracao 057 gravou, aplicada agora ao relatorio: o
-    fechamento leva tudo que estava em aberto ate a data final, INCLUSIVE
-    consumo anterior ao inicio do ciclo. Selecionar por data mostraria um
-    conjunto diferente do que foi cobrado -- e este relatorio e o documento da
-    cobranca, entao a diferenca apareceria numa discussao sobre dinheiro.
 
-    ⚠️ O ciclo ABERTO ainda nao carimbou nada: o que pertence a ele e o que
-    esta em aberto ate o `fim` dele, exatamente como `previa_do_fechamento` ja
-    calcula. Venda posterior ao fim e do proximo ciclo.
+def recorte(r: dict | None) -> tuple[str, tuple]:
+    """O WHERE que isola o recorte, e os parametros dele.
 
-    `None` e "tudo em aberto", sem recorte de data -- o que a casa tem a receber
-    hoje, e o unico recorte possivel numa loja que nunca abriu um ciclo.
+    🔑 **Contas a receber (22/10/2026)**: o ciclo saiu, e o recorte e a SITUACAO
+    do documento mais, se quiser, um intervalo de datas:
+    - `aberto` -- sem lote: o que a casa tem a receber e ainda nao cobrou (padrao);
+    - `cobranca` -- num lote ainda nao pago; `recebido` -- num lote com baixa;
+    - `todos` -- tudo, com ou sem lote.
+    🔑 **Com `id_lote`, o recorte e o LOTE**, e as datas e a situacao nao valem:
+    e o documento da cobranca, e tem de mostrar exatamente o que foi cobrado --
+    filtrar por data de novo poderia deixar de fora um documento dele.
+
+    `None` e "tudo em aberto", sem recorte de data.
     """
-    if periodo is None:
-        return "AND v.id_consumo_periodo IS NULL", ()
-    if periodo["status"] == "ABERTO":
-        return "AND v.id_consumo_periodo IS NULL AND v.data <= %s", (periodo["fim"],)
-    return "AND v.id_consumo_periodo = %s", (periodo["id"],)
+    r = r or {}
+    if r.get("id_lote"):
+        return "AND v.id_consumo_lote = %s", (r["id_lote"],)
+    situacao = r.get("situacao") or "aberto"
+    partes, ps = [], []
+    if situacao == "aberto":
+        partes.append("AND v.id_consumo_lote IS NULL")
+    elif situacao in ("cobranca", "recebido"):
+        partes.append("AND v.id_consumo_lote IN (SELECT l.id FROM consumo_lotes l "
+                      "WHERE l.status = %s)")
+        ps.append("ABERTO" if situacao == "cobranca" else "RECEBIDO")
+    if r.get("de"):
+        partes.append("AND v.data >= %s")
+        ps.append(r["de"])
+    if r.get("ate"):
+        partes.append("AND v.data <= %s")
+        ps.append(r["ate"])
+    return " ".join(partes), tuple(ps)
 
 
-def apurar(cur, id_unidade: int, periodo: dict | None,
+def apurar(cur, id_unidade: int, filtro: dict | None,
            ids_pessoa: list[int] | None = None,
            detalhe: str = "sintetico") -> list[dict]:
-    """As linhas de um ciclo — um total por pessoa, ou item a item.
+    """As linhas de um recorte — um total por pessoa, ou item a item.
 
-    ⚠️ **O recorte e o do CARIMBO** (ver `recorte`), nao um intervalo de datas.
+    ⚠️ **O recorte e o da SITUACAO do documento, ou o LOTE** (ver `recorte`).
 
     ⚠️ **Cupom CANCELADO fica de fora.** Ele existe na base para a conferência
     com o PDV fechar, mas cobrar alguém por um cupom cancelado seria cobrar o
@@ -60,8 +73,8 @@ def apurar(cur, id_unidade: int, periodo: dict | None,
     de itens do cupom — a armadilha que já custou a conferência do dia 02/09.
     """
     ids = ids_pessoa or None
-    onde, ps = recorte(periodo)
-    filtro = (id_unidade, *ps, ids, ids)
+    onde, ps = recorte(filtro)
+    params = (id_unidade, *ps, ids, ids)
 
     # 🔑 **Por DOCUMENTO** (26/09/2026, pedido do dono: *"criar mais opção de
     # impressão, agrupado por documento, agrupado por documento e destacando os
@@ -71,6 +84,7 @@ def apurar(cur, id_unidade: int, periodo: dict | None,
         cur.execute(
             f"""WITH cupom AS (
                    SELECT v.id, v.id_pessoa, v.data, v.hora, v.documento, v.desconto,
+                          v.id_consumo_lote,
                           sum(vi.quantidade * coalesce(vi.valor_unitario_cheio,
                                                        vi.valor_unitario)) AS cheio,
                           sum(vi.valor_total) AS itens_total,
@@ -85,6 +99,8 @@ def apurar(cur, id_unidade: int, periodo: dict | None,
                )
                SELECT c.id AS id_venda, c.data, c.hora, c.documento,
                       f.id AS id_pessoa, f.nome AS pessoa,
+                      -- O lote em que o documento está (nulo = em aberto).
+                      c.id_consumo_lote AS id_lote,
                       c.itens, c.cheio AS total_cheio,
                       -- ⚠️ O desconto do CABEÇALHO do cupom entra no total do
                       -- documento, como no sintético: é dinheiro que não se cobra.
@@ -93,14 +109,14 @@ def apurar(cur, id_unidade: int, periodo: dict | None,
                  FROM cupom c
                  JOIN fornecedores f ON f.id = c.id_pessoa
                 ORDER BY f.nome, c.data, c.hora NULLS LAST, c.id""",
-            filtro,
+            params,
         )
         documentos = [dict(r) for r in cur.fetchall()]
         if detalhe == "documento":
             return documentos
         # Os itens de cada documento, pela MESMA consulta do analítico — a linha
         # de um item não pode valer uma coisa aqui e outra no item a item.
-        itens = apurar(cur, id_unidade, periodo, ids_pessoa, "analitico")
+        itens = apurar(cur, id_unidade, filtro, ids_pessoa, "analitico")
         por_venda: dict[int, list[dict]] = {}
         for i in itens:
             por_venda.setdefault(i["id_venda"], []).append(i)
@@ -131,7 +147,7 @@ def apurar(cur, id_unidade: int, periodo: dict | None,
                   {onde}
                   AND (%s::int[] IS NULL OR v.id_pessoa = ANY(%s))
                 ORDER BY f.nome, v.data, v.hora NULLS LAST, v.id, vi.id""",
-            filtro,
+            params,
         )
         return [dict(r) for r in cur.fetchall()]
 
@@ -163,6 +179,6 @@ def apurar(cur, id_unidade: int, periodo: dict | None,
              JOIN fornecedores f ON f.id = c.id_pessoa
             GROUP BY f.id, f.nome, f.cupom_base, f.cupom_desconto_pct
             ORDER BY sum(c.cheio - c.itens_total + c.desconto) DESC, f.nome""",
-        filtro,
+        params,
     )
     return [dict(r) for r in cur.fetchall()]
