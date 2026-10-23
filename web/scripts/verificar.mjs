@@ -6290,7 +6290,9 @@ try {
   checar("Tabelas de apoio tem o cartão das unidades repetidas",
     await p.evaluate(() => /Unidades repetidas/.test(document.body.innerText)));
   checar("e aponta as que parecem a mesma (UNIDADE com siglas diferentes)",
-    await p.evaluate((s) => /Parecem a mesma unidade/.test(document.body.innerText)
+    // ⚠️ `/i`: o rótulo é `.rotulo`, que o CSS põe em MAIÚSCULAS — e o innerText
+    // devolve o texto como ele aparece, não como foi escrito.
+    await p.evaluate((s) => /Parecem a mesma unidade/i.test(document.body.innerText)
       && document.body.innerText.includes(s), mJun));
   await p.select("#juntar-absorvida", mJun).catch(() => {});
   await p.select("#juntar-principal", "UN").catch(() => {});
