@@ -26,6 +26,7 @@ from fastapi import HTTPException
 import auditoria
 from services import precos
 from services.custos import CASAS_CUSTO, dec
+from services.unidade_apelidos import sql_resolvida
 
 # A partir de quanto a referência e o razão "discordam". Meio a meio para cima:
 # variação de preço entre uma compra e outra não chega a isso, embalagem chega.
@@ -108,7 +109,7 @@ def suspeitos(cur, id_unidade: int) -> dict:
                    WHERE m.id_produto = p.id AND m.id_unidade = %(unidade)s
                      AND m.custo_medio_apos > 0
                      AND (m.um IS NULL OR p.um_estoque IS NULL
-                          OR upper(m.um) = upper(p.um_estoque))
+                          OR {sql_resolvida('m.um')} = upper(p.um_estoque))
                    ORDER BY m.id DESC LIMIT 1)) AS razao,
                {precos.sql_vigente()} AS preco
           FROM produtos p

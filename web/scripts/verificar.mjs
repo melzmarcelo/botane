@@ -6248,8 +6248,11 @@ try {
   aoTerminar.push(() => api("DELETE", `/unidades-medida/apelidos/${mUni}`, null, token));
 
   await irPara(p, `${WEB}/cadastros?aba=unidades`);
+  // ⚠️ Espera o CONTEÚDO do cartão, não o título (23/10/2026): o título nasce com a
+  // página e a lista vem depois, numa requisição própria — lida cedo, a tela parecia
+  // sem explicação e sem traduções, e a bateria ficou vermelha sem defeito nenhum.
   await p.waitForFunction(
-    () => /unidades que vieram nas notas/i.test(document.body.innerText), { timeout: 15000 })
+    () => /sem conversão/i.test(document.body.innerText), { timeout: 15000 })
     .catch(() => {});
   const filaUm = await p.evaluate(() => ({
     temCartao: /Unidades que vieram nas notas/i.test(document.body.innerText),
@@ -6274,6 +6277,39 @@ try {
   checar("dizendo que ela vale para as PRÓXIMAS notas",
     /pr[óo]ximas/i.test(filaUm.texto) && /estorno/i.test(filaUm.texto),
     filaUm.texto.slice(0, 400));
+
+  // 🔑 **Juntar unidades repetidas** (23/10/2026, pedido do dono: "1UNID/UN/UN1 é tudo
+  // UN … considerar somente uma"). Uma unidade com a MARCA da rodada, juntada em UN
+  // pela tela: sai do cadastro e vira tradução.
+  const mJun = `J${Date.now().toString().slice(-5)}`;
+  await api("POST", "/unidades-medida", { sigla: mJun, nome: "UNIDADE", grandeza: "UNIDADE",
+                                          fator_base: 1, ativo: true }, token);
+  aoTerminar.push(() => api("DELETE", `/unidades-medida/apelidos/${mJun}`, null, token));
+  await irPara(p, `${WEB}/cadastros?aba=unidades`);
+  await p.waitForSelector("#juntar-absorvida", { timeout: 15000 }).catch(() => {});
+  checar("Tabelas de apoio tem o cartão das unidades repetidas",
+    await p.evaluate(() => /Unidades repetidas/.test(document.body.innerText)));
+  checar("e aponta as que parecem a mesma (UNIDADE com siglas diferentes)",
+    await p.evaluate((s) => /Parecem a mesma unidade/.test(document.body.innerText)
+      && document.body.innerText.includes(s), mJun));
+  await p.select("#juntar-absorvida", mJun).catch(() => {});
+  await p.select("#juntar-principal", "UN").catch(() => {});
+  await p.$eval("#juntar-ver", (b) => b.click()).catch(() => {});
+  const viuPrevia = await esperarTexto(p, `Juntar ${mJun} em UN?`, 9000);
+  checar("ver o que muda abre a prévia antes de juntar", viuPrevia);
+  await p.evaluate(() => {
+    const d = [...document.querySelectorAll('[role="dialog"]')].pop();
+    [...(d?.querySelectorAll("button") ?? [])].find((b) => b.textContent?.trim() === "Juntar")
+      ?.click();
+  });
+  await assentar(1500);
+  const { dados: depoisJun } = await api("GET", "/unidades-medida?incluir_inativas=true", null,
+                                         token);
+  const { dados: apelidosJun } = await api("GET", "/unidades-medida/apelidos", null, token);
+  checar("confirmado, a repetida sai do cadastro",
+    Array.isArray(depoisJun) && !depoisJun.some((u) => u.sigla === mJun));
+  checar("e vira tradução de UN",
+    (apelidosJun?.apelidos ?? []).some((a) => a.apelido === mJun && a.sigla === "UN"));
 
   await irPara(p, `${WEB}/cadastros?aba=grupos-cmv`);
   await assentar(1800);

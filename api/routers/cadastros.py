@@ -5,7 +5,7 @@ na mesma tela e sempre lidas juntas. Leitura só exige autenticação (o formul�
 de produto precisa das quatro); a escrita exige a chave do módulo.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 import auditoria
 from database import get_cursor
@@ -15,6 +15,7 @@ from models.cadastros import (
     CategoriaResponse,
     CategoriaUpdate,
     GRANDEZAS,
+    JuntarUnidade,
     LocalCreate,
     LocalResponse,
     LocalUpdate,
@@ -493,6 +494,35 @@ def vincular_apelido(
         r = unidade_apelidos.vincular(cur, body.apelido, body.sigla, ctx.id_usuario)
         auditoria.registrar(cur, ctx.id_usuario, "unidade_medida", r["sigla"],
                             "apelido_vincular", depois=r)
+    return r
+
+
+@router.get("/unidades-medida/{sigla}/juntar")
+def previa_juntar_unidade(
+    sigla: str, em: str = Query(min_length=1, max_length=6),
+    ctx: Contexto = Depends(requer_permissao("cadastros.unidades_medida")),
+) -> dict:
+    """O que juntar `sigla` em `em` vai mexer — sem mexer (23/10/2026, pedido do dono)."""
+    with get_cursor() as cur:
+        return unidade_apelidos.previa_juntar(cur, sigla, em)
+
+
+@router.post("/unidades-medida/{sigla}/juntar")
+def juntar_unidade(
+    sigla: str, body: JuntarUnidade,
+    ctx: Contexto = Depends(requer_permissao("cadastros.unidades_medida")),
+) -> dict:
+    """Junta uma unidade em outra que quer dizer o mesmo (UN1 → UN).
+
+    🔑 Pedido do dono (23/10/2026): o Omie tem `1UNID`, `UN`, `UN1` para a mesma coisa,
+    e a casa quer uma só. A absorvida some do cadastro e vira APELIDO da que fica —
+    a próxima nota ou catálogo do Omie que a trouxer já entra na principal. Ver
+    `unidade_apelidos.juntar`.
+    """
+    with get_cursor() as cur:
+        r = unidade_apelidos.juntar(cur, sigla, body.em, ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "unidade_medida", r["absorvida"], "juntar",
+                            depois=r)
     return r
 
 

@@ -1788,9 +1788,14 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int,
                 # CMC de lá está. Por isso ela sai do bruto, antes da checagem.
                 um_omie = (p["um"] or "").strip().upper()[:6] or None
                 if p["um"]:
-                    cur.execute("SELECT 1 FROM unidades_medida WHERE upper(sigla) = upper(%s)",
-                                (p["um"],))
-                    if not cur.fetchone():
+                    # 🔑 **Pelo de-para** (23/10/2026, juntar unidades): "UN1" juntada em
+                    # UN deixou de ser unidade e virou apelido — sem traduzir aqui, o
+                    # produto novo do Omie nasceria sem unidade, ou pior, a importação
+                    # pediria para recriar a UN1 que a casa acabou de tirar.
+                    resolvida = unidade_apelidos.resolver(cur, p["um"])
+                    if resolvida:
+                        p["um"] = resolvida
+                    else:
                         sem_unidade += 1
                         p["um"] = None
                 id_existente = _do_catalogo_ja_existe(cur, p["codigo_omie"])
@@ -2074,7 +2079,11 @@ def _cmc_na_unidade_daqui(cur, id_produto: int, p: dict, cmc: Decimal, ums: dict
     quê é melhor que gravar um número cuja unidade ninguém sabe: custo errado
     não se anuncia, ele só sai na margem meses depois.
     """
-    um_omie = (p.get("um_omie") or "").strip().upper()
+    # ⚠️ A unidade do Omie passa pelo de-para: o CMC de um produto em "UN1" é por UN
+    # depois que a casa juntou as duas — sem isso o custo seria recusado como
+    # "sem caminho de conversão" entre duas unidades que são a mesma.
+    um_omie = (unidade_apelidos.resolver(cur, p.get("um_omie"))
+               or (p.get("um_omie") or "")).strip().upper()
     um_aqui = (p.get("um_estoque") or "").strip().upper()
     if not um_aqui:
         return None, "o produto ainda não tem unidade de estoque aqui"

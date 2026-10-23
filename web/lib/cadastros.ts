@@ -2,6 +2,8 @@
 
 /** Tipos e rótulos compartilhados pelas telas de cadastro. */
 
+import { api } from "./api";
+
 export type Setor = {
   id: number;
   nome: string;
@@ -45,6 +47,30 @@ export type UnidadeMedida = {
   fator_base: number;
   ativo: boolean;
 };
+
+/** O que juntar uma unidade em outra vai mexer (23/10/2026). */
+export type PreviaJuntar = {
+  absorvida: UnidadeMedida;
+  principal: UnidadeMedida;
+  produtos_estoque: number;
+  produtos_compra: number;
+  fichas: number;
+  inventario: number;
+  etiquetas: number;
+  movimentos_no_razao: number;
+  apelidos_que_mudam: string[];
+  conflitos: { id: number; codigo: string; nome: string; fator_absorvida: number;
+               fator_principal: number }[];
+  pode: boolean;
+};
+
+export const previaJuntarUnidade = (absorvida: string, principal: string) =>
+  api.get<PreviaJuntar>(
+    `/unidades-medida/${encodeURIComponent(absorvida)}/juntar?em=${encodeURIComponent(principal)}`);
+
+export const juntarUnidade = (absorvida: string, principal: string) =>
+  api.post<{ message: string }>(
+    `/unidades-medida/${encodeURIComponent(absorvida)}/juntar`, { em: principal });
 export type Fornecedor = {
   id: number;
   nome: string;

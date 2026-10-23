@@ -240,11 +240,15 @@ def _ultimo_medio_conhecido(cur, id_produto: int, id_unidade: int) -> Decimal:
     # de um movimento antigo é por KG se o produto era estocado em KG; lido
     # depois de uma troca para UN, ele entraria como custo do pacote. Linha sem
     # `um` é anterior à 076, de quando a unidade não mudava — continua valendo.
+    # ⚠️ A unidade da linha passa pelo de-para: depois de juntar UN1 em UN, o razão
+    # antigo continua dizendo "UN1" (append-only) e é a MESMA unidade de hoje.
+    from services.unidade_apelidos import sql_resolvida
     cur.execute(
-        """SELECT m.custo_medio_apos FROM estoque_movimentos m
+        f"""SELECT m.custo_medio_apos FROM estoque_movimentos m
              JOIN produtos p ON p.id = m.id_produto
             WHERE m.id_produto = %s AND m.custo_medio_apos > 0
-              AND (m.um IS NULL OR p.um_estoque IS NULL OR upper(m.um) = upper(p.um_estoque))
+              AND (m.um IS NULL OR p.um_estoque IS NULL
+                   OR {sql_resolvida('m.um')} = upper(p.um_estoque))
             ORDER BY m.id DESC LIMIT 1""",
         (id_produto,),
     )

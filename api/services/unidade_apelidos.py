@@ -149,3 +149,164 @@ def remover(cur, apelido: str) -> dict:
     """Desfaz a tradução. A unidade volta para a fila na próxima consulta."""
     cur.execute("DELETE FROM unidade_apelidos WHERE apelido = %s", (limpar(apelido),))
     return {"message": "Tradução removida."}
+
+
+# ---------------------------------------------------------------------------
+# Juntar unidades: a que veio do Omie como unidade de verdade vira apelido
+# ---------------------------------------------------------------------------
+#
+# 🔑 **Pedido do dono (23/10/2026):** *"no Omie tem vários cadastros de unidades
+# representando a mesma unidade. Exemplo: 1UNID/UN/UN1 é tudo UN … gostaria de um
+# DE/PARA … e considerar somente uma no nosso sistema"*.
+# ⚠️ **O de-para acima não alcançava esse caso**: ele só traduz texto que NÃO é
+# unidade, e no ar `1UNID`, `UN1` e `UNID` foram CADASTRADAS como unidades (e `PAC`,
+# `PCT` e `PT` são três "PACOTE"). Unidade diferente não converte (`custos.converter`
+# só junta CX e UN quando o produto diz quantas cabem), então cada uma partia o
+# custo e o combo do cadastro oferecia quatro "UNIDADE".
+# 🔑 **Juntar = mover tudo o que USA a absorvida para a principal, apagar a absorvida
+# e deixá-la como APELIDO da principal.** Assim a nota e o catálogo do Omie que
+# chegarem com "UN1" continuam entendidos, agora como UN, sem ninguém traduzir de novo.
+# ⚠️ **O razão NÃO se reescreve** (regra 1): `estoque_movimentos.um` continua dizendo
+# "UN1" nas linhas antigas, e quem compara essa coluna com a unidade do produto
+# resolve pelo apelido (`sql_resolvida`). O mesmo vale para o que é HISTÓRIA ou texto
+# de fora: `nota_itens.um_nota`, `produtos.um_omie`, `cmv_movimentacao.um_estoque`.
+
+# O que se reescreve: as colunas que apontam para o CADASTRO (as cinco com chave
+# estrangeira) e duas sem chave que descrevem o presente — o que se conta no
+# inventário e o que diz a etiqueta. (tabela, coluna)
+_REAPONTAR = (("produtos", "um_estoque"), ("produtos", "um_compra"),
+              ("fichas_tecnicas", "rendimento_um"), ("ficha_itens", "um"),
+              ("inventario_itens", "um_informada"), ("etiquetas", "um"))
+
+
+def sql_resolvida(coluna: str) -> str:
+    """A expressão SQL que lê uma sigla gravada já traduzida pelo de-para.
+
+    Para comparar o que foi gravado ANTES de uma junção ("UN1" no razão) com o
+    cadastro de HOJE ("UN"). Sem tradução, a sigla como está, em maiúsculas.
+    """
+    return (f"coalesce((SELECT a_.sigla FROM unidade_apelidos a_ "
+            f"WHERE a_.apelido = upper(trim({coluna}))), upper(trim({coluna})))")
+
+
+def _par(cur, absorvida: str, principal: str) -> tuple[dict, dict]:
+    from fastapi import HTTPException
+
+    a, p = absorvida.strip().upper(), principal.strip().upper()
+    if a == p:
+        raise HTTPException(status_code=400, detail="Escolha outra unidade para ficar.")
+    cur.execute("""SELECT sigla, nome, grandeza, fator_base, ativo FROM unidades_medida
+                    WHERE upper(sigla) IN (%s, %s)""", (a, p))
+    achadas = {r["sigla"].upper(): dict(r) for r in cur.fetchall()}
+    if a not in achadas:
+        raise HTTPException(status_code=404, detail=f"Não existe unidade {a} aqui.")
+    if p not in achadas:
+        raise HTTPException(status_code=404, detail=f"Não existe unidade {p} aqui.")
+    ua, up = achadas[a], achadas[p]
+    # ⚠️ **Só junta o que é a MESMA medida.** CX12 e DZ têm o mesmo fator e não são a
+    # mesma coisa para quem compra; KG e G têm grandeza igual e fatores diferentes —
+    # juntar trocaria quilo por grama em toda ficha. A grandeza E o fator têm de bater.
+    if ua["grandeza"] != up["grandeza"] or float(ua["fator_base"]) != float(up["fator_base"]):
+        raise HTTPException(
+            status_code=409,
+            detail=(f"{a} ({ua['nome'].lower()}, {ua['grandeza'].lower()} × "
+                    f"{float(ua['fator_base']):g}) e {p} ({up['nome'].lower()}, "
+                    f"{up['grandeza'].lower()} × {float(up['fator_base']):g}) não são a mesma "
+                    f"medida — juntar mudaria quantidades. Use o fator do produto."))
+    return ua, up
+
+
+def _conflitos_de_compra(cur, a: str, p: str) -> list[dict]:
+    """Produto com as DUAS unidades de compra e fatores diferentes: quem decide é gente."""
+    cur.execute(
+        """SELECT pr.id, pr.codigo, pr.nome, ua.fator AS fator_absorvida,
+                  up.fator AS fator_principal
+             FROM produto_unidades ua
+             JOIN produto_unidades up ON up.id_produto = ua.id_produto
+                                     AND upper(up.um) = %s
+             JOIN produtos pr ON pr.id = ua.id_produto
+            WHERE upper(ua.um) = %s AND ua.fator <> up.fator
+            ORDER BY pr.nome""", (p, a))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def previa_juntar(cur, absorvida: str, principal: str) -> dict:
+    """O que a junção vai mexer, sem mexer: quantos de cada coisa, e o que impede."""
+    ua, up = _par(cur, absorvida, principal)
+    a, p = ua["sigla"].upper(), up["sigla"].upper()
+    contas = {}
+    for tabela, coluna in (*_REAPONTAR, ("produto_unidades", "um")):
+        cur.execute(f"SELECT count(*) AS n FROM {tabela} WHERE upper({coluna}) = %s", (a,))
+        contas[f"{tabela}.{coluna}"] = cur.fetchone()["n"]
+    cur.execute("SELECT count(*) AS n FROM estoque_movimentos WHERE upper(um) = %s", (a,))
+    no_razao = cur.fetchone()["n"]
+    cur.execute("SELECT apelido FROM unidade_apelidos WHERE upper(sigla) = %s", (a,))
+    apelidos = [r["apelido"] for r in cur.fetchall()]
+    conflitos = _conflitos_de_compra(cur, a, p)
+    return {
+        "absorvida": ua, "principal": up,
+        "produtos_estoque": contas["produtos.um_estoque"],
+        "produtos_compra": contas["produtos.um_compra"] + contas["produto_unidades.um"],
+        "fichas": contas["fichas_tecnicas.rendimento_um"] + contas["ficha_itens.um"],
+        "inventario": contas["inventario_itens.um_informada"],
+        "etiquetas": contas["etiquetas.um"],
+        "movimentos_no_razao": no_razao,
+        "apelidos_que_mudam": apelidos,
+        "conflitos": conflitos,
+        "pode": not conflitos,
+    }
+
+
+def juntar(cur, absorvida: str, principal: str, id_usuario: int | None) -> dict:
+    """Junta a absorvida na principal, numa transação só. Ver o bloco acima."""
+    from fastapi import HTTPException
+
+    ua, up = _par(cur, absorvida, principal)
+    a, p_sigla = ua["sigla"], up["sigla"]
+    A, P = a.upper(), p_sigla.upper()
+    conflitos = _conflitos_de_compra(cur, A, P)
+    if conflitos:
+        lista = "; ".join(f"{c['nome']} ({float(c['fator_absorvida']):g} × "
+                          f"{float(c['fator_principal']):g})" for c in conflitos[:5])
+        raise HTTPException(
+            status_code=409,
+            detail=(f"{len(conflitos)} produto(s) compram em {a} e em {p_sigla} com fatores "
+                    f"diferentes — acerte a unidade de compra deles antes: {lista}"))
+    feito = {}
+    # A unidade de compra repetida (mesmo fator dos dois lados) sai; a padrão passa
+    # para a linha que fica, para o produto não perder a sugestão da tela.
+    # ⚠️ Em dois passos: o índice "uma padrão por produto" recusaria as duas
+    # marcadas ao mesmo tempo, e o DELETE logo abaixo leva a absorvida.
+    cur.execute(
+        """SELECT ua.id_produto FROM produto_unidades ua
+             JOIN produto_unidades up ON up.id_produto = ua.id_produto AND upper(up.um) = %s
+            WHERE upper(ua.um) = %s AND ua.padrao""", (P, A))
+    herdam_padrao = [r["id_produto"] for r in cur.fetchall()]
+    if herdam_padrao:
+        cur.execute("""UPDATE produto_unidades SET padrao = false
+                        WHERE upper(um) = %s AND id_produto = ANY(%s)""", (A, herdam_padrao))
+        cur.execute("""UPDATE produto_unidades SET padrao = true
+                        WHERE upper(um) = %s AND id_produto = ANY(%s)""", (P, herdam_padrao))
+    cur.execute(
+        """DELETE FROM produto_unidades ua
+            WHERE upper(ua.um) = %s
+              AND EXISTS (SELECT 1 FROM produto_unidades up
+                           WHERE up.id_produto = ua.id_produto AND upper(up.um) = %s)""",
+        (A, P))
+    feito["unidades_de_compra_repetidas"] = cur.rowcount
+    for tabela, coluna in (*_REAPONTAR, ("produto_unidades", "um")):
+        cur.execute(f"UPDATE {tabela} SET {coluna} = %s WHERE upper({coluna}) = %s",
+                    (p_sigla, A))
+        feito[f"{tabela}.{coluna}"] = cur.rowcount
+    # Quem traduzia PARA a absorvida passa a traduzir para a principal.
+    cur.execute("UPDATE unidade_apelidos SET sigla = %s WHERE upper(sigla) = %s", (p_sigla, A))
+    feito["apelidos_reapontados"] = cur.rowcount
+    cur.execute("DELETE FROM unidades_medida WHERE sigla = %s", (a,))
+    cur.execute(
+        """INSERT INTO unidade_apelidos (apelido, sigla, criado_por) VALUES (%s, %s, %s)
+           ON CONFLICT (apelido) DO UPDATE SET sigla = EXCLUDED.sigla, criado_em = now(),
+                                               criado_por = EXCLUDED.criado_por""",
+        (limpar(a), p_sigla, id_usuario))
+    return {"absorvida": a, "principal": p_sigla, "feito": feito,
+            "message": (f"{a} juntada em {p_sigla}: o cadastro passa a ter só {p_sigla}, e o "
+                        f"que chegar como {a} (nota ou Omie) vale como {p_sigla}.")}

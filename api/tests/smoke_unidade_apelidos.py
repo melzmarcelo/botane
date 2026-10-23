@@ -205,16 +205,93 @@ checar("e a unidade volta para a fila sozinha", na_fila(APELIDO) is not None,
        fila()["pendentes"][:3])
 
 
+print("\n5b. juntar unidades: a que veio do Omie como unidade vira apelido da que fica")
+# 🔑 Pedido do dono (23/10/2026): "1UNID/UN/UN1 é tudo UN … considerar somente uma".
+# O de-para acima não alcança esse caso — ele recusa traduzir unidade cadastrada.
+JUN = f"J{marca}"
+st, r = chamar("POST", "/unidades-medida", {"sigla": JUN, "nome": "UNIDADE DO OMIE",
+                                            "grandeza": "UNIDADE", "fator_base": 1,
+                                            "ativo": True}, token=token)
+checar("a unidade 'repetida' existe como unidade de verdade", st == 201, (st, r))
+_st, p2 = chamar("POST", "/produtos", {
+    "codigo": f"UAJ-{marca}", "nome": f"COPO JUNTAR {marca}", "tipo": "INSUMO",
+    "um_estoque": JUN, "controla_estoque": True, "status": "ATIVO",
+    "id_local_padrao": local["id"]}, token=token)
+P2 = (p2 or {}).get("id")
+if P2:
+    criados.append(P2)
+with get_cursor() as cur:
+    # Compra nas DUAS, com o mesmo fator: a repetida sai e a padrão passa para a UN.
+    cur.execute("""INSERT INTO produto_unidades (id_produto, um, fator, padrao)
+                   VALUES (%s, %s, 1, true), (%s, 'UN', 1, false)""", (P2, JUN, P2))
+_st, ent = chamar("POST", "/estoque/entradas", {
+    "id_produto": P2, "quantidade": 5, "custo_unitario": 2, "id_local": local["id"],
+    "documento": f"JUN {marca}"}, token=token)
+checar("o produto tem movimento gravado na unidade repetida", (ent or {}).get("id"), ent)
+
+st, pv = chamar("GET", f"/unidades-medida/{JUN}/juntar?em=UN", token=token)
+checar("a previa conta o produto, a compra e o razao",
+       st == 200 and pv.get("produtos_estoque") >= 1 and pv.get("produtos_compra") >= 1
+       and pv.get("movimentos_no_razao") >= 1 and pv.get("pode") is True, (st, pv))
+st, r = chamar("GET", f"/unidades-medida/{JUN}/juntar?em=KG", token=token)
+checar("juntar unidade em quilo e recusado (outra medida)",
+       st == 409 and "mesma" in str(r.get("detail", "")), (st, r))
+st, r = chamar("POST", f"/unidades-medida/{JUN}/juntar", {"em": "UN"})
+checar("sem autenticacao e barrado", st in (401, 403), st)
+
+st, r = chamar("POST", f"/unidades-medida/{JUN}/juntar", {"em": "UN"}, token=token)
+checar("juntar responde", st == 200, (st, r))
+_st, ums = chamar("GET", "/unidades-medida?incluir_inativas=true", token=token)
+checar("a repetida sai do cadastro", not any(u["sigla"] == JUN for u in ums or []), JUN)
+checar("e vira apelido da UN",
+       any(a["apelido"] == JUN and a["sigla"] == "UN" for a in fila()["apelidos"]),
+       fila()["apelidos"][:5])
+_st, pp = chamar("GET", f"/produtos/{P2}", token=token)
+checar("o produto passa a contar em UN", (pp or {}).get("um_estoque") == "UN", pp)
+with get_cursor() as cur:
+    cur.execute("SELECT um, padrao FROM produto_unidades WHERE id_produto = %s", (P2,))
+    compra = [dict(x) for x in cur.fetchall()]
+checar("a compra repetida sai, e a UN fica como padrao",
+       compra == [{"um": "UN", "padrao": True}], compra)
+with get_cursor() as cur:
+    cur.execute("SELECT um FROM estoque_movimentos WHERE id = %s", ((ent or {}).get("id"),))
+    no_razao = (cur.fetchone() or {}).get("um")
+checar("o razao NAO se reescreve (append-only): a linha antiga segue na sigla velha",
+       no_razao == JUN, no_razao)
+
+# A nota que chega com a sigla velha entra na UN, 1:1, sem ninguém traduzir de novo.
+st, nota2 = chamar("POST", "/notas", {
+    "id_fornecedor": fornecedor, "numero": f"UJ{marca}", "serie": "1",
+    "data_emissao": "2026-10-23", "id_local": local["id"],
+    "itens": [{"id_produto": P2, "quantidade": 3, "um": JUN, "valor_unitario": 2.0}],
+}, token=token)
+if (nota2 or {}).get("id"):
+    notas.append(nota2["id"])
+_st, n3 = chamar("GET", f"/notas/{(nota2 or {}).get('id')}", token=token)
+item3 = (n3.get("itens") or [{}])[0] if isinstance(n3, dict) else {}
+checar("a nota com a sigla velha entra como UN (3 = 3)",
+       perto(item3.get("quantidade_convertida"), 3), item3)
+checar("e ela nao volta para a fila de pendentes", na_fila(JUN) is None, fila()["pendentes"][:3])
+
+
 print("\n6. limpando o que a suite criou")
 for nid in notas:
     chamar("POST", f"/notas/{nid}/estornar", {}, token=token)
     chamar("DELETE", f"/notas/{nid}", token=token)
 with get_cursor() as cur:
-    cur.execute("DELETE FROM unidade_apelidos WHERE apelido = %s", (APELIDO,))
+    cur.execute("DELETE FROM unidade_apelidos WHERE apelido IN (%s, %s)", (APELIDO, JUN))
+    cur.execute("DELETE FROM unidades_medida WHERE sigla = %s", (JUN,))
+if (ent or {}).get("id"):
+    chamar("POST", f"/estoque/movimentos/{ent['id']}/estornar", {"motivo": "limpeza da suite"},
+           token=token)
 for pid in criados:
     chamar("DELETE", f"/produtos/{pid}", token=token)
 with get_cursor() as cur:
-    cur.execute("DELETE FROM produtos WHERE id = ANY(%s)", (criados,))
+    # ⚠️ O produto da junção tem movimento no razão (append-only): esse fica,
+    # desativado pelo DELETE da API acima, como todo produto com história.
+    cur.execute("""DELETE FROM produtos p WHERE p.id = ANY(%s)
+                     AND NOT EXISTS (SELECT 1 FROM estoque_movimentos m
+                                      WHERE m.id_produto = p.id)""", (criados,))
 checar("a suite nao deixa apelido para tras", na_fila(APELIDO) is None or True)
 
 print()

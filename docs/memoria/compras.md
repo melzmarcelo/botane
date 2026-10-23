@@ -333,6 +333,25 @@
   A tela diz isso com todas as letras — traduzir para "a mais parecida" é como o custo para de
   fluir.
 
+- 🔑 **Juntar unidades repetidas** (23/10/2026, pedido do dono: *"1UNID/UN/UN1 é tudo UN …
+  considerar somente uma"*). O receio acima aconteceu: no ar `1UNID`, `UN1` e `UNID` foram
+  CADASTRADAS como unidades (e `PAC`, `PCT`, `PT` são três "PACOTE"), e o de-para não as alcança
+  — ele recusa traduzir unidade cadastrada. `unidade_apelidos.juntar` (rotas
+  `GET|POST /unidades-medida/{sigla}/juntar`, tela "Unidades repetidas" em Tabelas de apoio):
+  - só junta a MESMA medida (grandeza e `fator_base` iguais; CX12×DZ e KG×G recusados, 409);
+  - reescreve as cinco colunas com FK (`produtos.um_estoque/um_compra`, `fichas_tecnicas.
+    rendimento_um`, `ficha_itens.um`, `produto_unidades.um`) e duas sem FK que descrevem o
+    presente (`inventario_itens.um_informada`, `etiquetas.um`); compra repetida com o MESMO fator
+    sai (a padrão passa para a que fica, em dois passos por causa do índice "uma padrão");
+    fatores diferentes = 409 listando os produtos;
+  - reaponta os apelidos que apontavam para a absorvida, APAGA a unidade e a grava como apelido
+    da principal — nota e catálogo do Omie com a sigla velha entram na principal sozinhos;
+  - ⚠️ **NÃO reescreve** `estoque_movimentos.um` (append-only), `nota_itens.um_nota`,
+    `produtos.um_omie` nem `cmv_movimentacao.um_estoque`. Quem compara esses com o cadastro passa
+    pelo de-para: `sql_resolvida('m.um')` em `estoque._ultimo_medio_conhecido` e `custo_referencia`;
+    `resolver` no catálogo do Omie (a unidade que chega) e em `_cmc_na_unidade_daqui`.
+  Suíte: `smoke_unidade_apelidos` seção 5b; roteiro no `verificar.mjs` junto da fila.
+
   ⚠️ **A fila é uma CONSULTA, não uma tabela** (`unidade_apelidos.pendentes`): o que apareceu em
   `nota_itens`, menos o que já é unidade, menos o que já foi traduzido. Mesma decisão da fila de
   envio ao PDV — uma fila mantida à mão precisaria ser alimentada em todo lugar que grava um item

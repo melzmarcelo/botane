@@ -153,6 +153,12 @@ class ApelidoUnidade(BaseModel):
     sigla: str = Field(min_length=1, max_length=6)
 
 
+class JuntarUnidade(BaseModel):
+    """A unidade que FICA quando outra, que quer dizer a mesma coisa, é juntada nela."""
+
+    em: str = Field(min_length=1, max_length=6)
+
+
 class UnidadeMedidaUpdate(BaseModel):
     nome: str | None = Field(default=None, min_length=2, max_length=40)
     grandeza: str | None = None

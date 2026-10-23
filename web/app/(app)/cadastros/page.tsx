@@ -18,6 +18,7 @@ import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/
 import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import GruposCmv from "./grupos-cmv";
 import UnidadesDeFora from "./unidades-de-fora";
+import JuntarUnidades from "./juntar-unidades";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
 
@@ -889,12 +890,28 @@ export default function PaginaCadastros() {
           mesma tela.
           ⚠️ Cartão separado, não uma seção dentro do outro: ele carrega os
           próprios dados e se recarrega sozinho a cada vínculo. */}
+      {/* 🔑 **Unidades repetidas** (23/10/2026, pedido do dono: "1UNID/UN/UN1 é tudo
+          UN … considerar somente uma"). Antes da fila: a fila traduz o que NÃO é
+          unidade; aqui se junta o que foi cadastrado duas vezes. */}
+      {aba === "unidades" && ums && (
+        <Cartao
+          titulo="Unidades repetidas"
+          descricao="A mesma unidade cadastrada com siglas diferentes — junte numa só."
+        >
+          <JuntarUnidades ums={ums} podeEditar={podeAba("unidades")}
+                          aoJuntar={() => void carregar()} />
+        </Cartao>
+      )}
+
       {aba === "unidades" && ums && (
         <Cartao
           titulo="Unidades que vieram nas notas"
           descricao="O que o fornecedor escreveu e o sistema ainda não sabe ler."
         >
-          <UnidadesDeFora ums={ums} podeEditar={podeAba("unidades")} />
+          {/* A chave pelo cadastro: juntar uma unidade cria uma tradução nova, e a
+              lista das "já traduzidas" precisa recarregar junto. */}
+          <UnidadesDeFora key={ums.map((u) => u.sigla).join(",")} ums={ums}
+                          podeEditar={podeAba("unidades")} />
         </Cartao>
       )}
     </div>
