@@ -333,11 +333,133 @@ st, nada = chamar("GET", "/exportar/livro-de-fichas.pdf?categorias=999999999", t
 checar("recorte sem ficha: 404", st == 404, (st, nada))
 
 
+print("\n12. reservas do dia: a folha da recepcao")
+# 🔑 Direto no banco: o que se cobra aqui é o RELATÓRIO, e a criação da reserva já tem
+# a suíte dela (com horário, disponibilidade e alocação de mesa no meio).
+from database import get_cursor, init_pool  # noqa: E402
+
+init_pool()
+_st, eu = chamar("GET", "/auth/me", token=token)
+U = ((eu or {}).get("unidades") or [{}])[0].get("id") or 1
+with get_cursor() as cur:
+    cur.execute("INSERT INTO saloes (id_unidade, nome) VALUES (%s, %s) RETURNING id",
+                (U, f"SALAO REL {marca}"))
+    SALAO = cur.fetchone()["id"]
+    mesas = []
+    for nome in ("R1", "R2"):
+        cur.execute("""INSERT INTO mesas (id_unidade, id_salao, nome, lugares, capacidade_max)
+                       VALUES (%s, %s, %s, 4, 4) RETURNING id""", (U, SALAO, f"{nome}{marca[-3:]}"))
+        mesas.append(cur.fetchone()["id"])
+    reservas = {}
+    for nome, hora, pessoas, status in (("GRUPO", "20:00", 8, "CONFIRMADA"),
+                                        ("CASAL", "19:30", 2, "PENDENTE"),
+                                        ("DESISTIU", "21:00", 3, "CANCELADA")):
+        cur.execute(
+            """INSERT INTO reservas (id_unidade, data, hora, pessoas, status, nome, telefone,
+                                     observacao_interna)
+               VALUES (%s, %s, %s, %s, %s, %s, '47999990000', %s) RETURNING id""",
+            (U, hoje, hora, pessoas, status, f"REL {nome} {marca}",
+             "trazer o bolo" if nome == "GRUPO" else None))
+        reservas[nome] = cur.fetchone()["id"]
+    for m in mesas:
+        cur.execute("INSERT INTO reserva_mesas (id_reserva, id_mesa) VALUES (%s, %s)",
+                    (reservas["GRUPO"], m))
+
+
+def _limpar_reservas():
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM reservas WHERE id = ANY(%s)", (list(reservas.values()),))
+        cur.execute("DELETE FROM mesas WHERE id = ANY(%s)", (mesas,))
+        cur.execute("DELETE FROM saloes WHERE id = %s", (SALAO,))
+
+
+atexit.register(_limpar_reservas)
+st, linhas = csv(f"/exportar/reservas-dia.csv?data={hoje}")
+grupo = linha_com(linhas, f"REL GRUPO {marca}")
+checar("o grupo aparece com as duas mesas JUNTAS numa linha so",
+       st == 200 and grupo and coluna(linhas, "Mesa", grupo) == f"R1{marca[-3:]} + R2{marca[-3:]}"
+       and len([l for l in linhas if any(f"REL GRUPO {marca}" in c for c in l)]) == 1,
+       (st, grupo))
+checar("com a observacao interna e o salao",
+       grupo and "trazer o bolo" in coluna(linhas, "Observação", grupo)
+       and coluna(linhas, "Salão", grupo) == f"SALAO REL {marca}", grupo)
+casal = linha_com(linhas, f"REL CASAL {marca}")
+checar("a pendente aparece, antes do grupo (ordem da hora)",
+       casal and coluna(linhas, "Situação", casal) == "aguardando confirmação"
+       and linhas.index(casal) < linhas.index(grupo), casal)
+checar("a cancelada fica de fora sem escolha",
+       not linha_com(linhas, f"REL DESISTIU {marca}"), linhas[:12])
+st, linhas = csv(f"/exportar/reservas-dia.csv?data={hoje}&situacao_reserva=CANCELADA")
+checar("pedindo as canceladas, so ela sai",
+       st == 200 and linha_com(linhas, f"REL DESISTIU {marca}")
+       and not linha_com(linhas, f"REL GRUPO {marca}"), linhas[:12])
+st, linhas = csv("/exportar/reservas-dia.csv?data=2001-01-01")
+checar("outro dia: nada destas", st == 200 and not linha_com(linhas, f"REL GRUPO {marca}"), st)
+st, pdf = chamar("GET", f"/exportar/reservas-dia.pdf?data={hoje}", token=token, cru=True)
+checar("e o PDF sai", st == 200 and pdf[:5] == b"%PDF-", st)
+
+
+print("\n13. pedidos do cardapio: pedido a pedido e por produto, recusado fora da conta")
+with get_cursor() as cur:
+    cur.execute("SELECT coalesce(max(numero), 0) AS n FROM pedidos WHERE id_unidade = %s", (U,))
+    n0 = cur.fetchone()["n"]
+    pedidos_rel = []
+    for i, (situacao, qtd_) in enumerate((("CONFIRMADO", 2), ("ENTREGUE", 1), ("RECUSADO", 5))):
+        total_ = 25 * qtd_
+        cur.execute(
+            """INSERT INTO pedidos (id_unidade, numero, nome, telefone, modo, para_quando,
+                                    forma_pagamento, subtotal, total, situacao, chave)
+               VALUES (%s, %s, %s, '47999990000', 'RETIRADA', (%s::date + time '12:00'),
+                       'RETIRADA', %s, %s, %s, %s) RETURNING id""",
+            (U, n0 + 1 + i, f"REL PEDIDO {situacao} {marca}", hoje, total_, total_, situacao,
+             f"rel-{marca}-{i}"))
+        pid = cur.fetchone()["id"]
+        pedidos_rel.append(pid)
+        cur.execute("""INSERT INTO pedido_itens (id_pedido, id_produto, nome, quantidade,
+                                                 preco_unitario, total)
+                       VALUES (%s, %s, %s, %s, 25, %s)""",
+                    (pid, PROD, f"INSUMO RELATORIO {marca}", qtd_, total_))
+
+
+def _limpar_pedidos():
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM pedidos WHERE id = ANY(%s)", (pedidos_rel,))
+
+
+atexit.register(_limpar_pedidos)
+q = f"inicio={hoje}&fim={hoje}"
+st, linhas = csv(f"/exportar/pedidos.csv?{q}")
+conf = linha_com(linhas, f"REL PEDIDO CONFIRMADO {marca}")
+recu = linha_com(linhas, f"REL PEDIDO RECUSADO {marca}")
+checar("o confirmado aparece com o total de 50",
+       st == 200 and conf and abs(numero(coluna(linhas, "Total", conf)) - 50) < 0.01, conf)
+checar("o recusado APARECE, marcado", recu and coluna(linhas, "Situação", recu) == "recusado",
+       recu)
+checar("e os quadros por situacao e por origem e modo vem junto",
+       linha_com(linhas, "Por situação") and linha_com(linhas, "Por origem e modo"), linhas[-8:])
+st, linhas = csv(f"/exportar/pedidos.csv?{q}&detalhe_pedidos=produto")
+item = linha_com(linhas, f"INSUMO RELATORIO {marca}")
+checar("por produto: 3 unidades (2 + 1), sem as 5 do recusado, em 2 pedidos",
+       st == 200 and item and abs(numero(coluna(linhas, "Quantidade", item)) - 3) < 0.01
+       and coluna(linhas, "Em quantos pedidos", item) == "2", item)
+checar("valendo 75", item and abs(numero(coluna(linhas, "Total", item)) - 75) < 0.01, item)
+st, linhas = csv(f"/exportar/pedidos.csv?{q}&situacao_pedido=ENTREGUE")
+checar("filtrado por entregue, so ele sai",
+       st == 200 and linha_com(linhas, f"REL PEDIDO ENTREGUE {marca}")
+       and not linha_com(linhas, f"REL PEDIDO CONFIRMADO {marca}"), linhas[:10])
+st, linhas = csv("/exportar/pedidos.csv?inicio=2001-01-01&fim=2001-01-31")
+checar("outro periodo: nada destes",
+       st == 200 and not linha_com(linhas, f"REL PEDIDO CONFIRMADO {marca}"), st)
+st, pdf = chamar("GET", f"/exportar/pedidos.pdf?{q}&detalhe_pedidos=produto", token=token, cru=True)
+checar("e o PDF sai", st == 200 and pdf[:5] == b"%PDF-", st)
+
+
 print("\n11. quem nao tem a chave nao baixa")
 tk = garantir_cozinha(chamar, token)
 st_c, cat_c = chamar("GET", "/exportar/catalogo", token=tk)
 chaves_c = {c["chave"] for c in cat_c or []}
-for chave in ("compras", "margem", "recebimentos", "producao", "vendas-documentos"):
+for chave in ("compras", "margem", "recebimentos", "producao", "vendas-documentos",
+              "reservas-dia", "pedidos"):
     if chave not in chaves_c:
         st, r = chamar("GET", f"/exportar/{chave}.csv", token=tk)
         checar(f"{chave} sem a chave: 403", st == 403, (st, r))
@@ -347,6 +469,9 @@ checar("e o catalogo da cozinha so oferece o que ela pode baixar",
            for c in chaves_c & {"compras", "perdas", "margem", "recebimentos"}), chaves_c)
 
 
+# ⚠️ Pedidos antes do resto: o item do pedido aponta para o produto da suíte.
+_limpar_pedidos()
+_limpar_reservas()
 _limpar()
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:

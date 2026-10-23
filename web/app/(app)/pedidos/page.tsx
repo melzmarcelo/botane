@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import CabecalhoTela from "@/components/cabecalho-tela";
+import BotaoExportar from "@/components/exportar";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
@@ -57,7 +58,15 @@ export default function ListaDePedidos() {
         caminho="Portal de Clientes · Pedidos"
         titulo="Pedidos"
         explica="Os pedidos feitos pelo cardápio do site. A casa confirma (podendo trocar produtos), lança no PDV — que é onde a venda acontece — e marca a entrega."
-        acoes={<Link href="/pedidos/painel" className="btn btn-primario">Painel</Link>}
+        acoes={
+          <div className="flex flex-wrap gap-2">
+            {/* 🔑 Os pedidos do período em PDF ou planilha (23/10/2026). O dia da tela,
+                quando escolhido, vira o período da janela. */}
+            <BotaoExportar relatorio="pedidos" rotulo="Relatório de pedidos"
+                           iniciais={dia ? { inicio: dia, fim: dia } : {}} />
+            <Link href="/pedidos/painel" className="btn btn-primario">Painel</Link>
+          </div>
+        }
       />
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 

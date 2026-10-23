@@ -250,6 +250,18 @@
     fica fora dos totais; anexos por dia (se >1 dia) e por origem e canal. Filtro
     `origem_venda` acrescentado a `FILTROS` DEPOIS da função de opções (o dicionário é
     montado antes dela).
+- 🔑 **Terceira leva** (23/10/2026, itens 8 e 9 da lista). Mesma suíte, seções 12 e 13 (a
+  reserva e o pedido entram DIRETO no banco: o que se cobra é o relatório, não a criação).
+  - `reservas-dia` (`reservas.ver`, filtros `data` + `situacao_reserva`): a folha da recepção.
+    ⚠️ Sem escolha saem todas MENOS as canceladas. Mesas juntadas numa célula ("3 + 4"), uma
+    linha por reserva; observação interna entra (o papel não sai da casa); coluna "Chegou" em
+    branco; quadro por horário quando há mais de um. Botão na agenda, visão do dia.
+  - `pedidos` (`pedidos.ver`, filtros `periodo` + `situacao_pedido` + `detalhe_pedidos`):
+    ⚠️ o período é o **`para_quando`** no fuso da casa, não o `criado_em` — o mesmo "Para o
+    dia" da tela. Recusado/cancelado APARECE e fica fora dos totais. "Por produto" agrupa por
+    `id_produto` (nome congelado do item) com % do total. Quadros por situação (todas), por
+    origem e modo, e por dia. Botão na lista de Pedidos (o dia da tela vira o período).
+  - Restam da lista: 10 (fidelidade), 11 (usuários e acessos), 12 (auditoria).
 - 🔑 **Quatro relatórios de gestão** (1.1.125, 23/10/2026, pedido do dono: *"Gostaria de mais
   relatorios e planilhas"* — da lista proposta, escolheu 1, 2, 3 e 6). Suíte própria:
   `smoke_relatorios_gestao.py`.

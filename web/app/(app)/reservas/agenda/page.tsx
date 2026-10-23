@@ -8,6 +8,7 @@ import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { agendaDoDia, mudarStatus, type Agenda, type Reserva } from "@/lib/reservas";
 import { useSessao } from "@/lib/sessao";
 import ExplicaTela from "@/components/explica-tela";
+import BotaoExportar from "@/components/exportar";
 
 import CalendarioDoMes, { maiuscula, mesDe } from "./calendario";
 import DetalheDaReserva from "./detalhe";
@@ -179,6 +180,9 @@ export default function AgendaDoDia() {
           <button className="btn btn-secundario" onClick={() => setDia(hoje())}>
             hoje
           </button>
+          {/* 🔑 A folha da recepção (23/10/2026): o dia que está na tela. */}
+          <BotaoExportar relatorio="reservas-dia" rotulo="Reservas do dia (PDF)"
+                         iniciais={{ data: dia }} formatoPadrao="pdf" />
           {pode("reservas.configurar") && (
             <button className="btn btn-secundario" onClick={() => setExcecao(true)}>
               Exceção do dia

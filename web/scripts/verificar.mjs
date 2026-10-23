@@ -5568,7 +5568,10 @@ try {
                                 ["/fichas", "Livro de fichas (PDF)"],
                                 ["/producao", "Agenda do dia"],
                                 ["/producao", "Relatório de produção"],
-                                ["/vendas", "Lista de vendas"]]) {
+                                ["/vendas", "Lista de vendas"],
+                                // A terceira leva (23/10/2026).
+                                ["/reservas/agenda?visao=dia", "Reservas do dia (PDF)"],
+                                ["/pedidos", "Relatório de pedidos"]]) {
     await irPara(p, `${WEB}${tela}`);
     await assentar(2000);
     const tem = await p.evaluate((r) => [...document.querySelectorAll("main button")]

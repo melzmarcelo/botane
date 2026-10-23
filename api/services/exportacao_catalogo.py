@@ -2135,6 +2135,217 @@ def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
         inicio, fim, anexos=anexos)
 
 
+# ---------------------------------------------------------------------------
+# A terceira leva (23/10/2026, itens 8 e 9): reservas do dia e pedidos do cardápio
+# ---------------------------------------------------------------------------
+
+SITUACOES_RESERVA = {"PENDENTE": "aguardando confirmação", "CONFIRMADA": "confirmada",
+                     "CHEGOU": "chegou", "ENCERRADA": "encerrada",
+                     "NAO_COMPARECEU": "não compareceu", "CANCELADA": "cancelada"}
+SITUACOES_PEDIDO = {"NOVO": "novo", "CONFIRMADO": "confirmado", "ENTREGUE": "entregue",
+                    "RECUSADO": "recusado", "CANCELADO": "cancelado"}
+DETALHES_PEDIDOS = {"pedido": "Pedido a pedido", "produto": "Por produto (o que mais sai)"}
+_MODOS_PEDIDO = {"RETIRADA": "retirada", "ENTREGA": "entrega", "MESA": "na mesa"}
+_ORIGENS_PEDIDO = {"SITE": "site", "CARDAPIO": "cardápio da mesa"}
+
+FILTROS["situacao_reserva"] = {
+    "tipo": "multipla", "rotulo": "Situação",
+    # ⚠️ Sem escolha, ficam de fora só as CANCELADAS: a folha é de quem vem, e
+    # a cancelada na lista da recepção vira mesa guardada para ninguém.
+    "ajuda": "todas menos as canceladas",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in SITUACOES_RESERVA.items()]}
+FILTROS["situacao_pedido"] = {
+    "tipo": "multipla", "rotulo": "Situação",
+    "ajuda": "todas (recusados e cancelados aparecem, fora dos totais)",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in SITUACOES_PEDIDO.items()]}
+FILTROS["detalhe_pedidos"] = {
+    "tipo": "escolha", "rotulo": "Como agrupar", "ajuda": "pedido a pedido",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in DETALHES_PEDIDOS.items()]}
+
+
+def _reservas_dia(cur, id_unidade: int, f: dict) -> Saida:
+    """As reservas de UM dia, para a recepção: hora, nome, pessoas, mesa.
+
+    🔑 Pedido do dono (lista de relatórios, item 8, 23/10/2026). É o papel do balcão:
+    a coluna "Chegou" vai em branco para marcar a caneta.
+    ⚠️ As mesas saem JUNTAS numa célula ("3 + 4"): a reserva que junta mesas é uma
+    linha só — duas linhas fariam a recepção contar o grupo duas vezes.
+    ⚠️ A observação interna ENTRA: o papel não sai da casa, e é nela que está o
+    "aniversário, trazer o bolo às 21h".
+    """
+    dia = f.get("data") or relogio.hoje_da_casa()
+    situacoes = _lista(f.get("situacao_reserva"))
+    cur.execute(
+        """SELECT r.id, r.hora, r.nome, r.telefone, r.pessoas, r.status, r.origem,
+                  r.objetivo, r.observacao_cliente, r.observacao_interna,
+                  string_agg(m.nome, ' + ' ORDER BY m.nome) AS mesas,
+                  string_agg(DISTINCT s.nome, ', ') AS salao
+             FROM reservas r
+             LEFT JOIN reserva_mesas rm ON rm.id_reserva = r.id
+             LEFT JOIN mesas m ON m.id = rm.id_mesa
+             LEFT JOIN saloes s ON s.id = m.id_salao
+            WHERE r.id_unidade = %(u)s AND r.data = %(dia)s
+              AND (CASE WHEN %(sit)s::text[] IS NULL THEN r.status <> 'CANCELADA'
+                        ELSE r.status = ANY(%(sit)s) END)
+            GROUP BY r.id
+            ORDER BY r.hora, r.nome, r.id""",
+        {"u": id_unidade, "dia": dia, "sit": situacoes})
+    linhas = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["hora"] = str(d["hora"])[:5]
+        d["situacao"] = SITUACOES_RESERVA.get(d["status"], d["status"])
+        d["origem_txt"] = "site" if d["origem"] == "SITE" else "balcão"
+        d["observacao"] = _junta(d["objetivo"], d["observacao_cliente"],
+                                 d["observacao_interna"], sep=" — ")
+        d["chegou"] = "[   ]"
+        linhas.append(d)
+
+    # Quem conta para a casa: a reserva que ainda vem ou já veio.
+    contam = [l for l in linhas if l["status"] not in ("CANCELADA", "NAO_COMPARECEU")]
+    por_hora: dict[str, dict] = {}
+    for l in contam:
+        g = por_hora.setdefault(l["hora"], {"hora": l["hora"], "reservas": 0, "pessoas": 0})
+        g["reservas"] += 1
+        g["pessoas"] += l["pessoas"]
+    resumo = [("Dia", dia), ("Reservas", len(contam)),
+              ("Pessoas esperadas", sum(l["pessoas"] for l in contam)),
+              ("Aguardando confirmação", sum(1 for l in linhas if l["status"] == "PENDENTE")),
+              ("Sem mesa definida", sum(1 for l in contam if not l["mesas"]))]
+    return Saida(
+        linhas,
+        [("chegou", "Chegou"), ("hora", "Hora"), ("nome", "Nome"), ("pessoas", "Pessoas"),
+         ("mesas", "Mesa"), ("salao", "Salão"), ("telefone", "Telefone"),
+         ("situacao", "Situação"), ("origem_txt", "Origem"), ("observacao", "Observação")],
+        f"Reservas do dia — {dia:%d/%m/%Y}", resumo, dia, dia,
+        anexos=[(sorted(por_hora.values(), key=lambda g: g["hora"]),
+                 [("hora", "Hora"), ("reservas", "Reservas"), ("pessoas", "Pessoas")],
+                 "Por horário", None)] if len(por_hora) > 1 else [])
+
+
+def _pedidos(cur, id_unidade: int, f: dict) -> Saida:
+    """Os pedidos do cardápio (site e mesa) no período: quantos, quanto e o que mais sai.
+
+    🔑 Pedido do dono (lista de relatórios, item 9, 23/10/2026).
+    ⚠️ **O período é o "para quando"**, não a hora do envio — é o mesmo "Para o dia"
+    da tela de Pedidos: o bolo encomendado na segunda para sábado é pedido de sábado.
+    ⚠️ Recusado e cancelado APARECEM, marcados, e ficam fora dos totais (a mesma regra
+    da lista de vendas): a conferência que os escondesse não fecharia a numeração.
+    """
+    from config import FUSO_DA_CASA
+
+    inicio, fim = _periodo(f)
+    situacoes = _lista(f.get("situacao_pedido"))
+    detalhe = f.get("detalhe_pedidos") or "pedido"
+    if detalhe not in DETALHES_PEDIDOS:
+        detalhe = "pedido"
+    params = {"u": id_unidade, "inicio": inicio, "fim": fim, "sit": situacoes,
+              "fuso": FUSO_DA_CASA}
+    onde = """p.id_unidade = %(u)s
+              AND (p.para_quando AT TIME ZONE %(fuso)s)::date BETWEEN %(inicio)s AND %(fim)s
+              AND (%(sit)s::text[] IS NULL OR p.situacao = ANY(%(sit)s))"""
+    cur.execute(
+        f"""SELECT p.id, p.numero, p.nome, p.telefone, p.modo, p.origem, p.situacao,
+                   (p.para_quando AT TIME ZONE %(fuso)s) AS quando,
+                   coalesce(m.nome, p.mesa_nome) AS mesa, p.subtotal, p.taxa_entrega,
+                   p.total, p.cupom_pdv, p.lancado_pdv_em, p.motivo,
+                   (SELECT count(*) FROM pedido_itens i WHERE i.id_pedido = p.id) AS itens
+              FROM pedidos p
+              LEFT JOIN mesas m ON m.id = p.id_mesa
+             WHERE {onde}
+             ORDER BY p.para_quando, p.numero""", params)
+    pedidos = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["data"] = d["quando"].date()
+        d["hora"] = d["quando"].strftime("%H:%M")
+        d["situacao_txt"] = SITUACOES_PEDIDO.get(d["situacao"], d["situacao"])
+        d["modo_txt"] = (f"mesa {d['mesa']}" if d["modo"] == "MESA" and d["mesa"]
+                         else _MODOS_PEDIDO.get(d["modo"], d["modo"]))
+        d["origem_txt"] = _ORIGENS_PEDIDO.get(d["origem"], d["origem"])
+        d["no_pdv"] = "sim" if d["lancado_pdv_em"] else ""
+        d["fora"] = d["situacao"] in ("RECUSADO", "CANCELADO")
+        pedidos.append(d)
+    validos = [p for p in pedidos if not p["fora"]]
+    fora = [p for p in pedidos if p["fora"]]
+    total = sum((Decimal(str(p["total"] or 0)) for p in validos), Decimal(0))
+
+    # Situação: um quadro com TODAS (as de fora inclusive), para fechar a contagem.
+    por_sit: dict[str, dict] = {}
+    for p in pedidos:
+        g = por_sit.setdefault(p["situacao"], {"chave": p["situacao_txt"], "pedidos": 0,
+                                               "total": Decimal(0)})
+        g["pedidos"] += 1
+        g["total"] += Decimal(str(p["total"] or 0))
+    ordem_sit = list(SITUACOES_PEDIDO)
+    quadro_sit = [por_sit[s] for s in ordem_sit if s in por_sit]
+    por_modo: dict[str, dict] = {}
+    for p in validos:
+        k = f"{p['origem_txt']} · {_MODOS_PEDIDO.get(p['modo'], p['modo'])}"
+        g = por_modo.setdefault(k, {"chave": k, "pedidos": 0, "total": Decimal(0)})
+        g["pedidos"] += 1
+        g["total"] += Decimal(str(p["total"] or 0))
+    cols_quadro = [("chave", "Situação"), ("pedidos", "Pedidos"), ("total", "Total")]
+    anexos = [(quadro_sit, cols_quadro, "Por situação", None),
+              (sorted(por_modo.values(), key=lambda g: -g["total"]),
+               [("chave", "Origem e modo"), ("pedidos", "Pedidos"), ("total", "Total")],
+               "Por origem e modo", None)]
+    if inicio != fim:
+        por_dia: dict = {}
+        for p in validos:
+            g = por_dia.setdefault(p["data"], {"chave": p["data"], "pedidos": 0,
+                                               "total": Decimal(0)})
+            g["pedidos"] += 1
+            g["total"] += Decimal(str(p["total"] or 0))
+        anexos.append((sorted(por_dia.values(), key=lambda g: g["chave"]),
+                       [("chave", "Dia"), ("pedidos", "Pedidos"), ("total", "Total")],
+                       "Por dia", None))
+
+    resumo = [("Pedidos válidos", len(validos)), ("Total dos pedidos", total),
+              ("Ticket médio",
+               (total / len(validos)).quantize(Decimal("0.01")) if validos else None),
+              ("Taxas de entrega",
+               sum((Decimal(str(p["taxa_entrega"] or 0)) for p in validos), Decimal(0))),
+              ("Ainda não lançados no PDV",
+               sum(1 for p in validos if not p["lancado_pdv_em"])),
+              ("Recusados e cancelados (fora da conta)", len(fora))]
+
+    if detalhe == "produto":
+        # ⚠️ Pelo NOME congelado no item, agrupado por produto: o nome do item é o do
+        # dia do envio, e o produto renomeado depois não pode virar duas linhas.
+        cur.execute(
+            f"""SELECT i.id_produto, pr.codigo, max(i.nome) AS produto,
+                       sum(i.quantidade) AS quantidade, sum(i.total) AS total,
+                       count(DISTINCT p.id) AS pedidos
+                  FROM pedido_itens i
+                  JOIN pedidos p ON p.id = i.id_pedido
+                  JOIN produtos pr ON pr.id = i.id_produto
+                 WHERE {onde} AND p.situacao NOT IN ('RECUSADO', 'CANCELADO')
+                 GROUP BY i.id_produto, pr.codigo
+                 ORDER BY sum(i.total) DESC, max(i.nome)""", params)
+        linhas = [dict(r) for r in cur.fetchall()]
+        soma_itens = sum((Decimal(str(l["total"] or 0)) for l in linhas), Decimal(0))
+        for l in linhas:
+            l["participacao"] = ((Decimal(str(l["total"] or 0)) * 100 / soma_itens)
+                                 .quantize(Decimal("0.1")) if soma_itens else None)
+        return Saida(
+            linhas,
+            [("codigo", "Código"), ("produto", "Produto"), ("quantidade", "Quantidade"),
+             ("pedidos", "Em quantos pedidos"), ("total", "Total"),
+             ("participacao", "% do total")],
+            f"Pedidos do cardápio por produto — {_intervalo(inicio, fim)}",
+            resumo + [("Produtos diferentes", len(linhas))], inicio, fim, anexos=anexos)
+
+    return Saida(
+        pedidos,
+        [("numero", "Nº"), ("data", "Data"), ("hora", "Hora"), ("nome", "Cliente"),
+         ("telefone", "Telefone"), ("origem_txt", "Origem"), ("modo_txt", "Modo"),
+         ("itens", "Itens"), ("taxa_entrega", "Taxa"), ("total", "Total"),
+         ("situacao_txt", "Situação"), ("no_pdv", "No PDV"), ("cupom_pdv", "Cupom")],
+        f"Pedidos do cardápio — {_intervalo(inicio, fim)}", resumo, inicio, fim,
+        anexos=anexos)
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -2262,6 +2473,17 @@ RELATORIOS: dict[str, Relatorio] = {
         "com o caixa e o PDV.",
         "cmv.relatorios", "vendas-documentos", ("periodo", "origem_venda"),
         _vendas_documentos),
+    # 🔑 A terceira leva (23/10/2026, itens 8 e 9).
+    "reservas-dia": Relatorio(
+        "Reservas do dia",
+        "Quem vem, a que horas, quantas pessoas e em que mesa — a folha da recepção.",
+        "reservas.ver", "reservas-do-dia", ("data", "situacao_reserva"), _reservas_dia),
+    "pedidos": Relatorio(
+        "Pedidos do cardápio",
+        "Os pedidos do site e da mesa no período: pedido a pedido ou o que mais sai, "
+        "com os totais por situação e por modo.",
+        "pedidos.ver", "pedidos", ("periodo", "situacao_pedido", "detalhe_pedidos"),
+        _pedidos),
 }
 
 

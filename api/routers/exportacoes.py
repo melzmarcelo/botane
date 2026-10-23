@@ -182,6 +182,9 @@ class _Filtros:
         detalhe_producao: str | None = None,
         origem_producao: list[str] | None = Query(default=None),
         origem_venda: list[str] | None = Query(default=None),
+        situacao_reserva: list[str] | None = Query(default=None),
+        situacao_pedido: list[str] | None = Query(default=None),
+        detalhe_pedidos: str | None = None,
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
@@ -197,7 +200,8 @@ class _Filtros:
             "detalhe_compras": detalhe_compras, "motivos": motivos,
             "detalhe_perdas": detalhe_perdas, "formas": formas,
             "detalhe_producao": detalhe_producao, "origem_producao": origem_producao,
-            "origem_venda": origem_venda,
+            "origem_venda": origem_venda, "situacao_reserva": situacao_reserva,
+            "situacao_pedido": situacao_pedido, "detalhe_pedidos": detalhe_pedidos,
         }
 
     def preenchidos(self) -> dict:
