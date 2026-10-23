@@ -88,6 +88,17 @@ class AcrescentarItensRequest(BaseModel):
     itens: list[ItemVenda] = Field(min_length=1)
 
 
+class VendaAlterar(BaseModel):
+    """A data e o número de um documento lançado À MÃO (pedido do dono, 23/10/2026).
+
+    O que vier nulo fica como está. ⚠️ Só o cabeçalho: item não muda por aqui — o
+    que falta se acrescenta, o que sobra se resolve cancelando e lançando de novo.
+    """
+
+    data: date | None = None
+    documento: str | None = Field(default=None, min_length=1, max_length=40)
+
+
 class VendaResponse(BaseModel):
     id: int
     data: date

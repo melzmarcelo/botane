@@ -18,7 +18,7 @@ import relogio
 from database import get_cursor
 from paginacao import pagina
 from models.cmv import (AcrescentarItensRequest, ImportarVendasRequest, PreviaCupomRequest,
-                        VendaResponse)
+                        VendaAlterar, VendaResponse)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
 from services import consumo_pessoa as consumo
@@ -679,6 +679,160 @@ def _por_que_nao_edita(cur, id_unidade: int, venda: dict) -> str | None:
     return None
 
 
+def _periodo_fechado_em(cur, id_unidade: int, dia) -> str | None:
+    """O nome do período do CMV FECHADO que contém `dia`, ou nada."""
+    cur.execute(
+        """SELECT inicio, fim, ciclo FROM cmv_fechamentos
+            WHERE id_unidade = %s AND status = 'FECHADO' AND %s BETWEEN inicio AND fim""",
+        (id_unidade, dia),
+    )
+    fechado = cur.fetchone()
+    if not fechado:
+        return None
+    from services import periodos
+
+    return periodos.rotulo(fechado["inicio"], fechado["fim"], fechado["ciclo"] or "MENSAL")
+
+
+def _por_que_nao_altera(cur, id_unidade: int, venda: dict) -> str | None:
+    """Por que a data e o número desta venda NÃO podem mudar — ou nada, se podem.
+
+    🔑 **A regra do dono (23/10/2026):** *"Para documentos lançados a mão, que ainda
+    não estão em algum lote baixado, permitir alterar a data e numero do documento"*.
+    ⚠️ **Lote EM COBRANÇA não impede** (só o recebido): a correção do cabeçalho não
+    muda o valor cobrado. Item novo continua barrado em lote de qualquer situação
+    (`_por_que_nao_edita`).
+    ⚠️ **Só MANUAL**: a da planilha se reimporta pelo número, e trocá-lo faria a
+    próxima importação da mesma planilha lançar o documento de novo.
+    """
+    if venda["cancelada"]:
+        return "Esta venda está cancelada."
+    if venda["origem"] != "MANUAL":
+        return ("Só o documento lançado à mão muda de data e número: "
+                + ("o da planilha se reimporta pelo número, e trocá-lo o lançaria de novo."
+                   if venda["origem"] == "PLANILHA" else "o do PDV se corrige lá."))
+    if venda.get("id_consumo_lote"):
+        cur.execute("SELECT id, status FROM consumo_lotes WHERE id = %s",
+                    (venda["id_consumo_lote"],))
+        l = cur.fetchone()
+        if l and l["status"] == "RECEBIDO":
+            return (f"Esta venda está no lote de cobrança nº {l['id']}, que já foi recebido. "
+                    "Estorne a baixa do lote para alterar a data ou o número.")
+    return None
+
+
+@router.put("/{id_venda}")
+def alterar(id_venda: int, body: VendaAlterar, ctx: Contexto = Depends(_editar)) -> dict:
+    """Muda a data e/ou o número de um documento lançado à mão (23/10/2026).
+
+    🔑 **A data leva a baixa de estoque junto.** A saída da venda nasce na data dela
+    (`_quando`), e o razão é append-only: cada saída viva é ESTORNADA na data em que
+    estava e lançada de novo na data nova — o dia antigo zera, o novo ganha a saída,
+    e o CMV de cada período continua batendo. A produção "na hora" não se mexe: ela
+    sempre foi datada no momento do lançamento, não na data da venda.
+    ⚠️ **Período do CMV fechado trava as DUAS pontas**: sair de um período fechado
+    mudaria a apuração dele, e entrar num também.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT id, data, hora, origem, documento, cancelada, id_consumo_lote
+                 FROM vendas WHERE id = %s AND id_unidade = %s FOR UPDATE""",
+            (id_venda, id_unidade),
+        )
+        venda = cur.fetchone()
+        if not venda:
+            raise HTTPException(status_code=404, detail="Venda não encontrada")
+        venda = dict(venda)
+        motivo = _por_que_nao_altera(cur, id_unidade, venda)
+        if motivo:
+            raise HTTPException(status_code=409, detail=motivo)
+
+        nova_data = body.data or venda["data"]
+        novo_doc = (body.documento or "").strip() or venda["documento"]
+        muda_data = nova_data != venda["data"]
+        muda_doc = novo_doc != venda["documento"]
+        if not (muda_data or muda_doc):
+            return {"id": id_venda, "estornados": 0, "message": "Nada mudou"}
+
+        if muda_data:
+            if nova_data > relogio.hoje_da_casa():
+                raise HTTPException(status_code=422,
+                                    detail="A data da venda não pode ser no futuro.")
+            for dia in (venda["data"], nova_data):
+                nome = _periodo_fechado_em(cur, id_unidade, dia)
+                if nome:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"O período de {nome} está fechado no CMV. Reabra o período "
+                               "para mudar a data desta venda.")
+        if muda_doc:
+            cur.execute(
+                """SELECT id FROM vendas WHERE id_unidade = %s AND origem = %s
+                      AND documento = %s AND id <> %s""",
+                (id_unidade, venda["origem"], novo_doc, id_venda))
+            outra = cur.fetchone()
+            if outra:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Já existe uma venda lançada à mão com o documento {novo_doc} "
+                           f"(venda nº {outra['id']}).")
+
+        refeitos = 0
+        if muda_data:
+            cur.execute(
+                """SELECT m.id, m.id_local, m.id_produto, m.tipo, m.quantidade,
+                          m.data_movimento, m.observacao
+                     FROM estoque_movimentos m
+                    WHERE m.origem_tipo = 'VENDA' AND m.origem_id = %s
+                      AND m.id_estorno_de IS NULL
+                      AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
+                                       WHERE e.id_estorno_de = m.id)
+                    ORDER BY m.id""",
+                (id_venda,))
+            vivos = [dict(r) for r in cur.fetchall()]
+            for m in reversed(vivos):
+                motor_estoque.estornar(
+                    cur, m["id"], ctx.id_usuario,
+                    f"Venda #{id_venda} mudou de data ({venda['data']:%d/%m/%Y} → "
+                    f"{nova_data:%d/%m/%Y})",
+                    data_movimento=m["data_movimento"])
+            for m in vivos:
+                motor_estoque.lancar(
+                    cur, id_unidade=id_unidade, id_local=m["id_local"],
+                    # ⚠️ No razão a saída tem SINAL (-2); `lancar` quer o positivo.
+                    id_produto=m["id_produto"], tipo=m["tipo"],
+                    quantidade=abs(m["quantidade"]),
+                    data_movimento=_quando(nova_data, venda["hora"]),
+                    origem_tipo="VENDA", origem_id=id_venda, documento=novo_doc,
+                    id_usuario=ctx.id_usuario, observacao=m["observacao"])
+            refeitos = len(vivos)
+
+        cur.execute("UPDATE vendas SET data = %s, documento = %s WHERE id = %s",
+                    (nova_data, novo_doc, id_venda))
+        # O "desde" do lote em cobrança acompanha a data nova; o valor não muda.
+        if muda_data and venda["id_consumo_lote"]:
+            from services import receber as receber_motor
+
+            receber_motor._recalcular(cur, venda["id_consumo_lote"])
+        auditoria.registrar(cur, ctx.id_usuario, "vendas", id_venda, "alterar",
+                            antes={"data": str(venda["data"]), "documento": venda["documento"]},
+                            depois={"data": str(nova_data), "documento": novo_doc,
+                                    "movimentos_refeitos": refeitos},
+                            id_unidade=id_unidade)
+
+    partes = []
+    if muda_doc:
+        partes.append(f"documento {novo_doc}")
+    if muda_data:
+        partes.append(f"data {nova_data:%d/%m/%Y}")
+    return {"id": id_venda, "data": str(nova_data), "documento": novo_doc,
+            "estornados": refeitos,
+            "message": "Venda alterada: " + " e ".join(partes)
+                       + (f" — {refeitos} baixa(s) de estoque refeita(s) na data nova"
+                          if refeitos else "")}
+
+
 @router.post("/{id_venda}/itens", status_code=201)
 def acrescentar_itens(id_venda: int, body: AcrescentarItensRequest,
                       ctx: Contexto = Depends(_editar)) -> dict:
@@ -1296,6 +1450,8 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
             (id_venda,))
         do_lote = dict(cur.fetchone() or {})
         por_que_nao = _por_que_nao_edita(cur, id_unidade, dict(venda) | do_lote)
+        # 🔑 E se aceita trocar data e número (23/10/2026) — regra diferente da do item.
+        por_que_nao_altera = _por_que_nao_altera(cur, id_unidade, dict(venda) | do_lote)
 
     custo = sum(float(i["quantidade"]) * float(i["custo_ficha_unitario"] or 0) for i in itens)
     receita = sum(float(i["valor_total"] or 0) for i in itens)
@@ -1304,6 +1460,8 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
         **do_lote,
         "pode_acrescentar": por_que_nao is None,
         "por_que_nao_acrescenta": por_que_nao,
+        "pode_alterar": por_que_nao_altera is None,
+        "por_que_nao_altera": por_que_nao_altera,
         "itens": itens,
         "movimentos": movimentos,
         "receita": receita,

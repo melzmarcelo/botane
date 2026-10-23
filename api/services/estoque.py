@@ -1168,8 +1168,14 @@ def converter_unidade(cur, *, id_produto: int, de: str, para: str, fator,
     }
 
 
-def estornar(cur, id_movimento: int, id_usuario: int, motivo: str | None = None) -> dict:
-    """Movimento não se apaga: nasce o contrário dele, apontando para o original."""
+def estornar(cur, id_movimento: int, id_usuario: int, motivo: str | None = None,
+             data_movimento: datetime | None = None) -> dict:
+    """Movimento não se apaga: nasce o contrário dele, apontando para o original.
+
+    `data_movimento` data o estorno (padrão: agora). 🔑 A venda que muda de data
+    (23/10/2026) estorna NA DATA ORIGINAL, para o dia antigo zerar em vez de o
+    estorno cair em outro período.
+    """
     cur.execute(
         """SELECT id, id_unidade, id_local, id_produto, tipo, quantidade, custo_unitario,
                   id_estorno_de
@@ -1209,6 +1215,7 @@ def estornar(cur, id_movimento: int, id_usuario: int, motivo: str | None = None)
         id_estorno_de=id_movimento,
         observacao=motivo or f"Estorno do movimento #{id_movimento}",
         id_usuario=id_usuario,
+        data_movimento=data_movimento,
         _lotes_espelho=lotes_originais or None,
     )
 

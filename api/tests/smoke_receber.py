@@ -420,6 +420,80 @@ st, nao = chamar("GET", "/exportar/lotes-consumo-abertos.pdf?ids=999999999", tok
 checar("sem lote em cobranca no recorte: 404", st == 404, (st, nao))
 
 
+print("\n12c. documento a mao muda data e numero -- menos em lote recebido")
+# 🔑 Pedido do dono (23/10/2026). O EU1 esta no LOTE2, em cobranca: pode.
+novo_doc = f"EU1X{marca}"
+st, r = chamar("PUT", f"/vendas/{EU1}", {"documento": novo_doc}, token=token)
+checar("em lote EM COBRANCA o numero muda", st == 200 and r.get("documento") == novo_doc, (st, r))
+st, r = chamar("PUT", f"/vendas/{EU1}", {"data": "2026-09-02"}, token=token)
+st_l, l2 = chamar("GET", f"/receber/lotes/{LOTE2}", token=token)
+checar("e a data tambem -- o 'desde' do lote acompanha, o valor nao",
+       st == 200 and (l2.get("lote") or {}).get("desde") == "2026-09-02"
+       and perto((l2.get("lote") or {}).get("total"), 144), (st, r, (l2 or {}).get("lote")))
+st, r = chamar("PUT", f"/vendas/{EU1}", {"documento": f"EU2{marca}"}, token=token)
+checar("numero que outra venda a mao ja usa: 409", st == 409 and "EU2" in str(r.get("detail")),
+       (st, r))
+st, r = chamar("PUT", f"/vendas/{EU1}", {"data": "2099-01-01"}, token=token)
+checar("data no futuro: 422", st == 422, (st, r))
+st, dv = chamar("GET", f"/vendas/{EU1}", token=token)
+checar("o detalhe diz que pode alterar e NAO pode acrescentar",
+       dv.get("pode_alterar") is True and dv.get("pode_acrescentar") is False,
+       (dv.get("pode_alterar"), dv.get("pode_acrescentar")))
+
+st, b = chamar("POST", f"/receber/lotes/{LOTE2}/receber",
+               {"recebido_em": "2026-10-01", "forma_pagamento": "PIX"}, token=token)
+st, r = chamar("PUT", f"/vendas/{EU1}", {"documento": f"EU1Y{marca}"}, token=token)
+checar("em lote RECEBIDO nao muda: 409", st == 409 and "recebido" in str(r.get("detail")), (st, r))
+st, ac = chamar("POST", f"/vendas/{EU1}/itens",
+                {"itens": [{"id_produto": produto, "quantidade": 1, "valor_unitario": 40}]},
+                token=token)
+checar("e em lote recebido tambem nao ganha item: 409", st == 409, (st, ac))
+st, dv = chamar("GET", f"/vendas/{EU1}", token=token)
+checar("o detalhe diz por que nao altera",
+       dv.get("pode_alterar") is False and "recebido" in str(dv.get("por_que_nao_altera")),
+       dv.get("por_que_nao_altera"))
+chamar("POST", f"/receber/lotes/{LOTE2}/estornar-baixa", None, token=token)
+
+# 🔑 A data leva a baixa de estoque junto: estorno no dia antigo, saida no novo.
+st, pe = chamar("POST", "/produtos", {
+    "codigo": f"RECE-{marca}", "nome": f"AGUA RECEBER {marca}", "tipo": "REVENDA",
+    "um_estoque": "UN", "controla_estoque": True, "status": "ATIVO", "preco_venda": 5,
+}, token=token)
+agua = (pe or {}).get("id")
+criados["produtos"].append(agua)
+doc_agua = f"AGUA{marca}"
+st, r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": "2026-10-01", "documento": doc_agua, "origem": "MANUAL",
+    "itens": [{"id_produto": agua, "quantidade": 2, "valor_unitario": 5}],
+}]}, token=token)
+st, lista = chamar("GET", f"/vendas?busca={doc_agua}", token=token)
+VAGUA = (lista or [{}])[0].get("id")
+criados["vendas"].append(VAGUA)
+st, r = chamar("PUT", f"/vendas/{VAGUA}", {"data": "2026-10-02"}, token=token)
+checar("a venda com baixa muda de data e refaz a baixa",
+       st == 200 and r.get("estornados") == 1, (st, r))
+st, dv = chamar("GET", f"/vendas/{VAGUA}", token=token)
+movs = dv.get("movimentos") or []
+vivas = [m for m in movs if not m["id_estorno_de"]
+         and not any(e["id_estorno_de"] == m["id"] for e in movs)]
+estornos = [m for m in movs if m["id_estorno_de"]]
+checar("uma saida viva, no dia novo",
+       len(vivas) == 1 and str(vivas[0]["data_movimento"]).startswith("2026-10-02"), movs)
+checar("e o estorno no dia ANTIGO -- o dia 01 zera",
+       len(estornos) == 1 and str(estornos[0]["data_movimento"]).startswith("2026-10-01"), movs)
+doc_plan = f"PLAN{marca}"
+chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": "2026-10-01", "documento": doc_plan, "origem": "PLANILHA",
+    "itens": [{"id_produto": produto, "quantidade": 1, "valor_unitario": 40}],
+}]}, token=token)
+st, lista = chamar("GET", f"/vendas?busca={doc_plan}", token=token)
+VPLAN = (lista or [{}])[0].get("id")
+criados["vendas"].append(VPLAN)
+st, r = chamar("PUT", f"/vendas/{VPLAN}", {"documento": f"PLANX{marca}"}, token=token)
+checar("venda da PLANILHA nao muda (o numero e o que a reimportacao confere): 409",
+       VPLAN and st == 409 and "planilha" in str(r.get("detail")), (VPLAN, st, r))
+
+
 print("\n13. quem nao gere o consumo nao gera lote nem da baixa")
 tk_cozinha = garantir_cozinha(chamar, token)
 st, r = chamar("POST", "/receber/lotes", {"ate": "2026-09-30", "ids_pessoa": [EU]},

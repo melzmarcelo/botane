@@ -77,6 +77,11 @@ export type VendaDetalhe = {
   pode_acrescentar?: boolean;
   /** E por que não, em português — período fechado, ciclo cobrado, venda do PDV. */
   por_que_nao_acrescenta?: string | null;
+  /** 23/10/2026: a venda à mão aceita trocar data e número? (lote recebido não aceita) */
+  pode_alterar?: boolean;
+  por_que_nao_altera?: string | null;
+  id_consumo_lote?: number | null;
+  lote_status?: string | null;
   data: string;
   hora: string | null;
   origem: string;

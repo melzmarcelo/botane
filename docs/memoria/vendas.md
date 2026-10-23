@@ -30,6 +30,21 @@
     rodapé são POR LOTE**: o flowable `_Secao` marca no canvas de que documento é a página, e o
     `_CanvasNumerado` conta por seção — a folha vai para uma pessoa e não pode dizer "3 de 7".
     Só PDF: a planilha de vários é o Consumo por pessoa com situação "em cobrança".
+  - 🔑 **Data e número do documento À MÃO** (23/10/2026, pedido do dono: *"Para documentos
+    lançados a mão, que ainda não estão em algum lote baixado, permitir alterar a data e numero
+    do documento. Para documentos em lotes em qualquer situação, não permitir adicionar mais
+    itens"*). `PUT /vendas/{id}` (`VendaAlterar`), regra em `_por_que_nao_altera`; o detalhe
+    devolve `pode_alterar`/`por_que_nao_altera`; tela `vendas/[id]/alterar-cabecalho.tsx`.
+    - Lote EM COBRANÇA não impede (recalcula o `desde` do lote; o valor não muda); RECEBIDO
+      impede. Item novo continua barrado em lote de qualquer situação (`_por_que_esta_em_lote`).
+    - ⚠️ **Só MANUAL, não PLANILHA**: a planilha se reimporta pelo número (`ux_venda_documento`),
+      e trocá-lo faria a reimportação lançar o documento de novo.
+    - ⚠️ **A data leva a baixa junto, por estorno**: cada saída viva de origem VENDA é estornada
+      NA DATA ORIGINAL (`estoque.estornar(..., data_movimento=)`, parâmetro novo) e relançada na
+      data nova. ⚠️ No razão a saída tem SINAL — o relançamento usa `abs()`, senão `lancar`
+      recusa "quantidade precisa ser maior que zero". A produção NA_HORA não se mexe: ela é
+      datada no lançamento, não na data da venda.
+    - Período do CMV fechado trava as DUAS datas; data no futuro é 422.
   - Qualquer lote estorna a baixa (não há a cadeia do "só o último" do período); cancelado fica
     no histórico, e a auditoria guarda os documentos que estavam nele.
   - 🔑 **O que estava no ar foi preservado**: cada (período FECHADO, pessoa) virou um lote

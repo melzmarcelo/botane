@@ -10738,6 +10738,22 @@ try {
     await p.waitForSelector("#venda-acrescentar-itens", { timeout: 5000 }).catch(() => {});
     checar("a venda lançada à mão oferece acrescentar itens",
       !!(await p.$("#venda-acrescentar-itens")), vendaAcr?.message);
+    // 🔑 E muda o NÚMERO pela tela (23/10/2026), com confirmação.
+    await p.$eval("#venda-alterar", (e) => e.click()).catch(() => {});
+    await p.waitForSelector("#venda-alterar-documento", { timeout: 5000 }).catch(() => {});
+    await p.$eval("#venda-alterar-documento", (e) => { e.focus(); e.select(); }).catch(() => {});
+    await p.type("#venda-alterar-documento", `TELA-ALT-${m2010}`).catch(() => {});
+    await p.$eval("#venda-alterar-salvar", (e) => e.click()).catch(() => {});
+    await p.waitForSelector("#venda-alterar-confirma", { timeout: 5000 }).catch(() => {});
+    const confAlt = await p.$eval("#venda-alterar-confirma", (e) => e.innerText).catch(() => "");
+    checar("alterar o número pede confirmação dizendo de qual para qual",
+      confAlt.includes(`TELA-ACR-${m2010}`) && confAlt.includes(`TELA-ALT-${m2010}`), confAlt);
+    await p.evaluate(() => [...document.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "Alterar")?.click());
+    await assentar(1500);
+    const { dados: depoisAlt } = await api("GET", `/vendas/${idAcr}`, null, token);
+    checar("e o documento passa a ter o número novo",
+      depoisAlt?.documento === `TELA-ALT-${m2010}`, depoisAlt?.documento);
     await api("DELETE", `/vendas/${idAcr}`, null, token);
     await irPara(p, `${WEB}/vendas/${idAcr}`);
     await assentar(1500);

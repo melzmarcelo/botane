@@ -14,6 +14,7 @@ import Voltar from "@/components/voltar";
 import { custo } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
 import AcrescentarItens from "./acrescentar-itens";
+import AlterarCabecalho from "./alterar-cabecalho";
 /**
  * Uma venda, inteira, numa página só.
  *
@@ -286,8 +287,28 @@ export default function PaginaVenda() {
         </div>
       </Cartao>
 
+      {/* 🔑 Data e número do documento à mão (pedido do dono, 23/10/2026), enquanto ele
+          não está num lote RECEBIDO. Lote em cobrança não impede. */}
+      {podeCancelar && venda.pode_alterar && (
+        <AlterarCabecalho
+          idVenda={venda.id}
+          data={venda.data}
+          documento={venda.documento}
+          temBaixa={venda.movimentos.some((m) => !m.id_estorno_de)}
+          aoAlterar={() => void carregar()}
+        />
+      )}
+      {podeCancelar && !venda.pode_alterar && !venda.cancelada && venda.origem === "MANUAL" &&
+        venda.por_que_nao_altera && (
+        <p className="text-[13px] text-suave" id="venda-sem-alterar">
+          Não dá para alterar a data nem o número: {venda.por_que_nao_altera}
+        </p>
+      )}
+
       {/* 🔑 Mais itens no MESMO documento (pedido do dono, 20/10/2026), enquanto o
-          período não fechou. ⚠️ A venda do PDV não oferece: o cupom é dele. */}
+          período não fechou. ⚠️ A venda do PDV não oferece: o cupom é dele.
+          ⚠️ Documento em lote de cobrança, EM QUALQUER SITUAÇÃO, não ganha item
+          (23/10/2026) — o servidor responde `pode_acrescentar: false`. */}
       {podeCancelar && venda.pode_acrescentar && (
         <AcrescentarItens idVenda={venda.id} data={venda.data} aoAcrescentar={() => void carregar()} />
       )}

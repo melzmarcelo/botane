@@ -2278,9 +2278,21 @@
         A venda lançada à mão ou pela planilha aceita <strong>itens novos</strong> no mesmo
         documento — o botão <strong>Acrescentar itens</strong>, na tela da venda. Eles custam,
         baixam o estoque e seguem a política da pessoa como os outros. Só enquanto o período do
-        CMV daquela data não foi fechado (e, se for consumo de pessoa, enquanto o ciclo não foi
-        cobrado); a tela diz por que não, quando não dá. Tirar um item é cancelar a venda e lançar
-        de novo — o que já saiu da prateleira está no razão. A venda do PDV se corrige no PDV.
+        CMV daquela data não foi fechado e, se for consumo de pessoa, enquanto o documento
+        <strong>não está em nenhum lote de cobrança</strong> — em cobrança ou já recebido; a tela
+        diz por que não, quando não dá. Tirar um item é cancelar a venda e lançar de novo — o que
+        já saiu da prateleira está no razão. A venda do PDV se corrige no PDV.
+      </p>
+
+      <h3>Alterar a data ou o número do documento</h3>
+      <p>
+        A venda <strong>lançada à mão</strong> tem o botão <strong>Alterar data ou número</strong>,
+        na tela da venda. Vale mesmo com o documento num lote <em>em cobrança</em> (o valor
+        cobrado não muda); não vale com o lote já <strong>recebido</strong> — estorne a baixa
+        antes —, nem com o período do CMV fechado na data antiga ou na nova. Ao trocar a data, a
+        baixa de estoque da venda é <strong>estornada no dia antigo e lançada de novo no
+        novo</strong>. O número não pode repetir o de outra venda lançada à mão. A venda da
+        planilha não muda de número: é por ele que a reimportação reconhece o que já entrou.
       </p>
 
       <h3>Cancelar, e a venda que o banco recusa</h3>
@@ -4175,6 +4187,7 @@
             <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
             <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">23/10</td><td>Venda lançada à mão: <strong>alterar a data e o número</strong> do documento (não em lote recebido). Documento em lote de cobrança, em qualquer situação, não ganha item</td><td><a href="#venda">8</a></td></tr>
             <tr><td class="mono">23/10</td><td>Contas a receber: o <strong>PDF de todos os lotes em cobrança</strong> de uma vez, cada lote na sua página</td><td><a href="#pessoas">14</a></td></tr>
             <tr><td class="mono">22/10</td><td>Sem <strong>períodos de consumo</strong>: o consumo se lança em qualquer data e fica em aberto; em <strong>Vendas ▸ Contas a receber</strong> gera-se o <strong>lote de cobrança</strong> de cada pessoa, baixa-se o relatório para mandar e, quando o pagamento chega, dá-se <strong>baixa</strong> (inclusive por permuta)</td><td><a href="#pessoas">14</a></td></tr>
             <tr><td class="mono">22/10</td><td>Estoque ganhou o <strong>Painel</strong>: negativos, abaixo do mínimo (com em quantos dias acaba e quanto custa repor), parados, validade e perdas do mês — cada cartão leva à lista de Saldos já filtrada; o andamento de cada produto em gráfico; e as perdas por motivo, setor, categoria, prateleira e produto, ao lado da falta da contagem. Saldos ganhou o filtro <strong>Situação</strong></td><td><a href="#ajustes">6</a>, <a href="#alertas">10</a></td></tr>
