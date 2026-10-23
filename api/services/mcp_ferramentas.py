@@ -2161,6 +2161,24 @@ FERRAMENTAS: list[Ferramenta] = [
                                            "na primeira contagem.",
                                 padrao=True, no_corpo=True)},
         metodo="POST"),
+    # 🔑 Pedido do dono (23/10/2026): o PÃO BOTANE rotulado "COSTELA PONTA DESOSSADA KG"
+    # pelo Omie — corrigir pelo conector o que a tela corrige em Vinculados.
+    Ferramenta(
+        "corrigir_descricao_do_codigo", "Corrigir o nome de um código vinculado",
+        "Troca o texto que diz o que um código de fora é (o \"O que é lá\" da aba "
+        "Vinculados) — para quando a nota veio com o nome errado. Só o rótulo: o vínculo, o "
+        "fator e o estoque não mudam. Pegue `sistema`, `codigo` e `id_fornecedor` em "
+        "`codigos_externos` de `detalhe_produto`.",
+        "/produtos/{id_produto}/codigos/descricao",
+        {"id_produto": Param("integer", "Produto a que o código aponta.", obrigatorio=True),
+         "sistema": Param("string", "Sistema do código (ex.: OMIE).", obrigatorio=True,
+                          no_corpo=True),
+         "codigo": Param("string", "O código, como está em `codigos_externos`.",
+                         obrigatorio=True, no_corpo=True),
+         "id_fornecedor": Param("integer", "Fornecedor da linha, quando houver — o mesmo "
+                                           "código existe por fornecedor.", no_corpo=True),
+         "descricao": Param("string", "O nome certo.", obrigatorio=True, no_corpo=True)},
+        metodo="PUT"),
     # 🔑 O "atualizar do Omie" pelo conector (09/10/2026): o da nota e o de todas.
     Ferramenta(
         "atualizar_nota_do_omie", "Atualizar uma nota do Omie",

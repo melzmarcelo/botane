@@ -355,6 +355,7 @@ nomes_gravam = {t["name"] for t in gravam}
 checar("a chave que altera enxerga as ferramentas de gravação",
        {"vincular_item_de_nota", "criar_produto", "atualizar_produto", "lancar_nota",
         "fundir_produtos", "transferir_estoque", "reprocessar_estoque",
+        "corrigir_descricao_do_codigo",
         # 🔑 Produzir pelo conector (pedido do dono, 08/10/2026).
         "produzir"} <= nomes_gravam, sorted(nomes_gravam))
 _produzir = next((t for t in gravam if t["name"] == "produzir"), {})
@@ -810,6 +811,17 @@ checar("o item aparece na fila de conciliação", item is not None, len(fila))
 st, _, r = rpc(escrita, "tools/call", {"name": "vincular_item_de_nota", "arguments": {
     "id_item": item["id"], "id_produto": id_novo, "aprender": True}})
 checar("vincular_item_de_nota liga o item ao produto", not r["result"]["isError"], r)
+# 🔑 (23/10/2026) O rótulo do código vinculado se corrige pelo conector.
+st, _, r = rpc(escrita, "tools/call", {"name": "corrigir_descricao_do_codigo", "arguments": {
+    "id_produto": id_novo, "sistema": "OMIE", "codigo": f"CL{marca_p}",
+    "descricao": f"NOME CERTO {marca_p}"}})
+checar("corrigir_descricao_do_codigo troca o rótulo", not r["result"]["isError"], r)
+st, _, r = rpc(escrita, "tools/call", {"name": "detalhe_produto",
+                                       "arguments": {"id_produto": id_novo}})
+_cod = next((c for c in json.loads(r["result"]["content"][0]["text"]).get("codigos_externos")
+             or [] if c["codigo"] == f"CL{marca_p}"), {})
+checar("e o detalhe do produto mostra o nome certo",
+       _cod.get("descricao_externa") == f"NOME CERTO {marca_p}", _cod)
 st, _, r = rpc(escrita, "tools/call", {"name": "nota_entrada",
                                        "arguments": {"id_nota": id_nota}})
 conferida = json.loads(r["result"]["content"][0]["text"])
