@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
-import { lotes as buscarLotes, ROTULO_SITUACAO, type Formas, type Lote,
+import { baixarLotesAbertos, lotes as buscarLotes, ROTULO_SITUACAO, type Formas, type Lote,
          type SituacaoLote } from "@/lib/receber";
 import { dataBr } from "../vendas/tipos";
 
@@ -32,6 +33,8 @@ export default function ListaDeLotes({ versao }: { versao: number }) {
   const [filtro, setFiltro] = useState<SituacaoLote | "">("ABERTO");
   const [dados, setDados] = useState<{ lotes: Lote[]; formas: Formas } | null>(null);
   const [erro, setErro] = useState("");
+  const [baixando, setBaixando] = useState(false);
+  const aviso = useAviso();
 
   useEffect(() => {
     let vivo = true;
@@ -46,25 +49,49 @@ export default function ListaDeLotes({ versao }: { versao: number }) {
 
   const lista = dados?.lotes ?? [];
 
+  // 🔑 Todos os em cobrança num PDF só, cada lote na sua página (23/10/2026).
+  async function baixarTodos() {
+    setBaixando(true);
+    try {
+      await baixarLotesAbertos();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar os lotes");
+    } finally {
+      setBaixando(false);
+    }
+  }
+
   return (
     <Cartao
       titulo="Lotes de cobrança"
       descricao="Um por pessoa. Abra o lote para baixar o relatório, dar baixa ou tirar um documento."
     >
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap gap-2" role="tablist">
-          {FILTROS.map((f) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2" role="tablist">
+            {FILTROS.map((f) => (
+              <button
+                key={f.valor || "todos"}
+                role="tab"
+                aria-selected={filtro === f.valor}
+                data-filtro-lote={f.valor || "todos"}
+                className={`btn ${filtro === f.valor ? "btn-primario" : "btn-secundario"}`}
+                onClick={() => setFiltro(f.valor)}
+              >
+                {f.nome}
+              </button>
+            ))}
+          </div>
+          {filtro === "ABERTO" && lista.length > 0 && (
             <button
-              key={f.valor || "todos"}
-              role="tab"
-              aria-selected={filtro === f.valor}
-              data-filtro-lote={f.valor || "todos"}
-              className={`btn ${filtro === f.valor ? "btn-primario" : "btn-secundario"}`}
-              onClick={() => setFiltro(f.valor)}
+              id="receber-pdf-abertos"
+              className="btn btn-secundario sm:ml-auto"
+              disabled={baixando}
+              onClick={baixarTodos}
             >
-              {f.nome}
+              {baixando ? "Gerando…" : `PDF dos ${lista.length} lote(s) em cobrança`}
             </button>
-          ))}
+          )}
         </div>
         {erro ? (
           <Aviso tipo="erro">{erro}</Aviso>

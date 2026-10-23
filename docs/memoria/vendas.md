@@ -23,6 +23,13 @@
     caminho do "pagou só uma parte". Tirar o último cancela o lote.
   - O valor do lote é congelado no lote (`cupons`, `total`…) e só se recalcula ao criar e ao
     tirar documento — nos dois casos o lote ainda não foi pago.
+  - 🔑 **PDF de todos os em cobrança** (23/10/2026, pedido do dono): `GET
+    /exportar/lotes-consumo-abertos.pdf` (`?ids=` restringe), botão na aba *Em cobrança* da lista.
+    Cada lote é o MESMO documento de `/lote-consumo/{id}.pdf`, em ordem de nome, montado por
+    `exportacao.pdf_de_varios` (o `pdf_de` virou um embrulho dele). ⚠️ **Numeração e título do
+    rodapé são POR LOTE**: o flowable `_Secao` marca no canvas de que documento é a página, e o
+    `_CanvasNumerado` conta por seção — a folha vai para uma pessoa e não pode dizer "3 de 7".
+    Só PDF: a planilha de vários é o Consumo por pessoa com situação "em cobrança".
   - Qualquer lote estorna a baixa (não há a cadeia do "só o último" do período); cancelado fica
     no histórico, e a auditoria guarda os documentos que estavam nele.
   - 🔑 **O que estava no ar foi preservado**: cada (período FECHADO, pessoa) virou um lote

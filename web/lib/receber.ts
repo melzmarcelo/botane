@@ -129,3 +129,6 @@ export const tirarDocumento = (id: number, idVenda: number) =>
 /** O documento do lote, para mandar à pessoa (PDF ou planilha). */
 export const baixarLote = (id: number, formato: "pdf" | "csv") =>
   api.baixar(`/exportar/lote-consumo/${id}.${formato}`);
+
+/** Todos os lotes em cobrança num PDF só — cada lote na sua página, por nome. */
+export const baixarLotesAbertos = () => api.baixar("/exportar/lotes-consumo-abertos.pdf");

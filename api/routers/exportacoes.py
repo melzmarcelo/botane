@@ -24,6 +24,7 @@ from fastapi.responses import Response
 
 import arquivos
 import auditoria
+import relogio
 from database import get_cursor
 from seguranca import Contexto, contexto_atual, unidade_atual
 from services import custos
@@ -235,6 +236,48 @@ def lote_consumo(nome: str, formato: str | None = None,
                             id_unidade=id_unidade)
     base = f"lote-{id_lote}-{exportacao.slug(lote['pessoa']) or 'consumo'}"
     return _render(saida, base, ext, timbre, ctx.nome)
+
+
+@router.get("/lotes-consumo-abertos.pdf")
+def lotes_consumo_abertos(
+        detalhe: str = Query(default="documento_itens",
+                             pattern="^(sintetico|analitico|documento|documento_itens)$"),
+        ids: list[int] | None = Query(default=None),
+        ctx: Contexto = Depends(contexto_atual)) -> Response:
+    """Todos os lotes EM COBRANÇA num PDF só, cada um na sua página (23/10/2026).
+
+    🔑 **Cada lote é o MESMO documento de `/lote-consumo/{id}.pdf`**, com timbre,
+    título e numeração próprios — o maço impresso se separa por pessoa sem
+    nenhuma folha dizer "Página 3 de 7". Em ordem de NOME, que é como se entrega.
+    ⚠️ Só PDF: a planilha de vários lotes é o relatório Consumo por pessoa com a
+    situação "em cobrança", que já existe e já soma por pessoa.
+    `ids` restringe a alguns lotes (ainda só os em cobrança).
+    """
+    _exige_alguma(ctx, "consumo.periodos", "cmv.relatorios")
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        lotes = receber_motor.lotes(cur, id_unidade, ["ABERTO"], limite=1000)
+        if ids:
+            lotes = [l for l in lotes if l["id"] in set(ids)]
+        if not lotes:
+            raise HTTPException(status_code=404, detail="Nenhum lote em cobrança")
+        lotes.sort(key=lambda l: (l["pessoa"].casefold(), l["id"]))
+        saidas = [catalogo_motor.montar(cur, "consumo-pessoa", id_unidade,
+                                        {"_lote": l, "detalhe": [detalhe]}) for l in lotes]
+        timbre = catalogo_motor.papel_timbrado(cur)
+        auditoria.registrar(cur, ctx.id_usuario, "exportacao", "lote-consumo", "exportar",
+                            depois={"formato": "pdf", "lotes": [l["id"] for l in lotes],
+                                    "detalhe": detalhe},
+                            id_unidade=id_unidade)
+    # ⚠️ O teto conta o MAÇO inteiro: são as páginas do mesmo arquivo.
+    catalogo_motor.limite_do_pdf(sum(len(s.linhas) + sum(len(a[0]) for a in s.anexos)
+                                     for s in saidas))
+    conteudo = exportacao.pdf_de_varios(
+        [{"linhas": s.linhas, "colunas": s.colunas, "titulo": s.titulo,
+          "resumo": s.resumo, "anexos": s.anexos} for s in saidas],
+        empresa=timbre, emitido_por=ctx.nome)
+    nome = f"lotes-em-cobranca-{relogio.hoje_da_casa():%Y-%m-%d}.pdf"
+    return _entregar(conteudo, nome, "pdf")
 
 
 @router.get("/inventario/{nome}")

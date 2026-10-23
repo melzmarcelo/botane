@@ -32,8 +32,10 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import (
+    Flowable,
     Image,
     KeepTogether,
+    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -301,12 +303,37 @@ class _CanvasNumerado(rl_canvas.Canvas):
         self._startPage()
 
     def save(self):
-        total = len(self._paginas)
-        for estado in self._paginas:
+        # 🔑 **A numeração é por DOCUMENTO** (`pdf_de_varios`): o arquivo com os
+        # lotes de cinco pessoas são cinco documentos, e a folha da terceira diz
+        # "Página 1 de 1", não "Página 3 de 5" — ela vai para uma pessoa só.
+        secoes = [estado.get("_secao", 0) for estado in self._paginas]
+        vistas: dict[int, int] = {}
+        for estado, secao in zip(self._paginas, secoes):
+            vistas[secao] = vistas.get(secao, 0) + 1
             self.__dict__.update(estado)
-            self._rodape(self, self._pageNumber, total)
+            self._rodape(self, vistas[secao], secoes.count(secao), secao)
             super().showPage()
         super().save()
+
+
+class _Secao(Flowable):
+    """Marca, sem ocupar espaço, que daqui em diante a página é do documento `n`.
+
+    ⚠️ Vai logo DEPOIS da quebra de página: o canvas guarda o atributo no estado
+    da página, e é por ele que o rodapé sabe que título e que numeração usar.
+    """
+
+    _ZEROSIZE = True
+
+    def __init__(self, n: int):
+        super().__init__()
+        self.n = n
+
+    def wrap(self, *_a):
+        return 0, 0
+
+    def draw(self):
+        self.canv._secao = self.n
 
 
 def _figura(bruto: bytes | None, alta: float, larga_max: float | None = None):
@@ -353,11 +380,30 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
     rodapé não diz quem o emitiu nem quando, e um relatório sem essas duas
     coisas não se confere contra nada.
     """
+    return pdf_de_varios(
+        [{"linhas": linhas, "colunas": colunas, "titulo": titulo, "resumo": resumo,
+          "subtitulo": subtitulo, "anexos": anexos, "notas": notas, "imagem": imagem,
+          "vazio": vazio}],
+        orientacao=orientacao, empresa=empresa, emitido_por=emitido_por)
+
+
+def pdf_de_varios(documentos: list[dict], orientacao: str = "auto",
+                  empresa: dict | None = None, emitido_por: str | None = None) -> bytes:
+    """Vários documentos num PDF só, cada um começando numa página NOVA.
+
+    Cada item de `documentos` tem as chaves de `pdf_de` (`linhas`, `colunas`,
+    `titulo`, `resumo`, `subtitulo`, `anexos`, `notas`, `imagem`, `vazio`).
+    🔑 Nasceu para os lotes de cobrança (23/10/2026, pedido do dono: "gerar pdf
+    [de] todos os lotes abertos de uma só vez, cada um em sua página"). Cada
+    documento leva timbre, título no rodapé e numeração PRÓPRIOS — a folha se
+    separa do maço e vai para a pessoa sem o número de página de outra.
+    """
     # ⚠️ Paisagem por CONTAGEM DE COLUNAS, não por gosto: a movimentação do
     # estoque tem 14 colunas, e em retrato cada uma ficaria com 13 mm.
     # ⚠️ Vale o quadro MAIS LARGO do arquivo, anexo incluído: a orientação é do
     # documento inteiro, e decidir pelo primeiro quadro espremeria o segundo.
-    mais_colunas = max([len(colunas)] + [len(c) for _l, c, _t, _r in (anexos or [])])
+    mais_colunas = max(len(c) for d in documentos
+                       for c in [d["colunas"]] + [a[1] for a in (d.get("anexos") or [])])
     # ⚠️ `orientacao` existe para o documento que tem FORMA por convenção: a
     # ficha técnica é um cartão de receita, e sai em retrato mesmo com uma
     # coluna a mais que o corte automático. Relatório de tabela continua no
@@ -370,7 +416,8 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
     doc = SimpleDocTemplate(
         buffer, pagesize=pagina,
         leftMargin=margem, rightMargin=margem, topMargin=margem, bottomMargin=16 * mm,
-        title=titulo or "Relatório", author=(empresa or {}).get("nome") or "Sistema de gestão",
+        title=(documentos[0].get("titulo") if len(documentos) == 1 else None) or "Relatório",
+        author=(empresa or {}).get("nome") or "Sistema de gestão",
     )
 
     normal = ParagraphStyle("corpo", fontName="Helvetica", fontSize=7.5, leading=9.5,
@@ -416,7 +463,9 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
         historia.append(cabecalho)
         historia.append(Spacer(1, 5 * mm))
 
-    def bloco(b_linhas, b_colunas, b_titulo, b_resumo, principal: bool) -> None:
+    def bloco(b_linhas, b_colunas, b_titulo, b_resumo, principal: bool, d: dict) -> None:
+        subtitulo, imagem = d.get("subtitulo"), d.get("imagem")
+        vazio = d.get("vazio") or "Nenhuma linha para o filtro escolhido."
         if b_titulo:
             historia.append(Paragraph(_escapar(b_titulo), ParagraphStyle(
                 "titulo", fontName="Helvetica-Bold", fontSize=14 if principal else 11,
@@ -539,37 +588,45 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
         ]))
         historia.append(tabela)
 
-    timbre()
-    bloco(linhas, colunas, titulo, resumo, principal=True)
-    for a_linhas, a_colunas, a_titulo, a_resumo in (anexos or []):
-        historia.append(Spacer(1, 10 * mm))
-        bloco(a_linhas, a_colunas, a_titulo, a_resumo, principal=False)
+    def fecho(notas) -> None:
+        # As notas fecham o documento. ATENCAO: a quebra de linha do texto tem de
+        # virar `<br/>` — o `Paragraph` do reportlab ignora a quebra crua e junta
+        # tudo num paragrafo so; um modo de preparo numerado sairia em bloco
+        # corrido.
+        for rotulo, corpo in (notas or []):
+            if not (corpo or "").strip():
+                continue
+            historia.append(Spacer(1, 8 * mm))
+            if rotulo:
+                historia.append(Paragraph(_escapar(rotulo), ParagraphStyle(
+                    "nota", fontName="Helvetica-Bold", fontSize=11, leading=14,
+                    textColor=_TINTA)))
+                historia.append(Spacer(1, 2 * mm))
+            quebrado = (_escapar(corpo).replace(chr(13) + chr(10), chr(10))
+                        .replace(chr(10), "<br/>"))
+            historia.append(Paragraph(
+                quebrado,
+                ParagraphStyle("notaCorpo", fontName="Helvetica", fontSize=9, leading=13,
+                               textColor=_TINTA)))
 
-    # As notas fecham o documento. ATENCAO: a quebra de linha do texto tem de
-    # virar `<br/>` — o `Paragraph` do reportlab ignora a quebra crua e junta
-    # tudo num paragrafo so; um modo de preparo numerado sairia em bloco
-    # corrido.
-    for rotulo, corpo in (notas or []):
-        if not (corpo or "").strip():
-            continue
-        historia.append(Spacer(1, 8 * mm))
-        if rotulo:
-            historia.append(Paragraph(_escapar(rotulo), ParagraphStyle(
-                "nota", fontName="Helvetica-Bold", fontSize=11, leading=14,
-                textColor=_TINTA)))
-            historia.append(Spacer(1, 2 * mm))
-        quebrado = _escapar(corpo).replace(chr(13) + chr(10), chr(10)).replace(chr(10), "<br/>")
-        historia.append(Paragraph(
-            quebrado,
-            ParagraphStyle("notaCorpo", fontName="Helvetica", fontSize=9, leading=13,
-                           textColor=_TINTA)))
+    for n, d in enumerate(documentos):
+        if n:
+            historia.append(PageBreak())
+            historia.append(_Secao(n))
+        timbre()
+        bloco(d["linhas"], d["colunas"], d.get("titulo"), d.get("resumo"), True, d)
+        for a_linhas, a_colunas, a_titulo, a_resumo in (d.get("anexos") or []):
+            historia.append(Spacer(1, 10 * mm))
+            bloco(a_linhas, a_colunas, a_titulo, a_resumo, False, d)
+        fecho(d.get("notas"))
 
     # ⚠️ O carimbo é calculado UMA vez, fora do rodapé: `_CanvasNumerado`
     # redesenha o rodapé de cada página no fim, e chamar `now()` ali daria
     # horários diferentes entre a página 1 e a 40 do mesmo arquivo.
     emissao = _junta_rodape(emitido_por)
 
-    def rodape(canvas, numero: int, total: int) -> None:
+    def rodape(canvas, numero: int, total: int, secao: int) -> None:
+        titulo = documentos[secao].get("titulo") if secao < len(documentos) else None
         canvas.saveState()
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(_SUAVE)

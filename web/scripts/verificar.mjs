@@ -4005,6 +4005,11 @@ try {
     const loteTela = (lotesPessoa?.lotes ?? [])[0];
     checar("o lote nasce pela tela, em cobranca, com os 80,00",
       loteTela && Number(loteTela.total) === 80, lotesPessoa);
+    // 🔑 Com lote em cobrança, a lista oferece o PDF de TODOS, um por página (23/10/2026).
+    await p.waitForSelector("#receber-pdf-abertos", { timeout: 8000 }).catch(() => {});
+    const botaoTodos = await p.$eval("#receber-pdf-abertos", (e) => e.textContent).catch(() => "");
+    checar("a lista de lotes oferece o PDF de todos os em cobranca",
+      /PDF dos \d+ lote\(s\) em cobran/.test(botaoTodos ?? ""), botaoTodos);
     if (loteTela) {
       await irPara(p, `${WEB}/receber/lotes/${loteTela.id}`);
       await p.waitForSelector("#lote-total", { timeout: 15000 }).catch(() => {});

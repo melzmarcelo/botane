@@ -16,10 +16,13 @@ baixa só do lote inteiro, permuta entre as formas, relatório baixado e mandado
 """
 
 import atexit
+import base64
 import json
+import re
 import sys
 import threading
 import time
+import zlib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -378,6 +381,43 @@ checar("com os tres documentos e o total do lote",
        all(f"EU{n}{marca}" in texto for n in (1, 2, 3)) and "144" in texto, texto[:400])
 st, nao = chamar("GET", "/exportar/lote-consumo/999999999.pdf", token=token)
 checar("lote que nao existe responde 404", st == 404, (st, nao))
+
+
+def _textos_do_pdf(bruto: bytes) -> list[str]:
+    """O texto de cada fluxo do PDF (o reportlab grava em ASCII85 + Flate, sem o
+    `<~` de abertura). ⚠️ Acento sai em octal: "º" é `\\272`, "á" é `\\341`."""
+    saida = []
+    for m in re.finditer(rb"stream\r?\n(.*?)endstream", bruto, re.S):
+        corpo = m.group(1).strip()
+        try:
+            if corpo.endswith(b"~>"):
+                corpo = base64.a85decode(corpo[:-2])
+            saida.append(zlib.decompress(corpo).decode("latin-1"))
+        except Exception:
+            pass
+    return saida
+
+
+print("\n12b. o PDF de TODOS os lotes em cobranca, cada um na sua pagina")
+# 🔑 O OUTRO ganha um lote tambem (o dele foi cancelado no passo 10): sao dois.
+st, g = _gerar({"ate": "2026-09-30", "ids_pessoa": [OUTRO]})
+LOTE_OU = (g.get("lotes") or [{}])[0].get("id")
+checar("o segundo lote em cobranca nasce", st == 201 and LOTE_OU, (st, g))
+st, maco = chamar("GET", f"/exportar/lotes-consumo-abertos.pdf?ids={LOTE2}&ids={LOTE_OU}",
+                  token=token, cru=True)
+checar("o PDF dos lotes em cobranca sai",
+       st == 200 and isinstance(maco, bytes) and maco[:5] == b"%PDF-", st)
+paginas = len(re.findall(rb"/Type /Page[^s]", maco)) if isinstance(maco, bytes) else 0
+checar("com uma pagina por lote (2)", paginas == 2, paginas)
+textos = " ".join(_textos_do_pdf(maco)) if isinstance(maco, bytes) else ""
+checar("e cada pagina numerada no SEU lote: 'Pagina 1 de 1' duas vezes",
+       textos.count("gina 1 de 1)") == 2 and "gina 2 de" not in textos,
+       textos.count("gina 1 de 1)"))
+checar("o EU e o OUTRO, cada um no seu cabecalho",
+       f"Lote n\\272 {LOTE2} " in textos and f"Lote n\\272 {LOTE_OU} " in textos,
+       textos[:300])
+st, nao = chamar("GET", "/exportar/lotes-consumo-abertos.pdf?ids=999999999", token=token)
+checar("sem lote em cobranca no recorte: 404", st == 404, (st, nao))
 
 
 print("\n13. quem nao gere o consumo nao gera lote nem da baixa")
