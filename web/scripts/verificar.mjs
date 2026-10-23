@@ -723,7 +723,12 @@ try {
   // ha uma loja so, e volta no dia em que a casa abre a filial.
   const tiposNaTela = await p.evaluate(() =>
     [...(document.querySelector("main select")?.options ?? [])].map((o) => o.value));
-  checar("a tela oferece os sete tipos de produto", tiposNaTela.length === 7, tiposNaTela);
+  // 🔑 Nove desde a reestruturação de 23/10/2026 (131): material operacional no lugar
+  // do de limpeza, e patrimônio e serviço novos.
+  checar("a tela oferece os nove tipos de produto", tiposNaTela.length === 9, tiposNaTela);
+  checar("com material operacional, patrimônio e serviço",
+    ["MATERIAL_OPERACIONAL", "PATRIMONIO", "SERVICO"].every((t) => tiposNaTela.includes(t))
+      && !tiposNaTela.includes("MATERIAL_LIMPEZA"), tiposNaTela);
   checar("inclusive utensílios e enxoval", tiposNaTela.includes("UTENSILIO"), tiposNaTela);
 
   // A ajuda do tipo é o que explica a escolha a quem cadastra; sem ela
@@ -4511,13 +4516,17 @@ try {
   checar("trocar abre a busca dizendo em que produto a linha está hoje",
     /hoje está em/i.test(textoTroca), textoTroca.slice(0, 400));
   checar("com a saída de trocar e a de desistir",
-    (await temLinhaBotao("trocar")) && (await temLinhaBotao("cancelar")));
+    (await temLinhaBotao("trocar e vincular")) && (await temLinhaBotao("cancelar")));
+  // 🔑 **Trocar só nesta nota** (23/10/2026, pedido do dono: "alterar o produto
+  // somente para esta nota, e não vincular os produtos").
+  checar("e a de trocar só nesta nota, sem vincular",
+    await temLinhaBotao("só nesta nota"));
   await foto(p, "29c-trocar-produto");
   // ⚠️ Desiste: a nota segue para as checagens seguintes do jeito que estava.
   await clicarLinha("cancelar");
   await assentar(400);
   checar("desistir devolve a linha ao produto que já estava lá",
-    !(await temLinhaBotao("trocar")) && (await temLinhaBotao("não é este produto")));
+    !(await temLinhaBotao("trocar e vincular")) && (await temLinhaBotao("não é este produto")));
 
   // O mesmo arquivo de novo: a chave da NF-e é que impede a duplicação. Volta
   // para a lista, que é onde mora a porta do XML.
@@ -10934,7 +10943,8 @@ try {
 // sem eles. Rodam aqui, DEPOIS do navegador fechar, e a soma entra no resumo de baixo, que
 // é a linha que o `promover.ps1` lê. Roteiro que estoura sem resumo conta como falha.
 for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mjs",
-                       "verificar-codigos-do-produto.mjs", "verificar-opcoes-notas-omie.mjs"]) {
+                       "verificar-codigos-do-produto.mjs", "verificar-opcoes-notas-omie.mjs",
+                       "verificar-reclassificar.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {

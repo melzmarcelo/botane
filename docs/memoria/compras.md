@@ -223,6 +223,16 @@
   - Com **"aprender"**, a troca **corrige** o de-para daquele fornecedor em vez de duplicá-lo;
     sem ele, a troca vale só para esta nota — é o caso do item que veio errado uma vez sem o
     código ter mudado de dono.
+  - 🔑 **"Só nesta nota" ganhou botão** (23/10/2026, pedido do dono: *"gostaria de ter a opção
+    de alterar o produto somente para esta nota, e não vincular os produtos"*). O servidor já
+    aceitava `aprender=false`, mas a tela mandava sempre `true`. Agora a linha oferece
+    **"vincular"/"trocar e vincular"** (aprende) e **"só nesta nota"** (não aprende). O item
+    guarda `nota_itens.so_nesta_nota` (migração 132), que: aparece como etiqueta na linha;
+    sobrevive à releitura do Omie (`atualizar_nota` guarda e devolve junto com o produto); e
+    tira o código desse item do `vincular_fornecedores` — sem isso o botão "vincular
+    fornecedores" gravaria `codigo_no_fornecedor`, o degrau 4 da conciliação, e a troca de
+    uma nota só viraria vínculo pela porta dos fundos. Vincular de novo COM aprender limpa a
+    marca. Suíte: `smoke_codigo_por_fornecedor` passo 4.
   - ⚠️ **Nota LANÇADA não se reponta** (`_item_de_nota_aberta`, 409): os movimentos estão no
     razão, que é append-only, e mudar só a linha da nota faria o documento discordar do
     lançamento. O caminho é estornar — a mensagem diz isso. Mesma disciplina de

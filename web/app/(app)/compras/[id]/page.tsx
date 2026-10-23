@@ -83,14 +83,22 @@ export default function PaginaNota() {
     void carregar();
   }, [carregar]);
 
-  async function vincular(item: ItemNota) {
+  /**
+   * 🔑 **`aprender` é escolha de quem confere** (23/10/2026, pedido do dono: *"gostaria
+   * de ter a opção de alterar o produto somente para esta nota, e não vincular os
+   * produtos"*). Antes a tela mandava sempre `true`: escolher o produto gravava o
+   * de-para do fornecedor, e a próxima nota com aquele código entrava sozinha nele —
+   * certo quando o código é daquele produto, errado quando o fornecedor mandou outra
+   * coisa uma vez. Com `false`, só esta linha muda (e o item guarda a marca).
+   */
+  async function vincular(item: ItemNota, aprender = true) {
     const id_produto = Number(escolha[item.id]);
     if (!id_produto) return;
     setOcupado(true);
     try {
       const r = await api.post<{ message: string }>(`/notas/itens/${item.id}/vincular`, {
         id_produto,
-        aprender: true,
+        aprender,
       });
       aviso.sucesso(r.message);
       setEscolha({ ...escolha, [item.id]: "" });
@@ -493,6 +501,12 @@ export default function PaginaNota() {
                           {i.produto_status === "RASCUNHO" && (
                             <Etiqueta cor="alerta">rascunho — completar cadastro</Etiqueta>
                           )}
+                          {/* A escolha que não ensinou nada se anuncia: senão quem
+                              conferir a próxima nota não entende por que ela veio
+                              pendente de novo. */}
+                          {i.so_nesta_nota && (
+                            <Etiqueta cor="neutro">só nesta nota</Etiqueta>
+                          )}
                           {/* 🔑 **Trocar o produto da linha** (pedido do dono,
                               14/09/2026). A nota pode chegar CASADA no produto
                               errado — o mesmo código significando coisas
@@ -550,8 +564,20 @@ export default function PaginaNota() {
                               className="link-acao"
                               onClick={() => void vincular(i)}
                               disabled={!escolha[i.id]}
+                              title="usa este produto e ensina: a próxima nota deste fornecedor com este código entra nele sozinha"
                             >
-                              {trocando[i.id] ? "trocar" : "vincular"}
+                              {trocando[i.id] ? "trocar e vincular" : "vincular"}
+                            </button>
+                            {/* 🔑 **Só nesta nota** (23/10/2026, pedido do dono): o
+                                produto vale para esta linha e nada é aprendido. */}
+                            <button
+                              className="link-acao"
+                              data-acao="so-nesta-nota"
+                              onClick={() => void vincular(i, false)}
+                              disabled={!escolha[i.id]}
+                              title="usa este produto só nesta nota, sem vincular o código do fornecedor"
+                            >
+                              só nesta nota
                             </button>
                             {/* O insumo ainda não existe no cadastro: criar daqui
                                 poupa sair da tela, cadastrar e voltar. */}

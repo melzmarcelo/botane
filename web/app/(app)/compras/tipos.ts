@@ -62,6 +62,9 @@ export type ItemNota = {
   /** O preço subiu acima do limite que ESTA loja configurou. Quem decide é o
    *  servidor: o limite vive em `parametros.alerta_variacao_preco_pct`. */
   variacao_acima: boolean;
+  /** O produto foi escolhido só para ESTA nota, sem ensinar o de-para do
+   *  fornecedor (migração 132, pedido do dono de 23/10/2026). */
+  so_nesta_nota?: boolean;
 };
 
 /** O cabeçalho inteiro: é dele que a visualização e a correção se enchem. */

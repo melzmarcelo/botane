@@ -205,11 +205,25 @@ with get_cursor() as cur:
                 (CODIGO, forn_b))
     checar("sem aprender, o de-para do fornecedor continua no morango",
            cur.fetchone()["id_produto"] == morango)
+# 🔑 **E o item LEMBRA que a troca foi so dele** (migracao 132, pedido do dono de
+# 23/10/2026: "alterar o produto somente para esta nota, e nao vincular").
+checar("o item fica marcado 'so nesta nota'", it5b.get("so_nesta_nota") is True, it5b)
+# ⚠️ A porta dos fundos: "vincular fornecedores" deduz o codigo do produto no
+# fornecedor a partir dos itens — e esse codigo e o degrau 4 da conciliacao.
+chamar("POST", "/notas/vincular-fornecedores", {}, token)
+with get_cursor() as cur:
+    cur.execute("""SELECT codigo_no_fornecedor FROM produto_fornecedor
+                    WHERE id_produto = %s AND id_fornecedor = %s""", (pera, forn_b))
+    pf = cur.fetchone()
+checar("e o 'vincular fornecedores' nao aprende o codigo pela troca so desta nota",
+       not pf or not pf["codigo_no_fornecedor"], pf)
 
 # Com "aprender", a troca CORRIGE o de-para em vez de duplica-lo.
 st, r = chamar("POST", f"/notas/itens/{it5['id']}/vincular",
                {"id_produto": morango, "aprender": True}, token)
 checar("voltar ao morango com aprender responde 200", st == 200, (st, r))
+it5c, _ = item_da(n5)
+checar("e com aprender a marca 'so nesta nota' sai", it5c.get("so_nesta_nota") is False, it5c)
 with get_cursor() as cur:
     cur.execute("""SELECT count(*) AS n FROM codigos_externos
                     WHERE sistema = 'OMIE' AND codigo = %s""", (CODIGO,))

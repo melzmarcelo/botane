@@ -427,9 +427,13 @@ def vincular_item(cur, id_item: int, id_produto: int, fator: float | None = None
         raise HTTPException(status_code=404, detail="Item não encontrado")
     anterior = item["id_produto"]
 
+    # 🔑 `so_nesta_nota` (migração 132, pedido do dono de 23/10/2026): sem aprender,
+    # o item LEMBRA que a escolha foi só dele — é o que impede o "vincular
+    # fornecedores" de transformá-la em código do fornecedor depois.
     cur.execute(
-        "UPDATE nota_itens SET id_produto = %s, ignorado = false WHERE id = %s",
-        (id_produto, id_item),
+        """UPDATE nota_itens SET id_produto = %s, ignorado = false, so_nesta_nota = %s
+            WHERE id = %s""",
+        (id_produto, not aprender, id_item),
     )
 
     if aprender and item["codigo_fornecedor"]:
@@ -482,8 +486,12 @@ def vincular_fornecedores(cur, id_unidade: int) -> dict:
                    -- O código do produto NO fornecedor: é o nível 3 da cascata
                    -- de conciliação, o que resolve hortifrúti e distribuidor
                    -- sem EAN na próxima nota que chegar.
+                   -- ⚠️ Menos o da troca "só nesta nota" (migração 132): o par
+                   -- produto × fornecedor continua verdade, mas o CÓDIGO dela não
+                   -- ensina nada — senão viraria o degrau 4 da conciliação.
                    (array_agg(ni.codigo_fornecedor ORDER BY n.id DESC)
-                        FILTER (WHERE ni.codigo_fornecedor IS NOT NULL))[1] AS codigo,
+                        FILTER (WHERE ni.codigo_fornecedor IS NOT NULL
+                                  AND NOT ni.so_nesta_nota))[1] AS codigo,
                    max(coalesce(n.data_entrada, n.data_emissao))
                        FILTER (WHERE n.status = 'LANCADA') AS ultima_compra
               FROM nota_itens ni
@@ -980,8 +988,10 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
         )
 
     # O que a pessoa decidiu, guardado pelo código do item antes de reescrever.
+    # ⚠️ `so_nesta_nota` vai junto (132): a troca feita só para esta nota precisa
+    # continuar sendo SÓ desta nota depois da releitura.
     cur.execute(
-        """SELECT codigo_omie, codigo_fornecedor, id_produto, ignorado
+        """SELECT codigo_omie, codigo_fornecedor, id_produto, ignorado, so_nesta_nota
              FROM nota_itens WHERE id_nota = %s""",
         (id_nota,),
     )
@@ -989,7 +999,7 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
     for r in cur.fetchall():
         chave = (r["codigo_omie"] or "").strip() or (r["codigo_fornecedor"] or "").strip()
         if chave and (r["id_produto"] or r["ignorado"]):
-            decidido[chave] = (r["id_produto"], r["ignorado"])
+            decidido[chave] = (r["id_produto"], r["ignorado"], r["so_nesta_nota"])
 
     antes = {}
     cur.execute("""SELECT valor_total, valor_produtos, valor_frete, valor_desconto,
@@ -1018,8 +1028,9 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
         chave = (item.get("codigo_omie") or "").strip() or (
             item.get("codigo_fornecedor") or "").strip()
         guardado = decidido.get(chave)
+        so_nesta = False
         if guardado:
-            id_produto, ignorado = guardado
+            id_produto, ignorado, so_nesta = guardado
             sugestao = score = None
             reconhecidos += 1
         else:
@@ -1032,9 +1043,9 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
                     quantidade, um_nota, valor_unitario, valor_total, valor_desconto,
                     valor_acrescimo, lote_nf, validade_nf, id_produto, sugestao_produto,
                     sugestao_score, frete_informado, outros_informado, ignorado,
-                    codigo_omie, fator_declarado)
+                    codigo_omie, fator_declarado, so_nesta_nota)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                       %s, %s, %s)""",
+                       %s, %s, %s, %s)""",
             (id_nota, item["seq"], item["descricao_fornecedor"], item.get("codigo_fornecedor"),
              item.get("codigo_barras"), item.get("ncm"), item["quantidade"], item.get("um_nota"),
              item["valor_unitario"], item["valor_total"], item.get("valor_desconto") or 0,
@@ -1045,7 +1056,7 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
              # ⚠️ Reler a nota do Omie APAGA e reinsere os itens; sem este campo
              # aqui, a conferência do fator sumia justamente na releitura — que
              # é quando o fornecedor mandou algo diferente e ela mais serve.
-             item.get("fator_declarado")),
+             item.get("fator_declarado"), so_nesta),
         )
 
     # 🔑 **O cancelamento do Omie chega aqui** (09/10/2026). A nota 87313 foi
