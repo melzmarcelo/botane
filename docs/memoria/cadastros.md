@@ -1428,3 +1428,28 @@ são cadastro, esperando a vitrine que os mostre. Ver [`catalogos.md`](catalogos
   O botão **Baixar** abre o relatório `pessoas` com os filtros da tela já escolhidos.
 - 🔑 **O cadastro de produtos inteiro na planilha** (1.1.114, pedido do dono: *"listar todos os campos
   do cadastro, principalmente na planilha"*). Ver `_transversais/exportacao-e-relatorios.md`.
+- 🔑 **Reestruturação dos tipos e reclassificação por planilha** (1.1.131, migração 131, pedido do dono
+  23/10/2026, com o documento da casa "BOTANE_TABELAS_TIPO_CATEGORIA_SETOR": *"Tipo, Categoria e
+  Setor são campos independentes"*).
+  - Tipos: `MATERIAL_LIMPEZA` → **`MATERIAL_OPERACIONAL`** (o consumível da rotina: limpeza,
+    descartável, escritório, a copa). RENOMEADO no lugar — produtos, categorias, `cmv_grupo_tipos`
+    e `inventarios.filtro_tipos` —, então todo mês já apurado continua idêntico. Novos **`PATRIMONIO`**
+    e **`SERVICO`**, num grupo "Patrimônio e serviços" FORA do CMV real (guarda da 037: não ressuscita).
+    `TIPOS_SEM_ESTOQUE = ("SERVICO",)`: serviço sai sempre com `controla_estoque = false` (criar,
+    editar, reclassificar; a tela trava a caixa). Reclassificar para serviço quem tem saldo é recusado.
+  - ⚠️ **As listas de tipo agora são UMA**: `TIPOS_CATEGORIA = TIPOS` (api e web), e o conector usa
+    `list(TIPOS)` — eram seis enums copiados à mão em `mcp_ferramentas.py`.
+  - **`categorias.tipo` é opcional** (NULL = qualquer tipo). Ele nunca filtrou nada.
+  - **`POST /produtos/reclassificar`** (multipart CSV, `simular=true` padrão) + tela
+    `/produtos/reclassificar` (botão na lista de Produtos). Lê a PRÓPRIA planilha exportada do
+    cadastro (`/exportar/produtos.csv`): procura o cabeçalho (o arquivo abre com título e carimbo),
+    `;` ou `,`, UTF-8 ou cp1252. Colunas: Código (obrigatória), Tipo, Categoria, Setor, Local padrão.
+    Pelo NOME sem caixa nem acento; tipo pelo código ou rótulo ("Material operacional", "Utensílios").
+    ⚠️ Célula vazia OU igual ao atual = não mexe nem valida — senão a linha não mexida de quem está
+    numa categoria desativada seria recusada. Recusas por linha nomeadas (nome inexistente/inativo/
+    ambíguo, código desconhecido, produto repetido, produção própria fora de produzido/kit, fusão);
+    as outras seguem. Auditoria `reclassificar` por produto, com o antes.
+  - ⚠️ No PDV, **categoria = grupo do cardápio e setor = impressora/KDS** (só pelo envio, desligado
+    nesta casa em 23/10/2026 — o dono confirmou que não usa nem um nem outro). O documento supunha que
+    o setor integrado servia à baixa das vendas: não serve.
+  - Cobertura: `smoke_reclassificacao.py` e o roteiro `verificar-reclassificar.mjs`.

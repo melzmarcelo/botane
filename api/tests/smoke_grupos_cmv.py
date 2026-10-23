@@ -7,7 +7,7 @@ porta dos insumos e somem no total.
 
 O que este arquivo cobra:
 
-1. o tipo `MATERIAL_LIMPEZA` existe e aceita produto
+1. o tipo `MATERIAL_OPERACIONAL` (o antigo MATERIAL_LIMPEZA, 131) existe e aceita produto
 2. um tipo só pode estar em UM grupo — e a recusa diz em qual ele está
 3. nome de grupo não se repete
 4. **a soma dos grupos fecha com o CMV do período** (é o que dá sentido ao corte)
@@ -137,7 +137,7 @@ checar("e ele CONTA no CMV, como a casa recebe",
 print("1. o tipo novo existe e aceita produto")
 st, r = chamar("POST", "/produtos", {
     "codigo": f"LIMP{marca}", "nome": f"Detergente {marca}",
-    "tipo": "MATERIAL_LIMPEZA", "um_estoque": "UN",
+    "tipo": "MATERIAL_OPERACIONAL", "um_estoque": "UN",
 }, token=token)
 checar("cria produto do tipo material de limpeza", st == 201, (st, r))
 id_limpeza = r.get("id")
@@ -168,7 +168,7 @@ st, r = chamar("POST", "/produtos", {
 }, token=token)
 checar("tipo inventado é recusado", st == 400, (st, r))
 checar("e a recusa lista os tipos válidos",
-       "MATERIAL_LIMPEZA" in str(r.get("detail", "")), r.get("detail"))
+       "MATERIAL_OPERACIONAL" in str(r.get("detail", "")), r.get("detail"))
 
 
 print("\n2. um tipo só pode estar num grupo")
@@ -176,7 +176,7 @@ st, existentes = chamar("GET", "/cmv/grupos", token=token)
 checar("a lista de grupos responde", st == 200, st)
 
 st, r = chamar("POST", "/cmv/grupos", {
-    "nome": f"Não comida {marca}", "tipos": ["MATERIAL_LIMPEZA", "EMBALAGEM"], "ordem": 90,
+    "nome": f"Não comida {marca}", "tipos": ["MATERIAL_OPERACIONAL", "EMBALAGEM"], "ordem": 90,
 }, token=token)
 # Se a instalação já trouxe o grupo de exemplo, os dois tipos estão tomados —
 # e a recusa É o comportamento sob teste. Nesse caso o grupo do teste nasce com
@@ -185,7 +185,7 @@ if st == 409:
     checar("a recusa nomeia o grupo que já tem o tipo",
            "já está em" in str(r.get("detail", "")), r.get("detail"))
     dono = next((g for g in existentes
-                 if "MATERIAL_LIMPEZA" in g["tipos"] or "EMBALAGEM" in g["tipos"]), None)
+                 if "MATERIAL_OPERACIONAL" in g["tipos"] or "EMBALAGEM" in g["tipos"]), None)
     checar("e esse grupo existe mesmo", dono is not None, existentes)
     # Libera os dois tipos para o grupo do teste, devolvendo depois.
     original = dict(dono)
@@ -197,7 +197,7 @@ if st == 409:
         {"nome": original["nome"], "tipos": list(original["tipos"]),
          "ordem": original["ordem"], "ativo": original["ativo"]}, token=token))
     st, r = chamar("POST", "/cmv/grupos", {
-        "nome": f"Não comida {marca}", "tipos": ["MATERIAL_LIMPEZA", "EMBALAGEM"],
+        "nome": f"Não comida {marca}", "tipos": ["MATERIAL_OPERACIONAL", "EMBALAGEM"],
         "ordem": 90,
     }, token=token)
 else:
@@ -225,7 +225,7 @@ checar("nome repetido é recusado, ignorando maiúsculas", st == 409, (st, r))
 print("\n4. editar o grupo enxerga os próprios tipos como livres")
 st, r = chamar("GET", f"/cmv/grupos/tipos-livres?id_grupo={id_grupo}", token=token)
 checar("os tipos do próprio grupo continuam disponíveis",
-       "EMBALAGEM" in r.get("tipos", []) and "MATERIAL_LIMPEZA" in r.get("tipos", []),
+       "EMBALAGEM" in r.get("tipos", []) and "MATERIAL_OPERACIONAL" in r.get("tipos", []),
        r.get("tipos"))
 st, r = chamar("GET", "/cmv/grupos/tipos-livres", token=token)
 checar("mas para um grupo novo eles estão tomados",
@@ -296,7 +296,7 @@ print("\n7. tirar o tipo do grupo reclassifica o passado")
 com_ambos = float(grupo_depois["compras"])
 
 st, r = chamar("PUT", f"/cmv/grupos/{id_grupo}",
-               {"nome": f"Não comida {marca}", "tipos": ["MATERIAL_LIMPEZA"], "ordem": 90,
+               {"nome": f"Não comida {marca}", "tipos": ["MATERIAL_OPERACIONAL"], "ordem": 90,
                 "ativo": True}, token=token)
 checar("o grupo aceita ficar com um tipo só", st == 200, (st, r))
 
@@ -327,7 +327,7 @@ checar("partir o grupo em dois soma exatamente o grupo inteiro",
        (so_limpeza and so_limpeza["compras"], so_embalagem and so_embalagem["compras"],
         com_ambos))
 checar("e cada um ficou com o tipo certo",
-       so_limpeza and so_limpeza["tipos"] == ["MATERIAL_LIMPEZA"]
+       so_limpeza and so_limpeza["tipos"] == ["MATERIAL_OPERACIONAL"]
        and so_embalagem and so_embalagem["tipos"] == ["EMBALAGEM"],
        (so_limpeza and so_limpeza["tipos"], so_embalagem and so_embalagem["tipos"]))
 
@@ -344,7 +344,7 @@ checar("o grupo começa DENTRO do CMV",
 valor_do_grupo = float(g_dentro["cmv"]) if g_dentro else 0.0
 
 st, r = chamar("PUT", f"/cmv/grupos/{id_grupo}",
-               {"nome": f"Não comida {marca}", "tipos": ["MATERIAL_LIMPEZA"],
+               {"nome": f"Não comida {marca}", "tipos": ["MATERIAL_OPERACIONAL"],
                 "ordem": 90, "ativo": True, "considerar_no_cmv": False}, token=token)
 checar("dá para tirar o grupo do CMV real", st == 200, (st, r))
 
@@ -353,7 +353,7 @@ caiu = float(com_grupo["cmv_real"]) - float(sem_grupo["cmv_real"])
 checar("o CMV real cai exatamente o que o grupo valia",
        perto(caiu, valor_do_grupo, 0.02), (caiu, valor_do_grupo))
 checar("e a apuração diz quais tipos ficaram de fora",
-       "MATERIAL_LIMPEZA" in (sem_grupo.get("tipos_fora_do_cmv") or []),
+       "MATERIAL_OPERACIONAL" in (sem_grupo.get("tipos_fora_do_cmv") or []),
        sem_grupo.get("tipos_fora_do_cmv"))
 
 # ⚠️ **O dinheiro NÃO some da tela.** Gastar com limpeza é gastar; um número que
@@ -370,7 +370,7 @@ checar("e marcado como fora do CMV",
 
 # Voltar a considerar devolve o CMV ao que era: a régua é reversível.
 chamar("PUT", f"/cmv/grupos/{id_grupo}",
-       {"nome": f"Não comida {marca}", "tipos": ["MATERIAL_LIMPEZA"], "ordem": 90,
+       {"nome": f"Não comida {marca}", "tipos": ["MATERIAL_OPERACIONAL"], "ordem": 90,
         "ativo": True, "considerar_no_cmv": True}, token=token)
 st, de_volta = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 checar("e marcar de novo devolve o CMV ao que era",
@@ -394,7 +394,7 @@ if id_grupo in criados["grupos"]:
     criados["grupos"].remove(id_grupo)
 st, r = chamar("GET", "/cmv/grupos/tipos-livres", token=token)
 checar("e os tipos dele voltam a ficar livres",
-       "MATERIAL_LIMPEZA" in r.get("tipos", []), r.get("tipos"))
+       "MATERIAL_OPERACIONAL" in r.get("tipos", []), r.get("tipos"))
 st, final = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 # ⚠️ Apagar o grupo não mexe em custo nenhum: o material de limpeza continua
 # dentro do CMV real, só deixa de aparecer separado.

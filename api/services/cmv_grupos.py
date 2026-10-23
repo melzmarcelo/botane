@@ -8,7 +8,7 @@ que a cozinha realmente custa.
 
 Aqui a casa monta os próprios grupos, escolhendo os tipos de produto que entram
 em cada um. Um grupo pode juntar vários tipos ("Material de limpeza e
-embalagem" = EMBALAGEM + MATERIAL_LIMPEZA).
+embalagem" = EMBALAGEM + MATERIAL_OPERACIONAL, o antigo MATERIAL_LIMPEZA).
 
 ⚠️ **Um tipo só entra em UM grupo, e quem garante é o banco**: `tipo` é a chave
 primária de `cmv_grupo_tipos`. Conferir só na aplicação deixaria passar duas

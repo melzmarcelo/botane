@@ -11,6 +11,7 @@ import {
   Local,
   Setor,
   TIPOS_CATEGORIA,
+  nomeTipo,
   TIPOS_LOCAL,
   UnidadeMedida,
 } from "@/lib/cadastros";
@@ -113,7 +114,7 @@ export default function PaginaCadastros() {
   // canto. O canto do setor é um LOCAL — e dizer a que setor ele pertence é o
   // que liga "onde a mercadoria está" a "quem a consome".
   const [novoLocal, setNovoLocal] = useState({ nome: "", tipo: "SECO", id_setor: "" });
-  const [novaCategoria, setNovaCategoria] = useState({ nome: "", id_pai: "", tipo: "INSUMO" });
+  const [novaCategoria, setNovaCategoria] = useState({ nome: "", id_pai: "", tipo: "" });
   const [novaUm, setNovaUm] = useState({ sigla: "", nome: "", grandeza: "UNIDADE", fator_base: "1" });
 
   /**
@@ -136,7 +137,7 @@ export default function PaginaCadastros() {
   function limparFormularios() {
     setNovoSetor("");
     setNovoLocal({ nome: "", tipo: "SECO", id_setor: "" });
-    setNovaCategoria({ nome: "", id_pai: "", tipo: "INSUMO" });
+    setNovaCategoria({ nome: "", id_pai: "", tipo: "" });
     setNovaUm({ sigla: "", nome: "", grandeza: "UNIDADE", fator_base: "1" });
   }
 
@@ -571,12 +572,13 @@ export default function PaginaCadastros() {
                     void acao(async () => {
                       const corpo = {
                         nome: novaCategoria.nome,
-                        tipo: novaCategoria.tipo,
+                        // Vazio = categoria de qualquer tipo (131).
+                        tipo: novaCategoria.tipo || null,
                         id_pai: novaCategoria.id_pai ? Number(novaCategoria.id_pai) : null,
                       };
                       if (alvo) await api.put(`/categorias/${alvo.id}`, corpo);
                       else await api.post("/categorias", corpo);
-                      setNovaCategoria({ nome: "", id_pai: "", tipo: "INSUMO" });
+                      setNovaCategoria({ nome: "", id_pai: "", tipo: "" });
                       setEditando(null);
                     }, alvo ? "Categoria corrigida." : "Categoria criada.");
                   }}
@@ -625,9 +627,10 @@ export default function PaginaCadastros() {
                       value={novaCategoria.tipo}
                       onChange={(e) => setNovaCategoria({ ...novaCategoria, tipo: e.target.value })}
                     >
+                      <option value="">— qualquer tipo —</option>
                       {TIPOS_CATEGORIA.map((t) => (
                         <option key={t} value={t}>
-                          {t.toLowerCase()}
+                          {nomeTipo(t).toLowerCase()}
                         </option>
                       ))}
                     </select>
@@ -656,7 +659,7 @@ export default function PaginaCadastros() {
                   >
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{c.nome}</span>
-                      <Etiqueta>{c.tipo.toLowerCase()}</Etiqueta>
+                      {c.tipo && <Etiqueta>{nomeTipo(c.tipo).toLowerCase()}</Etiqueta>}
                       {!!c.produtos && <Etiqueta cor="erva">{c.produtos} produto(s)</Etiqueta>}
                       {enviaAoPdv && c.integrado_pdv && <Etiqueta cor="erva">PDV</Etiqueta>}
                     </span>
@@ -672,7 +675,7 @@ export default function PaginaCadastros() {
                                 // por string, e um número aqui deixaria a
                                 // categoria-mãe aparecendo como "— raiz —".
                                 id_pai: c.id_pai ? String(c.id_pai) : "",
-                                tipo: c.tipo,
+                                tipo: c.tipo ?? "",
                               }))
                           }
                         >

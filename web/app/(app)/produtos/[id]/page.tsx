@@ -1346,12 +1346,14 @@ export default function FormularioProduto() {
                   n === lista.length - 1 && lista.length % 2 ? "sm:col-span-2" : ""
                 }`}
               >
+                {/* ⚠️ Serviço nunca controla estoque (131): o servidor grava assim
+                    qualquer que seja a caixa, e a tela não pode prometer outra coisa. */}
                 <input
                   id={i.campo}
                   type="checkbox"
                   className="mt-1 h-4 w-4 accent-erva"
-                  disabled={!podeEditar}
-                  checked={f[i.campo]}
+                  disabled={!podeEditar || (i.campo === "controla_estoque" && f.tipo === "SERVICO")}
+                  checked={i.campo === "controla_estoque" && f.tipo === "SERVICO" ? false : f[i.campo]}
                   onChange={(e) => set(i.campo, e.target.checked)}
                 />
                 <label htmlFor={i.campo} className="cursor-pointer">

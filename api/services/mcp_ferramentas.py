@@ -22,6 +22,10 @@ from typing import Any
 
 import httpx
 
+# A lista viva dos tipos — o conector a repetia em seis lugares, e a reestruturação de
+# 23/10/2026 (131) teria deixado o Claude oferecendo um tipo que o servidor recusa.
+from models.produtos import TIPOS
+
 # ⚠️ Resposta grande demais enche o contexto do Claude e empurra a conversa
 # para fora. O corte é aqui, com aviso: o modelo sabe que faltou e pede com
 # filtro, em vez de concluir sobre metade da lista achando que é tudo.
@@ -153,8 +157,7 @@ FERRAMENTAS: list[Ferramenta] = [
         "/produtos",
         {"busca": Param("string", "Texto: nome, código ou EAN."),
          "tipo": Param("string", "Tipo do produto.",
-                       enum=["INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM",
-                             "MATERIAL_LIMPEZA", "UTENSILIO"]),
+                       enum=list(TIPOS)),
          "ativo": Param("boolean", "true = só ativos, false = só inativos; omita para todos.",
                         padrao=True),
          "limite": _lim(25, 200), "offset": _OFFSET}),
@@ -597,8 +600,7 @@ FERRAMENTAS: list[Ferramenta] = [
         {"id_item": Param("integer", "Id do item da nota.", obrigatorio=True),
          "nome": Param("string", "Nome do produto; sem ele, o da nota.", no_corpo=True),
          "tipo": Param("string", "Tipo do produto.", padrao="INSUMO", no_corpo=True,
-                       enum=["INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM",
-                             "MATERIAL_LIMPEZA", "UTENSILIO"]),
+                       enum=list(TIPOS)),
          "um_estoque": Param("string", "Unidade de estoque; sem ela, a da nota.",
                              no_corpo=True),
          "fator": Param("number", "Quantos da unidade de estoque cabem em 1 da nota.",
@@ -615,8 +617,7 @@ FERRAMENTAS: list[Ferramenta] = [
         "/produtos",
         {"nome": Param("string", "Nome do produto.", obrigatorio=True, no_corpo=True),
          "tipo": Param("string", "Tipo do produto.", padrao="INSUMO", no_corpo=True,
-                       enum=["INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM",
-                             "MATERIAL_LIMPEZA", "UTENSILIO"]),
+                       enum=list(TIPOS)),
          "um_estoque": Param("string", "Unidade de estoque (de `unidades_medida`).",
                              no_corpo=True),
          "id_categoria": Param("integer", "Categoria (de `categorias`).", no_corpo=True),
@@ -652,8 +653,7 @@ FERRAMENTAS: list[Ferramenta] = [
          "nome": Param("string", "Nome.", no_corpo=True),
          "nome_curto": Param("string", "Nome curto (cupom, etiqueta).", no_corpo=True),
          "tipo": Param("string", "Tipo do produto.", no_corpo=True,
-                       enum=["INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM",
-                             "MATERIAL_LIMPEZA", "UTENSILIO"]),
+                       enum=list(TIPOS)),
          "id_categoria": Param("integer", "Categoria (de `categorias`).", no_corpo=True),
          "id_setor": Param("integer", "Setor (de `setores`).", no_corpo=True),
          "status": Param("string", "Situação do cadastro.", no_corpo=True,
@@ -1326,8 +1326,8 @@ FERRAMENTAS: list[Ferramenta] = [
         "existe com outro nome.",
         "/categorias",
         {"nome": Param("string", "Nome da categoria.", obrigatorio=True, no_corpo=True),
-         "tipo": Param("string", "De que tipo de produto ela é.", padrao="INSUMO",
-                       no_corpo=True, enum=["INSUMO", "REVENDA", "PRODUZIDO", "EMBALAGEM", "MATERIAL_LIMPEZA", "UTENSILIO"]),
+         "tipo": Param("string", "De que tipo de produto ela é (opcional: a categoria "
+                       "pode servir a vários tipos).", no_corpo=True, enum=list(TIPOS)),
          "id_pai": Param("integer", "Categoria-mãe, para criar uma subcategoria.",
                          no_corpo=True),
          "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
@@ -1338,7 +1338,7 @@ FERRAMENTAS: list[Ferramenta] = [
         "/categorias/{id_categoria}",
         {"id_categoria": Param("integer", "Id (de `categorias`).", obrigatorio=True),
          "nome": Param("string", "Nome.", no_corpo=True),
-         "tipo": Param("string", "Tipo de produto.", no_corpo=True, enum=["INSUMO", "REVENDA", "PRODUZIDO", "EMBALAGEM", "MATERIAL_LIMPEZA", "UTENSILIO"]),
+         "tipo": Param("string", "Tipo de produto.", no_corpo=True, enum=list(TIPOS)),
          "id_pai": Param("integer", "Categoria-mãe.", no_corpo=True),
          "ordem": Param("integer", "Posição na lista.", no_corpo=True),
          "ativo": Param("boolean", "Em uso.", no_corpo=True)},

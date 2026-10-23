@@ -31,11 +31,13 @@ from models.produtos import (
     ProdutoUpdate,
     STATUS,
     TIPOS,
+    TIPOS_SEM_ESTOQUE,
     VincularRequest,
 )
 from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import custo_referencia
+from services import reclassificacao
 from services import custos as motor_custos
 from services import alteracao_multipla as alteracao_multipla_motor
 from services import ean_das_notas, kits, openfoodfacts, precos, produtos_vinculo, traducao
@@ -116,6 +118,11 @@ MODOS_PRODUCAO = ("PARA_ESTOQUE", "NA_HORA")
 def _valida_basico(dados: dict) -> None:
     if dados.get("tipo") and dados["tipo"] not in TIPOS:
         raise HTTPException(status_code=400, detail=f"Tipo inválido. Use: {', '.join(TIPOS)}")
+    # 🔑 **Serviço não movimenta estoque físico** (131): a taxa de entrega não tem saldo
+    # nem local. O cadastro sai sem controle de estoque, peça-se o que se pedir — recusar
+    # faria toda criação de serviço esbarrar no padrão `controla_estoque = true`.
+    if dados.get("tipo") in TIPOS_SEM_ESTOQUE:
+        dados["controla_estoque"] = False
     if dados.get("status") and dados["status"] not in STATUS:
         raise HTTPException(status_code=400, detail=f"Status inválido. Use: {', '.join(STATUS)}")
     if dados.get("modo_producao") and dados["modo_producao"] not in MODOS_PRODUCAO:
@@ -329,6 +336,30 @@ def alteracao_multipla(
             {"tipo": body.tipo, "id_categoria": body.id_categoria,
              "id_setor": body.id_setor, "ativo": body.ativo},
             ctx.id_usuario, simular=body.simular)
+
+
+@router.post("/reclassificar")
+async def reclassificar(
+        arquivo: UploadFile = File(...),
+        simular: bool = True,
+        ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Tipo, categoria, setor e local padrão de cada produto, por planilha.
+
+    🔑 **Pedido do dono (23/10/2026)**, a reestruturação de tipos, categorias, setores
+    e locais: cada produto com o SEU destino. Exporta-se o cadastro, corrige-se no
+    Excel e manda-se de volta — ver `services/reclassificacao.py`.
+    ⚠️ **`simular=true` é o padrão**: a prévia diz quantos mudam, quantos já estavam
+    assim e quais linhas o servidor recusa, com o porquê, antes de qualquer escrita.
+    ⚠️ Os bytes são lidos ANTES de pedir a conexão, como no envio de foto.
+    """
+    conteudo = await arquivo.read(reclassificacao.MAXIMO_BYTES + 1)
+    try:
+        linhas = reclassificacao.ler(conteudo)
+    except reclassificacao.PlanilhaInvalida as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    with get_cursor() as cur:
+        return reclassificacao.aplicar(cur, unidade_atual(cur, ctx), linhas,
+                                       ctx.id_usuario, simular=simular)
 
 
 @router.get("/{id_produto}/troca-de-unidade")
@@ -1091,6 +1122,10 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
 
         # O tipo que vale na validação é o novo, se veio; senão o que já estava.
         _valida_basico({**dict(antes), **dados})
+        # ⚠️ A validação acima trabalha numa CÓPIA: virar serviço tem de desligar o
+        # estoque no que vai ser gravado.
+        if dados.get("tipo") in TIPOS_SEM_ESTOQUE:
+            dados["controla_estoque"] = False
         _recusar_codigo_de_outro(cur, dados, id_produto)
 
         if "codigo" in dados and dados["codigo"]:

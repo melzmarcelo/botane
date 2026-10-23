@@ -256,7 +256,7 @@ checar("e não traz os campos internos (código e unidade do Omie, origem, datas
 checar("e o custo de referência, para quem vê custo", "Custo de referência" in _cabecalho,
        _cabecalho)
 # ⚠️ O PDF tem teto de linhas: o recorte é o primeiro tipo que cabe nele.
-_tipo_pdf = next((t for t in ("KIT", "UTENSILIO", "MATERIAL_LIMPEZA", "EMBALAGEM", "PRODUZIDO")
+_tipo_pdf = next((t for t in ("KIT", "UTENSILIO", "MATERIAL_OPERACIONAL", "EMBALAGEM", "PRODUZIDO")
                   if (chamar("GET", f"/exportar/produtos/previa?tipos_produto={t}",
                              token=token)[1] or {}).get("cabe_no_pdf")), "KIT")
 st, pdf_cad, _ = chamar("GET", f"/exportar/produtos.pdf?tipos_produto={_tipo_pdf}",

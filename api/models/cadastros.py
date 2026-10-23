@@ -6,19 +6,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from models.produtos import TIPOS
+
 TIPOS_LOCAL = ("SECO", "RESFRIADO", "CONGELADO", "BAR")
-# ⚠️ Espelha `TIPOS` de models/produtos.py, menos `KIT` (combo não se classifica
-# em categoria de compra). `MATERIAL_LIMPEZA` faltava aqui desde a migração 029:
-# a tela oferecia o tipo e o servidor recusava com 422, e ninguém tinha tentado
-# criar a categoria ainda. Tipo novo entra nos DOIS lugares.
-TIPOS_CATEGORIA = (
-    "INSUMO",
-    "REVENDA",
-    "PRODUZIDO",
-    "EMBALAGEM",
-    "MATERIAL_LIMPEZA",
-    "UTENSILIO",
-)
+# 🔑 **O tipo da categoria é OPCIONAL desde a 131** (documento da casa, 23/10/2026:
+# *"Tipo, Categoria e Setor são campos independentes"*). Ele nunca filtrou nada —
+# era rótulo —, e a lista nova tem categoria que serve a vários tipos (KITS E CESTAS,
+# OUTROS). Quando preenchido, é um dos `TIPOS` de models/produtos.py — a mesma
+# lista, importada: eram duas, e a segunda passou semanas sem MATERIAL_LIMPEZA (029).
+TIPOS_CATEGORIA = TIPOS
 GRANDEZAS = ("MASSA", "VOLUME", "UNIDADE")
 
 
@@ -100,7 +96,7 @@ class LocalResponse(BaseModel):
 class CategoriaCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=80)
     id_pai: int | None = None
-    tipo: str = "INSUMO"
+    tipo: str | None = None
     ordem: int = 0
     ativo: bool = True
     # A categoria daqui é o GRUPO do cardápio do PDV.
@@ -122,7 +118,7 @@ class CategoriaResponse(BaseModel):
     nome: str
     caminho: str = ""          # "Insumos › Hortifrúti"
     nivel: int = 0
-    tipo: str
+    tipo: str | None = None
     ordem: int
     ativo: bool
     integrado_pdv: bool = False

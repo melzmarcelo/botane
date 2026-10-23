@@ -134,7 +134,7 @@ print("\n2. o tipo serve para categoria — nos DOIS lados")
 # MATERIAL_LIMPEZA como tipo de categoria desde a migração 029 e o servidor
 # recusava com 422, porque TIPOS_CATEGORIA não tinha sido atualizado junto.
 # Ninguém tinha tentado criar a categoria ainda.
-for tipo in ("UTENSILIO", "MATERIAL_LIMPEZA"):
+for tipo in ("UTENSILIO", "MATERIAL_OPERACIONAL"):
     st, r = chamar("POST", "/categorias", {
         "nome": f"Cat {tipo} {marca}", "tipo": tipo,
     }, token=token)

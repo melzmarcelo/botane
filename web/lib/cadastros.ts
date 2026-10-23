@@ -33,7 +33,8 @@ export type Categoria = {
   nome: string;
   caminho: string;
   nivel: number;
-  tipo: string;
+  /** Opcional desde a 131: a categoria é independente do tipo. */
+  tipo: string | null;
   ordem: number;
   ativo: boolean;
   /** A categoria daqui é o GRUPO do cardápio do PDV. */
@@ -125,10 +126,15 @@ export const TIPOS_PRODUTO = [
   { valor: "REVENDA", nome: "Revenda", ajuda: "Compra e vende inteiro, sem receita" },
   { valor: "KIT", nome: "Kit", ajuda: "Conjunto de outros produtos" },
   { valor: "EMBALAGEM", nome: "Embalagem", ajuda: "Copo, sacola, marmita" },
+  // 🔑 Reestruturação de 23/10/2026 (documento da casa, migração 131): o antigo
+  // "Material de limpeza" virou o consumível da rotina inteira, e entraram
+  // Patrimônio e Serviço. ⚠️ Espelha `TIPOS` de api/models/produtos.py.
   {
-    valor: "MATERIAL_LIMPEZA",
-    nome: "Material de limpeza",
-    ajuda: "Detergente, desinfetante, pano — custo que não é comida",
+    valor: "MATERIAL_OPERACIONAL",
+    nome: "Material operacional",
+    ajuda:
+      "Consumível da rotina: limpeza, descartável, escritório, a copa — " +
+      "fica fora do custo dos produtos",
   },
   {
     valor: "UTENSILIO",
@@ -137,20 +143,23 @@ export const TIPOS_PRODUTO = [
       "Prato, talher, taça, panela, avental — não é consumido pela receita: " +
       "quebra, some e é reposto. Fica fora do CMV real",
   },
+  {
+    valor: "PATRIMONIO",
+    nome: "Patrimônio",
+    ajuda: "Bem durável — processador, batedeira, móvel. Controle patrimonial, fora do CMV",
+  },
+  {
+    valor: "SERVICO",
+    nome: "Serviço",
+    ajuda: "Não é físico — taxa de entrega. Nunca controla estoque",
+  },
 ];
 
 export const TIPOS_LOCAL = ["SECO", "RESFRIADO", "CONGELADO", "BAR"];
-// ⚠️ Espelha TIPOS_CATEGORIA de api/models/cadastros.py — sem KIT, que não se
-// classifica em categoria de compra. Os dois lados têm de andar juntos: o front
-// oferecia MATERIAL_LIMPEZA e o servidor recusava com 422.
-export const TIPOS_CATEGORIA = [
-  "INSUMO",
-  "REVENDA",
-  "PRODUZIDO",
-  "EMBALAGEM",
-  "MATERIAL_LIMPEZA",
-  "UTENSILIO",
-];
+// 🔑 O tipo da categoria é OPCIONAL desde a 131 ("Tipo, Categoria e Setor são campos
+// independentes", documento da casa). Quando preenchido, é um dos tipos de produto —
+// a mesma lista, para não haver uma segunda que esqueça um tipo.
+export const TIPOS_CATEGORIA = TIPOS_PRODUTO.map((t) => t.valor);
 export const GRANDEZAS = ["MASSA", "VOLUME", "UNIDADE"];
 
 export const nomeTipo = (t: string) =>

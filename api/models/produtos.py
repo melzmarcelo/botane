@@ -15,15 +15,26 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 #
 # ⚠️ Esta tupla é a fonte única: `cmv_grupos`, `inventario_selecao` e o router do
 # CMV a importam. Não há CHECK no banco — tipo novo se adiciona aqui.
+#
+# 🔑 **Reestruturação de 23/10/2026** (documento "Tabelas tipo, categoria, setor" da
+# casa, migração 131): `MATERIAL_LIMPEZA` virou `MATERIAL_OPERACIONAL` — o consumível
+# da rotina, não só limpeza (descartável, escritório, a copa) — e entraram
+# `PATRIMONIO` (bem durável: processador, batedeira; controle patrimonial, fora do
+# CMV) e `SERVICO` (não físico: taxa de entrega; NUNCA controla estoque).
 TIPOS = (
     "INSUMO",
     "REVENDA",
     "PRODUZIDO",
     "KIT",
     "EMBALAGEM",
-    "MATERIAL_LIMPEZA",
+    "MATERIAL_OPERACIONAL",
     "UTENSILIO",
+    "PATRIMONIO",
+    "SERVICO",
 )
+# Os que não movimentam estoque físico, nunca: o cadastro sai com
+# `controla_estoque = false` qualquer que seja o pedido.
+TIPOS_SEM_ESTOQUE = ("SERVICO",)
 STATUS = ("RASCUNHO", "ATIVO", "ARQUIVADO")
 
 

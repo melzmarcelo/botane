@@ -80,7 +80,7 @@ def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
                     LEFT JOIN setores g ON g.id = coalesce(l.id_setor, p.id_setor)""",
         "categoria": "LEFT JOIN categorias g ON g.id = p.id_categoria",
         # ⚠️ O grupo do CMV é por TIPO de produto, não por uma coluna do
-        # produto: quem diz que EMBALAGEM e MATERIAL_LIMPEZA andam juntos é a
+        # produto: quem diz que EMBALAGEM e MATERIAL_OPERACIONAL andam juntos é a
         # casa, em `cmv_grupo_tipos`. A junção passa pelo tipo justamente para
         # que mudar a configuração reclassifique o passado inteiro sem tocar em
         # produto nenhum — o contrário (gravar o grupo no produto) exigiria
