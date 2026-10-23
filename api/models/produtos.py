@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ⚠️ A ordem é a que aparece nas telas, e os três últimos ficam juntos de
 # propósito: são os tipos que entram no custo pela porta dos insumos sem serem
@@ -93,6 +93,18 @@ class ProdutoBase(BaseModel):
     # lá dentro; a vitrine é que precisa de "Batata Rústica".
     nome_catalogo: str | None = Field(default=None, max_length=120)
     informacao_adicional: str | None = Field(default=None, max_length=500)
+
+    # ⚠️ **Código único em branco vira NULO** (23/10/2026, erro 500 no ar desde a
+    # 1.1.108). Os três têm índice único que só poupa o NULO: o primeiro "" gravado
+    # passava, e o segundo produto salvo com o campo vazio — pelo conector, que
+    # manda "" — estourava `ux_produto_barras`. `_recusar_codigo_de_outro` pula o
+    # vazio de propósito, então a porta tinha de ser aqui.
+    @field_validator("codigo_barras", "codigo_omie", "codigo_pdv", mode="before")
+    @classmethod
+    def _vazio_vira_nulo(cls, v):
+        if isinstance(v, str):
+            return v.strip() or None
+        return v
 
 
 class UnidadeCompra(BaseModel):
@@ -245,6 +257,19 @@ class ConversaoDoCodigoRequest(BaseModel):
     fator: float = Field(gt=0, le=100000)
 
 
+class DescricaoDoCodigoRequest(BaseModel):
+    """O texto do "O que é lá" de um código de fora — só o rótulo, nada da cascata."""
+
+    # ⚠️ Apara ANTES de medir: "  " passava no min_length e gravava rótulo vazio.
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    sistema: str = Field(min_length=1, max_length=20)
+    codigo: str = Field(min_length=1, max_length=60)
+    # ⚠️ Parte da identidade da linha (migração 067): o mesmo código existe por fornecedor.
+    id_fornecedor: int | None = None
+    descricao: str = Field(min_length=1, max_length=200)
+
+
 class LocalDoProdutoRequest(BaseModel):
     id_local: int
 
@@ -298,6 +323,10 @@ class CodigoExterno(BaseModel):
     confirmado_em: datetime | None = None
     fornecedor: str | None = None
     confirmado_por: str | None = None
+    # O que a nota mais nova chamou este código (só OMIE com fornecedor) — ao lado
+    # da descrição gravada no vínculo, que congela na nota em que se vinculou.
+    descricao_recente: str | None = None
+    descricao_recente_em: date | None = None
 
 
 class ProdutoResponse(BaseModel):

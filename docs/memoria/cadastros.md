@@ -63,6 +63,28 @@
   do nome. ⚠️ O cartão aparece SEMPRE dentro dela, mesmo sem código (antes só aparecia havendo
   algum): aba aberta e vazia sem explicação seria pior que a frase dizendo por quê.
   Cobertura: bloco 10 do `smoke_vinculo.py` e o bloco "desvincular" do `verificar.mjs`.
+  🔑 **O rótulo da linha se CORRIGE, e mostra o que a nota mais nova diz** (23/10/2026, relatado
+  pelo dono: o PÃO BOTANE aparecia em Vinculados como *"COSTELA PONTA DESOSSADA KG"*). O vínculo
+  estava CERTO (código 50 da Família Luciani → pão); o recebimento no Omie é que tinha sido
+  associado ao produto "Costela" de lá, e a nota veio com esse nome. `descricao_externa` é a
+  descrição da nota em que se vinculou e CONGELA ali — sem como trocar.
+  `PUT /produtos/{id}/codigos/descricao` corrige só o texto (sistema, código, fornecedor; 404
+  se o código não é deste produto; auditoria `descricao_codigo`); `descricao_recente` /
+  `descricao_recente_em` saem no detalhe do produto — o que a nota mais nova (não cancelada)
+  daquele fornecedor chamou o código, só para OMIE com fornecedor. A célula é
+  `produtos/[id]/descricao-codigo.tsx`.
+  ⚠️ **Só o texto**: a cascata casa pelo código, nunca pela descrição. ⚠️ Vincular de novo o
+  mesmo código por uma nota regrava a descrição com a daquela nota (`vincular_item`).
+  ⚠️ **O Enter do campo precisa de `preventDefault`**: a tabela mora dentro do `<form>` do
+  cadastro, e sem isso o Enter salvava o produto inteiro junto.
+  Cobertura: `smoke_codigos_do_produto.py` (bloco 3) e `verificar-codigos-do-produto.mjs`.
+
+- ⚠️ **Código único em branco vira NULO no modelo** (23/10/2026, erro 500 no ar desde a 1.1.108):
+  `codigo_barras`, `codigo_omie` e `codigo_pdv` têm índice único que só poupa o NULO; o primeiro
+  `""` gravado passava e o segundo produto salvo com o campo vazio (o conector manda `""`)
+  estourava `ux_produto_barras`. `_recusar_codigo_de_outro` pula o vazio de propósito, então a
+  porta é o `field_validator` de `ProdutoBase`. O `""` que já está no ar some sozinho quando
+  aquele produto for salvo de novo. Cobertura: bloco 1 do `smoke_codigos_do_produto.py`.
 
 - `api/db_scripts/`: 004 cadastros (setores, locais, categorias, UM, fornecedores, produtos,
   preços e produto×fornecedor), 005 semente dos cadastros.

@@ -138,6 +138,14 @@
   a linha nova no meio. Mandar só a que mudou apagaria as outras, e o palete de 480 sumiria
   porque alguém mexeu no fardo.
 
+- ⚠️ **"Criar produto" com EAN de cadastro ARQUIVADO dava 500** (23/10/2026, no ar: óleo de
+  soja cujo EAN um rascunho arquivado na limpeza ainda segurava). `vinculo.por_ean` não olha
+  arquivado (certo: não ressuscitar cadastro), mas `ux_produto_barras` olha TODOS — o INSERT
+  estourava. Agora: arquivado **absorvido de fusão** com principal ativo → vincula ao principal
+  (é o mesmo produto); qualquer outro arquivado → **409 nomeando-o**, mandando reativar
+  (reativado, o mesmo botão vincula a ele) ou corrigir o EAN daquele cadastro. Reativar é
+  decisão de gente, não do botão. Cobertura: bloco 2 do `smoke_codigos_do_produto.py`.
+
 - 🔑 **O EAN do absorvido ficava VIVO num cadastro arquivado** (10/09/2026, relatado pelo dono:
   dois açúcares orgânicos fundidos, o bom sobrevive com local e prateleira, e a nota seguinte
   aparece amarrada ao OUTRO, *"sem local no cadastro"*).

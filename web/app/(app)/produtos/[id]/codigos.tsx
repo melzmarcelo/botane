@@ -9,6 +9,7 @@ import {
   previaDoDesvinculo,
   type PreviaDoDesvinculo,
 } from "@/lib/produto-codigos";
+import DescricaoDoCodigo from "./descricao-codigo";
 
 /**
  * Os códigos de fora que caem neste produto — e quanto cada um vale.
@@ -50,6 +51,9 @@ export type CodigoExterno = {
   fornecedor: string | null;
   /** Parte da identidade da linha: o mesmo código pode existir por fornecedor. */
   id_fornecedor?: number | null;
+  /** O que a nota mais nova chamou este código (só OMIE com fornecedor). */
+  descricao_recente?: string | null;
+  descricao_recente_em?: string | null;
 };
 
 const ORIGEM: Record<string, string> = {
@@ -187,10 +191,8 @@ export default function CodigosDoProduto({
                     <span className="block text-[12px] text-suave">{c.sistema}</span>
                   </td>
                   <td>
-                    {c.descricao_externa ?? "—"}
-                    {c.fornecedor && (
-                      <span className="block text-[12.5px] text-suave">{c.fornecedor}</span>
-                    )}
+                    <DescricaoDoCodigo idProduto={idProduto} c={c} podeEditar={podeEditar}
+                                       aoMudar={aoMudar} />
                   </td>
                   <td className="text-[13px] text-suave">
                     {ORIGEM[c.origem_vinculo ?? ""] ?? c.origem_vinculo ?? "—"}

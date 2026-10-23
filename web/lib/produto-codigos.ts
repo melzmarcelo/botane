@@ -32,3 +32,12 @@ export const desvincularCodigo = (idProduto: number, c: Linha, devolver: boolean
     `/produtos/${idProduto}/codigos/desvincular`,
     { sistema: c.sistema, codigo: c.codigo, id_fornecedor: c.id_fornecedor ?? null, devolver },
   );
+
+/** Corrige só o texto do "O que é lá" — produto, fator e cascata não mudam. */
+export const renomearCodigo = (idProduto: number, c: Linha, descricao: string) =>
+  api.put<{ message: string }>(`/produtos/${idProduto}/codigos/descricao`, {
+    sistema: c.sistema,
+    codigo: c.codigo,
+    id_fornecedor: c.id_fornecedor ?? null,
+    descricao,
+  });

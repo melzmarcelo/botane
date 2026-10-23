@@ -10886,7 +10886,8 @@ try {
 // cada um liga e desliga o que precisa —, e ficavam fora da bateria: uma promoção passava
 // sem eles. Rodam aqui, DEPOIS do navegador fechar, e a soma entra no resumo de baixo, que
 // é a linha que o `promover.ps1` lê. Roteiro que estoura sem resumo conta como falha.
-for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mjs"]) {
+for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mjs",
+                       "verificar-codigos-do-produto.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {

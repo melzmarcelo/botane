@@ -15,6 +15,7 @@ from models.produtos import (
     AlteracaoMultiplaRequest,
     ColherEanRequest,
     ConversaoDoCodigoRequest,
+    DescricaoDoCodigoRequest,
     DesvincularCodigoRequest,
     FundirGrupoRequest,
     LocalDoProduto,
@@ -533,6 +534,44 @@ def conversao_do_codigo(id_produto: int, body: ConversaoDoCodigoRequest,
                         "unidade(s) de estoque. Vale da próxima nota em diante.")}
 
 
+@router.put("/{id_produto}/codigos/descricao")
+def descricao_do_codigo(id_produto: int, body: DescricaoDoCodigoRequest,
+                        ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Corrige o texto que diz o que um código de fora é (o "O que é lá" de Vinculados).
+
+    🔑 **O caso do PÃO BOTANE** (23/10/2026, relatado pelo dono): o recebimento no
+    Omie veio associado a "COSTELA PONTA DESOSSADA KG", o vínculo ao pão estava
+    certo e o rótulo, errado — e não havia como trocá-lo.
+    ⚠️ **Só o texto.** Não mexe em produto, fator nem cascata: a conciliação casa
+    pelo código, nunca pela descrição. ⚠️ Vincular de novo o mesmo código a partir
+    de uma nota regrava a descrição com a daquela nota.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT descricao_externa FROM codigos_externos
+                WHERE sistema = %s AND codigo = %s AND id_produto = %s
+                  AND coalesce(id_fornecedor, 0) = coalesce(%s, 0)""",
+            (body.sistema.upper(), body.codigo, id_produto, body.id_fornecedor),
+        )
+        linha = cur.fetchone()
+        if not linha:
+            # ⚠️ O `id_produto` no WHERE impede renomear o código de outro produto.
+            raise HTTPException(status_code=404,
+                                detail="Este código não aponta para este produto.")
+        descricao = body.descricao.strip()
+        cur.execute(
+            """UPDATE codigos_externos SET descricao_externa = %s
+                WHERE sistema = %s AND codigo = %s AND id_produto = %s
+                  AND coalesce(id_fornecedor, 0) = coalesce(%s, 0)""",
+            (descricao, body.sistema.upper(), body.codigo, id_produto, body.id_fornecedor),
+        )
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "descricao_codigo",
+                            antes={"codigo": body.codigo,
+                                   "descricao": linha["descricao_externa"]},
+                            depois={"codigo": body.codigo, "descricao": descricao})
+    return {"message": f"O código {body.codigo} passa a se chamar “{descricao}”."}
+
+
 @router.get("/{id_produto}/custo")
 def custo_do_produto(id_produto: int,
                      ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> dict:
@@ -893,13 +932,32 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
         # ⚠️ Com o nome do fornecedor junto quando existe: "código 8821" não
         # diz nada; "8821 — Hortifruti Silva" diz de quem é.
         cur.execute(
+            # 🔑 **`descricao_recente`: o que a NOTA mais nova chamou este código**
+            # (23/10/2026, relatado pelo dono: o PÃO BOTANE aparecia em Vinculados
+            # como "COSTELA PONTA DESOSSADA KG"). A descrição do vínculo é a da nota
+            # em que alguém vinculou, e congela ali; quando o Omie associa o
+            # recebimento ao produto errado, o rótulo errado fica preso no cadastro.
+            # Ao lado dele, a tela mostra o que as notas dizem hoje — e a descrição
+            # se corrige à mão (`PUT /codigos/descricao`).
+            # ⚠️ Só para OMIE com fornecedor: é o par (código, fornecedor) que
+            # identifica o item de nota; código de PDV e apelido de fusão não vêm de nota.
             """SELECT c.sistema, c.codigo, c.descricao_externa, c.fator,
                       c.fator_confirmado, c.id_fornecedor,
                       c.origem_vinculo, c.confirmado_em,
-                      f.nome AS fornecedor, u.nome AS confirmado_por
+                      f.nome AS fornecedor, u.nome AS confirmado_por,
+                      r.descricao AS descricao_recente, r.data AS descricao_recente_em
                  FROM codigos_externos c
                  LEFT JOIN fornecedores f ON f.id = c.id_fornecedor
                  LEFT JOIN usuarios u ON u.id = c.confirmado_por
+                 LEFT JOIN LATERAL (
+                       SELECT ni.descricao_fornecedor AS descricao, n.data_emissao AS data
+                         FROM nota_itens ni JOIN notas_entrada n ON n.id = ni.id_nota
+                        WHERE c.sistema = 'OMIE' AND c.id_fornecedor IS NOT NULL
+                          AND n.id_fornecedor = c.id_fornecedor
+                          AND ni.codigo_fornecedor = c.codigo
+                          AND n.status <> 'CANCELADA'
+                        ORDER BY n.data_emissao DESC NULLS LAST, ni.id DESC
+                        LIMIT 1) r ON true
                 WHERE c.id_produto = %s
                 ORDER BY c.sistema, c.codigo""",
             (id_produto,),

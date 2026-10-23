@@ -919,6 +919,31 @@ def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
         if item["codigo_barras"]:
             id_existente = vinculo_omie.por_ean(cur, item["codigo_barras"])
             existente = None
+            if not id_existente:
+                # ⚠️ **O EAN preso num cadastro ARQUIVADO** (23/10/2026, erro 500 no ar:
+                # óleo de soja que um rascunho arquivado na limpeza ainda segurava).
+                # `por_ean` não olha arquivado, de propósito, mas o índice único
+                # `ux_produto_barras` olha TODOS — o INSERT abaixo estourava. Absorvido
+                # de fusão leva ao principal (é o mesmo produto); qualquer outro
+                # arquivado vira 409 com o nome, porque reativar é decisão de gente.
+                cur.execute(
+                    """SELECT p.id, p.codigo, p.nome, p.fundido_em, f.ativo AS principal_ativo
+                         FROM produtos p LEFT JOIN produtos f ON f.id = p.fundido_em
+                        WHERE p.codigo_barras = %s""",
+                    (str(item["codigo_barras"]),),
+                )
+                arquivado = cur.fetchone()
+                if arquivado and arquivado["fundido_em"] and arquivado["principal_ativo"]:
+                    id_existente = arquivado["fundido_em"]
+                elif arquivado:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(f"O código de barras {item['codigo_barras']} é de "
+                                f"“{arquivado['nome']}” ({arquivado['codigo']}), que está "
+                                "arquivado. Se é o mesmo produto, reative-o em Produtos e "
+                                "tente de novo — o item se vincula a ele. Se não é, corrija "
+                                "o código de barras daquele cadastro."),
+                    )
             if id_existente:
                 cur.execute("SELECT id, nome, codigo FROM produtos WHERE id = %s",
                             (id_existente,))
