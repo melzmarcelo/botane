@@ -10,6 +10,7 @@ aparece, o filtro que corta e a permissão que barra.
 
 import atexit
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -255,11 +256,88 @@ st, pdf = chamar("GET", f"/exportar/recebimentos.pdf?inicio={hoje}&fim={hoje}", 
 checar("e o PDF sai", st == 200 and pdf[:5] == b"%PDF-", st)
 
 
-print("\n7. quem nao tem a chave nao baixa")
+print("\n8. vendas documento a documento: a fita do periodo, cancelada marcada e fora da conta")
+q = f"inicio={hoje}&fim={hoje}"
+st, linhas = csv(f"/exportar/vendas-documentos.csv?{q}")
+minha = linha_com(linhas, f"REL{marca}")
+checar("o cupom lancado hoje aparece com o total de 50",
+       st == 200 and minha and abs(numero(coluna(linhas, "Total", minha)) - 50) < 0.01, minha)
+total_antes = linha_com(linhas, "Total vendido")
+checar("e o quadro por origem e canal vem junto",
+       linha_com(linhas, "Por origem e canal") is not None, linhas[-5:])
+VREL = criados["vendas"][0]
+chamar("DELETE", f"/vendas/{VREL}", token=token)
+st, linhas = csv(f"/exportar/vendas-documentos.csv?{q}")
+minha = linha_com(linhas, f"REL{marca}")
+total_depois = linha_com(linhas, "Total vendido")
+checar("cancelado, o cupom CONTINUA na fita, marcado",
+       minha and coluna(linhas, "Situação", minha) == "cancelada", minha)
+checar("e o total do dia cai os 50",
+       total_antes and total_depois
+       and abs(numero(total_antes[1]) - numero(total_depois[1]) - 50) < 0.01,
+       (total_antes, total_depois))
+st, linhas = csv(f"/exportar/vendas-documentos.csv?{q}&origem_venda=PDV_LEGAL")
+checar("filtrado pelo PDV, a venda lancada a mao some",
+       st == 200 and not linha_com(linhas, f"REL{marca}"), st)
+
+
+print("\n9. producao e a agenda do dia")
+st, linhas = csv("/exportar/producao.csv?inicio=2026-01-01&fim=2026-12-31")
+resumo = linha_com(linhas, "Custo produzido")
+st2, linhas2 = csv("/exportar/producao.csv?inicio=2026-01-01&fim=2026-12-31"
+                   "&detalhe_producao=produto")
+resumo2 = linha_com(linhas2, "Custo produzido")
+checar("producao a producao e por produto fecham no mesmo custo",
+       st == 200 and st2 == 200 and resumo and resumo2 and resumo[1] == resumo2[1],
+       (resumo, resumo2))
+# A agenda so aceita produto com ficha HOMOLOGADA: um prato de 1 insumo por unidade.
+st, prato = chamar("POST", "/produtos", {
+    "codigo": f"RELP-{marca}", "nome": f"PRATO RELATORIO {marca}", "tipo": "PRODUZIDO",
+    "um_estoque": "UN", "producao_propria": True, "controla_estoque": True,
+    "status": "ATIVO"}, token=token)
+PRATO = (prato or {}).get("id")
+criados["produtos"].append(PRATO)
+st, fi = chamar("POST", "/fichas", {
+    "id_produto": PRATO, "rendimento_qtd": 1, "rendimento_um": "UN", "porcoes": 1,
+    "itens": [{"id_insumo": PROD, "qtd_bruta": 1, "um": "UN"}]}, token=token)
+chamar("POST", f"/fichas/{(fi or {}).get('id')}/homologar", {}, token=token)
+st, ag = chamar("POST", "/producao-agenda", {
+    "id_produto": PRATO, "data_prevista": hoje, "quantidade": 4,
+    "observacao": f"agenda {marca}"}, token=token)
+AG = (ag or {}).get("id")
+checar("o prato com ficha entra na agenda de hoje", st in (200, 201) and AG, (st, ag))
+st, linhas = csv(f"/exportar/agenda-producao.csv?data={hoje}")
+minha = linha_com(linhas, f"agenda {marca}")
+checar("a agenda do dia traz a linha planejada para hoje",
+       st == 200 and minha and abs(numero(coluna(linhas, "Quantidade", minha)) - 4) < 0.01,
+       (st, minha))
+insumo = linha_com(linhas, f"INSUMO RELATORIO {marca}")
+checar("e o 'O que separar' pede 4 do insumo (1 por prato)",
+       insumo and abs(numero(coluna(linhas, "Separar", insumo)) - 4) < 0.01, insumo)
+st, linhas = csv("/exportar/agenda-producao.csv?data=2001-01-01")
+checar("outro dia: a linha de hoje nao aparece",
+       st == 200 and not linha_com(linhas, f"agenda {marca}"), st)
+st, pdf = chamar("GET", f"/exportar/agenda-producao.pdf?data={hoje}", token=token, cru=True)
+checar("e o PDF da agenda sai", st == 200 and pdf[:5] == b"%PDF-", st)
+if AG:
+    chamar("DELETE", f"/producao-agenda/{AG}", token=token)
+
+
+print("\n10. o livro de fichas: uma ficha por pagina")
+st, livro = chamar("GET", "/exportar/livro-de-fichas.pdf", token=token, cru=True)
+paginas = len(re.findall(rb"/Type /Page[^s]", livro)) if isinstance(livro, bytes) else 0
+checar("o livro sai em PDF", st == 200 and isinstance(livro, bytes) and livro[:5] == b"%PDF-",
+       st)
+checar("com ao menos uma pagina por ficha", paginas >= 1, paginas)
+st, nada = chamar("GET", "/exportar/livro-de-fichas.pdf?categorias=999999999", token=token)
+checar("recorte sem ficha: 404", st == 404, (st, nada))
+
+
+print("\n11. quem nao tem a chave nao baixa")
 tk = garantir_cozinha(chamar, token)
 st_c, cat_c = chamar("GET", "/exportar/catalogo", token=tk)
 chaves_c = {c["chave"] for c in cat_c or []}
-for chave in ("compras", "margem", "recebimentos"):
+for chave in ("compras", "margem", "recebimentos", "producao", "vendas-documentos"):
     if chave not in chaves_c:
         st, r = chamar("GET", f"/exportar/{chave}.csv", token=tk)
         checar(f"{chave} sem a chave: 403", st == 403, (st, r))

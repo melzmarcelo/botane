@@ -12,6 +12,8 @@ import FilaDeFichasCartao from "./fila";
 
 import { custo } from "@/lib/numeros";
 import ExplicaTela from "@/components/explica-tela";
+import { useAviso } from "@/components/aviso-flutuante";
+import { baixarLivroDeFichas } from "@/lib/fichas";
 
 type Ficha = {
   id: number;
@@ -47,6 +49,8 @@ export default function PaginaFichas() {
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [status, setStatus] = useEstadoNaUrl<string>("status", "");
   const [erro, setErro] = useState("");
+  const [baixandoLivro, setBaixandoLivro] = useState(false);
+  const aviso = useAviso();
   const pag = usePaginacao("fichas", { filtros: [busca, status] });
 
   const carregar = useCallback(async () => {
@@ -100,11 +104,32 @@ export default function PaginaFichas() {
             o usam.
           </ExplicaTela>
         </div>
-        {podeEditar && (
-          <Link href="/fichas/nova" className="btn btn-primario">
-            Nova ficha
-          </Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {/* 🔑 Todas as fichas num PDF, uma por página, para o fichário da cozinha
+              (23/10/2026). */}
+          <button
+            id="fichas-livro"
+            className="btn btn-secundario"
+            disabled={baixandoLivro}
+            onClick={async () => {
+              setBaixandoLivro(true);
+              try {
+                await baixarLivroDeFichas();
+              } catch (e) {
+                aviso.erro(e instanceof Error ? e.message : "Não foi possível gerar o livro");
+              } finally {
+                setBaixandoLivro(false);
+              }
+            }}
+          >
+            {baixandoLivro ? "Gerando…" : "Livro de fichas (PDF)"}
+          </button>
+          {podeEditar && (
+            <Link href="/fichas/nova" className="btn btn-primario">
+              Nova ficha
+            </Link>
+          )}
+        </div>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

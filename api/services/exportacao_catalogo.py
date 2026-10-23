@@ -157,6 +157,14 @@ DETALHES_COMPRAS = {
     "produto": "Por produto — quanto, por quanto e de quantos fornecedores",
     "item": "Item a item — cada linha de cada nota",
 }
+DETALHES_PRODUCAO = {
+    "producao": "Produção a produção — cada lote feito",
+    "produto": "Por produto — quanto se fez e quanto custou",
+}
+ORIGENS_PRODUCAO = {
+    "cozinha": "Feitas na cozinha (agenda ou à mão)",
+    "na_hora": "Na hora, disparadas pela venda (café, suco…)",
+}
 DETALHES_PERDAS = {
     "motivo": "Por motivo — quanto se perdeu por cada razão",
     "produto": "Por produto — o que mais se perde",
@@ -188,6 +196,14 @@ def _opcoes_motivos(cur, _id_unidade: int) -> list[dict]:
             + [{"valor": "sem_motivo", "nome": "Perda sem motivo informado"},
                {"valor": "inventario", "nome": "Diferença de inventário"},
                {"valor": "ajuste", "nome": "Ajuste de saldo"}])
+
+
+def _opcoes_detalhe_producao(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in DETALHES_PRODUCAO.items()]
+
+
+def _opcoes_origem_producao(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in ORIGENS_PRODUCAO.items()]
 
 
 def _opcoes_formas(_cur, _id_unidade: int) -> list[dict]:
@@ -345,6 +361,12 @@ FILTROS: dict[str, dict] = {
                        "ajuda": "por motivo", "opcoes": _opcoes_detalhe_perdas},
     "formas": {"tipo": "multipla", "rotulo": "Formas de pagamento", "ajuda": "todas",
                "opcoes": _opcoes_formas},
+    "detalhe_producao": {"tipo": "escolha", "rotulo": "Como agrupar",
+                         "ajuda": "produção a produção", "opcoes": _opcoes_detalhe_producao},
+    # ⚠️ O padrão é só a COZINHA: a produção "na hora" é uma por café vendido, e
+    # misturada ela soterra o que a cozinha de fato fez.
+    "origem_producao": {"tipo": "multipla", "rotulo": "Quais produções",
+                        "ajuda": "só as feitas na cozinha", "opcoes": _opcoes_origem_producao},
 }
 
 
@@ -1862,6 +1884,257 @@ def _recebimentos(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _producoes(cur, id_unidade: int, f: dict) -> Saida:
+    """O que a cozinha produziu no período — produção a produção ou por produto.
+
+    🔑 Pedido do dono (lista de relatórios, item 5, 23/10/2026).
+    ⚠️ **Produção estornada fica FORA**, e o resumo diz quantas: ela foi desfeita no
+    razão, e somá-la faria o relatório afirmar uma produção que o estoque não tem.
+    "Estornada" sai do RAZÃO (a entrada do produzido tem contrário), a mesma régua
+    de `estoque.estornar_producao` — não há coluna que diga isso na produção.
+    ⚠️ A origem "na hora" é a que a VENDA disparou (`producoes.id_venda`).
+    """
+    inicio, fim = _periodo(f)
+    detalhe = f.get("detalhe_producao") or "producao"
+    if detalhe not in DETALHES_PRODUCAO:
+        detalhe = "producao"
+    origens = set(_lista(f.get("origem_producao")) or ["cozinha"])
+    cur.execute(
+        """SELECT pr.id, pr.data, p.codigo, p.nome AS produto, p.um_estoque,
+                  c.nome AS categoria, pr.quantidade, pr.custo_total, pr.custo_unitario,
+                  pr.versao_ficha, fm.nome AS modo, l.nome AS local, u.nome AS usuario,
+                  pr.observacao, pr.id_venda IS NOT NULL AS na_hora,
+                  EXISTS (SELECT 1 FROM producao_agenda a WHERE a.id_producao = pr.id)
+                      AS da_agenda,
+                  NOT EXISTS (SELECT 1 FROM estoque_movimentos m
+                               WHERE m.origem_tipo = 'PRODUCAO' AND m.origem_id = pr.id
+                                 AND m.tipo = 'ENTRADA_PRODUCAO'
+                                 AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
+                                                  WHERE e.id_estorno_de = m.id))
+                      AS estornada
+             FROM producoes pr
+             JOIN produtos p ON p.id = pr.id_produto
+             LEFT JOIN categorias c ON c.id = p.id_categoria
+             LEFT JOIN locais_estoque l ON l.id = pr.id_local
+             LEFT JOIN usuarios u ON u.id = pr.id_usuario
+             LEFT JOIN ficha_modos fm ON fm.id = pr.id_modo
+            WHERE pr.id_unidade = %(u)s
+              AND pr.data >= %(inicio)s AND pr.data < %(limite)s
+              AND (%(setores)s::int[] IS NULL OR p.id_setor = ANY(%(setores)s))
+              AND (%(categorias)s::int[] IS NULL OR p.id_categoria = ANY(%(categorias)s))
+            ORDER BY pr.data, pr.id""",
+        {"u": id_unidade, "inicio": inicio, "limite": fim + timedelta(days=1),
+         "setores": _lista(f.get("setores")), "categorias": _lista(f.get("categorias"))})
+    todas = [dict(r) for r in cur.fetchall()]
+    todas = [r for r in todas
+             if ("na_hora" if r["na_hora"] else "cozinha") in origens]
+    estornadas = sum(1 for r in todas if r["estornada"])
+    vivas = [r for r in todas if not r["estornada"]]
+    for r in vivas:
+        r["origem"] = ("na hora (venda)" if r["na_hora"]
+                       else "agenda" if r["da_agenda"] else "à mão")
+
+    if detalhe == "produto":
+        grupos: dict[str, dict] = {}
+        for r in vivas:
+            g = grupos.setdefault(r["produto"], {
+                "codigo": r["codigo"], "produto": r["produto"], "categoria": r["categoria"],
+                "um_estoque": r["um_estoque"], "producoes": 0, "quantidade": Decimal(0),
+                "custo_total": Decimal(0), "menor": None, "maior": None})
+            g["producoes"] += 1
+            g["quantidade"] += Decimal(str(r["quantidade"]))
+            g["custo_total"] += Decimal(str(r["custo_total"] or 0))
+            cu = Decimal(str(r["custo_unitario"] or 0))
+            g["menor"] = cu if g["menor"] is None else min(g["menor"], cu)
+            g["maior"] = cu if g["maior"] is None else max(g["maior"], cu)
+        linhas = sorted(grupos.values(), key=lambda g: -g["custo_total"])
+        for g in linhas:
+            g["medio"] = (g["custo_total"] / g["quantidade"]).quantize(Decimal("0.000001")) \
+                if g["quantidade"] else None
+        colunas = [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
+                   ("producoes", "Produções"), ("quantidade", "Quantidade"),
+                   ("um_estoque", "Unidade"), ("custo_total", "Custo total"),
+                   ("medio", "Custo médio un."), ("menor", "Menor custo un."),
+                   ("maior", "Maior custo un.")]
+    else:
+        linhas = vivas
+        colunas = [("data", "Quando"), ("codigo", "Código"), ("produto", "Produto"),
+                   ("quantidade", "Quantidade"), ("um_estoque", "Unidade"),
+                   ("modo", "Modo"), ("versao_ficha", "Ficha v."), ("local", "Local"),
+                   ("custo_total", "Custo total"), ("custo_unitario", "Custo un."),
+                   ("origem", "Origem"), ("usuario", "Quem"), ("observacao", "Observação")]
+    custo = sum((Decimal(str(r["custo_total"] or 0)) for r in vivas), Decimal(0))
+    resumo = [("Produções", len(vivas)), ("Produtos", len({r["produto"] for r in vivas})),
+              ("Custo produzido", custo),
+              ("Quais", ", ".join(ORIGENS_PRODUCAO[o].split(" (")[0].lower()
+                                  for o in ORIGENS_PRODUCAO if o in origens))]
+    if estornadas:
+        resumo.append(("Estornadas (fora da conta)", estornadas))
+    return Saida(linhas, colunas,
+                 f"Produção — {_intervalo(inicio, fim)} — "
+                 f"{DETALHES_PRODUCAO[detalhe].split(' — ')[0].lower()}",
+                 resumo, inicio, fim)
+
+
+def _agenda_producao(cur, id_unidade: int, f: dict) -> Saida:
+    """A agenda de produção de UM dia, para a bancada — e o que separar para ela.
+
+    🔑 Pedido do dono (lista de relatórios, item 5, 23/10/2026). Entra o PLANEJADO do
+    dia e o ATRASADO (planejado de dias antes, ainda não feito): é a lista de tarefas,
+    e a tarefa esquecida é a que mais precisa estar no papel.
+    🔑 **O anexo "O que separar"** soma os insumos de todas as linhas — a MESMA conta
+    da folha da produção (`estoque.previsao_producao`), com o saldo de agora. Sem
+    custo: o papel é da cozinha.
+    ⚠️ Linha cuja previsão falha (produto sem ficha) não derruba o papel: ela vai à
+    lista, e o resumo diz quantas ficaram sem insumos calculados.
+    """
+    from services import producao_agenda as agenda_motor
+
+    hoje = relogio.hoje_da_casa()
+    dia = f.get("data") or hoje
+    # ⚠️ Atrasada é em relação a HOJE, não ao dia escolhido: a folha de sexta,
+    # impressa na terça, não chama de atrasado o que está marcado para quarta.
+    # O atrasado entra só na folha de HOJE — é nela que ele vira tarefa.
+    linhas_ag = [l for l in agenda_motor.listar(cur, id_unidade, None, dia, "PLANEJADA")
+                 if l["data_prevista"] == dia or (dia == hoje and l["data_prevista"] < hoje)]
+    separar: dict[tuple, dict] = {}
+    sem_previsao = 0
+    linhas = []
+    for l in linhas_ag:
+        try:
+            prev = estoque_motor.previsao_producao(cur, id_unidade, l["id_produto"],
+                                                   l["quantidade"], l["id_local"], None,
+                                                   l.get("id_modo"))
+        except HTTPException:
+            prev, sem_previsao = None, sem_previsao + 1
+        for i in (prev or {}).get("itens") or []:
+            g = separar.setdefault((i["codigo"], i["produto"]), {
+                "codigo": i["codigo"], "insumo": i["produto"], "um": i["um_estoque"],
+                "necessario": Decimal(0), "saldo": Decimal(str(i["saldo_total"] or 0)),
+                "preparo": "sim" if i["preparo"] else ""})
+            g["necessario"] += Decimal(str(i["necessario"] or 0))
+        linhas.append({
+            "data_prevista": l["data_prevista"],
+            "situacao": "ATRASADA" if l["data_prevista"] < hoje else "",
+            "codigo": l["codigo"], "produto": l["produto"], "quantidade": l["quantidade"],
+            "um_estoque": l["um_estoque"], "modo": l.get("modo"), "local": l["local"],
+            "observacao": l["observacao"], "feito": "[   ]"})
+    lista_sep = sorted(separar.values(), key=lambda g: g["insumo"].casefold())
+    for g in lista_sep:
+        falta = g["necessario"] - g["saldo"]
+        g["falta"] = falta if falta > 0 else None
+    resumo = [("Dia", dia), ("Produções planejadas", len(linhas)),
+              ("Atrasadas", sum(1 for l in linhas if l["situacao"])),
+              ("Insumos a separar", len(lista_sep)),
+              ("Insumos em falta", sum(1 for g in lista_sep if g["falta"]))]
+    if sem_previsao:
+        resumo.append(("Sem insumos calculados (sem ficha)", sem_previsao))
+    return Saida(
+        linhas,
+        [("feito", "Feito"), ("produto", "Produto"), ("quantidade", "Quantidade"),
+         ("um_estoque", "Un."), ("modo", "Modo"), ("local", "Local"),
+         ("situacao", "Situação"), ("data_prevista", "Previsto para"),
+         ("observacao", "Observação")],
+        f"Agenda de produção — {dia:%d/%m/%Y}", resumo, dia, dia,
+        anexos=[(lista_sep, [("insumo", "Insumo"), ("preparo", "Preparo"),
+                             ("necessario", "Separar"), ("um", "Un."),
+                             ("saldo", "Tem no estoque"), ("falta", "Falta")],
+                 "O que separar", None)] if lista_sep else [])
+
+
+_ORIGENS_VENDA = {"PDV_LEGAL": "PDV Legal", "PDV": "PDV", "PLANILHA": "planilha",
+                  "MANUAL": "lançada à mão"}
+_CANAIS_VENDA = {"BALCAO": "balcão", "SALAO": "salão", "DELIVERY": "delivery",
+                 "EVENTO": "evento"}
+
+
+def _opcoes_origem_venda(cur, id_unidade: int) -> list[dict]:
+    """As origens que EXISTEM nas vendas desta loja — não uma lista fixa."""
+    cur.execute("SELECT DISTINCT origem FROM vendas WHERE id_unidade = %s ORDER BY 1",
+                (id_unidade,))
+    return [{"valor": r["origem"], "nome": _ORIGENS_VENDA.get(r["origem"], r["origem"])}
+            for r in cur.fetchall()]
+
+
+# ⚠️ Declarado aqui, e não no dicionário lá em cima: as opções saem de uma função
+# deste bloco, e o dicionário é montado antes dela existir.
+FILTROS["origem_venda"] = {"tipo": "multipla", "rotulo": "Origem",
+                           "ajuda": "todas as origens", "opcoes": _opcoes_origem_venda}
+
+
+def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
+    """As vendas do período, documento a documento — para conferir com o caixa e o PDV.
+
+    🔑 Pedido do dono (lista de relatórios, item 7, 23/10/2026). O Estudo de vendas é
+    agregado; este é a fita: cada cupom com hora, origem, canal, pessoa e total.
+    ⚠️ **A cancelada APARECE, marcada, e fica fora dos totais**: o PDV conta o cupom
+    cancelado, e a conferência que a escondesse não fecharia a numeração.
+    Dois quadros atrás: por dia (quando o período tem mais de um) e por origem e canal.
+    """
+    inicio, fim = _periodo(f)
+    origens = _lista(f.get("origem_venda"))
+    cur.execute(
+        """SELECT v.id, v.data, v.hora, v.documento, v.origem, v.canal, v.mesa,
+                  fo.nome AS pessoa, v.desconto, v.valor_total, v.cancelada,
+                  v.consumo_interno,
+                  (SELECT count(*) FROM venda_itens vi WHERE vi.id_venda = v.id) AS itens
+             FROM vendas v
+             LEFT JOIN fornecedores fo ON fo.id = v.id_pessoa
+            WHERE v.id_unidade = %(u)s AND v.data BETWEEN %(inicio)s AND %(fim)s
+              AND (%(origens)s::text[] IS NULL OR v.origem = ANY(%(origens)s))
+            ORDER BY v.data, v.hora NULLS FIRST, v.documento, v.id""",
+        {"u": id_unidade, "inicio": inicio, "fim": fim, "origens": origens})
+    linhas = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["origem_txt"] = _ORIGENS_VENDA.get(d["origem"], d["origem"])
+        d["canal_txt"] = _CANAIS_VENDA.get((d["canal"] or "").upper(), d["canal"] or "")
+        d["situacao"] = ("cancelada" if d["cancelada"]
+                         else "consumo interno" if d["consumo_interno"] else "")
+        d["hora"] = str(d["hora"])[:5] if d["hora"] else None
+        linhas.append(d)
+    validas = [l for l in linhas if not l["cancelada"]]
+    total = sum((Decimal(str(l["valor_total"] or 0)) for l in validas), Decimal(0))
+    canceladas = [l for l in linhas if l["cancelada"]]
+
+    def quadro(chave_de) -> list[dict]:
+        g: dict = {}
+        for l in validas:
+            k = chave_de(l)
+            x = g.setdefault(k, {"chave": k, "documentos": 0, "total": Decimal(0)})
+            x["documentos"] += 1
+            x["total"] += Decimal(str(l["valor_total"] or 0))
+        saida = list(g.values())
+        for x in saida:
+            x["ticket"] = (x["total"] / x["documentos"]).quantize(Decimal("0.01"))
+        return saida
+
+    anexos = []
+    if inicio != fim:
+        anexos.append((sorted(quadro(lambda l: l["data"]), key=lambda x: x["chave"]),
+                       [("chave", "Dia"), ("documentos", "Documentos"), ("total", "Total"),
+                        ("ticket", "Ticket médio")], "Por dia", None))
+    anexos.append((sorted(quadro(lambda l: f"{l['origem_txt']}"
+                                 + (f" · {l['canal_txt']}" if l["canal_txt"] else "")),
+                          key=lambda x: -x["total"]),
+                   [("chave", "Origem e canal"), ("documentos", "Documentos"),
+                    ("total", "Total"), ("ticket", "Ticket médio")],
+                   "Por origem e canal", None))
+    return Saida(
+        linhas,
+        [("data", "Data"), ("hora", "Hora"), ("documento", "Documento"),
+         ("origem_txt", "Origem"), ("canal_txt", "Canal"), ("mesa", "Mesa"),
+         ("pessoa", "Pessoa"), ("itens", "Itens"), ("desconto", "Desconto"),
+         ("valor_total", "Total"), ("situacao", "Situação")],
+        f"Vendas documento a documento — {_intervalo(inicio, fim)}",
+        [("Documentos válidos", len(validas)), ("Total vendido", total),
+         ("Ticket médio", (total / len(validas)).quantize(Decimal("0.01")) if validas else None),
+         ("Canceladas (fora da conta)", len(canceladas)),
+         ("Valor das canceladas",
+          sum((Decimal(str(l["valor_total"] or 0)) for l in canceladas), Decimal(0)))],
+        inicio, fim, anexos=anexos)
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -1971,6 +2244,24 @@ RELATORIOS: dict[str, Relatorio] = {
         "Os lotes de cobrança recebidos no período, com o total por forma de pagamento.",
         "consumo.periodos", "recebimentos", ("periodo", "formas", "pessoas"),
         _recebimentos),
+    # 🔑 A segunda leva (23/10/2026, itens 5 e 7; o 4, o livro de fichas, é rota própria
+    # em `routers/exportacoes.py` porque cada ficha é um documento inteiro).
+    "producao": Relatorio(
+        "Produção",
+        "O que a cozinha produziu no período, produção a produção ou por produto, com o custo.",
+        "estoque.saldos", "producao",
+        ("periodo", "detalhe_producao", "origem_producao", "categorias", "setores"),
+        _producoes),
+    "agenda-producao": Relatorio(
+        "Agenda de produção do dia",
+        "O planejado do dia (e o atrasado), para a bancada — com o que separar de insumos.",
+        "producao.agenda", "agenda-producao", ("data",), _agenda_producao),
+    "vendas-documentos": Relatorio(
+        "Vendas documento a documento",
+        "Cada cupom do período com hora, origem, canal, pessoa e total — para conferir "
+        "com o caixa e o PDV.",
+        "cmv.relatorios", "vendas-documentos", ("periodo", "origem_venda"),
+        _vendas_documentos),
 }
 
 

@@ -5556,13 +5556,19 @@ try {
   checar("e a memória por produto também", chavesCat.has("memoria-produto"),
     [...chavesCat]);
   // 🔑 Os quatro de gestão (23/10/2026), cada um com o botão na sua tela.
-  checar("compras, perdas, margem e recebimentos estão no catálogo",
-    ["compras", "perdas", "margem", "recebimentos"].every((c) => chavesCat.has(c)),
+  checar("compras, perdas, margem, recebimentos, produção, agenda e lista de vendas estão no catálogo",
+    ["compras", "perdas", "margem", "recebimentos", "producao", "agenda-producao",
+     "vendas-documentos"].every((c) => chavesCat.has(c)),
     [...chavesCat]);
   for (const [tela, rotulo] of [["/compras", "Relatório de compras"],
                                 ["/ajustes", "Perdas e ajustes"],
                                 ["/precificacao", "Margem dos pratos"],
-                                ["/receber", "Recebimentos"]]) {
+                                ["/receber", "Recebimentos"],
+                                // A segunda leva (23/10/2026).
+                                ["/fichas", "Livro de fichas (PDF)"],
+                                ["/producao", "Agenda do dia"],
+                                ["/producao", "Relatório de produção"],
+                                ["/vendas", "Lista de vendas"]]) {
     await irPara(p, `${WEB}${tela}`);
     await assentar(2000);
     const tem = await p.evaluate((r) => [...document.querySelectorAll("main button")]

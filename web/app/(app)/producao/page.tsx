@@ -14,6 +14,7 @@ import AgendaProducao from "./agenda";
 
 import { custo, qtd } from "@/lib/numeros";
 import ExplicaTela from "@/components/explica-tela";
+import BotaoExportar from "@/components/exportar";
 import LinkProduto from "@/components/link-produto";
 
 type Ficha = {
@@ -289,14 +290,22 @@ export default function PaginaProducao() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <p className="rotulo">Estoque</p>
-        <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Produção</h1>
-        <ExplicaTela>
-          Produzir baixa os ingredientes da ficha homologada e devolve o produto pronto ao
-          estoque. O custo é o que <b>realmente saiu</b> hoje — se o insumo subiu, o prato
-          produzido hoje custa mais.
-        </ExplicaTela>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="rotulo">Estoque</p>
+          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Produção</h1>
+          <ExplicaTela>
+            Produzir baixa os ingredientes da ficha homologada e devolve o produto pronto ao
+            estoque. O custo é o que <b>realmente saiu</b> hoje — se o insumo subiu, o prato
+            produzido hoje custa mais.
+          </ExplicaTela>
+        </div>
+        {/* 🔑 A agenda do dia para a bancada e o que foi produzido (23/10/2026). */}
+        <div className="flex flex-wrap gap-2">
+          <BotaoExportar relatorio="agenda-producao" rotulo="Agenda do dia"
+                         formatoPadrao="pdf" />
+          <BotaoExportar relatorio="producao" rotulo="Relatório de produção" />
+        </div>
       </header>
 
       {/* Planejar e registrar são momentos diferentes: um é a véspera, o outro

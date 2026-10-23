@@ -179,6 +179,9 @@ class _Filtros:
         motivos: list[str] | None = Query(default=None),
         detalhe_perdas: str | None = None,
         formas: list[str] | None = Query(default=None),
+        detalhe_producao: str | None = None,
+        origem_producao: list[str] | None = Query(default=None),
+        origem_venda: list[str] | None = Query(default=None),
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
@@ -193,6 +196,8 @@ class _Filtros:
             "situacao_nota": situacao_nota, "busca_fornecedor": busca_fornecedor,
             "detalhe_compras": detalhe_compras, "motivos": motivos,
             "detalhe_perdas": detalhe_perdas, "formas": formas,
+            "detalhe_producao": detalhe_producao, "origem_producao": origem_producao,
+            "origem_venda": origem_venda,
         }
 
     def preenchidos(self) -> dict:
@@ -539,6 +544,61 @@ def produto(nome: str, formato: str | None = None,
         nome_arq, ext)
 
 
+@router.get("/livro-de-fichas.pdf")
+def livro_de_fichas(
+        categorias: list[int] | None = Query(default=None),
+        setores: list[int] | None = Query(default=None),
+        rascunhos: bool = False,
+        operacional: bool = True,
+        ctx: Contexto = Depends(contexto_atual)) -> Response:
+    """Todas as fichas técnicas num PDF só, uma por página (23/10/2026).
+
+    🔑 Pedido do dono (lista de relatórios, item 4): o livro que fica impresso na
+    cozinha. Cada página é a MESMA folha de `/ficha/{id}.pdf`, com timbre, foto,
+    modo de preparo e numeração própria — a folha sai do fichário sozinha.
+    ⚠️ **Operacional por padrão** (sem dinheiro): o livro mora na cozinha.
+    `operacional=false` traz o custo para quem tem `fichas.custos`.
+    ⚠️ A ficha que vale é a HOMOLOGADA vigente; `rascunhos=true` põe também o
+    produto que só tem rascunho (o mais novo), marcado no subtítulo.
+    """
+    _exige_alguma(ctx, "fichas.visualizar", "fichas.editar")
+    ve_custo = ctx.pode("fichas.custos") and not operacional
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT DISTINCT ON (f.id_produto) f.id, p.nome
+                 FROM fichas_tecnicas f
+                 JOIN produtos p ON p.id = f.id_produto
+                WHERE p.ativo
+                  AND ((f.status = 'HOMOLOGADA' AND f.vigente_ate IS NULL)
+                       OR (%(rasc)s AND f.status = 'RASCUNHO'
+                           AND NOT EXISTS (SELECT 1 FROM fichas_tecnicas h
+                                            WHERE h.id_produto = f.id_produto
+                                              AND h.status = 'HOMOLOGADA'
+                                              AND h.vigente_ate IS NULL)))
+                  AND (%(cats)s::int[] IS NULL OR p.id_categoria = ANY(%(cats)s))
+                  AND (%(sets)s::int[] IS NULL OR p.id_setor = ANY(%(sets)s))
+                ORDER BY f.id_produto, (f.status = 'HOMOLOGADA') DESC, f.versao DESC""",
+            {"rasc": rascunhos, "cats": categorias or None, "sets": setores or None})
+        escolhidas = sorted(cur.fetchall(), key=lambda r: r["nome"].casefold())
+        if not escolhidas:
+            raise HTTPException(status_code=404, detail="Nenhuma ficha técnica neste recorte")
+        docs = [d for d in (_documento_da_ficha(cur, r["id"], id_unidade, ve_custo, operacional)
+                            for r in escolhidas) if d]
+        timbre = catalogo_motor.papel_timbrado(cur)
+        auditoria.registrar(cur, ctx.id_usuario, "exportacao", "livro-de-fichas", "exportar",
+                            depois={"fichas": len(docs), "com_custo": ve_custo,
+                                    "rascunhos": rascunhos},
+                            id_unidade=id_unidade)
+    catalogo_motor.limite_do_pdf(sum(len(d["linhas"]) for d in docs))
+    conteudo = exportacao.pdf_de_varios(
+        docs,
+        orientacao="retrato" if all(len(d["colunas"]) <= 9 for d in docs) else "auto",
+        empresa=timbre, emitido_por=ctx.nome)
+    return _entregar(conteudo,
+                     f"livro-de-fichas-{relogio.hoje_da_casa():%Y-%m-%d}.pdf", "pdf")
+
+
 @router.get("/ficha/{nome}")
 def ficha(nome: str, formato: str | None = None, operacional: bool = False,
           ctx: Contexto = Depends(contexto_atual)) -> Response:
@@ -569,29 +629,62 @@ def ficha(nome: str, formato: str | None = None, operacional: bool = False,
     ve_custo = ctx.pode("fichas.custos") and not operacional
 
     with get_cursor() as cur:
-        cur.execute(
-            """SELECT f.*, p.nome AS produto, p.codigo, u.nome AS homologada_por_nome
-                 FROM fichas_tecnicas f
-                 JOIN produtos p ON p.id = f.id_produto
-                 LEFT JOIN usuarios u ON u.id = f.homologada_por
-                WHERE f.id = %s""",
-            (id_ficha,),
-        )
-        f = cur.fetchone()
-        if not f:
+        id_unidade = unidade_atual(cur, ctx)
+        doc = _documento_da_ficha(cur, id_ficha, id_unidade, ve_custo, operacional)
+        if not doc:
             raise HTTPException(status_code=404, detail="Ficha não encontrada")
-        # O papel diz o mesmo custo que a tela: o da loja do seletor.
-        calculo = custos.custo_da_ficha(cur, id_ficha, id_unidade=unidade_atual(cur, ctx))
         timbre = catalogo_motor.papel_timbrado(cur)
-        # 🔑 **A foto do prato vai no PAPEL, que é onde a ficha serve.** Quem
-        # segue a receita está de pé na cozinha, e "está pronto?" é uma
-        # pergunta visual: nenhuma descrição de montagem responde o que a foto
-        # responde. Os BYTES, não a URL — o PDF desenha a imagem, não a busca
-        # por HTTP, e é gerado sem navegador nenhum.
-        foto = (arquivos.ler(f["foto_url"]) or (None,))[0]
         auditoria.registrar(cur, ctx.id_usuario, "exportacao", f"ficha-{id_ficha}",
                             "exportar", depois={"formato": ext, "com_custo": ve_custo,
                                                 "operacional": operacional})
+
+    f = doc["_ficha"]
+    # ⚠️ O nome do arquivo é o que a pessoa vê na pasta de Downloads:
+    # `botane-ficha-431.pdf` obriga a abrir para saber de que prato é, e quem
+    # baixa cinco fichas seguidas fica com cinco números. A VERSÃO entra junto
+    # porque duas versões do mesmo prato são dois documentos diferentes.
+    apelido = exportacao.slug(f["produto"]) or str(id_ficha)
+    nome_arq = exportacao.nome_arquivo(
+        f"ficha-{apelido}-v{f['versao']}" + ("-operacional" if operacional else ""), ext=ext)
+    if ext == "pdf":
+        catalogo_motor.limite_do_pdf(len(doc["linhas"]))
+        return _entregar(
+            exportacao.pdf_de_varios([doc], orientacao=doc["_orientacao"], empresa=timbre,
+                                     emitido_por=ctx.nome),
+            nome_arq, ext)
+    return _entregar(
+        exportacao.csv_de(doc["linhas"], doc["colunas"], doc["titulo"], doc["resumo"],
+                          notas=doc["notas"]).encode("utf-8"),
+        nome_arq, ext)
+
+
+def _documento_da_ficha(cur, id_ficha: int, id_unidade: int, ve_custo: bool,
+                        operacional: bool) -> dict | None:
+    """Uma ficha como DOCUMENTO de `exportacao.pdf_de_varios` — ou nada, se não existe.
+
+    🔑 **Uma montagem só para a ficha avulsa e para o livro de fichas** (23/10/2026):
+    a página do livro é a mesma folha que se baixa sozinha, e dois códigos para ela
+    divergiriam no primeiro campo novo.
+    """
+    cur.execute(
+        """SELECT f.*, p.nome AS produto, p.codigo, u.nome AS homologada_por_nome
+             FROM fichas_tecnicas f
+             JOIN produtos p ON p.id = f.id_produto
+             LEFT JOIN usuarios u ON u.id = f.homologada_por
+            WHERE f.id = %s""",
+        (id_ficha,),
+    )
+    f = cur.fetchone()
+    if not f:
+        return None
+    # O papel diz o mesmo custo que a tela: o da loja do seletor.
+    calculo = custos.custo_da_ficha(cur, id_ficha, id_unidade=id_unidade)
+    # 🔑 **A foto do prato vai no PAPEL, que é onde a ficha serve.** Quem
+    # segue a receita está de pé na cozinha, e "está pronto?" é uma
+    # pergunta visual: nenhuma descrição de montagem responde o que a foto
+    # responde. Os BYTES, não a URL — o PDF desenha a imagem, não a busca
+    # por HTTP, e é gerado sem navegador nenhum.
+    foto = (arquivos.ler(f["foto_url"]) or (None,))[0]
 
     linhas = []
     for i in calculo["itens"]:
@@ -688,41 +781,24 @@ def ficha(nome: str, formato: str | None = None, operacional: bool = False,
             resumo.append(("⚠ Itens sem preço conhecido",
                            f"{calculo['itens_sem_custo']} — o custo acima é parcial"))
 
-    saida = catalogo_motor.Saida(
-        linhas, colunas, f"Ficha técnica — {f['produto']}", resumo,
-        anexos=[],
-    )
-    # ⚠️ O nome do arquivo é o que a pessoa vê na pasta de Downloads:
-    # `botane-ficha-431.pdf` obriga a abrir para saber de que prato é, e quem
-    # baixa cinco fichas seguidas fica com cinco números. A VERSÃO entra junto
-    # porque duas versões do mesmo prato são dois documentos diferentes.
-    apelido = exportacao.slug(f["produto"]) or str(id_ficha)
-    nome_arq = exportacao.nome_arquivo(
-        f"ficha-{apelido}-v{f['versao']}" + ("-operacional" if operacional else ""), ext=ext)
     notas = [("Modo de preparo", f["modo_preparo"] or ""),
              ("Observações", f["observacao"] or "")]
-    if ext == "pdf":
-        catalogo_motor.limite_do_pdf(len(linhas))
-        return _entregar(
-            exportacao.pdf_de(saida.linhas, saida.colunas, saida.titulo, saida.resumo,
-                              # ⚠️ Sem o nome da casa: ele está no timbre, logo
-                              # acima. Repetido, envelhece num dos dois lugares.
-                              # ⚠️ A versão FICA no operacional: é o que diz se
-                              # o papel na parede ainda é a receita que vale.
-                              subtitulo=(f"versão {f['versao']}" if operacional
-                                         else f"versão {f['versao']}"
-                                              f" · {str(f['status']).lower()}"),
-                              notas=notas, empresa=timbre, emitido_por=ctx.nome,
-                              imagem=foto,
-                              # A ficha é um CARTÃO DE RECEITA: sai em retrato,
-                              # que é a forma do papel que se pendura. Só cede à
-                              # paisagem quando a receita usa colunas demais.
-                              orientacao="retrato" if len(saida.colunas) <= 9 else "auto"),
-            nome_arq, ext)
-    return _entregar(
-        exportacao.csv_de(saida.linhas, saida.colunas, saida.titulo, saida.resumo,
-                          notas=notas).encode("utf-8"),
-        nome_arq, ext)
+    return {
+        "linhas": linhas, "colunas": colunas, "titulo": f"Ficha técnica — {f['produto']}",
+        "resumo": resumo, "notas": notas, "imagem": foto,
+        # ⚠️ Sem o nome da casa: ele está no timbre, logo acima. Repetido,
+        # envelhece num dos dois lugares. ⚠️ A versão FICA no operacional: é o
+        # que diz se o papel na parede ainda é a receita que vale.
+        # ⚠️ Rascunho se diz MESMO no operacional: receita não homologada na parede
+        # da cozinha tem de se anunciar como tal.
+        "subtitulo": (f"versão {f['versao']}"
+                      + ("" if operacional and f["status"] == "HOMOLOGADA"
+                         else f" · {str(f['status']).lower()}")),
+        # A ficha é um CARTÃO DE RECEITA: sai em retrato, que é a forma do papel
+        # que se pendura. Só cede à paisagem quando a receita usa colunas demais.
+        "_orientacao": "retrato" if len(colunas) <= 9 else "auto",
+        "_ficha": dict(f),
+    }
 
 
 def _com_as_lojas(cur, ctx: Contexto, filtros: dict) -> dict:

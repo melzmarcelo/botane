@@ -32,3 +32,9 @@ export type FilaDeFichas = {
 /** Os produtos VENDIDOS sem custo, do que mais pesa na receita para o que menos. */
 export const filaDeFichas = (dias = 30, limite = 10) =>
   api.get<FilaDeFichas>(`/fichas/fila?dias=${dias}&limite=${limite}`);
+
+/**
+ * O livro de fichas: todas as homologadas num PDF só, uma por página (23/10/2026).
+ * Sai na versão da COZINHA (sem custos) — é o papel que fica no fichário.
+ */
+export const baixarLivroDeFichas = () => api.baixar("/exportar/livro-de-fichas.pdf");

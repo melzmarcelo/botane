@@ -232,6 +232,24 @@
     `busca_pessoa` (texto próprio — o `busca` dos outros diz "Produto contém"). Pessoa é da CASA:
     a loja não entra.
   - Cobertura: `smoke_exportacoes.py` (cabeçalho do cadastro e seção 4b).
+- 🔑 **Segunda leva** (1.1.125, 23/10/2026, itens 4, 5 e 7 da lista), na mesma suíte:
+  - **Livro de fichas** — rota própria `GET /exportar/livro-de-fichas.pdf` (categorias,
+    setores, `rascunhos`, `operacional` = true por padrão: o livro mora na cozinha). Cada
+    página é a folha de `/ficha/{id}.pdf`: a montagem saiu da rota para
+    `_documento_da_ficha` (um código só para as duas) e o PDF vai por `pdf_de_varios`.
+    Rascunho se anuncia no subtítulo MESMO no operacional.
+  - `producao` (`estoque.saldos`, tem custo): produção a produção ou por produto;
+    `origem_producao` padrão só "cozinha" (a "na hora" é uma por café vendido).
+    ⚠️ Estornada sai do RAZÃO (entrada do produzido com contrário), fica fora e o resumo
+    conta — não há coluna de estorno em `producoes`.
+  - `agenda-producao` (`producao.agenda`, filtro `data`): o PLANEJADO do dia + o atrasado
+    só na folha de HOJE (atrasada é relativa a hoje, não ao dia escolhido — a 1ª versão
+    chamava de atrasado tudo antes do dia impresso). Anexo "O que separar" somando
+    `previsao_producao` de cada linha; linha sem ficha não derruba o papel.
+  - `vendas-documentos` (`cmv.relatorios`): a fita do período; cancelada APARECE marcada e
+    fica fora dos totais; anexos por dia (se >1 dia) e por origem e canal. Filtro
+    `origem_venda` acrescentado a `FILTROS` DEPOIS da função de opções (o dicionário é
+    montado antes dela).
 - 🔑 **Quatro relatórios de gestão** (1.1.125, 23/10/2026, pedido do dono: *"Gostaria de mais
   relatorios e planilhas"* — da lista proposta, escolheu 1, 2, 3 e 6). Suíte própria:
   `smoke_relatorios_gestao.py`.

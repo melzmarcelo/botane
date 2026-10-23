@@ -10,6 +10,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/ui";
 import CabecalhoTela from "@/components/cabecalho-tela";
+import BotaoExportar from "@/components/exportar";
 import { qtd } from "@/lib/numeros";
 import { CANAIS, dataBr, horaBr, ORIGENS, Venda } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
@@ -187,6 +188,10 @@ export default function PaginaVendas() {
                     <Link href="/vendas/por-pessoa" className="btn btn-secundario">
                       Consumo por pessoa
                     </Link>
+                    {/* 🔑 A fita do período, cupom a cupom, para conferir com o caixa
+                        (23/10/2026). Leva o dia escolhido na tela. */}
+                    <BotaoExportar relatorio="vendas-documentos" rotulo="Lista de vendas"
+                                   iniciais={dia ? { inicio: dia, fim: dia } : undefined} />
                     {/* ⚠️ O gêmeo do "Buscar no Omie" de Compras. A busca precisa estar na
                         tela do assunto: quem abre Vendas para ver as vendas não vai
                         lembrar que ela mora em Integrações — e venda não buscada é receita
