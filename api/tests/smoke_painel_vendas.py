@@ -82,13 +82,22 @@ assert st == 200, r
 token = r["access_token"]
 marca = str(time.time_ns() // 100)[-6:]
 
-# Uma SEGUNDA-feira nos anos 80, escolhida pela marca: cada rodada cai noutra semana.
-d1 = date(1980, 1, 7) + timedelta(weeks=int(marca) % 500)
-d2 = d1 + timedelta(days=1)
-
-
 def painel(q):
     return chamar("GET", f"/vendas/painel?{q}", token=token)
+
+
+# Uma SEGUNDA-feira nos anos 80, escolhida pela marca: cada rodada cai noutra semana.
+# ⚠️ **E a semana tem de estar VAZIA** (23/10/2026): a suíte não apaga as vendas que
+# lança, então cada rodada deixa uma semana ocupada entre 500 — e com dezenas de
+# rodadas a colisão virou certeza (duas baterias vermelhas no mesmo dia, "o trecho
+# escolhido não tem venda nenhuma"). Anda de semana em semana até achar um trecho limpo.
+d1 = date(1980, 1, 7) + timedelta(weeks=int(marca) % 500)
+for _ in range(60):
+    _st, _v = painel(f"inicio={d1 - timedelta(days=14)}&fim={d1 + timedelta(days=8)}")
+    if (_v or {}).get("totais", {}).get("cupons") == 0:
+        break
+    d1 += timedelta(weeks=5)
+d2 = d1 + timedelta(days=1)
 
 
 print("0. o trecho do calendario esta vazio")
