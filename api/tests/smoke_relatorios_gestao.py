@@ -525,7 +525,12 @@ checar("filtrado por outra entidade, ele some",
                              for l in linhas), st)
 st, pdf = chamar("GET", f"/exportar/auditoria.pdf?inicio={hoje}&fim={hoje}&entidades=produto",
                  token=token, cru=True)
-checar("e o PDF sai", st == 200 and pdf[:5] == b"%PDF-", st)
+# ⚠️ Na bateria inteira, as outras suítes criam MILHARES de produtos no dia, e o PDF
+# passa do teto (`exportacao.MAXIMO_PDF`): aí a resposta certa é o 400 mandando à
+# planilha, não o arquivo. Medido em 23/10/2026 — sozinha a suíte passava.
+checar("e o PDF sai (ou, acima do teto, manda a planilha)",
+       (st == 200 and pdf[:5] == b"%PDF-")
+       or (st == 400 and "planilha" in str((pdf or {}).get("detail", ""))), (st, pdf if st != 200 else ""))
 
 
 print("\n17. etiquetas emitidas: linha a linha, com a vencida marcada")
