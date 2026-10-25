@@ -369,13 +369,14 @@ export default function PdvLegal() {
                   {form.trazer_categorias ? (
                     <>
                       O grupo de cada item do cardápio do PDV vira a <b>categoria</b> do
-                      produto aqui — e a categoria é criada se ainda não existe.
+                      produto aqui, e a impressora vira o <b>setor</b> — os dois são criados
+                      se ainda não existem.
                     </>
                   ) : (
                     <>
-                      Desligado, <b>a categoria é só daqui</b>: o Importar cardápio e a busca
-                      de vendas não criam categoria nem mudam a de produto nenhum. O que já
-                      veio fica como está, e o produto novo do PDV nasce sem categoria.
+                      Desligado, <b>categoria e setor são só daqui</b>: o Importar cardápio e a
+                      busca de vendas não criam nenhum dos dois nem mudam o de produto nenhum.
+                      O que já veio fica como está, e o produto novo do PDV nasce sem eles.
                     </>
                   )}
                 </span>
@@ -409,8 +410,8 @@ export default function PdvLegal() {
               ) : (
                 <>
                   Como o PDV é o dono do cadastro, ela também atualiza o que mudou lá: preço,
-                  nome curto, setor, fiscais
-                  {form.trazer_categorias ? " e categoria" : " (a categoria não, que está desligada acima)"}.
+                  nome curto, fiscais
+                  {form.trazer_categorias ? ", setor e categoria" : " (categoria e setor não, que estão desligados acima)"}.
                 </>
               )}
             </p>

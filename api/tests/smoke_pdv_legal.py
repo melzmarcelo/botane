@@ -907,13 +907,28 @@ if alvo_c:
         _c.execute("UPDATE categorias SET nome = nome || %s WHERE id = %s", (f" ~{marca}", cat_pdv))
         _c.execute("SELECT count(*) AS n FROM categorias")
         _n_cats = _c.fetchone()["n"]
+    # O setor segue a mesma opcao (25/10/2026): a impressora do PDV deixa de mandar nele.
+    setor_pdv = no_pdv.get("id_setor")
+    st, sets_c = chamar("GET", "/setores", token=token)
+    outro_s = next((x for x in (sets_c or []) if x["id"] != setor_pdv), None)
+    with _cur_pdv() as _c:
+        _c.execute("SELECT count(*) AS n FROM setores")
+        _n_sets = _c.fetchone()["n"]
     try:
-        chamar("PUT", f"/produtos/{alvo_c['id']}", {"id_categoria": outra_c["id"]}, token=token)
+        chamar("PUT", f"/produtos/{alvo_c['id']}",
+               {"id_categoria": outra_c["id"], "id_setor": outro_s["id"]}, token=token)
         st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
         st, depois_c = chamar("GET", f"/produtos/{alvo_c['id']}", token=token)
         checar("desligada, a busca de vendas NAO desfaz a categoria daqui",
                depois_c.get("id_categoria") == outra_c["id"],
                (depois_c.get("id_categoria"), outra_c["id"]))
+        checar("nem o setor daqui (a impressora do PDV nao manda)",
+               depois_c.get("id_setor") == outro_s["id"],
+               (depois_c.get("id_setor"), outro_s["id"]))
+        with _cur_pdv() as _c:
+            _c.execute("SELECT count(*) AS n FROM setores")
+            checar("e nenhum setor nasceu da impressora do PDV",
+                   _c.fetchone()["n"] == _n_sets, _n_sets)
         checar("e diz que as categorias nao vieram por regra",
                (r or {}).get("cadastros", {}).get("categorias_do_pdv") is False,
                (r or {}).get("cadastros"))
@@ -938,6 +953,8 @@ if alvo_c:
     st, religada = chamar("GET", f"/produtos/{alvo_c['id']}", token=token)
     checar("ligada de novo, a categoria volta a ser a do PDV",
            religada.get("id_categoria") == cat_pdv, (religada.get("id_categoria"), cat_pdv))
+    checar("e o setor tambem", religada.get("id_setor") == setor_pdv,
+           (religada.get("id_setor"), setor_pdv))
     with _cur_pdv() as _c:
         _c.execute("UPDATE integracoes SET enviar_ao_pdv = %s, cardapio_em = NULL "
                    "WHERE servico = 'PDV_LEGAL'", (_envio_c,))

@@ -511,7 +511,10 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
         campos = {
             # ⚠️ Desligado, nem chama o `_Apoio`: é ele quem CRIA a categoria que falta.
             "id_categoria": apoio.categoria(item["grupo"]) if traz_categorias else None,
-            "id_setor": apoio.setor(item["setor"]),
+            # ⚠️ O setor (impressora do PDV) segue a MESMA opção (pedido do dono, 25/10/2026):
+            # renomeado o setor VITRINE na reestruturação, a busca recriou um "VITRINE" e
+            # tirou os pratos do setor que a planilha pôs. Ver `_traz_categorias`.
+            "id_setor": apoio.setor(item["setor"]) if traz_categorias else None,
             "ncm": item["ncm"] or None,
             "cest": item["cest"] or None,
             "codigo_barras": item["ean"] or None,
@@ -653,6 +656,9 @@ def _traz_categorias(cur, id_unidade: int) -> bool:
     sincronizar elas"*). Desligada, a importação não CRIA categoria a partir do grupo
     e não GRAVA categoria no produto — nem no que nasce, nem no que se alinha. O que
     já está no cadastro fica como está.
+    🔑 **Vale também para o SETOR** (a impressora do PDV), desde 25/10/2026: categoria e
+    setor passaram a ser organizados aqui, na reestruturação dos cadastros, e o dono não
+    usa o setor como impressora. Desligada, nem cria setor nem grava setor no produto.
     ⚠️ Mesma razão de `_preco_e_do_pdv` morar numa função só: o botão e a agenda
     chegam por caminhos diferentes, e a regra copiada nos dois diverge.
     ⚠️ Sem linha (integração nunca salva), vale o padrão da coluna: trazer.

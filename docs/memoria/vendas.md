@@ -512,6 +512,12 @@
     "categoria, setor e nome só por Importar cardápio" — falso desde 20/10 com o envio desligado.
   - Cobertura: `smoke_pdv_legal` 8g2b (renomeia por um instante a categoria do grupo, para provar
     que nenhuma nasce) e `verificar.mjs` 10z (só marca e desmarca na tela, sem salvar).
+  - 🔑 **Desde 1.1.133 (25/10/2026) a opção vale também para o SETOR** (impressora do PDV →
+    `_Apoio.setor`). Motivo: a reestruturação dos cadastros renomeou o setor VITRINE (id 7) para
+    "SALÃO / ATENDIMENTO / MERCEARIA"; a busca de vendas seguinte não achou "VITRINE" pelo nome,
+    **criou um setor VITRINE novo (id 18)** e tirou dele os pratos que a planilha tinha posto no
+    SALÃO. O dono não usa setor como impressora. Desligada, `id_setor` vai nulo (nada cria setor,
+    nada muda no produto). Ligada, volta o de antes. `smoke_pdv_legal` 8g2b cobre os dois lados.
 
 - 🔑 **O PREÇO passou a vir na busca automática de vendas** (09/09/2026, pedido do dono: *"ao
   rodar a integração com o PDV, antes das vendas busca os novos produtos, pode rodar a

@@ -7291,14 +7291,14 @@ try {
     texto: document.querySelector("#categorias-pdv")?.innerText ?? "",
     agenda: document.querySelector("#agenda-pdv")?.innerText ?? "",
   }));
-  checar("desmarcada, a frase diz que a categoria passa a ser só daqui (e marcada, que vem do PDV)",
+  checar("desmarcada, a frase diz que categoria e setor passam a ser só daqui (e marcada, que vêm do PDV)",
     catTrocada.ligado
       ? /vira a categoria/i.test(catTrocada.texto)
-      : /a categoria é só daqui/i.test(catTrocada.texto), catTrocada);
+      : /categoria e setor são só daqui/i.test(catTrocada.texto), catTrocada);
   checar("e a busca automática acompanha (com o PDV dono do cadastro)",
     donoEhACasa || (catTrocada.ligado
       ? /e categoria/i.test(catTrocada.agenda)
-      : /a categoria não/i.test(catTrocada.agenda)), catTrocada.agenda.slice(0, 300));
+      : /categoria e setor não/i.test(catTrocada.agenda)), catTrocada.agenda.slice(0, 300));
   await p.click("#pdv-trazer-categorias").catch(() => {});
 
   await p.evaluate(() => {

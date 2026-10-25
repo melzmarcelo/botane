@@ -543,7 +543,8 @@ def importar_cardapio(
                            if r.get("ean_de_outro") else "")
                         # ⚠️ Dito, para o "nenhuma categoria mudou" não se ler como defeito.
                         + ("" if r.get("categorias_do_pdv", True)
-                           else ". As categorias do PDV estão desligadas: nenhuma foi trazida"))}
+                           else ". As categorias do PDV estão desligadas: nenhuma categoria "
+                                "nem setor foi trazido"))}
 
 
 @router.post("/reconciliar")
