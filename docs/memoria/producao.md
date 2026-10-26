@@ -628,6 +628,25 @@
   todos eles de uma vez, calado. As duas telas mandam o campo sempre, e o padrão de cada uma é o
   mesmo: um por aba seria armadilha.
 
+- 🔑 **Relatório "Fichas técnicas" (`fichas`, 1.1.138, 26/10/2026, pedido do dono: *"listar todas as fichas
+  técnicas, em linhas, contendo a situação"*)** — `_fichas` em `exportacao_catalogo.py`, botão
+  "Lista de fichas" na tela (leva a busca e a situação dela). É o ÍNDICE; o livro é a receita.
+  - Uma linha por produto, a versão que VALE (mesma escolha do `agrupar=true` e da produção);
+    "todas as versões" abre o histórico, e a homologada com `vigente_ate` sai "substituída".
+    ⚠️ O filtro de situação recorta DEPOIS da escolha da versão (a tela filtra antes): "rascunho"
+    na lista agrupada não traz a v2 de quem tem homologada — ela aparece em "O que falta".
+  - 🔑 "Sem ficha" é linha: produzido ativo (`tipo = PRODUZIDO` ou `producao_propria`, fora
+    rascunho) sem ficha nenhuma — a pendência que mais importa.
+  - "O que falta" junta com " · " (com "; " o CSV partia a coluna): homologar, sem ingredientes,
+    vN em rascunho, ingrediente sem custo.
+  - ⚠️ Custo só com `fichas.custos` (`_ve_custo_ficha`, posto por `_com_as_lojas`), pela loja
+    do seletor, em centavos; a prévia não custeia. Permissão do relatório: `fichas.visualizar`.
+  - Cobertura: `smoke_relatorio_fichas.py` (19).
+
+- ⚠️ **O cartão "Por onde começar" SAIU da tela de fichas** (26/10/2026, pedido do dono). Foi-se o `fichas/fila.tsx` e o service do front;
+  a rota `GET /fichas/fila` e a suíte ficam na API. O `?produto=` da ficha nova segue vivo (o cadastro
+  do produto, 1.1.135, usa).  Histórico abaixo.
+
 - 🔑 **"Por onde começar": a fila de fichas pela RECEITA** (`services/fichas_fila.py`,
   `GET /fichas/fila`, `fichas/fila.tsx`, 05/10/2026). No ar havia 446 produtos de produção
   própria sem ficha e 2,67% da receita coberta; a pendência era uma lista alfabética do

@@ -8,12 +8,12 @@ import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
-import FilaDeFichasCartao from "./fila";
 
 import { custo } from "@/lib/numeros";
 import ExplicaTela from "@/components/explica-tela";
 import { useAviso } from "@/components/aviso-flutuante";
 import { baixarLivroDeFichas } from "@/lib/fichas";
+import BotaoExportar from "@/components/exportar";
 
 type Ficha = {
   id: number;
@@ -105,6 +105,16 @@ export default function PaginaFichas() {
           </ExplicaTela>
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* 🔑 A LISTA das fichas, uma por linha, com a situação (26/10/2026, pedido
+              do dono) — o índice do livro abaixo. Leva a busca e a situação da tela. */}
+          <BotaoExportar
+            relatorio="fichas"
+            rotulo="Lista de fichas"
+            iniciais={{
+              ...(busca.trim() ? { busca: busca.trim() } : {}),
+              ...(status ? { situacao_ficha: [status] } : {}),
+            }}
+          />
           {/* 🔑 Todas as fichas num PDF, uma por página, para o fichário da cozinha
               (23/10/2026). */}
           <button
@@ -133,10 +143,6 @@ export default function PaginaFichas() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-
-      {/* 🔑 A fila pela RECEITA vem antes da lista alfabética de pendências: é
-          ela que diz por onde começar. */}
-      <FilaDeFichasCartao podeEditar={podeEditar} />
 
       {!!semFicha.length && podeEditar && (
         <Aviso tipo="info">

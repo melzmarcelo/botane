@@ -2815,6 +2815,167 @@ def _etiquetas(cur, id_unidade: int, f: dict) -> Saida:
                  "Por produto", None)] if linhas else [])
 
 
+# ---------------------------------------------------------------------------
+# A lista das fichas técnicas (26/10/2026, pedido do dono)
+# ---------------------------------------------------------------------------
+
+SITUACOES_FICHA = {"HOMOLOGADA": "homologada", "RASCUNHO": "rascunho",
+                   "ARQUIVADA": "arquivada", "SUBSTITUIDA": "substituída",
+                   "SEM_FICHA": "sem ficha"}
+VERSOES_FICHA = {"vale": "Uma linha por produto — a versão que vale",
+                 "todas": "Todas as versões"}
+FILTROS["situacao_ficha"] = {
+    "tipo": "multipla", "rotulo": "Situação",
+    "ajuda": "todas, com os produzidos sem ficha",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in SITUACOES_FICHA.items()]}
+FILTROS["versoes_ficha"] = {
+    "tipo": "escolha", "rotulo": "Versões", "ajuda": "uma linha por produto",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in VERSOES_FICHA.items()]}
+
+
+def _fichas(cur, id_unidade: int, f: dict) -> Saida:
+    """Todas as fichas técnicas, uma por LINHA, com a situação de cada uma.
+
+    🔑 Pedido do dono (26/10/2026): *"um relatório para listar todas as fichas
+    técnicas, em linhas, contendo a situação"*. O livro de fichas é a receita
+    inteira, uma por página; isto é o ÍNDICE, para conferir o que está pronto.
+    ⚠️ **Uma linha por produto, a versão que VALE** (homologada vigente; sem ela, a
+    maior) — a mesma escolha de `GET /fichas?agrupar=true` e da produção. "Todas as
+    versões" abre o histórico, e a homologada que uma versão nova tirou de vigência
+    sai como "substituída".
+    🔑 **"Sem ficha" é linha também**: o produzido ativo sem ficha nenhuma é a
+    pendência que mais importa, e uma lista só das que existem esconderia justamente
+    ela. Mesma régua do aviso da tela (`/produtos?tipo=PRODUZIDO&sem_ficha=true`),
+    mais quem tem produção própria ligada.
+    ⚠️ **Custo só com `fichas.custos`** (`_ve_custo_ficha`), pelo custo da loja do
+    seletor — a regra do router de fichas, não a da tela.
+    """
+    from services import custos
+
+    todas = f.get("versoes_ficha") == "todas"
+    situacoes = set(_lista(f.get("situacao_ficha")) or SITUACOES_FICHA)
+    ve_custo = bool(f.get("_ve_custo_ficha"))
+    busca = (f.get("busca") or "").strip() or None
+    params = {"setores": _lista(f.get("setores")), "categorias": _lista(f.get("categorias")),
+              "busca": busca}
+    filtro_produto = """
+              AND (%(setores)s::int[] IS NULL OR p.id_setor = ANY(%(setores)s))
+              AND (%(categorias)s::int[] IS NULL OR p.id_categoria = ANY(%(categorias)s))
+              AND (%(busca)s::varchar IS NULL
+                   OR lower(p.nome) LIKE lower('%%' || %(busca)s || '%%')
+                   OR lower(p.codigo) LIKE lower('%%' || %(busca)s || '%%'))"""
+    cur.execute(
+        f"""WITH todas AS (
+              SELECT f.id, f.id_produto, f.versao, f.status, f.vigente_ate,
+                     f.rendimento_qtd, f.rendimento_um, f.porcoes, f.tempo_preparo_min,
+                     f.foto_url IS NOT NULL AND f.foto_url <> '' AS tem_foto,
+                     f.criado_em, f.homologada_em, uh.nome AS homologada_por,
+                     (SELECT count(*) FROM ficha_itens i WHERE i.id_ficha = f.id) AS itens,
+                     count(*) OVER (PARTITION BY f.id_produto) AS versoes,
+                     max(f.versao) FILTER (WHERE f.status = 'RASCUNHO')
+                         OVER (PARTITION BY f.id_produto) AS versao_rascunho
+                FROM fichas_tecnicas f
+                LEFT JOIN usuarios uh ON uh.id = f.homologada_por
+            ), escolhidas AS (
+              SELECT * FROM todas
+               WHERE %(todas)s
+              UNION ALL
+              (SELECT DISTINCT ON (id_produto) * FROM todas
+                WHERE NOT %(todas)s
+                ORDER BY id_produto, (status = 'HOMOLOGADA' AND vigente_ate IS NULL) DESC,
+                         versao DESC)
+            )
+            SELECT e.*, p.codigo, p.nome AS produto, p.ativo, c.nome AS categoria,
+                   s.nome AS setor
+              FROM escolhidas e
+              JOIN produtos p ON p.id = e.id_produto
+              LEFT JOIN categorias c ON c.id = p.id_categoria
+              LEFT JOIN setores s ON s.id = p.id_setor
+             WHERE TRUE{filtro_produto}
+             ORDER BY lower(p.nome), e.versao DESC""",
+        params | {"todas": todas})
+    linhas = []
+    for r in cur.fetchall():
+        d = dict(r)
+        chave = ("SUBSTITUIDA" if d["status"] == "HOMOLOGADA" and d["vigente_ate"]
+                 else d["status"])
+        if chave not in situacoes:
+            continue
+        d["_chave"] = chave
+        d["situacao"] = SITUACOES_FICHA.get(chave, chave.lower())
+        d["versao_txt"] = (f"v{d['versao']} de {d['versoes']}" if d["versoes"] > 1
+                           else f"v{d['versao']}")
+        d["rendimento"] = exportacao.quantidade_br(d["rendimento_qtd"], d["rendimento_um"])
+        d["foto"] = "sim" if d["tem_foto"] else None
+        d["inativo"] = None if d["ativo"] else "inativo"
+        pend = []
+        if chave == "RASCUNHO":
+            pend.append("homologar (rascunho não vale)")
+        if not d["itens"]:
+            pend.append("sem ingredientes")
+        # A homologada que já tem uma versão nova sendo escrita.
+        if (chave == "HOMOLOGADA" and d["versao_rascunho"]
+                and d["versao_rascunho"] > d["versao"]):
+            pend.append(f"v{d['versao_rascunho']} em rascunho")
+        if ve_custo and not f.get("_previa") and chave in ("HOMOLOGADA", "RASCUNHO"):
+            c = custos.custo_da_ficha(cur, d["id"], id_unidade=id_unidade)
+            # Centavos de APRESENTAÇÃO (ver `_em_reais`); a conta fica no motor.
+            d["custo_total"] = Decimal(str(c["custo_total"])).quantize(
+                Decimal("0.01"), ROUND_HALF_UP)
+            d["custo_por_porcao"] = Decimal(str(c["custo_por_porcao"])).quantize(
+                Decimal("0.01"), ROUND_HALF_UP)
+            if not c["completo"]:
+                pend.append("ingrediente sem custo")
+                d["_incompleto"] = True
+        d["pendencia"] = " · ".join(pend) or None
+        linhas.append(d)
+
+    if "SEM_FICHA" in situacoes:
+        cur.execute(
+            f"""SELECT p.id AS id_produto, p.codigo, p.nome AS produto, p.ativo,
+                       c.nome AS categoria, s.nome AS setor
+                  FROM produtos p
+                  LEFT JOIN categorias c ON c.id = p.id_categoria
+                  LEFT JOIN setores s ON s.id = p.id_setor
+                 WHERE p.ativo AND p.status <> 'RASCUNHO'
+                   AND (p.tipo = 'PRODUZIDO' OR p.producao_propria)
+                   AND NOT EXISTS (SELECT 1 FROM fichas_tecnicas f WHERE f.id_produto = p.id)
+                   {filtro_produto}""",
+            params)
+        for r in cur.fetchall():
+            d = dict(r)
+            d.update({"_chave": "SEM_FICHA", "situacao": SITUACOES_FICHA["SEM_FICHA"],
+                      "pendencia": "criar a ficha", "inativo": None})
+            linhas.append(d)
+        linhas.sort(key=lambda l: (l["produto"].lower(), -(l.get("versao") or 0)))
+
+    conta = {k: sum(1 for l in linhas if l["_chave"] == k) for k in SITUACOES_FICHA}
+    resumo = [("Linhas", len(linhas)),
+              ("Produtos", len({l["id_produto"] for l in linhas}))]
+    resumo += [(SITUACOES_FICHA[k].capitalize(), n) for k, n in conta.items() if n]
+    if ve_custo and not f.get("_previa"):
+        incompletas = sum(1 for l in linhas if l.get("_incompleto"))
+        if incompletas:
+            resumo.append(("Com ingrediente sem custo", incompletas))
+    resumo.append(("Versões", VERSOES_FICHA["todas" if todas else "vale"].split(" — ")[0]))
+
+    colunas = [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
+               ("setor", "Setor"), ("versao_txt", "Versão"), ("situacao", "Situação"),
+               ("pendencia", "O que falta"), ("itens", "Itens"),
+               ("rendimento", "Rendimento"), ("porcoes", "Porções"),
+               ("tempo_preparo_min", "Preparo (min)"), ("foto", "Foto"),
+               ("homologada_em", "Homologada em"), ("homologada_por", "Por"),
+               ("inativo", "Produto")]
+    if ve_custo:
+        colunas[8:8] = [("custo_total", "Custo total"), ("custo_por_porcao", "Custo/porção")]
+    return Saida(
+        linhas, colunas,
+        "Fichas técnicas" + (" — todas as versões" if todas else ""), resumo,
+        anexos=[([{"chave": SITUACOES_FICHA[k], "linhas": n} for k, n in conta.items() if n],
+                 [("chave", "Situação"), ("linhas", "Fichas")], "Por situação", None)]
+        if linhas else [])
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -2976,6 +3137,13 @@ RELATORIOS: dict[str, Relatorio] = {
         "Auditoria",
         "Quem fez o quê no período, por onde (tela ou Claude) e o que mudou.",
         "admin.auditoria", "auditoria", ("periodo", "usuarios", "entidades"), _auditoria),
+    # 🔑 A lista das fichas técnicas (26/10/2026, pedido do dono).
+    "fichas": Relatorio(
+        "Fichas técnicas",
+        "Todas as fichas, uma por linha: versão, situação, o que falta, rendimento, "
+        "porções e o custo — com os produzidos que ainda não têm ficha.",
+        "fichas.visualizar", "fichas",
+        ("situacao_ficha", "versoes_ficha", "categorias", "setores", "busca"), _fichas),
     # 🔑 A lista das etiquetas para conferência (23/10/2026, pedido do dono).
     "etiquetas": Relatorio(
         "Etiquetas emitidas",

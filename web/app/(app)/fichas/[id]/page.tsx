@@ -100,9 +100,10 @@ export default function EditorFicha() {
 
   const [ficha, setFicha] = useState<Ficha | null>(null);
   const [idProduto, setIdProduto] = useState("");
-  // 🔑 **Quem vem da fila "Por onde começar" já escolheu o produto**
+  // 🔑 **Quem vem do cadastro do produto já escolheu o produto**
   // (`/fichas/nova?produto=123`). Sem isto a pessoa clicava em "criar a ficha"
   // do cappuccino e caía num formulário em branco, procurando o cappuccino.
+  // (Nasceu para a fila "Por onde começar", que saiu da tela em 26/10/2026.)
   // ⚠️ Num efeito, lendo a barra de endereço: a página é pré-renderizada, e ler
   // isso na primeira pintura daria HTML diferente do do servidor.
   useEffect(() => {

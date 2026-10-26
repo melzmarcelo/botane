@@ -195,6 +195,9 @@ class _Filtros:
         situacao_etiqueta: list[str] | None = Query(default=None),
         eventos_etiqueta: list[str] | None = Query(default=None),
         busca_etiqueta: str | None = None,
+        # 🔑 A lista das fichas técnicas (26/10/2026).
+        situacao_ficha: list[str] | None = Query(default=None),
+        versoes_ficha: str | None = None,
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
@@ -217,6 +220,7 @@ class _Filtros:
             "usuarios": usuarios, "entidades": entidades,
             "situacao_etiqueta": situacao_etiqueta, "eventos_etiqueta": eventos_etiqueta,
             "busca_etiqueta": busca_etiqueta,
+            "situacao_ficha": situacao_ficha, "versoes_ficha": versoes_ficha,
         }
 
     def preenchidos(self) -> dict:
@@ -835,6 +839,9 @@ def _com_as_lojas(cur, ctx: Contexto, filtros: dict) -> dict:
     # ⚠️ Também interno: o cadastro de produtos leva o custo de referência só para
     # quem vê custo — a mesma chave do `GET /produtos/{id}`.
     filtros["_ve_custo"] = ctx.pode("estoque.saldos")
+    # E a lista de fichas, o custo da ficha só para quem tem `fichas.custos` — a regra
+    # do router de fichas (26/10/2026).
+    filtros["_ve_custo_ficha"] = ctx.pode("fichas.custos")
     return filtros
 
 
