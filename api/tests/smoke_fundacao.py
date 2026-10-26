@@ -64,8 +64,11 @@ checar("e quantos arquivos entraram na conta", (r.get("arquivos") or 0) > 50, r)
 # API, com um nome que ninguém tinha previsto. O hash passou a incluir
 # biblioteca de terceiros — a ferramenta feita para comparar O NOSSO código
 # comparava outra coisa. Só o piso acima passaria feliz nos dois casos.
+# ⚠️ O teto era 400 e o NOSSO código passou dele na 1.1.137 (401 arquivos): subiu
+# para 800 em 26/10/2026 — ainda longe dos 2.014 da dependência instalada, que é
+# o defeito que ele existe para pegar. Quando chegar perto de novo, subir de novo.
 checar("e SÓ o nosso código entrou (dependência instalada ficaria de fora)",
-       (r.get("arquivos") or 0) < 400, r)
+       (r.get("arquivos") or 0) < 800, r)
 # ⚠️ Estável entre chamadas: se mudasse sozinha (por ler dado de operação, ou
 # por pontas de linha), responderia sempre "não é o mesmo código" e viraria um
 # alarme que ninguém escuta.
