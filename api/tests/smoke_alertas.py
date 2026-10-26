@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "tests")
-from comum import garantir_local  # noqa: E402
+from comum import garantir_cozinha, garantir_local  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -127,22 +127,11 @@ checar("a lista mostra o lote e há quantos dias venceu",
 
 print("4. cada um vê o alerta que pode resolver")
 st, papeis = chamar("GET", "/papeis", token=token)
-id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
-st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
-existente = next((u for u in usuarios if u["email"] == COZINHA[0]), None)
-# ⚠️ **Cria quando NÃO existe.** A versão anterior só ajustava o que já
-# estava lá: depois de uma limpeza que leva os usuários de teste, o login
-# seguinte voltava 401 e a checagem tentava iterar a MENSAGEM de erro como
-# se fosse a lista de alertas — o traceback caía longe da causa.
-if existente:
-    chamar("PUT", f"/usuarios/{existente['id']}",
-           {"ativo": True, "senha": COZINHA[1], "papeis": [{"id_papel": id_cozinha}]}, token=token)
-else:
-    chamar("POST", "/usuarios",
-           {"nome": "Cozinha do teste", "email": COZINHA[0], "senha": COZINHA[1],
-            "papeis": [{"id_papel": id_cozinha}]}, token=token)
-st, r = chamar("POST", "/auth/login", {"email": COZINHA[0], "senha": COZINHA[1]})
-tk = r.get("access_token")
+# ⚠️ Pelo `comum.garantir_cozinha` (26/10/2026): a busca própria olhava só a
+# primeira página de 500 usuários, e com o usuário de teste INATIVO (o
+# `smoke_fundacao` o exclui no fim) ele caía fora dela — o login dava 401 e a
+# checagem comparava 401 com 403. O helper percorre as páginas.
+tk = garantir_cozinha(chamar, token, *COZINHA)
 st, alertas_cozinha = chamar("GET", "/alertas", token=tk)
 checar("cozinha também recebe alertas", st == 200, (st, alertas_cozinha))
 # ⚠️ Só itera se veio LISTA: um corpo de erro é string, e indexá-lo como

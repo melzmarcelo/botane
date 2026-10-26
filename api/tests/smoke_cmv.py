@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "tests")
-from comum import garantir_local  # noqa: E402
+from comum import garantir_cozinha, garantir_local  # noqa: E402
 from datetime import date, timedelta
 
 BASE = "http://127.0.0.1:9200"
@@ -496,17 +496,11 @@ if id_da_filial:
 
 
 print("6. permissão")
-st, papeis = chamar("GET", "/papeis", token=token)
-id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
-st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
-existente = next((u for u in usuarios if u["email"] == "smoke.cozinha@botane.com.br"), None)
-if existente:
-    chamar("PUT", f"/usuarios/{existente['id']}",
-           {"ativo": True, "senha": "smoke12345", "papeis": [{"id_papel": id_cozinha}]},
-           token=token)
-st, r = chamar("POST", "/auth/login",
-               {"email": "smoke.cozinha@botane.com.br", "senha": "smoke12345"})
-tk = r.get("access_token")
+# ⚠️ Pelo `comum.garantir_cozinha` (26/10/2026): a busca própria olhava só a
+# primeira página de 500 usuários, e com o usuário de teste INATIVO (o
+# `smoke_fundacao` o exclui no fim) ele caía fora dela — o login dava 401 e a
+# checagem comparava 401 com 403. O helper percorre as páginas.
+tk = garantir_cozinha(chamar, token)
 st, r = chamar("GET", "/cmv/apuracao", token=tk)
 checar("cozinha NÃO vê o painel de CMV (403)", st == 403, st)
 st, r = chamar("POST", "/cmv/fechamentos", {"competencia": str(inicio_mes)}, token=tk)
