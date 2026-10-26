@@ -23,6 +23,11 @@ export type Barra = {
   /** As linhas da dica, ao passar o cursor. */
   dica: { rotulo: string; valor: string }[];
   titulo: string;
+  /**
+   * 🔑 As partes da barra, EMPILHADAS de baixo para cima (26/10/2026, o custo por
+   * motivo). A soma das partes é o `valor`; sem partes, a barra é de uma cor só.
+   */
+  partes?: { chave: string; valor: number; cor: string }[];
 };
 
 const M = { esquerda: 64, direita: 12, topo: 12, base: 30 };
@@ -82,11 +87,29 @@ export function GraficoBarras({ barras, altura, rotulo, noEixo, aoClicar, W = 10
           const cx = M.esquerda + passo * (i + 0.5);
           return (
             <g key={b.chave}>
-              <rect x={cx - grossura / 2} y={y(b.valor)} width={grossura}
-                    height={Math.max(0, y(0) - y(b.valor))} rx={Math.min(3, grossura / 4)}
-                    fill={COR_BARRA} opacity={sobre === null || sobre === i ? 1 : 0.55}>
-                <title>{b.titulo}</title>
-              </rect>
+              {b.partes?.length ? (
+                // ⚠️ Um fio da cor do fundo entre as partes: sem ele, duas cores
+                // vizinhas parecidas viram uma barra só.
+                b.partes.reduce<{ base: number; nos: React.ReactNode[] }>((acc, p) => {
+                  const topo = acc.base + p.valor;
+                  acc.nos.push(
+                    <rect key={p.chave} x={cx - grossura / 2} y={y(topo)} width={grossura}
+                          height={Math.max(0, y(acc.base) - y(topo))} fill={p.cor}
+                          stroke="var(--color-superficie)" strokeWidth={1}
+                          opacity={sobre === null || sobre === i ? 1 : 0.55}>
+                      <title>{b.titulo}</title>
+                    </rect>,
+                  );
+                  acc.base = topo;
+                  return acc;
+                }, { base: 0, nos: [] }).nos
+              ) : (
+                <rect x={cx - grossura / 2} y={y(b.valor)} width={grossura}
+                      height={Math.max(0, y(0) - y(b.valor))} rx={Math.min(3, grossura / 4)}
+                      fill={COR_BARRA} opacity={sobre === null || sobre === i ? 1 : 0.55}>
+                  <title>{b.titulo}</title>
+                </rect>
+              )}
               {i % cada === 0 && (
                 <text x={cx} y={altura - 9} fontSize={12} textAnchor="middle"
                       fill="var(--color-suave)">{b.rotulo}</text>

@@ -3872,14 +3872,15 @@ try {
   // `inicio` e `fim` desde sempre; a tela nunca ofereceu, e conferir um dia
   // contra o PDV exigia rolar a lista ate achar onde a data virava.
   const temCampoDia = await p.evaluate(() =>
-    !!document.querySelector('input[type="date"][aria-label="Dia"]'));
-  checar("a tela de vendas oferece filtrar por dia", temCampoDia, temCampoDia);
+    !!document.querySelector('input[type="date"][aria-label="De"]'));
+  // ⚠️ Virou período (26/10/2026): o "De" sozinho recorta aquele dia.
+  checar("a tela de vendas oferece filtrar por dia (o De sozinho)", temCampoDia, temCampoDia);
 
   // ⚠️ Um dia SEM venda tem de esvaziar a lista — se o filtro nao chegasse ao
   // servidor, a venda desta rodada continuaria na tela e o teste passaria por
   // engano.
   await p.evaluate(() => {
-    const c = document.querySelector('input[type="date"][aria-label="Dia"]');
+    const c = document.querySelector('input[type="date"][aria-label="De"]');
     const setter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype, "value").set;
     setter.call(c, "2001-01-01");
@@ -11069,7 +11070,7 @@ try {
 // é a linha que o `promover.ps1` lê. Roteiro que estoura sem resumo conta como falha.
 for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mjs",
                        "verificar-codigos-do-produto.mjs", "verificar-opcoes-notas-omie.mjs",
-                       "verificar-reclassificar.mjs"]) {
+                       "verificar-reclassificar.mjs", "verificar-motivos.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {

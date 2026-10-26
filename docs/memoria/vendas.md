@@ -1056,6 +1056,33 @@
   `custo da ficha ÷ rendimento` (o cookie saía pelo custo de 1 KG de massa). A regra mora
   em Custos — ver `custos.md`, "O custo unitário da ficha é o da PORÇÃO".
 
+- 🔑 **Documentos por MOTIVO: filtro, quadros, impressão e comparativo** (1.1.137, pedido do
+  dono 26/10/2026: *"no painel de documentos filtros e quadros por motivos, onde podemos realizar
+  a impressão e comparativos"*). Sem migração.
+  - Lista (`GET /vendas?motivo=`): `VENDA` (sem motivo e não consumo interno), `QUALQUER` (todo
+    documento com motivo — o cancelado também, marcado) ou um motivo; outro valor é 422. O filtro
+    de dia virou PERÍODO (`de`/`ate` na URL); o "de" sozinho recorta aquele dia.
+  - `GET /vendas/motivos` → `services/vendas_motivos.painel` — a MESMA função do relatório
+    `vendas-motivos`. 🔑 O custo é o que SAIU DO ESTOQUE (SAIDA_CONSUMO_INTERNO/SAIDA_PERDA de
+    origem VENDA, líquido de estorno pelo `id_estorno_de`), a conta do CMV; ⚠️ mas pela DATA DO
+    DOCUMENTO, e o CMV conta pela data do movimento (só diverge na baixa atrasada entre meses).
+    Custo pela ficha e referência (preço digitado) vão ao lado. Cancelado fica fora. Sem datas,
+    o mês corrente; até dois anos.
+  - Comparativo: `painel_vendas._anterior` (mesmo tamanho logo antes; um dia, o mesmo dia da
+    semana anterior). Variação sobre zero é nula.
+  - Quadros: por motivo, evolução empilhada (`GraficoBarras` ganhou `partes`), produto (o do
+    MOVIMENTO: kit sai pelos componentes), pessoa, motivo da perda, documentos (até 500 na tela,
+    todos no arquivo).
+  - 🔑 A perda de Ajustes entra só como REFERÊNCIA (o dono é o painel de Estoque), e só sem
+    filtro de pessoa e com a Perda entre os motivos.
+  - Tela `vendas/motivos`: tudo na URL; ⚠️ o que filtra nos cartões e na tabela de pessoas NÃO é
+    `<button>` — o `@media print` da casa esconde todo botão, e o cartão sumiria do papel. O
+    recorte vai escrito numa linha `print:block`.
+  - Exportação: filtros `motivo_venda` (vendas-documentos, com VENDA) e `motivos_venda`
+    (vendas-motivos) — ⚠️ declarados também em `_Filtros` de `routers/exportacoes.py`, senão a
+    query string é ignorada em silêncio.
+  - Cobertura: `smoke_vendas_motivos.py` (44) e `verificar-motivos.mjs` (15, rodado pela bateria).
+
 - 🔑 **O MOTIVO de um documento que não é venda** (1.1.136, migração 134, pedido do dono
   26/10/2026): *"ao lançar um documento à mão … campo Motivo, e quando selecionado algum, ter um
   campo Observação: Perda, Prêmio, Brinde/Aniversário, Outros … basicamente consumo interno, saindo

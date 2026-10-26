@@ -12,7 +12,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/
 import CabecalhoTela from "@/components/cabecalho-tela";
 import BotaoExportar from "@/components/exportar";
 import { qtd } from "@/lib/numeros";
-import { CANAIS, dataBr, etiquetaDoMotivo, horaBr, ORIGENS, Venda } from "./tipos";
+import { CANAIS, dataBr, etiquetaDoMotivo, horaBr, MOTIVOS_VENDA, ORIGENS, Venda } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /**
@@ -61,14 +61,20 @@ export default function PaginaVendas() {
   // 🔑 **O filtro de DIA** (pedido do dono, 03/09/2026). O servidor já aceitava
   // `inicio` e `fim` desde sempre; a tela nunca ofereceu, e conferir um dia
   // contra o PDV exigia rolar a lista até achar onde a data virava.
-  // ⚠️ Um campo só, e não um par: a pergunta que se faz é "como foi o dia X",
-  // e um intervalo pediria duas respostas para uma pergunta.
-  const [dia, setDia] = useEstadoNaUrl<string>("dia", "");
+  // 🔑 **Virou PERÍODO** (26/10/2026, pedido do dono: filtros e comparativos por
+  // motivo). Um dia só continua sendo as duas pontas iguais — preencher só o "de"
+  // já recorta aquele dia, que era a pergunta de antes ("como foi o dia X").
+  const [de, setDe] = useEstadoNaUrl<string>("de", "", { atraso: 0 });
+  const [ate, setAte] = useEstadoNaUrl<string>("ate", "", { atraso: 0 });
+  // 🔑 **O MOTIVO** (134): só as vendas de verdade, todo documento que não é venda,
+  // ou um motivo. Quem decide o que cada um quer dizer é o servidor.
+  const [motivo, setMotivo] = useEstadoNaUrl<string>("motivo", "", { atraso: 0 });
+  const fimEfetivo = ate || de;
   const [ocupado, setOcupado] = useState(false);
 
   // ⚠️ `filtros:` faz a busca voltar para a primeira página. Sem isso, quem
   // está na página 7 e digita um documento cai numa tela vazia sem explicação.
-  const pag = usePaginacao("vendas", { padrao: 50, filtros: [busca, origem, dia] });
+  const pag = usePaginacao("vendas", { padrao: 50, filtros: [busca, origem, de, ate, motivo] });
 
   const carregar = useCallback(async () => {
     // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
@@ -79,11 +85,10 @@ export default function PaginaVendas() {
       const q = new URLSearchParams(pag.parametros);
       if (busca.trim()) q.set("busca", busca.trim());
       if (origem) q.set("origem", origem);
-      // O mesmo dia nas duas pontas: é assim que o servidor recorta um dia só.
-      if (dia) {
-        q.set("inicio", dia);
-        q.set("fim", dia);
-      }
+      // Só o "de": o mesmo dia nas duas pontas, que é como o servidor recorta um dia.
+      if (de) q.set("inicio", de);
+      if (fimEfetivo) q.set("fim", fimEfetivo);
+      if (motivo) q.set("motivo", motivo);
       const [v, p] = await Promise.all([
         api.listar<Venda>(`/vendas?${q}`),
         api.get<unknown[]>("/vendas/sem-vinculo"),
@@ -97,7 +102,7 @@ export default function PaginaVendas() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, pag.offset, pag.porPagina, busca, origem, dia]);
+  }, [pag.pronto, pag.offset, pag.porPagina, busca, origem, de, ate, motivo]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 350 : 0);
@@ -190,8 +195,21 @@ export default function PaginaVendas() {
                     </Link>
                     {/* 🔑 A fita do período, cupom a cupom, para conferir com o caixa
                         (23/10/2026). Leva o dia escolhido na tela. */}
+                    {/* 🔑 Os documentos que não são venda, por motivo (26/10/2026): quadros,
+                        comparativo e impressão. Leva o período escolhido. */}
+                    <Link
+                      href={`/vendas/motivos${de ? `?modo=periodo&de=${de}&ate=${fimEfetivo}` : ""}`}
+                      className="btn btn-secundario" id="vendas-por-motivo"
+                    >
+                      Por motivo
+                    </Link>
                     <BotaoExportar relatorio="vendas-documentos" rotulo="Lista de vendas"
-                                   iniciais={dia ? { inicio: dia, fim: dia } : undefined} />
+                                   iniciais={{
+                                     ...(de ? { inicio: de, fim: fimEfetivo } : {}),
+                                     ...(motivo === "VENDA" ? { motivo_venda: ["VENDA"] }
+                                       : motivo === "QUALQUER" ? { motivo_venda: Object.keys(MOTIVOS_VENDA) }
+                                       : motivo ? { motivo_venda: [motivo] } : {}),
+                                   }} />
                     {/* ⚠️ O gêmeo do "Buscar no Omie" de Compras. A busca precisa estar na
                         tela do assunto: quem abre Vendas para ver as vendas não vai
                         lembrar que ela mora em Integrações — e venda não buscada é receita
@@ -259,17 +277,44 @@ export default function PaginaVendas() {
               </option>
             ))}
           </select>
-          <input
-            className="campo max-w-[190px]"
-            type="date"
-            aria-label="Dia"
-            value={dia}
-            onChange={(e) => setDia(e.target.value)}
-          />
-          {dia && (
+          <select
+            className="campo max-w-[220px]"
+            id="vendas-filtro-motivo"
+            aria-label="Motivo"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          >
+            <option value="">vendas e motivos</option>
+            <option value="VENDA">só vendas</option>
+            <option value="QUALQUER">qualquer motivo (não é venda)</option>
+            {Object.entries(MOTIVOS_VENDA).map(([v, r]) => (
+              <option key={v} value={v}>
+                {r}
+              </option>
+            ))}
+          </select>
+          <span className="flex items-center gap-2">
+            <input
+              className="campo max-w-[170px]"
+              type="date"
+              aria-label="De"
+              title="de (sozinho, recorta este dia)"
+              value={de}
+              onChange={(e) => setDe(e.target.value)}
+            />
+            <span className="text-suave">a</span>
+            <input
+              className="campo max-w-[170px]"
+              type="date"
+              aria-label="Até"
+              value={ate}
+              onChange={(e) => setAte(e.target.value)}
+            />
+          </span>
+          {(de || ate) && (
             // ⚠️ Um `type="date"` não tem como se esvaziar sozinho em todo
             // navegador — sem esta saída, quem filtrou um dia fica preso nele.
-            <button type="button" className="btn btn-secundario" onClick={() => setDia("")}>
+            <button type="button" className="btn btn-secundario" onClick={() => { setDe(""); setAte(""); }}>
               Todos os dias
             </button>
           )}
@@ -279,7 +324,7 @@ export default function PaginaVendas() {
           <Carregando />
         ) : !lista.length ? (
           <Vazio>
-            {busca || origem || dia
+            {busca || origem || de || ate || motivo
               ? "Nenhuma venda com esse filtro."
               : "Nenhuma venda ainda. Lance uma, cole a planilha do PDV ou ligue a integração."}
           </Vazio>

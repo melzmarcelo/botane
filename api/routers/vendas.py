@@ -24,6 +24,7 @@ from services import cmv as motor
 from services import consumo_pessoa as consumo
 from services import estoque as motor_estoque
 from services import painel_vendas
+from services import vendas_motivos
 from services import precos
 from services import producao_agenda as agenda
 
@@ -41,6 +42,9 @@ def listar(
     # carregada acharia o documento só quando ele já estivesse na tela.
     busca: str | None = None,
     origem: str | None = None,
+    # 🔑 O MOTIVO (26/10/2026, pedido do dono): VENDA (só as vendas de verdade),
+    # QUALQUER (todo documento que não é venda) ou um motivo da migração 134.
+    motivo: str | None = None,
     limite: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
@@ -56,6 +60,9 @@ def listar(
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         alvo = f"%{busca.strip()}%" if busca and busca.strip() else None
+        motivo = (motivo or "").strip().upper() or None
+        if motivo and motivo not in ("VENDA", "QUALQUER") and motivo not in ROTULOS_MOTIVO:
+            raise HTTPException(status_code=422, detail=f"Motivo desconhecido: {motivo}.")
         return pagina(
             cur,
             """SELECT v.id, v.data, v.hora, v.origem, v.canal, v.documento, v.valor_total,
@@ -69,12 +76,17 @@ def listar(
                   AND (%s::date IS NULL OR v.data <= %s)
                   AND (%s::text IS NULL OR v.origem = %s)
                   AND (%s::text IS NULL OR v.documento ILIKE %s)
+                  AND (%s::text IS NULL
+                       OR (%s = 'VENDA' AND v.motivo IS NULL AND NOT v.consumo_interno)
+                       OR (%s = 'QUALQUER' AND v.motivo IS NOT NULL)
+                       OR v.motivo = %s)
                 GROUP BY v.id
                 -- Com a hora gravada, a ordem do DIA passa a ser a do relógio:
                 -- quem procura "a venda das 14h" não a acha pela ordem de
                 -- importação. NULLS LAST porque a planilha não tem hora.
                 ORDER BY v.data DESC, v.hora DESC NULLS LAST, v.id DESC""",
-            (id_unidade, inicio, inicio, fim, fim, origem, origem, alvo, alvo),
+            (id_unidade, inicio, inicio, fim, fim, origem, origem, alvo, alvo,
+             motivo, motivo, motivo, motivo),
             limite=limite, offset=offset, resposta=resposta,
         )
 
@@ -1412,6 +1424,35 @@ def consumo_em_aberto(id_pessoa: int, ctx: Contexto = Depends(_ver)) -> dict:
         "lotes_em_cobranca": cobranca["lotes"],
         "em_cobranca": float(cobranca["total"]),
     }
+
+
+# 🔑 **Os documentos que não são venda, por motivo** (26/10/2026, pedido do dono:
+# "filtros e quadros por motivos, onde podemos realizar a impressão e comparativos").
+# ⚠️ Antes de `/{id_venda}`, pelo mesmo motivo do `/painel` logo abaixo.
+@router.get("/motivos")
+def por_motivo(inicio: date | None = None, fim: date | None = None,
+               motivos: list[str] | None = Query(None),
+               id_pessoa: int | None = None, agrupar: str = "semana",
+               ctx: Contexto = Depends(_ver)) -> dict:
+    """Custo que saiu do estoque, documentos e itens de cada motivo, contra o
+    período anterior de mesmo tamanho. Sem datas, o mês corrente."""
+    if inicio is None and fim is None:
+        hoje = relogio.hoje_da_casa()
+        inicio, fim = hoje.replace(day=1), hoje
+    inicio = inicio or fim
+    fim = fim or inicio
+    if fim < inicio:
+        raise HTTPException(status_code=400, detail="O fim do período vem antes do início.")
+    if (fim - inicio).days > 731:
+        raise HTTPException(status_code=400,
+                            detail="O recorte passa de dois anos — estreite o período.")
+    errados = [m for m in (motivos or []) if m not in ROTULOS_MOTIVO]
+    if errados:
+        raise HTTPException(status_code=422, detail=f"Motivo desconhecido: {', '.join(errados)}.")
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        return vendas_motivos.painel(cur, id_unidade, inicio, fim, motivos,
+                                     [id_pessoa] if id_pessoa else None, agrupar)
 
 
 # ⚠️ **Antes de `/{id_venda}`**, como `/sem-vinculo` e `/por-pessoa`: a rota com

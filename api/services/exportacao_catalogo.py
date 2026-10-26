@@ -45,6 +45,7 @@ from services import estoque as estoque_motor
 from services import exportacao
 from services import memoria_calculo as memoria
 from services import painel_vendas
+from services import vendas_motivos
 from services import periodos as periodos_motor
 from services import relatorios
 
@@ -2068,6 +2069,17 @@ def _opcoes_origem_venda(cur, id_unidade: int) -> list[dict]:
 # deste bloco, e o dicionário é montado antes dela existir.
 FILTROS["origem_venda"] = {"tipo": "multipla", "rotulo": "Origem",
                            "ajuda": "todas as origens", "opcoes": _opcoes_origem_venda}
+# 🔑 O MOTIVO do documento (26/10/2026, pedido do dono). "Venda" é o documento SEM
+# motivo — a venda de verdade; os outros são os da migração 134.
+FILTROS["motivo_venda"] = {
+    "tipo": "multipla", "rotulo": "Motivo", "ajuda": "vendas e todos os motivos",
+    "opcoes": lambda _c, _u: [{"valor": "VENDA", "nome": "venda"}] + [
+        {"valor": v, "nome": n.lower()} for v, n in vendas_motivos.ROTULOS.items()]}
+# Só os motivos: o relatório "por motivo" não tem venda dentro.
+FILTROS["motivos_venda"] = {
+    "tipo": "multipla", "rotulo": "Motivos", "ajuda": "todos os motivos",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n.lower()}
+                              for v, n in vendas_motivos.ROTULOS.items()]}
 
 
 def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
@@ -2081,6 +2093,7 @@ def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
     """
     inicio, fim = _periodo(f)
     origens = _lista(f.get("origem_venda"))
+    motivos = _lista(f.get("motivo_venda"))
     cur.execute(
         """SELECT v.id, v.data, v.hora, v.documento, v.origem, v.canal, v.mesa,
                   fo.nome AS pessoa, v.desconto, v.valor_total, v.cancelada,
@@ -2090,8 +2103,12 @@ def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
              LEFT JOIN fornecedores fo ON fo.id = v.id_pessoa
             WHERE v.id_unidade = %(u)s AND v.data BETWEEN %(inicio)s AND %(fim)s
               AND (%(origens)s::text[] IS NULL OR v.origem = ANY(%(origens)s))
+              AND (%(motivos)s::text[] IS NULL
+                   OR coalesce(v.motivo, CASE WHEN v.consumo_interno THEN 'CONSUMO_INTERNO'
+                                              ELSE 'VENDA' END) = ANY(%(motivos)s))
             ORDER BY v.data, v.hora NULLS FIRST, v.documento, v.id""",
-        {"u": id_unidade, "inicio": inicio, "fim": fim, "origens": origens})
+        {"u": id_unidade, "inicio": inicio, "fim": fim, "origens": origens,
+         "motivos": motivos})
     linhas = []
     for r in cur.fetchall():
         d = dict(r)
@@ -2144,6 +2161,82 @@ def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
          ("Valor das canceladas",
           sum((Decimal(str(l["valor_total"] or 0)) for l in canceladas), Decimal(0)))],
         inicio, fim, anexos=anexos)
+
+
+def _vendas_motivos(cur, id_unidade: int, f: dict) -> Saida:
+    """Os documentos que não são venda, por motivo — o mesmo recorte da tela.
+
+    🔑 **A conta é a da TELA** (`vendas_motivos.painel`): o arquivo tem de bater com
+    a tela "Por motivo" de onde saiu. O quadro da frente são os DOCUMENTOS, com a
+    observação ("para quem foi o brinde"); motivo, evolução, produtos, pessoas e
+    motivos de perda vão atrás.
+    """
+    inicio, fim = _periodo(f)
+    p = vendas_motivos.painel(cur, id_unidade, inicio, fim, _lista(f.get("motivos_venda")),
+                              _lista(f.get("pessoas")), f.get("agrupar") or "semana",
+                              limite_documentos=100000)
+    t, c = p["totais"], p["comparacao"]
+
+    def r2(v):
+        return None if v is None else round(v, 2)
+
+    def pct(v):
+        return "—" if v is None else f"{v:+.1f}%".replace(".", ",")
+
+    docs = [{**d, "documento": d["documento"] or f"#{d['id']}",
+             "custo": r2(d["custo"]), "custo_ficha": r2(d["custo_ficha"]),
+             "referencia": r2(d["referencia"])} for d in p["documentos"]]
+    motivos = [{"rotulo": l["rotulo"], "documentos": l["documentos"], "itens": l["itens"],
+                "custo": r2(l["custo"]), "custo_ficha": r2(l["custo_ficha"]),
+                "referencia": r2(l["referencia"]),
+                "custo_anterior": r2(l["anterior"]["custo"]),
+                "variacao": pct(l["pct_custo"])} for l in p["por_motivo"]]
+    nome_ag = vendas_motivos.AGRUPAMENTOS[p["agrupar"]]
+    serie = [{"periodo": s["periodo"], "documentos": s["documentos"], "custo": r2(s["custo"]),
+              **{m: r2(s["por_motivo"].get(m, 0)) for m in vendas_motivos.ROTULOS}}
+             for s in p["serie"]]
+    resumo = [("Documentos", t["documentos"]), ("Itens", t["itens"]),
+              ("Custo que saiu do estoque", r2(t["custo"])),
+              ("Custo pela ficha", r2(t["custo_ficha"])),
+              ("Valor de referência (fora da receita)", r2(t["referencia"])),
+              (f"Contra {c['rotulo']} ({_intervalo(c['inicio'], c['fim'])})",
+               f"custo {r2(c['custo'])} ({pct(c['pct_custo'])}) · "
+               f"documentos {c['documentos']} ({pct(c['pct_documentos'])})")]
+    if p["perdas_ajuste"]:
+        pa = p["perdas_ajuste"]
+        resumo.append(("Perdas lançadas em Ajustes (referência)",
+                       f"{r2(pa['custo'])} · antes {r2(pa['anterior'])} "
+                       f"({pct(pa['pct_custo'])})"))
+    anexos = [
+        (motivos, [("rotulo", "Motivo"), ("documentos", "Documentos"), ("itens", "Itens"),
+                   ("custo", "Custo (estoque)"), ("custo_ficha", "Custo (ficha)"),
+                   ("referencia", "Referência"), ("custo_anterior", "Custo anterior"),
+                   ("variacao", "Variação")], "Por motivo", None),
+        (serie, [("periodo", nome_ag), ("documentos", "Documentos"), ("custo", "Custo")]
+         + list(vendas_motivos.ROTULOS.items()),
+         f"Evolução por {nome_ag.lower()}", None),
+        ([{**x, "custo": r2(x["custo"])} for x in p["produtos"]],
+         [("codigo", "Código"), ("produto", "Produto"), ("quantidade", "Quantidade"),
+          ("um_estoque", "Un."), ("custo", "Custo"), ("documentos", "Documentos")],
+         "O que saiu do estoque, por produto", None),
+        ([{**x, "custo": r2(x["custo"]), "referencia": r2(x["referencia"])}
+          for x in p["pessoas"]],
+         [("nome", "Pessoa"), ("documentos", "Documentos"), ("custo", "Custo"),
+          ("referencia", "Referência")], "Por pessoa", None),
+    ]
+    if p["motivos_perda"]:
+        anexos.append(([{**x, "custo": r2(x["custo"])} for x in p["motivos_perda"]],
+                       [("nome", "Motivo da perda"), ("documentos", "Documentos"),
+                        ("custo", "Custo")], "Perda, pelo motivo da perda", None))
+    return Saida(
+        docs,
+        [("data", "Data"), ("documento", "Documento"), ("rotulo", "Motivo"),
+         ("motivo_perda", "Motivo da perda"), ("pessoa", "Pessoa"),
+         ("motivo_observacao", "Observação"), ("itens", "Itens"),
+         ("custo", "Custo (estoque)"), ("custo_ficha", "Custo (ficha)"),
+         ("referencia", "Referência")],
+        f"Documentos por motivo — {_intervalo(inicio, fim)}", resumo, inicio, fim,
+        anexos=anexos)
 
 
 # ---------------------------------------------------------------------------
@@ -2847,8 +2940,15 @@ RELATORIOS: dict[str, Relatorio] = {
         "Vendas documento a documento",
         "Cada cupom do período com hora, origem, canal, pessoa e total — para conferir "
         "com o caixa e o PDV.",
-        "cmv.relatorios", "vendas-documentos", ("periodo", "origem_venda"),
+        "cmv.relatorios", "vendas-documentos", ("periodo", "origem_venda", "motivo_venda"),
         _vendas_documentos),
+    # 🔑 Os documentos que não são venda, por motivo (26/10/2026, pedido do dono).
+    "vendas-motivos": Relatorio(
+        "Documentos por motivo",
+        "Consumo interno, perda, prêmio, brinde e outros: o custo que saiu do estoque, "
+        "comparado com o período anterior, por motivo, produto, pessoa e documento.",
+        "cmv.relatorios", "vendas-motivos",
+        ("periodo", "motivos_venda", "pessoas", "agrupar"), _vendas_motivos),
     # 🔑 A terceira leva (23/10/2026, itens 8 e 9).
     "reservas-dia": Relatorio(
         "Reservas do dia",
