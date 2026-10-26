@@ -24,6 +24,8 @@ from models.cadastros import (
     SetorUpdate,
     TIPOS_CATEGORIA,
     TIPOS_LOCAL,
+    TipoDescricaoResponse,
+    TipoDescricaoUpdate,
     UnidadeMedidaCreate,
     UnidadeMedidaResponse,
     UnidadeMedidaUpdate,
@@ -45,6 +47,13 @@ def _sets(dados: dict) -> tuple[str, list]:
     return ", ".join(f"{c} = %s" for c in dados), list(dados.values())
 
 
+def _texto(valor: str | None) -> str | None:
+    """Descrição em branco é AUSÊNCIA de descrição: guarda nulo, não string vazia —
+    senão a dica do cadastro do produto mostraria um balão vazio."""
+    valor = (valor or "").strip()
+    return valor or None
+
+
 # ================================================================ setores
 
 
@@ -52,7 +61,8 @@ def _sets(dados: dict) -> tuple[str, list]:
 def listar_setores(incluir_inativos: bool = False, ctx: Contexto = Depends(contexto_atual)):
     with get_cursor() as cur:
         cur.execute(
-            """SELECT id, nome, cor, ordem, id_unidade, ativo, integrado_pdv FROM setores
+            """SELECT id, nome, cor, ordem, id_unidade, ativo, integrado_pdv, descricao
+                 FROM setores
                 WHERE (%s OR ativo) ORDER BY ordem, nome""",
             (incluir_inativos,),
         )
@@ -71,10 +81,10 @@ def criar_setor(body: SetorCreate,
             f"Já existe um setor chamado {body.nome.strip()}.",
         )
         cur.execute(
-            """INSERT INTO setores (nome, cor, ordem, id_unidade, ativo, integrado_pdv)
-               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+            """INSERT INTO setores (nome, cor, ordem, id_unidade, ativo, integrado_pdv, descricao)
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (body.nome.strip(), body.cor, body.ordem, body.id_unidade, body.ativo,
-             body.integrado_pdv),
+             body.integrado_pdv, _texto(body.descricao)),
         )
         novo = cur.fetchone()["id"]
         auditoria.registrar(cur, ctx.id_usuario, "setor", novo, "criar", depois=body.model_dump())
@@ -87,11 +97,14 @@ def atualizar_setor(id_setor: int, body: SetorUpdate,
     dados = body.model_dump(exclude_unset=True)
     if not dados:
         raise HTTPException(status_code=400, detail="Nada para atualizar")
+    if "descricao" in dados:
+        dados["descricao"] = _texto(dados["descricao"])
     with get_cursor() as cur:
         # ⚠️ O `SELECT` do "antes" traz o campo novo: sem ele, marcar ou
         # desmarcar a integração entraria na auditoria como se nada tivesse
         # mudado. É a mesma lição do `um_estoque` que faltava no PUT do produto.
-        cur.execute("SELECT nome, cor, ordem, ativo, integrado_pdv FROM setores WHERE id = %s",
+        cur.execute("SELECT nome, cor, ordem, ativo, integrado_pdv, descricao "
+                    "  FROM setores WHERE id = %s",
                     (id_setor,))
         antes = cur.fetchone()
         if not antes:
@@ -280,6 +293,42 @@ def desativar_local(id_local: int,
     return {"message": "Local desativado"}
 
 
+# ================================================================ tipos de produto
+#
+# 🔑 A LISTA de tipos é do sistema (`TIPOS`, models/produtos.py) e não se edita; a
+# EXPLICAÇÃO de cada um é da casa (133, pedido do dono 25/10/2026): é a dica que
+# aparece ao passar o mouse no Tipo do cadastro do produto. Tipo sem linha na tabela
+# volta com descrição nula — a tela cai na ajuda que já vem no código.
+
+
+@router.get("/tipos-produto", response_model=list[TipoDescricaoResponse])
+def listar_tipos_produto(ctx: Contexto = Depends(contexto_atual)):
+    with get_cursor() as cur:
+        cur.execute("SELECT tipo, descricao FROM tipos_produto_descricao")
+        descricoes = {r["tipo"]: r["descricao"] for r in cur.fetchall()}
+    return [{"tipo": t, "descricao": descricoes.get(t)} for t in TIPOS_CATEGORIA]
+
+
+@router.put("/tipos-produto/{tipo}")
+def atualizar_tipo_produto(tipo: str, body: TipoDescricaoUpdate,
+                           ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    _valida(tipo, TIPOS_CATEGORIA, "tipo")
+    descricao = _texto(body.descricao)
+    with get_cursor() as cur:
+        cur.execute("SELECT descricao FROM tipos_produto_descricao WHERE tipo = %s", (tipo,))
+        antes = cur.fetchone()
+        cur.execute(
+            """INSERT INTO tipos_produto_descricao (tipo, descricao) VALUES (%s, %s)
+               ON CONFLICT (tipo) DO UPDATE SET descricao = EXCLUDED.descricao,
+                                                atualizado_em = now()""",
+            (tipo, descricao),
+        )
+        auditoria.registrar(cur, ctx.id_usuario, "tipo_produto", tipo, "atualizar",
+                            antes=dict(antes) if antes else None,
+                            depois={"descricao": descricao})
+    return {"message": "Descrição do tipo atualizada"}
+
+
 # ================================================================ categorias
 
 
@@ -291,17 +340,17 @@ def listar_categorias(incluir_inativas: bool = False, ctx: Contexto = Depends(co
             """
             WITH RECURSIVE arvore AS (
                 SELECT c.id, c.id_pai, c.nome, c.tipo, c.ordem, c.ativo, c.integrado_pdv,
-                       c.nome::text AS caminho, 0 AS nivel,
+                       c.descricao, c.nome::text AS caminho, 0 AS nivel,
                        lpad(c.ordem::text, 5, '0') || c.nome AS chave
                   FROM categorias c WHERE c.id_pai IS NULL
                 UNION ALL
                 SELECT f.id, f.id_pai, f.nome, f.tipo, f.ordem, f.ativo, f.integrado_pdv,
-                       a.caminho || ' › ' || f.nome, a.nivel + 1,
+                       f.descricao, a.caminho || ' › ' || f.nome, a.nivel + 1,
                        a.chave || '/' || lpad(f.ordem::text, 5, '0') || f.nome
                   FROM categorias f JOIN arvore a ON a.id = f.id_pai
             )
             SELECT a.id, a.id_pai, a.nome, a.caminho, a.nivel, a.tipo, a.ordem, a.ativo,
-                   a.integrado_pdv,
+                   a.integrado_pdv, a.descricao,
                    (SELECT count(*) FROM produtos p WHERE p.id_categoria = a.id) AS produtos
               FROM arvore a
              WHERE (%s OR a.ativo)
@@ -332,10 +381,10 @@ def criar_categoria(body: CategoriaCreate,
     _valida(body.tipo, TIPOS_CATEGORIA, "tipo")
     with get_cursor() as cur:
         cur.execute(
-            """INSERT INTO categorias (nome, id_pai, tipo, ordem, ativo, integrado_pdv)
-               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+            """INSERT INTO categorias (nome, id_pai, tipo, ordem, ativo, integrado_pdv, descricao)
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (body.nome.strip(), body.id_pai, body.tipo, body.ordem, body.ativo,
-             body.integrado_pdv),
+             body.integrado_pdv, _texto(body.descricao)),
         )
         nova = cur.fetchone()["id"]
         auditoria.registrar(cur, ctx.id_usuario, "categoria", nova, "criar",
@@ -350,11 +399,13 @@ def atualizar_categoria(id_categoria: int, body: CategoriaUpdate,
     _valida(dados.get("tipo"), TIPOS_CATEGORIA, "tipo")
     if not dados:
         raise HTTPException(status_code=400, detail="Nada para atualizar")
+    if "descricao" in dados:
+        dados["descricao"] = _texto(dados["descricao"])
     with get_cursor() as cur:
         cur.execute(
             # ⚠️ O campo novo entra no "antes": sem ele, marcar ou desmarcar a
             # integração entraria na auditoria como se nada tivesse mudado.
-            "SELECT nome, id_pai, tipo, ordem, ativo, integrado_pdv "
+            "SELECT nome, id_pai, tipo, ordem, ativo, integrado_pdv, descricao "
             "  FROM categorias WHERE id = %s",
             (id_categoria,),
         )

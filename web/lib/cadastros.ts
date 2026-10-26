@@ -12,6 +12,8 @@ export type Setor = {
   ativo: boolean;
   /** O setor daqui é a IMPRESSORA do cardápio do PDV (VITRINE, BAR, COZINHA). */
   integrado_pdv: boolean;
+  /** O "uso previsto" — a dica do campo Setor no cadastro do produto (133). */
+  descricao?: string | null;
 };
 export type Local = {
   id: number;
@@ -40,6 +42,8 @@ export type Categoria = {
   /** A categoria daqui é o GRUPO do cardápio do PDV. */
   integrado_pdv: boolean;
   produtos: number;
+  /** "Exemplos / abrangência" — a dica do campo Categoria no cadastro do produto (133). */
+  descricao?: string | null;
 };
 export type UnidadeMedida = {
   sigla: string;
@@ -154,6 +158,23 @@ export const TIPOS_PRODUTO = [
     ajuda: "Não é físico — taxa de entrega. Nunca controla estoque",
   },
 ];
+
+/** A explicação que a CASA deu a um tipo (133). A lista de tipos é do sistema. */
+export type TipoDescricao = { tipo: string; descricao: string | null };
+
+export const listarDescricoesDeTipo = () => api.get<TipoDescricao[]>("/tipos-produto");
+export const gravarDescricaoDeTipo = (tipo: string, descricao: string) =>
+  api.put<{ message: string }>(`/tipos-produto/${encodeURIComponent(tipo)}`, { descricao });
+
+/**
+ * O que a dica do Tipo diz: a descrição da casa, se houver; senão a ajuda do código.
+ * ⚠️ A ajuda do código fica como reserva de propósito — base sem a migração 133, ou
+ * descrição apagada na tela, não deixa o campo sem explicação nenhuma.
+ */
+export const explicacaoDoTipo = (tipo: string, descricoes: TipoDescricao[]) =>
+  descricoes.find((d) => d.tipo === tipo)?.descricao
+  ?? TIPOS_PRODUTO.find((t) => t.valor === tipo)?.ajuda
+  ?? "";
 
 export const TIPOS_LOCAL = ["SECO", "RESFRIADO", "CONGELADO", "BAR"];
 // 🔑 O tipo da categoria é OPCIONAL desde a 131 ("Tipo, Categoria e Setor são campos

@@ -1453,3 +1453,20 @@ são cadastro, esperando a vitrine que os mostre. Ver [`catalogos.md`](catalogos
     nesta casa em 23/10/2026 — o dono confirmou que não usa nem um nem outro). O documento supunha que
     o setor integrado servia à baixa das vendas: não serve.
   - Cobertura: `smoke_reclassificacao.py` e o roteiro `verificar-reclassificar.mjs`.
+
+- 🔑 **Descrições de tipo, categoria e setor** (1.1.134, migração 133, pedido do dono 25/10/2026):
+  *"nos combobox de tipo, setor e categoria, ao passar o mouse … mostra o uso operacional …
+  exemplo/abrangência … uso previsto"*. São as três colunas do documento da casa, carregadas pela
+  migração (só onde está em branco — rodar de novo não desfaz edição).
+  - `categorias.descricao` e `setores.descricao` (PUT/POST normais; em branco vira NULL, máx. 500).
+  - Tipo é fixo do sistema, a explicação é da casa: tabela `tipos_produto_descricao` (tipo PK) e
+    `GET/PUT /tipos-produto[/{tipo}]` (leitura autenticada, escrita `cadastros.produtos`, audita
+    `tipo_produto`). Tipo sem linha volta nulo e a tela cai em `TIPOS_PRODUTO[].ajuda`
+    (`explicacaoDoTipo`, `web/lib/cadastros.ts`).
+  - Cadastro do produto: `title` no seletor (o escolhido) e em cada `<option>` (a lista aberta) —
+    `#produto-tipo`, `#produto-categoria`, `#produto-setor`. A dica do tipo é carregada fora do
+    `Promise.all`: falhar não derruba o cadastro.
+  - Tabelas de apoio ▸ botão **Descrições** (`cadastros/descricoes.tsx`): janela com três listas,
+    só ativos, grava só o que mudou; cada lista respeita a própria permissão.
+  - Conector: `criar/atualizar_categoria` e `criar/atualizar_setor` aceitam `descricao`.
+  - Cobertura: `smoke_descricoes.py` e `verificar.mjs` (dica do tipo; janela sem salvar).

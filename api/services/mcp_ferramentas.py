@@ -1330,7 +1330,8 @@ FERRAMENTAS: list[Ferramenta] = [
                        "pode servir a vários tipos).", no_corpo=True, enum=list(TIPOS)),
          "id_pai": Param("integer", "Categoria-mãe, para criar uma subcategoria.",
                          no_corpo=True),
-         "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True),
+         "descricao": Param("string", "Exemplos / abrangência: a dica que aparece no cadastro do produto.", no_corpo=True)},
         metodo="POST"),
     Ferramenta(
         "atualizar_categoria", "Corrigir uma categoria",
@@ -1341,7 +1342,8 @@ FERRAMENTAS: list[Ferramenta] = [
          "tipo": Param("string", "Tipo de produto.", no_corpo=True, enum=list(TIPOS)),
          "id_pai": Param("integer", "Categoria-mãe.", no_corpo=True),
          "ordem": Param("integer", "Posição na lista.", no_corpo=True),
-         "ativo": Param("boolean", "Em uso.", no_corpo=True)},
+         "ativo": Param("boolean", "Em uso.", no_corpo=True),
+         "descricao": Param("string", "Exemplos / abrangência: a dica que aparece no cadastro do produto.", no_corpo=True)},
         metodo="PUT"),
     Ferramenta(
         "remover_categoria", "Remover uma categoria",
@@ -1356,7 +1358,8 @@ FERRAMENTAS: list[Ferramenta] = [
         "/setores",
         {"nome": Param("string", "Nome do setor.", obrigatorio=True, no_corpo=True),
          "cor": Param("string", "Cor em hexadecimal (#2f6b4f).", no_corpo=True),
-         "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True),
+         "descricao": Param("string", "Uso previsto: a dica que aparece no cadastro do produto.", no_corpo=True)},
         metodo="POST"),
     Ferramenta(
         "atualizar_setor", "Corrigir um setor",
@@ -1366,7 +1369,8 @@ FERRAMENTAS: list[Ferramenta] = [
          "nome": Param("string", "Nome.", no_corpo=True),
          "cor": Param("string", "Cor em hexadecimal.", no_corpo=True),
          "ordem": Param("integer", "Posição na lista.", no_corpo=True),
-         "ativo": Param("boolean", "Em uso.", no_corpo=True)},
+         "ativo": Param("boolean", "Em uso.", no_corpo=True),
+         "descricao": Param("string", "Uso previsto: a dica que aparece no cadastro do produto.", no_corpo=True)},
         metodo="PUT"),
     Ferramenta(
         "remover_setor", "Remover um setor",

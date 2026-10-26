@@ -29,6 +29,8 @@ class SetorCreate(BaseModel):
     ativo: bool = True
     # O setor daqui é a IMPRESSORA do cardápio do PDV (VITRINE, BAR, COZINHA).
     integrado_pdv: bool = False
+    # O "uso previsto" — a dica do campo Setor no cadastro do produto (133).
+    descricao: str | None = Field(default=None, max_length=500)
 
 
 class SetorUpdate(BaseModel):
@@ -37,6 +39,7 @@ class SetorUpdate(BaseModel):
     ordem: int | None = None
     ativo: bool | None = None
     integrado_pdv: bool | None = None
+    descricao: str | None = Field(default=None, max_length=500)
 
 
 class SetorResponse(BaseModel):
@@ -47,6 +50,7 @@ class SetorResponse(BaseModel):
     id_unidade: int | None = None
     ativo: bool
     integrado_pdv: bool = False
+    descricao: str | None = None
 
 
 # ---------------------------------------------------------------- locais
@@ -101,6 +105,8 @@ class CategoriaCreate(BaseModel):
     ativo: bool = True
     # A categoria daqui é o GRUPO do cardápio do PDV.
     integrado_pdv: bool = False
+    # "Exemplos / abrangência" — a dica do campo Categoria no cadastro do produto (133).
+    descricao: str | None = Field(default=None, max_length=500)
 
 
 class CategoriaUpdate(BaseModel):
@@ -110,6 +116,7 @@ class CategoriaUpdate(BaseModel):
     ordem: int | None = None
     ativo: bool | None = None
     integrado_pdv: bool | None = None
+    descricao: str | None = Field(default=None, max_length=500)
 
 
 class CategoriaResponse(BaseModel):
@@ -123,6 +130,20 @@ class CategoriaResponse(BaseModel):
     ativo: bool
     integrado_pdv: bool = False
     produtos: int = 0
+    descricao: str | None = None
+
+
+# ---------------------------------------------------------------- descrição dos tipos
+
+
+class TipoDescricaoResponse(BaseModel):
+    """Um tipo de produto (fixo do sistema) e a explicação que a casa deu a ele (133)."""
+    tipo: str
+    descricao: str | None = None
+
+
+class TipoDescricaoUpdate(BaseModel):
+    descricao: str | None = Field(default=None, max_length=500)
 
 
 # ---------------------------------------------------------------- unidades de medida

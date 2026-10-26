@@ -731,6 +731,25 @@ try {
       && !tiposNaTela.includes("MATERIAL_LIMPEZA"), tiposNaTela);
   checar("inclusive utensílios e enxoval", tiposNaTela.includes("UTENSILIO"), tiposNaTela);
 
+  // 🔑 **Passar o mouse explica** (25/10/2026, pedido do dono; migração 133): o Tipo mostra
+  // o uso operacional — o `title` do seletor e o de cada opção. A Categoria e o Setor
+  // seguem o mesmo molde; aqui eles só precisam OFERECER o título quando há descrição.
+  await p.waitForFunction(() => !!document.querySelector("#produto-tipo")?.title,
+    { timeout: 8000 }).catch(() => {});
+  const dicas = await p.evaluate(() => {
+    const tipo = document.querySelector("#produto-tipo");
+    return {
+      tipo: tipo?.title ?? "",
+      opcoes: [...(tipo?.options ?? [])].filter((o) => o.title).length,
+      categoria: !!document.querySelector("#produto-categoria"),
+      setor: !!document.querySelector("#produto-setor"),
+    };
+  });
+  checar("o Tipo explica ao passar o mouse (title do seletor e das nove opções)",
+    dicas.tipo.length > 10 && dicas.opcoes === 9, dicas);
+  checar("e a Categoria e o Setor têm o seletor identificado para a dica",
+    dicas.categoria && dicas.setor, dicas);
+
   // A ajuda do tipo é o que explica a escolha a quem cadastra; sem ela
   // "Utensílios" fica indistinguível de "Material de limpeza".
   await p.select("main select", "UTENSILIO");
@@ -1296,6 +1315,37 @@ try {
   checar("o cadastro fica acima da lista nas tabelas de apoio",
     ordemCadastro.listaY === null || ordemCadastro.formY < ordemCadastro.listaY,
     ordemCadastro);
+
+  // 🔑 **Descrições** (25/10/2026, pedido do dono): um botão abre a janela onde se
+  // escreve o uso operacional do tipo, os exemplos da categoria e o uso previsto do
+  // setor — o texto da dica do cadastro do produto. ⚠️ Só abre e passeia pelas três
+  // listas, sem salvar: a descrição aqui é a real.
+  await p.click("#abrir-descricoes").catch(() => {});
+  await p.waitForFunction(() => document.querySelectorAll("#descricoes-lista textarea").length > 0,
+    { timeout: 8000 }).catch(() => {});
+  const janelaDesc = await p.evaluate(() => {
+    const caixa = document.querySelector('[role="dialog"]');
+    return {
+      aberta: !!caixa && /Descrições/.test(caixa.innerText),
+      tipos: document.querySelectorAll('#descricoes-lista textarea[data-chave^="tipos:"]').length,
+      listas: [...document.querySelectorAll("button[data-lista]")].map((b) => b.dataset.lista),
+      salvarDesligado: document.querySelector("#descricoes-salvar")?.disabled ?? null,
+    };
+  });
+  checar("Tabelas de apoio abre a janela de Descrições com os nove tipos",
+    janelaDesc.aberta && janelaDesc.tipos === 9, janelaDesc);
+  checar("com as três listas (tipos, categorias, setores) e o Salvar parado sem mudança",
+    ["tipos", "categorias", "setores"].every((l) => janelaDesc.listas.includes(l))
+      && janelaDesc.salvarDesligado === true, janelaDesc);
+  await p.click('button[data-lista="setores"]').catch(() => {});
+  await p.waitForFunction(
+    () => document.querySelector('#descricoes-lista textarea[data-chave^="setores:"]'),
+    { timeout: 5000 }).catch(() => {});
+  const naAbaSetores = await p.evaluate(() =>
+    document.querySelectorAll('#descricoes-lista textarea[data-chave^="setores:"]').length);
+  checar("e a aba Setores mostra um campo por setor", naAbaSetores > 0, naAbaSetores);
+  await p.keyboard.press("Escape").catch(() => {});
+  await assentar(300);
 
   // 🔑 **O local pode dizer a que SETOR pertence** (migração 051). O processo
   // da casa é: o açúcar entra no Estoque Central e de manhã cada setor leva um

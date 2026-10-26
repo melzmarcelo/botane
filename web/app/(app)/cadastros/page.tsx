@@ -20,6 +20,7 @@ import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import GruposCmv from "./grupos-cmv";
 import UnidadesDeFora from "./unidades-de-fora";
 import JuntarUnidades from "./juntar-unidades";
+import Descricoes from "./descricoes";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
 
@@ -106,6 +107,8 @@ export default function PaginaCadastros() {
   const [categorias, setCategorias] = useState<Categoria[] | null>(null);
   const [ums, setUms] = useState<UnidadeMedida[] | null>(null);
   const [erro, setErro] = useState("");
+  // A janela das descrições de tipo, categoria e setor (pedido do dono, 25/10/2026).
+  const [descricoesAberta, setDescricoesAberta] = useState(false);
 
   // formulários de criação, um por aba
   const [novoSetor, setNovoSetor] = useState("");
@@ -279,15 +282,41 @@ export default function PaginaCadastros() {
         <p className="max-w-[70ch] text-[14px] prosa text-suave">{atual.explica}</p>
         {/* Mesma caixinha de Produtos, no mesmo lugar do olho: quem procura um
             cadastro antigo sabe onde ligá-la. */}
-        <label className="flex shrink-0 items-center gap-2 text-[14px] text-suave">
-          <input
-            type="checkbox"
-            checked={mostrarInativos}
-            onChange={(e) => setMostrarInativos(e.target.checked)}
-          />
-          mostrar inativos
-        </label>
+        <div className="flex shrink-0 items-center gap-4">
+          {/* 🔑 Fora das abas de propósito: as descrições valem para TRÊS listas, e o
+              tipo nem tem aba aqui (é fixo do sistema). */}
+          <button
+            id="abrir-descricoes"
+            type="button"
+            className="btn btn-secundario"
+            onClick={() => setDescricoesAberta(true)}
+          >
+            Descrições
+          </button>
+          <label className="flex items-center gap-2 text-[14px] text-suave">
+            <input
+              type="checkbox"
+              checked={mostrarInativos}
+              onChange={(e) => setMostrarInativos(e.target.checked)}
+            />
+            mostrar inativos
+          </label>
+        </div>
       </div>
+
+      {descricoesAberta && (
+        <Descricoes
+          categorias={categorias ?? []}
+          setores={setores ?? []}
+          pode={{
+            tipos: pode("cadastros.produtos"),
+            categorias: pode("cadastros.categorias"),
+            setores: pode("cadastros.setores"),
+          }}
+          aoFechar={() => setDescricoesAberta(false)}
+          aoSalvar={() => void carregar()}
+        />
+      )}
 
       {/* ---------------------------------------------------------- setores */}
       {/* ⚠️ A marca só aparece com o envio LIGADO. Um controle para um recurso

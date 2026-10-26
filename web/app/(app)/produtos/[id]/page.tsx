@@ -9,10 +9,13 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import {
   Categoria,
+  explicacaoDoTipo,
   Fornecedor,
+  listarDescricoesDeTipo,
   Local,
   reais,
   Setor,
+  TipoDescricao,
   TIPOS_PRODUTO,
   UnidadeMedida,
 } from "@/lib/cadastros";
@@ -206,6 +209,8 @@ export default function FormularioProduto() {
   const [vinculos, setVinculos] = useState<VinculoFornecedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
+  // A explicação de cada tipo, editada em Tabelas de apoio ▸ Descrições (133).
+  const [descTipos, setDescTipos] = useState<TipoDescricao[]>([]);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
@@ -242,6 +247,9 @@ export default function FormularioProduto() {
         setLocais(lo);
       })
       .catch((e) => setErro(e.message));
+    // ⚠️ Por fora do `Promise.all`: a dica é conforto, e base sem a rota (ou sem a
+    // migração 133) não pode derrubar o cadastro inteiro — cai na ajuda do código.
+    listarDescricoesDeTipo().then(setDescTipos).catch(() => setDescTipos([]));
   }, []);
 
   // 🔑 Os códigos de fora que caem neste produto — o de-para que a fusão e o
@@ -1058,15 +1066,22 @@ export default function FormularioProduto() {
             />
           </Campo>
 
+          {/* 🔑 **Passar o mouse explica** (pedido do dono, 25/10/2026): o Tipo mostra o
+              uso operacional, a Categoria os exemplos/abrangência e o Setor o uso
+              previsto — textos editados em Tabelas de apoio ▸ Descrições. O `title` vai
+              no seletor (o item escolhido) e em cada opção (a lista aberta). */}
           <Campo rotulo="Tipo">
             <select
+              id="produto-tipo"
               className="campo"
               disabled={!podeEditar}
               value={f.tipo}
+              title={explicacaoDoTipo(f.tipo, descTipos) || undefined}
               onChange={(e) => set("tipo", e.target.value)}
             >
               {TIPOS_PRODUTO.map((t) => (
-                <option key={t.valor} value={t.valor}>
+                <option key={t.valor} value={t.valor}
+                  title={explicacaoDoTipo(t.valor, descTipos) || undefined}>
                   {t.nome}
                 </option>
               ))}
@@ -1077,14 +1092,17 @@ export default function FormularioProduto() {
           </Campo>
           <Campo rotulo="Categoria">
             <select
+              id="produto-categoria"
               className="campo"
               disabled={!podeEditar}
               value={f.id_categoria}
+              title={categorias.find((c) => String(c.id) === f.id_categoria)?.descricao
+                ?? undefined}
               onChange={(e) => set("id_categoria", e.target.value)}
             >
               <option value="">—</option>
               {categorias.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} title={c.descricao ?? undefined}>
                   {c.caminho}
                 </option>
               ))}
@@ -1092,14 +1110,17 @@ export default function FormularioProduto() {
           </Campo>
           <Campo rotulo="Setor" dica="cozinha, bar, confeitaria">
             <select
+              id="produto-setor"
               className="campo"
               disabled={!podeEditar}
               value={f.id_setor}
+              title={setores.find((s) => String(s.id) === f.id_setor)?.descricao
+                ?? undefined}
               onChange={(e) => set("id_setor", e.target.value)}
             >
               <option value="">—</option>
               {setores.map((s) => (
-                <option key={s.id} value={s.id}>
+                <option key={s.id} value={s.id} title={s.descricao ?? undefined}>
                   {s.nome}
                 </option>
               ))}
