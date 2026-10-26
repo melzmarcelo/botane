@@ -3771,6 +3771,38 @@ try {
     /75,00/.test(textoPreviaCupom) && /15,00/.test(textoPreviaCupom)
       && /60,00/.test(textoPreviaCupom), textoPreviaCupom.slice(0, 400));
 
+  // 🔑 **O MOTIVO do documento que não é venda** (134, pedido do dono, 26/10/2026):
+  // Consumo interno, Perda, Prêmio, Brinde/Aniversário e Outros, com a Observação
+  // aparecendo ao escolher. A caixa "Considerar consumo interno" virou a 1ª opção.
+  // ⚠️ Só a tela: gravar e sair do estoque é de `smoke_venda_motivo.py`.
+  const motivoNaTela = await p.evaluate(() => ({
+    opcoes: [...document.querySelectorAll("#venda-motivo-campo option")].map((o) => o.value),
+    caixaAntiga: /Considerar consumo interno/.test(document.body.innerText),
+    observacaoAntes: !!document.querySelector("#venda-motivo-observacao"),
+  }));
+  checar("o lançamento à mão tem o campo Motivo com os cinco motivos",
+    ["CONSUMO_INTERNO", "PERDA", "PREMIO", "BRINDE", "OUTROS"]
+      .every((m) => motivoNaTela.opcoes.includes(m)), motivoNaTela);
+  checar("a caixa 'Considerar consumo interno' saiu, e a observação só vem com o motivo",
+    !motivoNaTela.caixaAntiga && !motivoNaTela.observacaoAntes, motivoNaTela);
+  await p.select("#venda-motivo-campo", "PERDA");
+  await assentar(300);
+  const comPerda = await p.evaluate(() => ({
+    motivoPerda: [...document.querySelectorAll("#venda-motivo-perda option")].length,
+    observacao: !!document.querySelector("#venda-motivo-observacao"),
+    explica: /sai como perda/i.test(document.body.innerText),
+  }));
+  checar("Perda pede o motivo da perda (a lista de Ajustes) e abre a Observação",
+    comPerda.motivoPerda > 1 && comPerda.observacao && comPerda.explica, comPerda);
+  await p.select("#venda-motivo-campo", "OUTROS");
+  await assentar(300);
+  const comOutros = await p.evaluate(() => ({
+    motivoPerda: !!document.querySelector("#venda-motivo-perda"),
+    obrigatoria: /obrigatória com Outros/i.test(document.body.innerText),
+  }));
+  checar("Outros some com o motivo da perda e diz que a observação é obrigatória",
+    !comOutros.motivoPerda && comOutros.obrigatoria, comOutros);
+
   await p.reload({ waitUntil: "networkidle2" });
   await assentar(1500);
   const doc6 = `TELA-${m6}`;

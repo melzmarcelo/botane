@@ -78,6 +78,16 @@ def _apurar_escopo(cur, lojas: list[int], inicio: date, fim: date) -> dict:
         for k, v in parte.items():
             if k in _SOMAVEIS:
                 total[k] = (total.get(k) or 0) + v
+            elif k == "consumo_por_motivo":
+                # ⚠️ Lista se soma PARTE A PARTE (134): ficar com a da primeira loja
+                # faria as partes não fecharem com o consumo interno somado.
+                por = {l["motivo"]: dict(l) for l in total.get(k, [])}
+                for l in v:
+                    if l["motivo"] in por:
+                        por[l["motivo"]]["valor"] += l["valor"]
+                    else:
+                        por[l["motivo"]] = dict(l)
+                total[k] = list(por.values())
             elif k not in total:
                 total[k] = v
     receita = total.get("receita") or 0

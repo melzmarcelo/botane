@@ -10,7 +10,8 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, CampoMoeda, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fontePessoas, fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
-import { CANAIS, lerPlanilha } from "../tipos";
+import { CANAIS, lerPlanilha, MOTIVOS_VENDA } from "../tipos";
+import { motivosDePerda } from "@/lib/etiquetas";
 import Voltar from "@/components/voltar";
 
 import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
@@ -105,10 +106,25 @@ export default function PaginaLancarVenda() {
   // lista inteira na memória da tela.
   const [pessoa, setPessoa] = useState<{ id: number; rotulo: string } | null>(null);
   const [politica, setPolitica] = useState<PessoaCupom | null>(null);
-  // 🔑 **Consumo interno** (migração 095, pedido do dono, 26/09/2026): só existe com
-  // pessoa. Marcado, o documento baixa o estoque como consumo interno e fica fora
-  // da receita e do CMV teórico — só o custo pesa. Quem decide é o servidor.
-  const [consumoInterno, setConsumoInterno] = useState(false);
+  // 🔑 **O MOTIVO de um documento que não é venda** (migração 134, pedido do dono,
+  // 26/10/2026): Consumo interno (a antiga caixa, que exige pessoa), Perda, Prêmio,
+  // Brinde/Aniversário e Outros. Todo motivo tira o documento da receita e do CMV
+  // teórico e sai do estoque pelo custo — a perda como perda, os outros como consumo
+  // interno. Quem decide e confere é o servidor; a tela só não oferece o impossível.
+  const [motivo, setMotivo] = useState("");
+  const [motivoObs, setMotivoObs] = useState("");
+  const [idMotivoPerda, setIdMotivoPerda] = useState("");
+  const [motivosPerda, setMotivosPerda] = useState<{ id: number; nome: string }[]>([]);
+  useEffect(() => {
+    motivosDePerda().then(setMotivosPerda).catch(() => {});
+  }, []);
+  const corpoMotivo = motivo
+    ? {
+        motivo,
+        motivo_observacao: motivoObs.trim() || null,
+        id_motivo_perda: motivo === "PERDA" && idMotivoPerda ? Number(idMotivoPerda) : null,
+      }
+    : {};
 
   // 🔑 **Consumo de pessoa NÃO exige mais ciclo** (22/10/2026, pedido do dono):
   // o documento entra na data em que aconteceu e fica em aberto até a casa gerar
@@ -287,7 +303,7 @@ export default function PaginaLancarVenda() {
             canal: canal || null,
             origem: "MANUAL",
             id_pessoa: pessoa ? pessoa.id : null,
-            consumo_interno: !!pessoa && consumoInterno,
+            ...corpoMotivo,
             itens: prontos.map((i) => ({
               id_produto: Number(i.id_produto),
               quantidade: Number(i.quantidade.replace(",", ".")),
@@ -315,7 +331,7 @@ export default function PaginaLancarVenda() {
             canal: canal || null,
             origem: "PLANILHA",
             id_pessoa: pessoa ? pessoa.id : null,
-            consumo_interno: !!pessoa && consumoInterno,
+            ...corpoMotivo,
             itens: previa.linhas.map((l) => ({
               codigo: l.codigo || null,
               descricao: l.descricao || null,
@@ -395,8 +411,8 @@ export default function PaginaLancarVenda() {
               selecionado={pessoa}
               aoEscolher={(item: ItemBusca | null) => {
                 setPessoa(item ? { id: item.id, rotulo: rotuloDe(item) } : null);
-                // Sem pessoa não há consumo interno: a caixa some e desmarca.
-                if (!item) setConsumoInterno(false);
+                // Sem pessoa não há consumo interno: o motivo que a exige se desfaz.
+                if (!item && motivo === "CONSUMO_INTERNO") setMotivo("");
                 setPolitica(
                   item ? (item.bruto as unknown as PessoaCupom) : null,
                 );
@@ -405,25 +421,79 @@ export default function PaginaLancarVenda() {
           </Campo>
         </div>
 
-        {/* 🔑 **Considerar consumo interno** (pedido do dono, 26/09/2026): só aparece
-            depois de escolher a pessoa — consumo interno é sempre de alguém. */}
-        {pessoa && (
-          <label className="mt-4 flex items-start gap-3">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={consumoInterno}
-              onChange={(e) => setConsumoInterno(e.target.checked)}
-            />
-            <span className="text-[14px]">
-              Considerar consumo interno
-              <span className="block text-[13px] text-suave">
-                O estoque sai como consumo interno, e o documento fica fora da receita e do
-                CMV teórico: só o custo entra, na linha de consumo interno do CMV. Continua
-                aparecendo no consumo desta pessoa.
-              </span>
-            </span>
-          </label>
+        {/* 🔑 **Motivo** (134, pedido do dono, 26/10/2026): "quando selecionado algum,
+            ter um campo Observação". Substituiu a caixa "Considerar consumo interno",
+            que virou a primeira opção. */}
+        <div className="mt-4 grid gap-4 sm:grid-cols-3" id="motivo-do-documento">
+          <Campo rotulo="Motivo" dica="em branco, é venda">
+            <select
+              id="venda-motivo-campo"
+              className="campo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+            >
+              <option value="">venda (não é consumo)</option>
+              {Object.entries(MOTIVOS_VENDA).map(([v, r]) => (
+                <option key={v} value={v} disabled={v === "CONSUMO_INTERNO" && !pessoa}>
+                  {r}
+                  {v === "CONSUMO_INTERNO" && !pessoa ? " (escolha a pessoa)" : ""}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          {motivo === "PERDA" && (
+            <Campo rotulo="Motivo da perda" dica="a mesma lista de Ajustes ▸ Perda">
+              <select
+                id="venda-motivo-perda"
+                className="campo"
+                value={idMotivoPerda}
+                onChange={(e) => setIdMotivoPerda(e.target.value)}
+              >
+                <option value="">escolha…</option>
+                {motivosPerda.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nome}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+          )}
+          {motivo && (
+            <div className={motivo === "PERDA" ? "" : "sm:col-span-2"}>
+              <Campo
+                rotulo="Observação"
+                dica={motivo === "OUTROS" ? "obrigatória com Outros" : "opcional"}
+              >
+                <input
+                  id="venda-motivo-observacao"
+                  className="campo"
+                  maxLength={500}
+                  value={motivoObs}
+                  onChange={(e) => setMotivoObs(e.target.value)}
+                />
+              </Campo>
+            </div>
+          )}
+        </div>
+        {motivo && (
+          <div className="mt-3">
+            <Aviso tipo="info">
+              {motivo === "PERDA" ? (
+                <>
+                  O estoque sai como <b>perda</b>, pelo custo, e aparece em Perdas junto com as
+                  lançadas em Ajustes.
+                </>
+              ) : (
+                <>
+                  O estoque sai como <b>consumo interno</b>, pelo custo, na linha de consumo
+                  interno do CMV ({(MOTIVOS_VENDA[motivo] ?? motivo).toLowerCase()}).
+                </>
+              )}{" "}
+              O documento fica fora da receita e do CMV teórico; o preço digitado fica só como
+              referência.
+              {motivo === "CONSUMO_INTERNO" && " Continua aparecendo no consumo desta pessoa."}
+            </Aviso>
+          </div>
         )}
 
         {/* ⚠️ **A consequência dita ANTES de lançar** (pedido do dono:

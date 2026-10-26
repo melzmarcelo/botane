@@ -32,6 +32,8 @@ type Apuracao = {
   variancia_pct: number | null;
   perdas: number;
   consumo_interno: number;
+  /** As partes do consumo interno pelo motivo do documento (134). */
+  consumo_por_motivo?: { motivo: string; rotulo: string; valor: number }[];
   ajustes: number;
   receita: number;
   vendas: number;
@@ -573,6 +575,18 @@ export default function PaginaCmv() {
                     ["= CMV real", a.cmv_real, "o que de fato saiu", true],
                     ["Perdas", a.perdas, "quebra, validade, cortesia — dentro do CMV real"],
                     ["Consumo interno", a.consumo_interno, "equipe e degustação"],
+                    // 🔑 As partes do consumo interno pelo motivo do documento (134,
+                    // pedido do dono): prêmio, brinde, outros. Só com mais de uma —
+                    // uma parte só repetiria a linha de cima.
+                    ...((a.consumo_por_motivo ?? []).length > 1
+                      ? (a.consumo_por_motivo ?? []).map(
+                          (m) => [`  · ${m.rotulo}`, m.valor, "dentro do consumo interno"] as [
+                            string,
+                            number,
+                            string,
+                          ],
+                        )
+                      : []),
                     ["Ajustes de inventário", a.ajustes, "diferença apurada na contagem"],
                     // ⚠️ **Duas naturezas de linha de grupo.** A que está
                     // DENTRO explica o CMV real, como Perdas: o custo já está

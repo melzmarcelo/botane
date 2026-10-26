@@ -12,7 +12,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/
 import CabecalhoTela from "@/components/cabecalho-tela";
 import BotaoExportar from "@/components/exportar";
 import { qtd } from "@/lib/numeros";
-import { CANAIS, dataBr, horaBr, ORIGENS, Venda } from "./tipos";
+import { CANAIS, dataBr, etiquetaDoMotivo, horaBr, ORIGENS, Venda } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /**
@@ -309,7 +309,7 @@ export default function PaginaVendas() {
                     <Etiqueta cor="alerta">{v.sem_custo} sem custo</Etiqueta>
                   )}
                   {v.cancelada && <Etiqueta cor="alerta">cancelada</Etiqueta>}
-                  {v.consumo_interno && <Etiqueta>consumo interno</Etiqueta>}
+                  {etiquetaDoMotivo(v) && <Etiqueta>{etiquetaDoMotivo(v)}</Etiqueta>}
                 </span>
               </li>
             ))}

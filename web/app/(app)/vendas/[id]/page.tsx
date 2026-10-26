@@ -8,7 +8,15 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
-import { CANAIS, dataBr, ORIGEM_CUSTO, ORIGENS, VendaDetalhe } from "../tipos";
+import {
+  CANAIS,
+  dataBr,
+  etiquetaDoMotivo,
+  MOTIVOS_VENDA,
+  ORIGEM_CUSTO,
+  ORIGENS,
+  VendaDetalhe,
+} from "../tipos";
 import Voltar from "@/components/voltar";
 
 import { custo } from "@/lib/numeros";
@@ -91,6 +99,18 @@ export default function PaginaVenda() {
             {venda.canal ? ` · ${CANAIS[venda.canal] ?? venda.canal.toLowerCase()}` : ""}
             {venda.mesa ? ` · mesa ${venda.mesa}` : ""}
           </p>
+          {/* 🔑 **Por que não é venda** (134, pedido do dono): o motivo, o da perda e a
+              observação de quem lançou. */}
+          {venda.motivo && (
+            <p className="mt-1 text-[13.5px]" id="venda-motivo">
+              <span className="text-suave">motivo </span>
+              <b>{MOTIVOS_VENDA[venda.motivo] ?? venda.motivo}</b>
+              {venda.motivo_perda ? ` (${venda.motivo_perda})` : ""}
+              {venda.motivo_observacao ? (
+                <span className="text-suave"> — {venda.motivo_observacao}</span>
+              ) : null}
+            </p>
+          )}
           {/* 🔑 **Para quem foi o cupom, e por qual regra** (04/09/2026). A
               política vem CONGELADA do dia do lançamento, não do cadastro de
               hoje: quem passou de 20% para 30% de desconto faria este cupom
@@ -115,7 +135,7 @@ export default function PaginaVenda() {
         </div>
         <div className="flex items-center gap-2">
           {/* Consumo interno (095): o documento não é receita nem CMV teórico. */}
-          {venda.consumo_interno && <Etiqueta>consumo interno</Etiqueta>}
+          {etiquetaDoMotivo(venda) && <Etiqueta>{etiquetaDoMotivo(venda)}</Etiqueta>}
           {venda.cancelada ? (
             <Etiqueta cor="alerta">cancelada</Etiqueta>
           ) : (

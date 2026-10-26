@@ -21,7 +21,7 @@ entregue.
 | [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas` |
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes`, `preco_custo`, `custo_referencia` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `duas_lojas`, `alertas`, `lotes` |
-| [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `receber`, `pdv_legal`, `rotulos_cabem` |
+| [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `venda_consumo_interno`, `venda_motivo`, `consumo_pessoa`, `receber`, `pdv_legal`, `rotulos_cabem` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo`, `erros` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `cmv_conferencia`, `grupos_cmv`, `ciclos`, `relatorios` |
 | [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao`, `cardapio_vivo`, `cardapio_pedido`, `cardapio_testes` |

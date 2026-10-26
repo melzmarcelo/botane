@@ -59,7 +59,7 @@ def listar(
         return pagina(
             cur,
             """SELECT v.id, v.data, v.hora, v.origem, v.canal, v.documento, v.valor_total,
-                      v.cancelada, v.consumo_interno,
+                      v.cancelada, v.consumo_interno, v.motivo,
                       count(vi.id) AS itens,
                       count(*) FILTER (WHERE vi.custo_ficha_unitario IS NULL) AS sem_custo
                  FROM vendas v
@@ -333,6 +333,73 @@ def _preparar_itens(cur, id_unidade: int, origem: str, data, itens) -> None:
                 item.codigo = item.codigo or p["codigo_pdv"]
 
 
+ROTULOS_MOTIVO = {
+    "CONSUMO_INTERNO": "Consumo interno",
+    "PERDA": "Perda",
+    "PREMIO": "Prêmio",
+    "BRINDE": "Brinde/Aniversário",
+    "OUTROS": "Outros",
+}
+
+
+def _normalizar_motivo(cur, venda) -> None:
+    """O motivo de um documento que não é venda, conferido ANTES de gravar.
+
+    🔑 **Pedido do dono (26/10/2026, migração 134)**: Perda, Prêmio, Brinde/Aniversário e
+    Outros — e a antiga caixa "consumo interno" virou o motivo CONSUMO_INTERNO. Todo
+    motivo põe o documento FORA da receita (`consumo_interno`), e a saída é pelo custo.
+    ⚠️ Quem manda só `consumo_interno=true` (a tela antiga, o conector) continua valendo:
+    vira o motivo CONSUMO_INTERNO.
+    ⚠️ CONSUMO_INTERNO exige pessoa (095: sem dono, é perda); PERDA exige o motivo da
+    perda, da mesma lista de Ajustes ▸ Perda; OUTROS exige a observação — "outros" sem
+    explicação é o buraco que o motivo existe para fechar.
+    """
+    if venda.consumo_interno and not venda.motivo:
+        venda.motivo = "CONSUMO_INTERNO"
+    venda.motivo_observacao = (venda.motivo_observacao or "").strip() or None
+    if not venda.motivo:
+        venda.motivo_observacao = None
+        venda.id_motivo_perda = None
+        return
+    venda.consumo_interno = True
+    if venda.motivo != "PERDA":
+        venda.id_motivo_perda = None
+    if venda.motivo == "CONSUMO_INTERNO" and not venda.id_pessoa:
+        raise HTTPException(
+            status_code=422,
+            detail="Consumo interno precisa de uma pessoa: informe para quem é o lançamento.")
+    if venda.motivo == "PERDA":
+        if not venda.id_motivo_perda:
+            raise HTTPException(status_code=422, detail="Informe o motivo da perda.")
+        cur.execute("SELECT 1 FROM perda_motivos WHERE id = %s AND ativo",
+                    (venda.id_motivo_perda,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=422, detail="Motivo de perda não encontrado.")
+    if venda.motivo == "OUTROS" and not venda.motivo_observacao:
+        raise HTTPException(status_code=422,
+                            detail="Com o motivo Outros, a observação é obrigatória.")
+
+
+def _tipo_da_saida(venda) -> str:
+    """Como o documento sai do estoque: venda, perda ou consumo interno (095/134)."""
+    if getattr(venda, "motivo", None) == "PERDA":
+        return "SAIDA_PERDA"
+    return "SAIDA_CONSUMO_INTERNO" if venda.consumo_interno else "SAIDA_VENDA"
+
+
+def _motivo_perda_da_venda(venda) -> int | None:
+    return getattr(venda, "id_motivo_perda", None) if _tipo_da_saida(venda) == "SAIDA_PERDA" \
+        else None
+
+
+def _rotulo_do_motivo(venda) -> str:
+    """A observação do movimento: o motivo e, se houver, o que a pessoa escreveu."""
+    rotulo = ROTULOS_MOTIVO.get(getattr(venda, "motivo", None) or "CONSUMO_INTERNO",
+                                "Consumo interno")
+    obs = getattr(venda, "motivo_observacao", None)
+    return f"{rotulo}: {obs}"[:500] if obs else rotulo
+
+
 def _gravar_item(cur, id_unidade: int, id_venda: int, venda, item, id_usuario: int,
                  custos_cache: dict) -> dict:
     """Grava UMA linha da venda: congela o custo e baixa o estoque.
@@ -413,15 +480,16 @@ def _gravar_item(cur, id_unidade: int, id_venda: int, venda, item, id_usuario: i
                 id_produto=id_produto,
                 # 🔑 **Consumo interno sai como CONSUMO INTERNO** (095): é
                 # o que o põe na linha "dos quais: consumo interno" da
-                # apuração, com o custo dele. ⚠️ A origem continua VENDA:
+                # apuração, com o custo dele. E a PERDA pelo motivo (134) sai
+                # como perda, com o motivo dela. ⚠️ A origem continua VENDA:
                 # é por ela que o cancelamento acha o movimento a estornar.
-                tipo=("SAIDA_CONSUMO_INTERNO" if venda.consumo_interno
-                      else "SAIDA_VENDA"),
+                tipo=_tipo_da_saida(venda),
+                id_motivo_perda=_motivo_perda_da_venda(venda),
                 quantidade=item.quantidade,
                 data_movimento=_quando(venda.data, venda.hora),
                 origem_tipo="VENDA", origem_id=id_venda,
                 documento=venda.documento, id_usuario=id_usuario,
-                observacao=("Consumo interno" if venda.consumo_interno
+                observacao=(_rotulo_do_motivo(venda) if venda.consumo_interno
                             else "Produzido e vendido na hora" if feito
                             else "Baixa da venda"),
             )
@@ -462,10 +530,8 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         # ⚠️ **Consumo interno é de ALGUÉM** (migração 095): é o campo que a tela só
         # habilita depois de escolher a pessoa. Sem ela, "consumo interno" seria
         # mercadoria saindo sem dono — isso é perda, e tem tela própria.
-        if any(v.consumo_interno and not v.id_pessoa for v in body.vendas):
-            raise HTTPException(
-                status_code=422,
-                detail="Consumo interno precisa de uma pessoa: informe para quem é o lançamento.")
+        for v in body.vendas:
+            _normalizar_motivo(cur, v)
 
         for venda in body.vendas:
             if venda.documento:
@@ -532,13 +598,16 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                 cur.execute(
                     """INSERT INTO vendas (id_unidade, data, hora, origem, canal, documento,
                                            valor_total, desconto, cancelada, id_pessoa,
-                                           consumo_interno,
+                                           consumo_interno, motivo, motivo_observacao,
+                                           id_motivo_perda,
                                            cupom_base, cupom_desconto_pct, id_usuario)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                               %s, %s, %s)
                        RETURNING id""",
                     (id_unidade, venda.data, venda.hora, venda.origem, venda.canal,
                      venda.documento, total, venda.desconto or 0, venda.cancelada,
-                     venda.id_pessoa, bool(venda.consumo_interno and venda.id_pessoa),
+                     venda.id_pessoa, bool(venda.consumo_interno), venda.motivo,
+                     venda.motivo_observacao, venda.id_motivo_perda,
                      # 🔑 A política CONGELADA, como o custo da ficha: ela muda no
                      # cadastro, e sem isto o relatório de março passaria a se
                      # explicar por uma regra de setembro.
@@ -782,7 +851,7 @@ def alterar(id_venda: int, body: VendaAlterar, ctx: Contexto = Depends(_editar))
         if muda_data:
             cur.execute(
                 """SELECT m.id, m.id_local, m.id_produto, m.tipo, m.quantidade,
-                          m.data_movimento, m.observacao
+                          m.data_movimento, m.observacao, m.id_motivo_perda
                      FROM estoque_movimentos m
                     WHERE m.origem_tipo = 'VENDA' AND m.origem_id = %s
                       AND m.id_estorno_de IS NULL
@@ -803,6 +872,9 @@ def alterar(id_venda: int, body: VendaAlterar, ctx: Contexto = Depends(_editar))
                     # ⚠️ No razão a saída tem SINAL (-2); `lancar` quer o positivo.
                     id_produto=m["id_produto"], tipo=m["tipo"],
                     quantidade=abs(m["quantidade"]),
+                    # ⚠️ A perda lançada pelo motivo da venda (134) volta COM o motivo
+                    # dela: sem ele, `lancar` recusa a perda e a data não muda.
+                    id_motivo_perda=m["id_motivo_perda"],
                     data_movimento=_quando(nova_data, venda["hora"]),
                     origem_tipo="VENDA", origem_id=id_venda, documento=novo_doc,
                     id_usuario=ctx.id_usuario, observacao=m["observacao"])
@@ -849,7 +921,8 @@ def acrescentar_itens(id_venda: int, body: AcrescentarItensRequest,
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT v.id, v.data, v.hora, v.origem, v.documento, v.cancelada, v.id_pessoa,
-                      v.consumo_interno, v.cupom_base, v.cupom_desconto_pct,
+                      v.consumo_interno, v.motivo, v.motivo_observacao, v.id_motivo_perda,
+                      v.cupom_base, v.cupom_desconto_pct,
                       v.id_consumo_lote, v.valor_total, f.nome AS pessoa
                  FROM vendas v
                  LEFT JOIN fornecedores f ON f.id = v.id_pessoa
@@ -878,7 +951,11 @@ def acrescentar_itens(id_venda: int, body: AcrescentarItensRequest,
 
         cabecalho = SimpleNamespace(data=venda["data"], hora=venda["hora"],
                                     documento=venda["documento"], cancelada=False,
-                                    consumo_interno=bool(venda["consumo_interno"]))
+                                    consumo_interno=bool(venda["consumo_interno"]),
+                                    # A linha que chega depois sai pelo MESMO motivo (134).
+                                    motivo=venda["motivo"],
+                                    motivo_observacao=venda["motivo_observacao"],
+                                    id_motivo_perda=venda["id_motivo_perda"])
         soma = {"sem_vinculo": 0, "sem_custo": 0, "de_rascunho": 0, "produzido": 0, "baixado": 0}
         for item in body.itens:
             r_item = _gravar_item(cur, id_unidade, id_venda, cabecalho, item,
@@ -1022,8 +1099,10 @@ def previa_sem_baixa(ctx: Contexto = Depends(_ver)) -> dict:
                     -- ⚠️ O consumo interno lançado como VENDA (095) também é
                     -- saída da venda: sem ele aqui, a tela o daria como "não
                     -- baixado" e o botão baixaria de novo.
+                    -- E a perda pelo motivo da venda (134), pelo mesmo motivo.
                     AND (m.tipo = 'SAIDA_VENDA'
-                         OR (m.tipo = 'SAIDA_CONSUMO_INTERNO' AND m.origem_tipo = 'VENDA'))
+                         OR (m.tipo IN ('SAIDA_CONSUMO_INTERNO', 'SAIDA_PERDA')
+                             AND m.origem_tipo = 'VENDA'))
                     AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
                                      WHERE e.id_estorno_de = m.id)
                   GROUP BY m.id_produto
@@ -1125,8 +1204,10 @@ def baixar_sem_baixa(id_produto: int | None = None,
                     -- ⚠️ O consumo interno lançado como VENDA (095) também é
                     -- saída da venda: sem ele aqui, a tela o daria como "não
                     -- baixado" e o botão baixaria de novo.
+                    -- E a perda pelo motivo da venda (134), pelo mesmo motivo.
                     AND (m.tipo = 'SAIDA_VENDA'
-                         OR (m.tipo = 'SAIDA_CONSUMO_INTERNO' AND m.origem_tipo = 'VENDA'))
+                         OR (m.tipo IN ('SAIDA_CONSUMO_INTERNO', 'SAIDA_PERDA')
+                             AND m.origem_tipo = 'VENDA'))
                     AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
                                      WHERE e.id_estorno_de = m.id)
                   GROUP BY m.id_produto
@@ -1147,7 +1228,8 @@ def baixar_sem_baixa(id_produto: int | None = None,
         if faltas:
             cur.execute(
                 """SELECT vi.id, vi.id_produto, vi.quantidade, v.id AS id_venda, v.data,
-                          v.hora, v.documento, v.consumo_interno
+                          v.hora, v.documento, v.consumo_interno, v.motivo,
+                          v.motivo_observacao, v.id_motivo_perda
                      FROM venda_itens vi
                      JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
                     WHERE v.id_unidade = %s AND vi.id_produto = ANY(%s)
@@ -1175,9 +1257,10 @@ def baixar_sem_baixa(id_produto: int | None = None,
                     cur, id_unidade=id_unidade,
                     id_local=item["id_local_padrao"] or reserva,
                     id_produto=item["id_produto"],
-                    # O consumo interno (095) sai como consumo interno, também aqui.
-                    tipo=("SAIDA_CONSUMO_INTERNO" if item["consumo_interno"]
-                          else "SAIDA_VENDA"),
+                    # O consumo interno (095) sai como consumo interno, também aqui;
+                    # e a perda pelo motivo (134), como perda.
+                    tipo=_tipo_da_saida(SimpleNamespace(**item)),
+                    id_motivo_perda=_motivo_perda_da_venda(SimpleNamespace(**item)),
                     quantidade=item["quantidade"],
                     data_movimento=_quando(item["data"], item["hora"]),
                     origem_tipo="VENDA", origem_id=item["id_venda"],
@@ -1382,11 +1465,14 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
             """SELECT v.id, v.data, v.hora, v.origem, v.canal, v.documento, v.id_externo,
                       v.mesa, v.valor_total, v.desconto, v.cancelada, v.importada_em,
                       v.id_pessoa, v.cupom_base, v.cupom_desconto_pct, v.consumo_interno,
+                      v.motivo, v.motivo_observacao, v.id_motivo_perda,
+                      pm.nome AS motivo_perda,
                       f.nome AS pessoa,
                       u.nome AS usuario
                  FROM vendas v
                  LEFT JOIN usuarios u ON u.id = v.id_usuario
                  LEFT JOIN fornecedores f ON f.id = v.id_pessoa
+                 LEFT JOIN perda_motivos pm ON pm.id = v.id_motivo_perda
                 WHERE v.id = %s AND v.id_unidade = %s""",
             (id_venda, id_unidade),
         )

@@ -260,6 +260,60 @@ def movimentacao_congelada(cur, id_fechamento: int) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
+ROTULOS_CONSUMO = {
+    "CONSUMO_INTERNO": "consumo interno",
+    "PREMIO": "prêmios",
+    "BRINDE": "brindes/aniversário",
+    "OUTROS": "outros",
+    "AVULSO": "saídas de estoque",
+}
+
+
+def consumo_por_motivo(cur, id_unidade: int, inicio: date, fim: date,
+                       fora: list[str] | None = None) -> list[dict]:
+    """O consumo interno do período, separado pelo MOTIVO (migração 134).
+
+    🔑 Pedido do dono (26/10/2026): o documento lançado à mão com motivo Prêmio,
+    Brinde/Aniversário ou Outros sai como consumo interno, e a apuração diz quanto foi de
+    cada um. A saída avulsa de estoque (sem documento de venda) aparece como "saídas de
+    estoque". ⚠️ Mesma conta de `_soma_movimentos` — líquida de estorno, o estorno no
+    período DELE —, senão as partes não fechariam com a linha do consumo interno.
+    """
+    p = {"u": id_unidade, "inicio": inicio, "limite": fim + timedelta(days=1),
+         "fora": fora or None}
+    cur.execute(
+        """WITH mov AS (
+               SELECT abs(m.custo_total) AS valor, m.origem_tipo, m.origem_id
+                 FROM estoque_movimentos m
+                 JOIN produtos pr ON pr.id = m.id_produto
+                WHERE m.id_unidade = %(u)s AND m.tipo = 'SAIDA_CONSUMO_INTERNO'
+                  AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
+                  AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
+               UNION ALL
+               SELECT -abs(e.custo_total), o.origem_tipo, o.origem_id
+                 FROM estoque_movimentos e
+                 JOIN estoque_movimentos o ON o.id = e.id_estorno_de
+                 JOIN produtos pr ON pr.id = e.id_produto
+                WHERE e.id_unidade = %(u)s AND o.tipo = 'SAIDA_CONSUMO_INTERNO'
+                  AND e.data_movimento >= %(inicio)s AND e.data_movimento < %(limite)s
+                  AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
+           )
+           SELECT CASE WHEN mov.origem_tipo = 'VENDA'
+                       THEN coalesce(v.motivo, 'CONSUMO_INTERNO') ELSE 'AVULSO' END AS motivo,
+                  sum(mov.valor) AS valor
+             FROM mov
+             LEFT JOIN vendas v ON mov.origem_tipo = 'VENDA' AND v.id = mov.origem_id
+            GROUP BY 1""",
+        p,
+    )
+    ordem = list(ROTULOS_CONSUMO)
+    linhas = [{"motivo": r["motivo"], "rotulo": ROTULOS_CONSUMO.get(r["motivo"], r["motivo"]),
+               "valor": r["valor"]}
+              for r in cur.fetchall() if abs(r["valor"] or 0) >= Decimal("0.005")]
+    return sorted(linhas, key=lambda l: ordem.index(l["motivo"])
+                  if l["motivo"] in ordem else len(ordem))
+
+
 def _soma_movimentos(cur, id_unidade: int, inicio: date, fim: date, tipos,
                     fora: list[str] | None = None) -> Decimal:
     """Quanto estes tipos de movimento somaram no período — **líquido de estorno**.
@@ -484,6 +538,8 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
         "variancia": cmv_real - cmv_teorico,
         "perdas": perdas,
         "consumo_interno": consumo,
+        # 🔑 As partes do consumo interno, pelo motivo do documento (134).
+        "consumo_por_motivo": consumo_por_motivo(cur, id_unidade, inicio, fim, fora),
         "ajustes": ajustes,
         # Efeito NO CMV: negativo quando o estoque foi reavaliado para cima.
         "ajuste_custo": ajuste_custo,

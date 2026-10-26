@@ -1056,6 +1056,33 @@
   `custo da ficha ÷ rendimento` (o cookie saía pelo custo de 1 KG de massa). A regra mora
   em Custos — ver `custos.md`, "O custo unitário da ficha é o da PORÇÃO".
 
+- 🔑 **O MOTIVO de um documento que não é venda** (1.1.136, migração 134, pedido do dono
+  26/10/2026): *"ao lançar um documento à mão … campo Motivo, e quando selecionado algum, ter um
+  campo Observação: Perda, Prêmio, Brinde/Aniversário, Outros … basicamente consumo interno, saindo
+  pelo custo"*. A caixa "Considerar consumo interno" (095) virou o motivo CONSUMO_INTERNO.
+  - `vendas.motivo` (CONSUMO_INTERNO, PERDA, PREMIO, BRINDE, OUTROS), `motivo_observacao`,
+    `id_motivo_perda` (→ `perda_motivos`) e `id_premio` (→ `fidelidade_premios`, previsto para a
+    fidelidade, ainda sem uso). CHECK: com motivo, `consumo_interno` é verdadeiro. A migração deu
+    o motivo CONSUMO_INTERNO a todo consumo interno antigo.
+  - 🔑 **`consumo_interno` continua sendo a chave de "fora da receita"** para TODO motivo: as dez
+    consultas que já o excluem (apuração, margem, painel, início, cardápio) não mudaram.
+  - `_normalizar_motivo` (routers/vendas.py): `consumo_interno=true` sem motivo vira
+    CONSUMO_INTERNO (tela antiga, conector); CONSUMO_INTERNO exige pessoa; PERDA exige motivo de
+    perda ativo; OUTROS exige observação (422). Os outros motivos NÃO exigem pessoa.
+  - Saída (`_tipo_da_saida`): PERDA → `SAIDA_PERDA` com `id_motivo_perda` (entra em Perdas e no
+    relatório de perdas); os outros → `SAIDA_CONSUMO_INTERNO`. O rótulo do movimento é
+    "<motivo>: <observação>". Vale também no "acrescentar itens" e na baixa atrasada.
+  - ⚠️ **Trocar a data relança o razão** (`alterar`): a perda volta COM `id_motivo_perda`, senão
+    `lancar` recusa (exigir_motivo_perda). E a conferência "vendido × saiu" aceita `SAIDA_PERDA`
+    de origem VENDA, como já aceitava o consumo interno — senão o botão baixaria de novo.
+  - CMV: `consumo_por_motivo` na apuração (`cmv.consumo_por_motivo`, líquido de estorno; saída
+    avulsa = "saídas de estoque"); somado parte a parte entre lojas; painel e exportação mostram
+    as partes quando há mais de uma.
+  - Tela: `vendas/lancar` — Motivo (Consumo interno desabilitado sem pessoa), Motivo da perda,
+    Observação e o aviso do que acontece; lista e detalhe mostram o motivo. Conector: `lancar_vendas`
+    aceita `motivo`, `motivo_observacao`, `id_motivo_perda`.
+  - Cobertura: `smoke_venda_motivo.py` (27) e `verificar.mjs` (campo, motivo da perda, Outros).
+
 - 🔑 **Venda de pessoa como CONSUMO INTERNO** (migração 095, 26/09/2026). Pedido do dono:
   *"quando lanço uma venda para uma pessoa, habilitar um novo campo, Considerar consumo
   interno … não é considerado no CMV, somente o custo … mesma regra do consumo interno."*

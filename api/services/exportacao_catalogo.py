@@ -788,6 +788,11 @@ def _cmv(cur, id_unidade: int, f: dict) -> Saida:
         {"linha": "Variância (real − teórico)", "valor": reais(a["variancia"])},
         {"linha": "  dos quais: perdas", "valor": reais(a["perdas"])},
         {"linha": "  dos quais: consumo interno", "valor": reais(a["consumo_interno"])},
+        # As partes do consumo interno, pelo motivo do documento (134) — só com mais de
+        # uma, senão a parte repete a linha de cima.
+        *([{"linha": f"      {p['rotulo']}", "valor": reais(p["valor"])}
+           for p in a.get("consumo_por_motivo", [])]
+          if len(a.get("consumo_por_motivo", [])) > 1 else []),
         {"linha": "  dos quais: ajustes de inventário", "valor": reais(a["ajustes"])},
         {"linha": "Receita do período", "valor": reais(a["receita"])},
     ]
@@ -2043,6 +2048,8 @@ def _agenda_producao(cur, id_unidade: int, f: dict) -> Saida:
                  "O que separar", None)] if lista_sep else [])
 
 
+_MOTIVOS_VENDA = {"CONSUMO_INTERNO": "consumo interno", "PERDA": "perda", "PREMIO": "prêmio",
+                  "BRINDE": "brinde/aniversário", "OUTROS": "outros"}
 _ORIGENS_VENDA = {"PDV_LEGAL": "PDV Legal", "PDV": "PDV", "PLANILHA": "planilha",
                   "MANUAL": "lançada à mão"}
 _CANAIS_VENDA = {"BALCAO": "balcão", "SALAO": "salão", "DELIVERY": "delivery",
@@ -2077,7 +2084,7 @@ def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
     cur.execute(
         """SELECT v.id, v.data, v.hora, v.documento, v.origem, v.canal, v.mesa,
                   fo.nome AS pessoa, v.desconto, v.valor_total, v.cancelada,
-                  v.consumo_interno,
+                  v.consumo_interno, v.motivo,
                   (SELECT count(*) FROM venda_itens vi WHERE vi.id_venda = v.id) AS itens
              FROM vendas v
              LEFT JOIN fornecedores fo ON fo.id = v.id_pessoa
@@ -2090,8 +2097,11 @@ def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
         d = dict(r)
         d["origem_txt"] = _ORIGENS_VENDA.get(d["origem"], d["origem"])
         d["canal_txt"] = _CANAIS_VENDA.get((d["canal"] or "").upper(), d["canal"] or "")
+        # O motivo (134) diz que tipo de "não é venda" o documento é.
         d["situacao"] = ("cancelada" if d["cancelada"]
-                         else "consumo interno" if d["consumo_interno"] else "")
+                         else _MOTIVOS_VENDA.get(d["motivo"] or "CONSUMO_INTERNO",
+                                                 "consumo interno")
+                         if d["consumo_interno"] else "")
         d["hora"] = str(d["hora"])[:5] if d["hora"] else None
         linhas.append(d)
     validas = [l for l in linhas if not l["cancelada"]]

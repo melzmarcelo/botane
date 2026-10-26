@@ -790,6 +790,18 @@ FERRAMENTAS: list[Ferramenta] = [
                                                     "quando é consumo de pessoa da casa."},
                        "consumo_interno": {"type": "boolean",
                                            "description": "Consumo da casa, não venda."},
+                       "motivo": {"type": "string",
+                                  "enum": ["CONSUMO_INTERNO", "PERDA", "PREMIO", "BRINDE",
+                                           "OUTROS"],
+                                  "description": "Quando NÃO é venda: fica fora da receita "
+                                                 "e sai pelo custo. PERDA sai como perda "
+                                                 "(pede id_motivo_perda); CONSUMO_INTERNO "
+                                                 "pede id_pessoa; OUTROS pede observação."},
+                       "motivo_observacao": {"type": "string",
+                                             "description": "Por quê, em palavras."},
+                       "id_motivo_perda": {"type": "integer",
+                                           "description": "De `motivos_de_perda`, com "
+                                                          "motivo PERDA."},
                        "itens": {"type": "array", "items": {
                            "type": "object",
                            "properties": {

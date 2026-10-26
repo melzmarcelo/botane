@@ -1,6 +1,7 @@
 """Modelos de vendas e CMV."""
 
 from datetime import date, time
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -56,6 +57,14 @@ class VendaImportar(BaseModel):
     # só o custo pesa, na linha de consumo interno. ⚠️ Só com pessoa: é o campo que a
     # tela habilita quando se escolhe para quem é o lançamento.
     consumo_interno: bool = False
+    # 🔑 **O MOTIVO de um documento que não é venda** (migração 134, pedido do dono,
+    # 26/10/2026). Com motivo, o documento fica fora da receita (`consumo_interno`
+    # vira verdadeiro no servidor) e sai do estoque pelo custo: PERDA como perda, com
+    # `id_motivo_perda`; os outros como consumo interno. CONSUMO_INTERNO é a antiga
+    # caixa e continua exigindo pessoa; OUTROS exige a observação.
+    motivo: Literal["CONSUMO_INTERNO", "PERDA", "PREMIO", "BRINDE", "OUTROS"] | None = None
+    motivo_observacao: str | None = Field(default=None, max_length=500)
+    id_motivo_perda: int | None = None
     itens: list[ItemVenda]
 
 
@@ -111,6 +120,7 @@ class VendaResponse(BaseModel):
     # ⚠️ Campo novo em resposta com `response_model` precisa estar AQUI, senão sai
     # recortado (a armadilha do `reservas_ligado` e do `porcao_qtd`). Migração 095.
     consumo_interno: bool = False
+    motivo: str | None = None
     itens: int = 0
     sem_custo: int = 0
 
@@ -127,6 +137,9 @@ class ApuracaoResponse(BaseModel):
     variancia_pct: float | None = None
     perdas: float
     consumo_interno: float
+    # 🔑 O consumo interno separado pelo motivo do documento (migração 134):
+    # `[{motivo, rotulo, valor}]`. Tem de estar AQUI, senão o `response_model` o recorta.
+    consumo_por_motivo: list[dict] = []
     ajustes: float
     # ⚠️ Efeito NO CMV da reavaliação de custo, já com o sinal invertido:
     # estoque reavaliado para cima deixa o CMV MENOR. Sem esta linha o número

@@ -17,6 +17,8 @@ export type Venda = {
   cancelada: boolean;
   /** Consumo interno (095): fora da receita e do CMV teórico. */
   consumo_interno?: boolean;
+  /** Por que não é venda (134): ver `MOTIVOS_VENDA`. */
+  motivo?: string | null;
   itens: number;
   sem_custo: number;
 };
@@ -94,6 +96,10 @@ export type VendaDetalhe = {
   cancelada: boolean;
   /** Consumo interno (095): fora da receita e do CMV teórico. */
   consumo_interno?: boolean;
+  /** Por que não é venda (134), o que a pessoa escreveu e o motivo da perda. */
+  motivo?: string | null;
+  motivo_observacao?: string | null;
+  motivo_perda?: string | null;
   importada_em: string | null;
   usuario: string | null;
   /** Para quem foi este cupom — e a política que valia NO DIA, congelada. */
@@ -117,6 +123,25 @@ export const ORIGENS: Record<string, string> = {
   PLANILHA: "planilha",
   MANUAL: "lançada à mão",
 };
+
+/**
+ * Por que um documento NÃO é venda (migração 134, pedido do dono, 26/10/2026). Todo
+ * motivo põe o documento fora da receita e sai do estoque pelo custo: a perda como
+ * perda (com o motivo da perda), os outros como consumo interno.
+ */
+export const MOTIVOS_VENDA: Record<string, string> = {
+  CONSUMO_INTERNO: "Consumo interno",
+  PERDA: "Perda",
+  PREMIO: "Prêmio",
+  BRINDE: "Brinde/Aniversário",
+  OUTROS: "Outros",
+};
+
+/** A etiqueta do documento na lista e no detalhe: o motivo, ou "consumo interno". */
+export const etiquetaDoMotivo = (v: { consumo_interno?: boolean; motivo?: string | null }) =>
+  v.consumo_interno
+    ? (MOTIVOS_VENDA[v.motivo || "CONSUMO_INTERNO"] ?? "Consumo interno").toLowerCase()
+    : null;
 
 export const CANAIS: Record<string, string> = {
   BALCAO: "balcão",
