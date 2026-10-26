@@ -1470,3 +1470,18 @@ são cadastro, esperando a vitrine que os mostre. Ver [`catalogos.md`](catalogos
     só ativos, grava só o que mudou; cada lista respeita a própria permissão.
   - Conector: `criar/atualizar_categoria` e `criar/atualizar_setor` aceitam `descricao`.
   - Cobertura: `smoke_descricoes.py` e `verificar.mjs` (dica do tipo; janela sem salvar).
+
+- 🔑 **A ficha técnica no cadastro do produzido** (1.1.135, pedido do dono 26/10/2026):
+  *"quando ele é produzido, … informação que está faltando o cadastro de ficha, ou se a ficha não
+  está homologada ou homologada, e ter acesso à ficha direto do produto"*. Veio da conferência do
+  local PRODUÇÃO: 26 bebidas negativas porque a venda baixou o produto sem produzir — a produção na
+  hora (`producao_agenda.producao_da_venda`) e a manual (`estoque.produzir`) só usam ficha HOMOLOGADA.
+  - `produtos/[id]/ficha.tsx`, no cartão Natureza, com produção própria ligada e produto salvo;
+    `GET /fichas?id_produto=` (já existia, `fichas.visualizar`/`fichas.editar`). Sem API nova.
+  - Três estados (`#ficha-do-produto[data-situacao]`): `sem_ficha` (alerta + `#criar-ficha` →
+    `/fichas/nova?produto=ID`, só com `fichas.editar`), `rascunho` (alerta: rascunho NÃO vale) e
+    `homologada` (verde + `#abrir-ficha`; rascunho mais novo aparece junto, `#abrir-rascunho`).
+    O texto da falta muda com o modo: NA_HORA diz que a venda não consome os insumos.
+  - O botão **Reclassificar por planilha** saiu da lista de produtos (a tela continua em
+    `/produtos/reclassificar`, sem link). `verificar-reclassificar.mjs` confere a ausência.
+  - Cobertura: `verificar.mjs` (produto e ficha próprios: sem ficha → rascunho → homologada).

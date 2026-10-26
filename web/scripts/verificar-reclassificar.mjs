@@ -57,11 +57,13 @@ try {
   await p.evaluate((a, r) => { localStorage.setItem("botane.access", a); localStorage.setItem("botane.refresh", r); localStorage.setItem("botane.unidade", "1"); },
                    login.access_token, login.refresh_token);
 
-  console.log("1. a lista de produtos leva à reclassificação");
+  // ⚠️ O botão saiu da lista em 26/10/2026 (pedido do dono: a reestruturação já
+  // passou). A tela continua de pé pelo endereço — é ela que o passo 2 exercita.
+  console.log("1. a lista de produtos NÃO mostra mais o botão");
   await p.goto(`${WEB}/produtos`, { waitUntil: "networkidle2" });
-  const temLink = await p.waitForSelector('a[href="/produtos/reclassificar"]', { timeout: 30000 })
-    .then(() => true).catch(() => false);
-  checar("o botão Reclassificar por planilha aparece", temLink);
+  await p.waitForSelector('a[href="/produtos/novo"]', { timeout: 30000 }).catch(() => {});
+  const temLink = await p.evaluate(() => !!document.querySelector('a[href="/produtos/reclassificar"]'));
+  checar("o botão Reclassificar por planilha não aparece na lista", !temLink);
 
   console.log("\n2. prévia e aplicação");
   await p.goto(`${WEB}/produtos/reclassificar`, { waitUntil: "networkidle2" });

@@ -163,13 +163,9 @@ export default function PaginaProdutos() {
               Código de barras das notas
             </Link>
           )}
-          {/* 🔑 Cada produto com o SEU tipo, categoria, setor e local, pela planilha
-              exportada (reestruturação de 23/10/2026). */}
-          {podeEditar && (
-            <Link href="/produtos/reclassificar" className="btn btn-secundario">
-              Reclassificar por planilha
-            </Link>
-          )}
+          {/* ⚠️ **"Reclassificar por planilha" saiu daqui** (26/10/2026, pedido do
+              dono): serviu à reestruturação de 23/10 e já cumpriu o papel. A tela
+              continua em /produtos/reclassificar, para uma próxima vez. */}
           {podeEditar && (
             <Link href="/produtos/novo" className="btn btn-primario">
               Novo produto

@@ -37,6 +37,7 @@ import CodigosDoProduto, { CodigoExterno } from "./codigos";
 import CardapioVivoDoProduto from "./cardapio-vivo";
 import ComposicaoKit from "./kit";
 import CustoDoProduto from "./custo";
+import FichaDoProdutoResumo from "./ficha";
 import LocaisDoProduto from "./locais";
 import UnidadesDeCompra from "./unidades";
 import MovimentacaoDoProduto from "./movimentacao";
@@ -1441,6 +1442,17 @@ export default function FormularioProduto() {
                 })}
               </ul>
             </div>
+          )}
+
+          {/* 🔑 Onde está a ficha, e se ela vale (pedido do dono, 26/10/2026) — ver
+              `ficha.tsx`. Produto novo ainda não tem id para ter ficha. */}
+          {f.producao_propria && !novo && (pode("fichas.visualizar") || pode("fichas.editar")) && (
+            <FichaDoProdutoResumo
+              key={`ficha-${recarga}`}
+              idProduto={Number(id)}
+              naHora={f.modo_producao === "NA_HORA"}
+              podeCriar={pode("fichas.editar")}
+            />
           )}
       </Cartao>
 

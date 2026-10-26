@@ -698,6 +698,49 @@ try {
     await foto(p, nome);
   }
 
+  // 🔑 **A ficha do produzido, no cadastro dele** (26/10/2026, pedido do dono): sem
+  // ficha, em rascunho e homologada, com o caminho até ela. Produto e ficha DESTA
+  // suíte — a situação de um produto da base não é precondição que se possa supor.
+  const marcaFp = String(Date.now()).slice(-5);
+  const { dados: insFp } = await api("POST", "/produtos",
+    { nome: `Ficha cadastro insumo ${marcaFp}`, tipo: "INSUMO", um_estoque: "KG" }, token);
+  const { dados: prodFp } = await api("POST", "/produtos",
+    { nome: `Ficha cadastro prato ${marcaFp}`, tipo: "PRODUZIDO", um_estoque: "UN",
+      producao_propria: true, modo_producao: "NA_HORA" }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${prodFp.id}`, null, token));
+  aoTerminar.push(() => api("DELETE", `/produtos/${insFp.id}`, null, token));
+  const situacaoDaFicha = async () => {
+    await irPara(p, `${WEB}/produtos/${prodFp.id}`);
+    await p.waitForSelector("#ficha-do-produto", { timeout: 15000 }).catch(() => {});
+    return p.evaluate(() => {
+      const caixa = document.querySelector("#ficha-do-produto");
+      return {
+        situacao: caixa?.getAttribute("data-situacao") ?? null,
+        texto: caixa?.innerText ?? "",
+        criar: document.querySelector("#criar-ficha")?.getAttribute("href") ?? null,
+        abrir: document.querySelector("#abrir-ficha")?.getAttribute("href")
+          ?? document.querySelector("#abrir-rascunho")?.getAttribute("href") ?? null,
+      };
+    });
+  };
+  const semFicha = await situacaoDaFicha();
+  checar("produzido sem ficha avisa e oferece criar a ficha já com o produto",
+    semFicha.situacao === "sem_ficha" && semFicha.criar === `/fichas/nova?produto=${prodFp.id}`
+      && /não consome os insumos/.test(semFicha.texto), semFicha);
+  const { dados: fichaFp } = await api("POST", "/fichas", {
+    id_produto: prodFp.id, rendimento_qtd: 1, rendimento_um: "UN", porcoes: 1,
+    itens: [{ id_insumo: insFp.id, qtd_bruta: 0.1, um: "KG" }],
+  }, token);
+  const emRascunho = await situacaoDaFicha();
+  checar("ficha em rascunho aparece em alerta, dizendo que ainda não vale",
+    emRascunho.situacao === "rascunho" && emRascunho.abrir === `/fichas/${fichaFp.id}`
+      && /Ainda não vale/.test(emRascunho.texto), emRascunho);
+  await api("POST", `/fichas/${fichaFp.id}/homologar`, null, token);
+  const homologadaFp = await situacaoDaFicha();
+  checar("e homologada aparece em verde, com o link direto para ela",
+    homologadaFp.situacao === "homologada" && homologadaFp.abrir === `/fichas/${fichaFp.id}`,
+    homologadaFp);
+
   // Cadastro de um produto pela tela, do jeito que o cliente faria.
   await p.goto(`${WEB}/produtos/novo`, { waitUntil: "networkidle2" });
   await assentar(1200);

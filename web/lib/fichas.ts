@@ -33,6 +33,18 @@ export type FilaDeFichas = {
 export const filaDeFichas = (dias = 30, limite = 10) =>
   api.get<FilaDeFichas>(`/fichas/fila?dias=${dias}&limite=${limite}`);
 
+/** Uma versão da ficha de um produto, como `GET /fichas?id_produto=` devolve. */
+export type FichaDoProduto = {
+  id: number;
+  versao: number;
+  status: "RASCUNHO" | "HOMOLOGADA" | "ARQUIVADA" | string;
+  itens: number;
+};
+
+/** Todas as versões da ficha deste produto, da mais nova para a mais velha. */
+export const fichasDoProduto = (idProduto: number) =>
+  api.get<FichaDoProduto[]>(`/fichas?id_produto=${idProduto}&limite=50`);
+
 /**
  * O livro de fichas: todas as homologadas num PDF só, uma por página (23/10/2026).
  * Sai na versão da COZINHA (sem custos) — é o papel que fica no fichário.
