@@ -554,7 +554,17 @@ checar("sem apagar o resto do cadastro",
 erro, r = chamar_ferramenta("desativar_fornecedor", id_fornecedor=forn.get("id"))
 checar("desativar_fornecedor desativa", not erro, r)
 
-_sigla = f"Z{marca_p[-4:]}"
+# ⚠️ **A sigla sorteada tem de estar LIVRE** (25/10/2026). Era `Z` + os quatro últimos
+# dígitos do relógio — dez mil siglas, e cada rodada deixa a dela no cadastro (só
+# desativada). Com 381 já usadas, a colisão virou rotina e a bateria acusava "já existe
+# unidade com esta sigla" sem defeito nenhum. Agora são cinco caracteres aleatórios,
+# conferidos contra a base antes de usar.
+with get_cursor() as _c:
+    while True:
+        _sigla = "Z" + secrets.token_hex(3).upper()[:5]
+        _c.execute("SELECT 1 FROM unidades_medida WHERE upper(sigla) = %s", (_sigla,))
+        if not _c.fetchone():
+            break
 erro, r = chamar_ferramenta("criar_unidade_de_medida", sigla=_sigla, nome="Do Claude",
                             grandeza="MASSA", fator_base=1)
 checar("criar_unidade_de_medida cria", not erro, r)
