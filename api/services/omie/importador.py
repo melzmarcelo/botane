@@ -597,6 +597,45 @@ def reconciliar(cur, id_unidade: int, id_nota: int | None = None,
             "notas": len(notas_mexidas), "recalculadas": len(recalculadas)}
 
 
+def estornar_lancamento(cur, id_nota: int, id_usuario: int, *, na_data_original: bool = False,
+                        motivo: str | None = None) -> int:
+    """Desfaz o lançamento da nota: cada movimento ganha a contrapartida. Devolve quantos.
+
+    A nota volta a CONCILIADA (a conferência), sem `lancada_em`/`lancada_por`.
+    🔑 **Um código só para o botão e para a sincronização** (27/10/2026): o
+    recebimento desfeito no Omie estorna sozinho, e duas cópias desta conta
+    divergiriam na primeira correção.
+    ⚠️ `na_data_original`: o estorno nasce NA DATA de cada movimento (a regra da
+    venda que muda de data), para o dia da nota zerar em vez de a entrada ficar num
+    período e a saída em outro. Período fechado recusa (`estoque._travar_periodo_fechado`),
+    e a recusa sobe — quem chama decide o que fazer com ela.
+    """
+    cur.execute("SELECT status FROM notas_entrada WHERE id = %s FOR UPDATE", (id_nota,))
+    nota = cur.fetchone()
+    if not nota:
+        raise HTTPException(status_code=404, detail="Nota não encontrada")
+    if nota["status"] != "LANCADA":
+        raise HTTPException(status_code=400, detail="Esta nota não está lançada.")
+    cur.execute(
+        """SELECT m.id, m.data_movimento FROM estoque_movimentos m
+            WHERE m.origem_tipo = 'NOTA' AND m.origem_id = %s
+              AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e WHERE e.id_estorno_de = m.id)
+            ORDER BY m.id""",
+        (id_nota,),
+    )
+    movimentos = [dict(r) for r in cur.fetchall()]
+    for m in movimentos:
+        motor.estornar(cur, m["id"], id_usuario, motivo or f"Estorno da nota #{id_nota}",
+                       data_movimento=m["data_movimento"] if na_data_original else None)
+    cur.execute(
+        """UPDATE notas_entrada SET status = 'CONCILIADA', lancada_em = NULL,
+                                    lancada_por = NULL
+            WHERE id = %s""",
+        (id_nota,),
+    )
+    return len(movimentos)
+
+
 def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
                 pode_retroativo: bool = False) -> dict:
     """Transforma a nota em movimento de estoque. Só com tudo conciliado."""
@@ -945,6 +984,17 @@ def mudou_no_omie(cur, id_unidade: int, cabecalho: dict) -> dict | None:
     if (cabecalho.get("recebida") is True and aqui["status"] in ("IMPORTADA", "CONCILIADA")
             and mapeadores.situacao_no_omie(_como_dict(aqui["bruto"]))["recebida"] is not True):
         difere["recebida"] = (False, True)
+    # 🔑 **A ETAPA mudou lá** (27/10/2026, pedido do dono: a nota recebida que volta
+    # para a conferência, e que depois é recebida de novo). A lista traz o `cEtapa`
+    # — a marca `cRecebido`, talvez não —, e ele muda nas duas viradas: a 80 era a
+    # recebida no ar, a 40 a não recebida. Mudou → o detalhe decide. ⚠️ Comparada com
+    # a etapa guardada no `bruto` (o detalhe da última leitura): sem nada guardado,
+    # não há o que comparar.
+    etapa_aqui = mapeadores.situacao_no_omie(_como_dict(aqui["bruto"]))["marcas"].get("cEtapa")
+    etapa_la = cabecalho.get("etapa_omie")
+    if (etapa_la and etapa_aqui is not None
+            and str(etapa_aqui).strip() != str(etapa_la).strip()):
+        difere["etapa"] = (str(etapa_aqui).strip(), str(etapa_la).strip())
     if not difere:
         return None
     return {"id": aqui["id"], "status": aqui["status"], "campos": difere}
@@ -1200,6 +1250,10 @@ FOLGA_DIAS = 7
 # giro de compras de um restaurante sem puxar o histórico inteiro.
 JANELA_PADRAO = 60
 
+# Quantos dias para trás a lista é varrida com o "lançar notas recebidas" ligado —
+# para enxergar o recebimento desfeito no Omie depois do lançamento aqui.
+VIGIA_DIAS = 30
+
 
 def janela(cur, id_unidade: int, desde: date | None = None,
            dias: int | None = None) -> tuple[date, str]:
@@ -1215,7 +1269,8 @@ def janela(cur, id_unidade: int, desde: date | None = None,
     if desde:
         return desde, f"desde {desde.strftime('%d/%m/%Y')}"
     if dias:
-        return relogio.hoje_da_casa() - timedelta(days=dias), f"últimos {dias} dias"
+        return _com_vigia(cur, id_unidade, relogio.hoje_da_casa() - timedelta(days=dias),
+                          f"últimos {dias} dias")
 
     cur.execute(
         """SELECT ultima_sincronizacao, so_recebidas, aguardando_recebimento_desde
@@ -1239,6 +1294,23 @@ def janela(cur, id_unidade: int, desde: date | None = None,
         inicio = max(aguardando, relogio.hoje_da_casa() - timedelta(days=JANELA_PADRAO))
         motivo += (f"; desde {inicio.strftime('%d/%m/%Y')} pela nota mais antiga "
                    "que esperava recebimento")
+    return _com_vigia(cur, id_unidade, inicio, motivo)
+
+
+def _com_vigia(cur, id_unidade: int, inicio: date, motivo: str) -> tuple[date, str]:
+    """🔑 **Com o "lançar notas recebidas", a lista é VIGIADA por `VIGIA_DIAS`** (27/10/2026).
+
+    O recebimento desfeito no Omie (a nota volta para a conferência) só se vê passando
+    pela nota na lista; com a janela da última busca + folga — ou a de um dia, do botão
+    —, a recebida há duas semanas e desfeita hoje ficaria de fora. A lista é a chamada
+    BARATA (50 notas por página); o detalhe só é pedido quando a etapa mudou.
+    ⚠️ Vale para a janela automática e para a de `dias`; a data escolhida (`desde`, a
+    carga do histórico) manda sozinha.
+    """
+    if _opcoes_de_notas(cur, id_unidade)["lancar_recebidas"]:
+        vigia = relogio.hoje_da_casa() - timedelta(days=VIGIA_DIAS)
+        if vigia < inicio:
+            return vigia, motivo + f"; vigiando os últimos {VIGIA_DIAS} dias (lançar recebidas)"
     return inicio, motivo
 
 
@@ -1270,7 +1342,7 @@ def _opcoes_de_notas(cur, id_unidade: int) -> dict:
     """As duas opções de notas da integração (130). Sem linha, as duas desligadas."""
     cur.execute(
         """SELECT so_recebidas, lancar_recebidas, lancar_recebidas_desde,
-                  aguardando_recebimento_desde
+                  aguardando_recebimento_desde, lancar_recebidas_corte
              FROM integracoes WHERE id_unidade = %s AND servico = 'OMIE'""",
         (id_unidade,),
     )
@@ -1278,6 +1350,7 @@ def _opcoes_de_notas(cur, id_unidade: int) -> dict:
     return {"so_recebidas": bool(linha and linha["so_recebidas"]),
             "lancar_recebidas": bool(linha and linha["lancar_recebidas"]),
             "lancar_recebidas_desde": linha["lancar_recebidas_desde"] if linha else None,
+            "lancar_recebidas_corte": linha["lancar_recebidas_corte"] if linha else None,
             "aguardando_recebimento_desde":
                 linha["aguardando_recebimento_desde"] if linha else None}
 
@@ -1311,8 +1384,17 @@ def lancar_as_recebidas(cur, id_unidade: int) -> dict | None:
     mesmas recusas — item sem produto, produto sem unidade, período fechado — e nota
     cuja conversão declarada diverge do cadastro fica para uma pessoa conferir. O que
     não lança fica na fila de sempre, com o motivo na resposta.
-    ⚠️ **Só nota importada DEPOIS de ligar a opção** (`lancar_recebidas_desde`): as
-    conciliadas que já esperavam têm o lote com prévia, e o razão é append-only.
+    🔑 **TODA nota aberta recebida, também as de ANTES de ligar** (27/10/2026, pedido
+    do dono: *"caso tenha nota presa de antes de marcar, ao rodar, estas também podem
+    ser atualizadas"*). Até a 1.1.139 só entrava a importada depois de ligar
+    (`lancar_recebidas_desde`, que fica gravado e não filtra mais nada). A nota antiga
+    precisa ter sido RELIDA para a marca valer — a releitura das abertas e a etapa
+    que muda na lista fazem isso.
+    🔑 E a que travou por um motivo (item sem produto, conversão a conferir) entra na
+    próxima busca depois de ajustada: a seleção é refeita a cada rodada.
+    ⚠️ **Com o CORTE de data** (migração 136, o dono escolheu 01/10/2026): só nota com
+    entrada (ou emissão) a partir dele. No ar havia 17 abertas de setembro e outubro,
+    várias de equipamento e obra, que ninguém lançou de propósito.
     ⚠️ **Nunca no período fechado** (`pode_retroativo=False`), seja quem for que assina.
     🔑 **Assina quem LIGOU a opção** (`agenda_id_usuario`, gravado por quem salvou a
     integração), e não quem clicou em buscar: o lançamento é decisão de quem
@@ -1333,8 +1415,8 @@ def lancar_as_recebidas(cur, id_unidade: int) -> dict | None:
         """SELECT id, bruto FROM notas_entrada
             WHERE id_unidade = %s AND origem = 'OMIE'
               AND status IN ('IMPORTADA', 'CONCILIADA')
-              AND importada_em >= coalesce(%s, now())""",
-        (id_unidade, opcoes["lancar_recebidas_desde"]),
+              AND (%s::date IS NULL OR coalesce(data_entrada, data_emissao) >= %s)""",
+        (id_unidade, opcoes["lancar_recebidas_corte"], opcoes["lancar_recebidas_corte"]),
     )
     ids = [r["id"] for r in cur.fetchall()
            if mapeadores.situacao_no_omie(_como_dict(r["bruto"]))["recebida"] is True]
@@ -1378,6 +1460,10 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
     # NÃO puderam ser, por já estarem no razão. As segundas importam mais — elas
     # são a divergência que ninguém veria de outro jeito.
     atualizadas, travadas = 0, []
+    # 🔑 As recebidas no Omie, lançadas aqui, cujo recebimento foi DESFEITO lá: estornadas
+    # e de volta à conferência (27/10/2026).
+    desfeitas: list[dict] = []
+    lancar_recebidas = _opcoes_de_notas(cur, id_unidade)["lancar_recebidas"]
     seguidas, truncou = 0, {}
 
     def parou_no_teto(trazidos, total):
@@ -1411,6 +1497,25 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
                     if not mudanca:
                         repetidas += 1
                         continue
+                    if mudanca["status"] == "LANCADA" and "etapa" in mudanca["campos"]:
+                        # 🔑 **A etapa da LANÇADA mudou lá** (27/10/2026). Com o
+                        # "lançar notas recebidas" ligado, o Omie manda: recebimento
+                        # desfeito estorna e volta para a conferência. Sem a opção,
+                        # etapa sozinha não é alarme — segue como antes.
+                        r_etapa = (_lancada_mudou_de_etapa(cur, cliente, mudanca, cabecalho)
+                                   if lancar_recebidas else None)
+                        if r_etapa and r_etapa.get("desfeita"):
+                            desfeitas.append(r_etapa["desfeita"])
+                            repetidas += 1
+                            continue
+                        if r_etapa and r_etapa.get("travada"):
+                            travadas.append(r_etapa["travada"])
+                            repetidas += 1
+                            continue
+                        mudanca["campos"].pop("etapa", None)
+                        if not mudanca["campos"]:
+                            repetidas += 1
+                            continue
                     if mudanca["status"] == "LANCADA":
                         # ⚠️ **Não reescreve, e não cala.** Os movimentos já
                         # estão no razão; o que se pode fazer é DIZER que a nota
@@ -1480,6 +1585,9 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
         recado += f"; {aguardando} ainda não recebida(s) no Omie, ficaram para depois"
     if atualizadas:
         recado += f"; {atualizadas} atualizada(s) com o ajuste do Omie"
+    if desfeitas:
+        recado += (f"; {len(desfeitas)} com o recebimento desfeito no Omie: estornada(s) e de "
+                   "volta à conferência")
     # ⚠️ A travada entra na frase mesmo sendo "nada aconteceu": é justamente o
     # caso em que alguém precisa agir, e um silêncio aqui o esconderia.
     canceladas_lancadas = [t for t in travadas if "cancelada" in t["campos"]]
@@ -1512,7 +1620,7 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
                        "não deu para completar os fornecedores desta leva", cliente.modo)
 
     return {"novas": novas, "repetidas": repetidas, "atualizadas": atualizadas,
-            "travadas": travadas,
+            "travadas": travadas, "desfeitas": desfeitas,
             "paginas": paginas, "modo": cliente.modo,
             "desde": inicio, "janela": motivo, "fornecedores_completados": completados,
             "fora_da_janela": antigas, "sem_detalhe": falhas,
@@ -1520,6 +1628,70 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
             # Só preenchido quando a varredura parou no teto de páginas: sem
             # isso, "0 nova(s)" não se distingue de "não deu tempo de chegar lá".
             "faltou_varrer": truncou or None}
+
+
+def _lancada_mudou_de_etapa(cur, cliente: ClienteOmie, mudanca: dict,
+                            cabecalho: dict) -> dict | None:
+    """A nota LANÇADA aqui cuja etapa mudou no Omie. Devolve o que aconteceu.
+
+    🔑 **Pedido do dono (27/10/2026):** *"foi recebida, depois voltada para conferência,
+    no sistema deve estornar e voltar para conferência, e depois quando recebida
+    novamente no Omie, atualizar sozinha"*.
+    - O detalhe decide (a lista pode não trazer `cRecebido`). **Estorna só quando ERA
+      recebida e deixou de ser** — a nota lançada à mão antes de ser recebida lá
+      (marca "N" guardada) não é estornada porque a etapa andou.
+    - O estorno vai na DATA ORIGINAL de cada movimento; depois a nota é reescrita com o
+      que o Omie tem (`atualizar_nota`, vínculos preservados) e fica na conferência.
+      Recebida de novo, a etapa muda outra vez, a releitura grava a marca e o
+      "lançar notas recebidas" a lança — sozinha.
+    - ⚠️ **Período fechado: NÃO estorna**, e a nota vai para `travadas` com o motivo.
+      Mexer num período fechado é decisão de gente.
+    - Assina quem LIGOU a opção (`agenda_id_usuario`), como o lançamento automático.
+    - Ainda recebida (a etapa andou entre etapas de recebida): só o `bruto` é trocado,
+      para a mesma diferença não pedir o detalhe a cada busca.
+    """
+    try:
+        detalhe = cliente.chamar(MODULO_NOTAS, ITENS_DA_NOTA,
+                                 {"nIdReceb": int(cabecalho["id_omie"])})
+    except (ErroOmie, TypeError, ValueError):
+        return None
+    nova = mapeadores.recebimento_de_nfe(detalhe)
+    cur.execute("SELECT bruto FROM notas_entrada WHERE id = %s", (mudanca["id"],))
+    antes = mapeadores.situacao_no_omie(_como_dict(cur.fetchone()["bruto"]))
+    rotulo = {"id": mudanca["id"], "numero": cabecalho.get("numero"),
+              "fornecedor": cabecalho.get("nome_emitente")}
+    if not (antes["recebida"] is True and nova.get("recebida") is False
+            and not nova.get("cancelada")):
+        cur.execute("UPDATE notas_entrada SET bruto = %s WHERE id = %s",
+                    (json.dumps(detalhe, default=str), mudanca["id"]))
+        return {}
+    cur.execute("""SELECT agenda_id_usuario FROM integracoes
+                    WHERE id_unidade = (SELECT id_unidade FROM notas_entrada WHERE id = %s)
+                      AND servico = 'OMIE'""", (mudanca["id"],))
+    linha = cur.fetchone()
+    id_usuario = linha["agenda_id_usuario"] if linha else None
+    if not id_usuario:
+        return {"travada": rotulo | {"campos": ["recebimento_desfeito"],
+                                     "motivo": "ninguém assina o estorno automático — "
+                                               "salve a integração de novo"}}
+    cur.execute("SAVEPOINT desfazer_recebimento")
+    try:
+        estornados = estornar_lancamento(
+            cur, mudanca["id"], id_usuario, na_data_original=True,
+            motivo=f"Recebimento desfeito no Omie — estorno da nota #{mudanca['id']}")
+        atualizar_nota(cur, mudanca["id"], nova, detalhe)
+        cur.execute("RELEASE SAVEPOINT desfazer_recebimento")
+    except HTTPException as e:
+        cur.execute("ROLLBACK TO SAVEPOINT desfazer_recebimento")
+        cur.execute("RELEASE SAVEPOINT desfazer_recebimento")
+        return {"travada": rotulo | {"campos": ["recebimento_desfeito"],
+                                     "motivo": str(e.detail)}}
+    import auditoria
+    auditoria.registrar(cur, id_usuario, "nota", mudanca["id"], "estornar",
+                        depois={"movimentos": estornados, "automatico": True,
+                                "motivo": "recebimento desfeito no Omie",
+                                "etapa": mudanca["campos"]["etapa"]})
+    return {"desfeita": rotulo | {"estornados": estornados}}
 
 
 def conferir_notas(cur, id_unidade: int, cliente: ClienteOmie,

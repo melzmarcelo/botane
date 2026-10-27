@@ -1317,36 +1317,13 @@ def estornar_nota(id_nota: int,
     trocada). O razão não se apaga — o estorno é o caminho.
     """
     _conferir_loja_da_nota(ctx, id_nota)
-    from services import estoque as motor
-
     with get_cursor() as cur:
-        cur.execute("SELECT status FROM notas_entrada WHERE id = %s", (id_nota,))
-        nota = cur.fetchone()
-        if not nota:
-            raise HTTPException(status_code=404, detail="Nota não encontrada")
-        if nota["status"] != "LANCADA":
-            raise HTTPException(status_code=400, detail="Esta nota não está lançada.")
-
-        cur.execute(
-            """SELECT m.id FROM estoque_movimentos m
-                WHERE m.origem_tipo = 'NOTA' AND m.origem_id = %s
-                  AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e WHERE e.id_estorno_de = m.id)
-                ORDER BY m.id""",
-            (id_nota,),
-        )
-        movimentos = [r["id"] for r in cur.fetchall()]
-        for id_movimento in movimentos:
-            motor.estornar(cur, id_movimento, ctx.id_usuario, f"Estorno da nota #{id_nota}")
-
-        cur.execute(
-            """UPDATE notas_entrada SET status = 'CONCILIADA', lancada_em = NULL,
-                                        lancada_por = NULL
-                WHERE id = %s""",
-            (id_nota,),
-        )
+        # A conta mora em `importador.estornar_lancamento` — a mesma que a sincronização
+        # usa quando o recebimento é desfeito no Omie (27/10/2026).
+        estornados = importador.estornar_lancamento(cur, id_nota, ctx.id_usuario)
         auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "estornar",
-                            depois={"movimentos": len(movimentos)})
-    return {"estornados": len(movimentos), "message": "Lançamento da nota desfeito"}
+                            depois={"movimentos": estornados})
+    return {"estornados": estornados, "message": "Lançamento da nota desfeito"}
 
 
 @router.delete("/{id_nota}")

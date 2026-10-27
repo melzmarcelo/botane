@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
+from psycopg2.extras import Json
 from paginacao import com_total
 from models.estoque import (
     ContagemRequest,
@@ -207,7 +208,7 @@ def _montar(cur, id_inventario: int) -> dict:
     cur.execute(
         """SELECT ii.id, ii.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
                   ii.qtd_sistema, ii.qtd_contada, ii.custo_medio, ii.observacao,
-                  ii.qtd_informada, ii.um_informada, ii.contado_em, u.nome AS contado_por,
+                  ii.qtd_informada, ii.um_informada, ii.parcelas, ii.contado_em, u.nome AS contado_por,
                   c.nome AS categoria, se.nome AS setor, p.tipo,
                   ii.id_local, l.nome AS local, ii.incluido,
                   (coalesce(ii.qtd_contada, ii.qtd_sistema) - ii.qtd_sistema) AS diferenca,
@@ -487,22 +488,51 @@ def contar(id_inventario: int, body: ContagemRequest, ctx: Contexto = Depends(_p
             # A pessoa conta na embalagem que está na mão; o sistema guarda na
             # unidade de estoque. A conversão é a MESMA da ficha e da nota.
             convertida, informada, um_informada = item.qtd_contada, None, None
-            if item.qtd_contada is not None and item.um:
+            parcelas = None
+            p = None
+
+            def _produto():
                 cur.execute("SELECT um_estoque, nome FROM produtos WHERE id = %s",
                             (item.id_produto,))
-                p = cur.fetchone()
-                if not p:
+                achado = cur.fetchone()
+                if not achado:
                     raise HTTPException(status_code=404,
                                         detail=f"Produto {item.id_produto} não encontrado")
-                convertida, _como = custos.converter_para_estoque(
-                    cur, dec(item.qtd_contada), item.id_produto, item.um, p["um_estoque"], ums)
-                if convertida is None:
+                return achado
+
+            def _converter(qtd, um):
+                c, _como = custos.converter_para_estoque(
+                    cur, dec(qtd), item.id_produto, um, p["um_estoque"], ums)
+                if c is None:
                     raise HTTPException(
                         status_code=400,
-                        detail=(f"{p['nome']}: {item.um} não converte para "
+                        detail=(f"{p['nome']}: {um} não converte para "
                                 f"{p['um_estoque'] or '?'}. Cadastre esta unidade de compra "
                                 f"no produto."),
                     )
+                return c
+
+            if item.parcelas is not None:
+                # 🔑 **Em parcelas** (135): "3 UN + 948 ML". Cada uma pela MESMA
+                # conversão, e a soma é a contagem. Uma parcela só grava como a
+                # contagem de sempre — `parcelas` fica para quando são várias.
+                p = _produto()
+                if not item.parcelas:
+                    convertida = None
+                elif len(item.parcelas) == 1:
+                    um1 = (item.parcelas[0].um or p["um_estoque"] or "").upper() or None
+                    convertida = _converter(item.parcelas[0].qtd, um1)
+                    informada, um_informada = item.parcelas[0].qtd, um1
+                else:
+                    convertida = dec(0)
+                    parcelas = []
+                    for parc in item.parcelas:
+                        um_p = (parc.um or p["um_estoque"] or "").upper() or None
+                        convertida += _converter(parc.qtd, um_p)
+                        parcelas.append({"qtd": parc.qtd, "um": um_p})
+            elif item.qtd_contada is not None and item.um:
+                p = _produto()
+                convertida = _converter(item.qtd_contada, item.um)
                 informada, um_informada = item.qtd_contada, item.um.upper()
 
             # ⚠️ **De que prateleira é este número?** Com o recorte, o mesmo
@@ -516,10 +546,10 @@ def contar(id_inventario: int, body: ContagemRequest, ctx: Contexto = Depends(_p
             cur.execute(
                 """INSERT INTO inventario_itens (id_inventario, id_produto, id_local,
                                                  qtd_sistema, custo_medio, qtd_contada,
-                                                 qtd_informada, um_informada, observacao,
-                                                 contado_em, contado_por)
+                                                 qtd_informada, um_informada, parcelas,
+                                                 observacao, contado_em, contado_por)
                    SELECT %s, %s, %s, coalesce(s.quantidade, 0), coalesce(s.custo_medio, 0),
-                          %s, %s, %s, %s, now(), %s
+                          %s, %s, %s, %s, %s, now(), %s
                      FROM (SELECT 1) x
                      LEFT JOIN estoque_saldos s
                             ON s.id_produto = %s AND s.id_local = %s
@@ -527,11 +557,12 @@ def contar(id_inventario: int, body: ContagemRequest, ctx: Contexto = Depends(_p
                        SET qtd_contada = EXCLUDED.qtd_contada,
                            qtd_informada = EXCLUDED.qtd_informada,
                            um_informada = EXCLUDED.um_informada,
+                           parcelas = EXCLUDED.parcelas,
                            observacao = EXCLUDED.observacao,
                            contado_em = now(),
                            contado_por = EXCLUDED.contado_por""",
                 (id_inventario, item.id_produto, id_local, convertida, informada,
-                 um_informada, item.observacao, ctx.id_usuario, item.id_produto, id_local),
+                 um_informada, Json(parcelas) if parcelas else None, item.observacao, ctx.id_usuario, item.id_produto, id_local),
             )
         return _montar(cur, id_inventario)
 

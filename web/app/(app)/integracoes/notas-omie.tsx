@@ -25,6 +25,8 @@ type Travada = {
   numero: string | null;
   fornecedor: string | null;
   campos: string[];
+  /** Por que não foi resolvida sozinha (o recebimento desfeito num período fechado). */
+  motivo?: string;
 };
 
 type Resultado = {
@@ -36,6 +38,8 @@ type Resultado = {
   atualizadas?: number;
   /** As que mudaram lá mas já estão no razão — só alguém decide o estorno. */
   travadas?: Travada[];
+  /** 🔑 Recebimento desfeito no Omie: estornadas e de volta à conferência (27/10/2026). */
+  desfeitas?: { id: number; numero: string | null; fornecedor: string | null }[];
 };
 
 type Faltando = {
@@ -70,6 +74,7 @@ export default function NotasOmie() {
   // a única coisa da busca que exige AÇÃO de alguém, e um contador na frase que
   // some em seis segundos não bastaria: a lista fica na tela, nomeando cada uma.
   const [travadas, setTravadas] = useState<Travada[]>([]);
+  const [desfeitas, setDesfeitas] = useState<NonNullable<Resultado["desfeitas"]>>([]);
 
   async function buscar(caminho: string, oQue: string) {
     setOcupado(oQue);
@@ -77,6 +82,7 @@ export default function NotasOmie() {
       const r = await api.post<Resultado & { message: string }>(caminho);
       aviso.sucesso(r.message);
       setTravadas(r.travadas ?? []);
+      setDesfeitas(r.desfeitas ?? []);
       // Depois de buscar, a conferência aberta na tela está velha.
       if (conf) await conferir();
     } catch (e) {
@@ -131,7 +137,36 @@ export default function NotasOmie() {
                 {t.fornecedor ? ` · ${t.fornecedor}` : ""}
                 {/* O campo que mudou é o que decide se vale o estorno: um
                     centavo de frete não é a mesma notícia que o valor total. */}
-                <span className="text-suave"> · mudou: {t.campos.join(", ")}</span>
+                {t.campos.includes("recebimento_desfeito") ? (
+                  <span className="text-suave">
+                    {" "}
+                    · recebimento desfeito no Omie, NÃO estornada: {t.motivo}
+                  </span>
+                ) : (
+                  <span className="text-suave"> · mudou: {t.campos.join(", ")}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Aviso>
+      )}
+
+      {/* 🔑 **O caminho de volta, feito sozinho** (27/10/2026, pedido do dono): com o
+          "lançar notas recebidas", a nota recebida e lançada cujo recebimento foi
+          desfeito no Omie é estornada e volta à conferência. Recebida de novo, é
+          lançada de novo. A lista fica na tela porque mexeu no estoque. */}
+      {!!desfeitas.length && (
+        <Aviso tipo="info">
+          <b>{desfeitas.length} nota(s) tiveram o recebimento desfeito no Omie</b> — foram
+          estornadas e voltaram à conferência. Quando forem recebidas de novo lá, entram
+          sozinhas.
+          <ul className="mt-2 flex flex-col gap-1">
+            {desfeitas.map((t) => (
+              <li key={t.id} className="text-[13px]">
+                <a className="link-registro" href={`/compras/${t.id}`}>
+                  NF {t.numero ?? t.id}
+                </a>
+                {t.fornecedor ? ` · ${t.fornecedor}` : ""}
               </li>
             ))}
           </ul>

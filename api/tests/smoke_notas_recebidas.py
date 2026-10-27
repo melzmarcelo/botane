@@ -11,9 +11,14 @@ O que esta suíte afirma:
    detalhe, ou pelo detalhe quando a lista não traz a marca; a busca lembra a data
    dela e a próxima janela a alcança (até 60 dias); recebida depois, ela entra
 4. "lançar notas recebidas": a recebida e pronta vai ao estoque na própria busca,
-   com a auditoria marcada; a não recebida, a importada ANTES de ligar e a de item
-   pendente ficam; sem quem assine, não lança; recebida depois de importada, a
-   busca relê e lança
+   com a auditoria marcada — também a importada ANTES de ligar (27/10/2026); a não
+   recebida e a de item pendente ficam, e a pendente entra depois de ajustada; sem
+   quem assine, não lança; recebida depois de importada, a busca relê e lança
+4d. o recebimento DESFEITO no Omie (27/10/2026): a etapa muda na lista, o detalhe
+   decide; a lançada que era recebida é estornada na data original e volta à
+   conferência, e recebida de novo é lançada sozinha. A lançada à mão que nunca foi
+   recebida não é estornada; período fechado não estorna (fica travada, com o
+   motivo); com a opção desligada, a etapa sozinha não pede o detalhe
 5. a configuração pela API (só se a API estiver de pé): grava, devolve, e um PUT
    sem os campos mantém
 
@@ -61,7 +66,7 @@ HOJE = date.today()
 
 
 def recebimento(sufixo: str, recebido: str | None, produto: dict | None = None,
-                quando: date = HOJE, na_lista: bool = True) -> dict:
+                quando: date = HOJE, na_lista: bool = True, etapa: str = "40") -> dict:
     """Um recebimento como o Omie devolve, com um item só.
 
     `produto` liga o item a um cadastro pelo código do Omie; sem ele, o item fica
@@ -77,7 +82,7 @@ def recebimento(sufixo: str, recebido: str | None, produto: dict | None = None,
     bruto = {
         "cabec": {"nIdReceb": int(f"88{marca}{sufixo}"),
                   "cChaveNFe": f"4226{marca}{sufixo}".ljust(44, "7"),
-                  "cNumeroNFe": f"00{marca[-5:]}{sufixo}", "cSerieNFe": "1", "cEtapa": "40",
+                  "cNumeroNFe": f"00{marca[-5:]}{sufixo}", "cSerieNFe": "1", "cEtapa": etapa,
                   "dEmissaoNFe": dia, "cCNPJ_CPF": "12.968.266/0001-01",
                   "cRazaoSocial": f"Fornecedor recebido {marca}"},
         "totais": {"vTotalNFe": 20.0, "vTotalProdutos": 20.0},
@@ -136,7 +141,8 @@ def opcoes(cur, id_unidade, so=False, lancar=False, desde_agora=True, ultima=Non
                    lancar_recebidas_desde = EXCLUDED.lancar_recebidas_desde,
                    ultima_sincronizacao = EXCLUDED.ultima_sincronizacao,
                    aguardando_recebimento_desde = EXCLUDED.aguardando_recebimento_desde,
-                   agenda_id_usuario = EXCLUDED.agenda_id_usuario""",
+                   agenda_id_usuario = EXCLUDED.agenda_id_usuario,
+                   lancar_recebidas_corte = NULL""",
         (id_unidade, so, lancar, lancar and desde_agora, ultima, aguardando,
          USUARIO if assina else None),
     )
@@ -260,7 +266,8 @@ def lancar_recebidas(cur, id_unidade):
     auto = r.get("lancamento_automatico") or {}
     checar("a recebida e pronta é lançada na própria busca",
            nota_de(cur, "10")["status"] == "LANCADA", (nota_de(cur, "10"), auto))
-    checar("a resposta conta", auto.get("lancadas") == 1, auto)
+    # Duas: a 10 e a 9, importada antes de ligar (27/10/2026).
+    checar("a resposta conta", auto.get("lancadas") == 2, auto)
     cur.execute("""SELECT depois FROM auditoria WHERE entidade = 'nota' AND acao = 'lancar'
                     AND id_entidade::text = %s""", (str(nota_de(cur, "10")["id"]),))
     linha = cur.fetchone()
@@ -273,8 +280,18 @@ def lancar_recebidas(cur, id_unidade):
            nota_de(cur, "11"))
     checar("a recebida com item sem produto fica na fila",
            nota_de(cur, "12")["status"] != "LANCADA", nota_de(cur, "12"))
-    checar("a importada ANTES de ligar a opção não é lançada sozinha",
-           nota_de(cur, "9")["status"] != "LANCADA", nota_de(cur, "9"))
+    # 🔑 Pedido do dono (27/10/2026): a presa de antes de ligar também entra.
+    checar("a importada ANTES de ligar a opção também é lançada (recebida e pronta)",
+           nota_de(cur, "9")["status"] == "LANCADA", nota_de(cur, "9"))
+
+    # A que travou por item sem produto: ajustada, entra na busca seguinte.
+    cur.execute("""UPDATE nota_itens SET id_produto = %s
+                    WHERE id_nota = %s""", (PRODUTO["id"], nota_de(cur, "12")["id"]))
+    importador.calcular_nota(cur, nota_de(cur, "12")["id"])
+    importador.sincronizar_completo(cur, id_unidade, OmieDeMentira([]), USUARIO, 5, None,
+                                    catalogo=False)
+    checar("a que travou por item sem produto, ajustada, é lançada na busca seguinte",
+           nota_de(cur, "12")["status"] == "LANCADA", nota_de(cur, "12"))
 
     # Recebida no Omie depois de importada: a busca relê pela lista e lança.
     recebida_depois = OmieDeMentira([recebimento("11", "S", PRODUTO)])
@@ -306,12 +323,175 @@ def desligada_nao_lanca(cur, id_unidade):
            and r.get("lancamento_automatico") is None, r.get("lancamento_automatico"))
 
 
+def movimentos_da_nota(cur, id_nota):
+    cur.execute("""SELECT m.id, m.data_movimento::date AS dia,
+                          EXISTS (SELECT 1 FROM estoque_movimentos e WHERE e.id_estorno_de = m.id)
+                              AS estornado
+                     FROM estoque_movimentos m
+                    WHERE m.origem_tipo = 'NOTA' AND m.origem_id = %s ORDER BY m.id""", (id_nota,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def recebimento_desfeito(cur, id_unidade):
+    quando = HOJE - timedelta(days=12)
+    opcoes(cur, id_unidade, lancar=True)
+    # Recebida (etapa 80) e lançada pela busca.
+    r = importador.sincronizar_completo(
+        cur, id_unidade, OmieDeMentira([recebimento("20", "S", PRODUTO, quando, etapa="80")]),
+        USUARIO, 5, None, catalogo=False)
+    nota = nota_de(cur, "20")
+    checar("recebida (etapa 80), é lançada", nota["status"] == "LANCADA", nota)
+
+    # Voltou para a conferência no Omie (etapa 40, N). A LISTA sem a marca: quem
+    # denuncia é a etapa, e o detalhe decide. ⚠️ Sem janela fixa: a busca automática,
+    # com a vigia de 30 dias — a nota tem 12 e a última busca foi hoje.
+    from datetime import datetime
+    cur.execute("""UPDATE integracoes SET ultima_sincronizacao = %s
+                    WHERE id_unidade = %s AND servico = 'OMIE'""",
+                (datetime.now().astimezone(), id_unidade))
+    voltou = OmieDeMentira([recebimento("20", "N", PRODUTO, quando, na_lista=False, etapa="40")],
+                           {int(f"88{marca}20"): recebimento("20", "N", PRODUTO, quando,
+                                                            etapa="40")})
+    r = importador.sincronizar_completo(cur, id_unidade, voltou, USUARIO, None, None,
+                                        catalogo=False)
+    nota = nota_de(cur, "20")
+    checar("desfeito o recebimento no Omie, a nota volta à conferência",
+           nota["status"] in ("CONCILIADA", "IMPORTADA"), (nota, r.get("travadas")))
+    movs = movimentos_da_nota(cur, nota["id"])
+    checar("cada movimento da nota foi estornado", movs and all(m["estornado"] for m in movs),
+           movs)
+    cur.execute("""SELECT e.data_movimento::date AS dia FROM estoque_movimentos e
+                    WHERE e.id_estorno_de = ANY(%s)""", ([m["id"] for m in movs],))
+    dias = {x["dia"] for x in cur.fetchall()}
+    checar("o estorno nasce na DATA ORIGINAL da entrada", dias == {m["dia"] for m in movs},
+           (dias, [m["dia"] for m in movs]))
+    checar("a resposta conta a desfeita", len(r.get("desfeitas") or []) == 1, r.get("desfeitas"))
+    cur.execute("""SELECT depois FROM auditoria WHERE entidade = 'nota' AND acao = 'estornar'
+                    AND id_entidade::text = %s""", (str(nota["id"]),))
+    linha = cur.fetchone()
+    checar("a auditoria marca o estorno como automático, assinado por quem ligou",
+           linha is not None and (linha["depois"] or {}).get("automatico") is True, linha)
+    cur.execute("SELECT mensagem FROM sync_log WHERE chamada = %s ORDER BY id DESC LIMIT 1",
+                (importador.LISTA_NOTAS,))
+    checar("e a frase do log diz", "recebimento desfeito" in (cur.fetchone()["mensagem"] or ""))
+
+    # Recebida de novo: a etapa muda outra vez, a releitura grava a marca e lança.
+    de_novo = OmieDeMentira([recebimento("20", "S", PRODUTO, quando, na_lista=False, etapa="80")],
+                            {int(f"88{marca}20"): recebimento("20", "S", PRODUTO, quando,
+                                                             etapa="80")})
+    r = importador.sincronizar_completo(cur, id_unidade, de_novo, USUARIO, None, None,
+                                        catalogo=False)
+    checar("recebida de novo, é lançada sozinha", nota_de(cur, "20")["status"] == "LANCADA",
+           (nota_de(cur, "20"), r.get("lancamento_automatico")))
+    movs = movimentos_da_nota(cur, nota["id"])
+    checar("com movimentos novos, e os antigos seguem estornados",
+           sum(1 for m in movs if not m["estornado"]) >= 1
+           and sum(1 for m in movs if m["estornado"]) >= 1, movs)
+
+    # A mesma etapa na busca seguinte: nada a fazer, e sem pedir o detalhe.
+    igual = OmieDeMentira([recebimento("20", "S", PRODUTO, quando, na_lista=False, etapa="80")])
+    importador.sincronizar(cur, id_unidade, igual, None, None)
+    checar("etapa igual não pede o detalhe", igual.detalhes_pedidos == 0, igual.detalhes_pedidos)
+
+
+def lancada_a_mao_nao_recebida(cur, id_unidade):
+    opcoes(cur, id_unidade, lancar=True)
+    quando = HOJE - timedelta(days=3)
+    id_nota = importador.gravar_nota(
+        cur, id_unidade, mapeadores.recebimento_de_nfe(recebimento("21", "N", PRODUTO, quando)),
+        recebimento("21", "N", PRODUTO, quando))[0]
+    importador.lancar_nota(cur, id_nota, USUARIO)
+    andou = OmieDeMentira([recebimento("21", "N", PRODUTO, quando, etapa="50")])
+    r = importador.sincronizar(cur, id_unidade, andou, 5, None)
+    checar("a lançada à mão que nunca foi recebida NÃO é estornada quando a etapa anda",
+           nota_de(cur, "21")["status"] == "LANCADA" and not r.get("desfeitas"),
+           (nota_de(cur, "21"), r.get("desfeitas")))
+    de_novo = OmieDeMentira([recebimento("21", "N", PRODUTO, quando, etapa="50")])
+    importador.sincronizar(cur, id_unidade, de_novo, 5, None)
+    checar("e a etapa nova fica guardada: a busca seguinte não pede o detalhe",
+           de_novo.detalhes_pedidos == 0, de_novo.detalhes_pedidos)
+
+
+def desfeito_em_periodo_fechado(cur, id_unidade):
+    opcoes(cur, id_unidade, lancar=True)
+    quando = HOJE - timedelta(days=4)
+    importador.sincronizar_completo(
+        cur, id_unidade, OmieDeMentira([recebimento("22", "S", PRODUTO, quando, etapa="80")]),
+        USUARIO, 5, None, catalogo=False)
+    checar("lançada", nota_de(cur, "22")["status"] == "LANCADA", nota_de(cur, "22"))
+    cur.execute("""DELETE FROM cmv_fechamentos
+                    WHERE id_unidade = %s AND %s BETWEEN inicio AND fim""", (id_unidade, quando))
+    cur.execute("""INSERT INTO cmv_fechamentos (id_unidade, competencia, inicio, fim, status, ciclo)
+                   VALUES (%s, %s, %s, %s, 'FECHADO', 'MENSAL')
+                   ON CONFLICT DO NOTHING""",
+                (id_unidade, quando, quando - timedelta(days=1), quando + timedelta(days=1)))
+    voltou = OmieDeMentira([recebimento("22", "N", PRODUTO, quando, etapa="40")])
+    r = importador.sincronizar(cur, id_unidade, voltou, 5, None)
+    trav = [t for t in r.get("travadas") or [] if t["id"] == nota_de(cur, "22")["id"]]
+    checar("no período FECHADO não estorna: segue lançada",
+           nota_de(cur, "22")["status"] == "LANCADA", nota_de(cur, "22"))
+    checar("e vai para as travadas, com o motivo", trav and "fechado" in (trav[0].get("motivo") or ""),
+           r.get("travadas"))
+
+
+def desligada_etapa_nao_custa(cur, id_unidade):
+    opcoes(cur, id_unidade, lancar=True)
+    quando = HOJE - timedelta(days=2)
+    importador.sincronizar_completo(
+        cur, id_unidade, OmieDeMentira([recebimento("23", "S", PRODUTO, quando, etapa="80")]),
+        USUARIO, 5, None, catalogo=False)
+    opcoes(cur, id_unidade)
+    voltou = OmieDeMentira([recebimento("23", "N", PRODUTO, quando, etapa="40")])
+    r = importador.sincronizar(cur, id_unidade, voltou, 5, None)
+    checar("com a opção desligada, a etapa da lançada não pede o detalhe nem estorna",
+           voltou.detalhes_pedidos == 0 and nota_de(cur, "23")["status"] == "LANCADA"
+           and not r.get("travadas"), (voltou.detalhes_pedidos, r.get("travadas")))
+
+
+def corte_de_data(cur, id_unidade):
+    opcoes(cur, id_unidade, lancar=True)
+    corte = HOJE - timedelta(days=10)
+    cur.execute("""UPDATE integracoes SET lancar_recebidas_corte = %s
+                    WHERE id_unidade = %s AND servico = 'OMIE'""", (corte, id_unidade))
+    r = importador.sincronizar_completo(
+        cur, id_unidade,
+        OmieDeMentira([recebimento("24", "S", PRODUTO, corte - timedelta(days=1)),
+                       recebimento("25", "S", PRODUTO, corte)]),
+        USUARIO, 30, None, catalogo=False)
+    checar("com o corte, a nota de ANTES dele não é lançada sozinha",
+           nota_de(cur, "24")["status"] != "LANCADA", (nota_de(cur, "24"),
+                                                       r.get("lancamento_automatico")))
+    checar("e a do dia do corte em diante é", nota_de(cur, "25")["status"] == "LANCADA",
+           nota_de(cur, "25"))
+    cur.execute("""UPDATE integracoes SET lancar_recebidas_corte = NULL
+                    WHERE id_unidade = %s AND servico = 'OMIE'""", (id_unidade,))
+    importador.sincronizar_completo(cur, id_unidade, OmieDeMentira([]), USUARIO, 5, None,
+                                    catalogo=False)
+    checar("sem corte, a antiga entra", nota_de(cur, "24")["status"] == "LANCADA",
+           nota_de(cur, "24"))
+
+
+def vigia(cur, id_unidade):
+    from datetime import datetime
+    opcoes(cur, id_unidade, lancar=True, ultima=datetime.now().astimezone())
+    inicio, motivo = importador.janela(cur, id_unidade)
+    checar("com o lançamento automático, a busca vigia 30 dias",
+           inicio == HOJE - timedelta(days=importador.VIGIA_DIAS) and "vigiando" in motivo,
+           (inicio, motivo))
+
+
 cenario("\n2. desligada, a busca traz tudo", desligada_traz_tudo)
 cenario("\n3. somente recebidas", so_recebidas)
 cenario("\n3b. a janela alcança a que espera recebimento", janela_alcanca_a_que_espera)
 cenario("\n4. lançar notas recebidas", lancar_recebidas)
 cenario("\n4b. sem quem assine", sem_quem_assine)
 cenario("\n4c. desligada, não lança", desligada_nao_lanca)
+cenario("\n4d. recebimento desfeito no Omie", recebimento_desfeito)
+cenario("\n4e. lançada à mão, nunca recebida", lancada_a_mao_nao_recebida)
+cenario("\n4f. desfeito em período fechado", desfeito_em_periodo_fechado)
+cenario("\n4g. opção desligada: a etapa não custa", desligada_etapa_nao_custa)
+cenario("\n4h. a vigia de 30 dias", vigia)
+cenario("\n4i. o corte de data", corte_de_data)
 
 
 def chamar(metodo, caminho, corpo=None, token=None):

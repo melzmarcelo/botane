@@ -53,6 +53,9 @@ class ConfigOmie(BaseModel):
     # credencial por outro caminho não desliga as opções sem querer.
     so_recebidas: bool | None = None
     lancar_recebidas: bool | None = None
+    # 🔑 O corte de data do lançamento automático (136). ⚠️ Só muda quando VEM no corpo
+    # (`model_fields_set`): nulo enviado limpa o corte; ausente mantém.
+    lancar_recebidas_corte: date | None = None
 
 
 def _cliente(cur, id_unidade: int) -> ClienteOmie:
@@ -79,7 +82,7 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.omie", "admin.in
                       ultima_mensagem, agenda_frequencia, agenda_hora,
                       agenda_janela_dias, agenda_rodou_em, agenda_ultimo_erro,
                       so_recebidas, lancar_recebidas, lancar_recebidas_desde,
-                      aguardando_recebimento_desde
+                      aguardando_recebimento_desde, lancar_recebidas_corte
                  FROM integracoes WHERE id_unidade = %s AND servico = %s""",
             (id_unidade, SERVICO),
         )
@@ -120,6 +123,8 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.omie", "admin.in
         "lancar_recebidas_desde": linha["lancar_recebidas_desde"] if linha else None,
         "aguardando_recebimento_desde":
             linha["aguardando_recebimento_desde"] if linha else None,
+        # Só nota com entrada a partir daqui é lançada sozinha (136). Nulo = sem corte.
+        "lancar_recebidas_corte": linha["lancar_recebidas_corte"] if linha else None,
         "historico": historico,
     }
 
@@ -181,6 +186,10 @@ def salvar_config(body: ConfigOmie,
              body.lancar_recebidas,
              body.so_recebidas, body.lancar_recebidas, body.lancar_recebidas),
         )
+        if "lancar_recebidas_corte" in body.model_fields_set:
+            cur.execute("""UPDATE integracoes SET lancar_recebidas_corte = %s
+                            WHERE id_unidade = %s AND servico = %s""",
+                        (body.lancar_recebidas_corte, id_unidade, SERVICO))
         # ⚠️ Ligar o agendamento limpa o erro anterior: manter a mensagem velha
         # faria a tela acusar uma falha que já foi tratada — e quem acabou de
         # arrumar a credencial veria o mesmo aviso de antes.
@@ -195,6 +204,7 @@ def salvar_config(body: ConfigOmie,
                                     "agenda": body.agenda_frequencia,
                                     "so_recebidas": body.so_recebidas,
                                     "lancar_recebidas": body.lancar_recebidas,
+                                    "lancar_recebidas_corte": body.lancar_recebidas_corte,
                                     "app_key": segredos.mascarar(cred.get("app_key"))},
                             id_unidade=id_unidade)
     return {"message": "Integração salva"}
@@ -281,6 +291,9 @@ def sincronizar(dias: int | None = Query(default=None, ge=1, le=365),
         # na resposta (`lancamento_automatico.fora`).
         + (f". {auto['lancadas']} nota(s) recebida(s) lançada(s) no estoque"
            if auto.get("lancadas") else "")
+        # 🔑 E o caminho de volta (27/10/2026): recebimento desfeito no Omie.
+        + (f". {len(r['desfeitas'])} nota(s) com o recebimento desfeito no Omie: "
+           "estornada(s) e de volta à conferência" if r.get("desfeitas") else "")
         + (f". {len(auto['fora'])} recebida(s) ficaram para lançar à mão"
            if auto.get("fora") else "")
         + (f". ⚠️ O lançamento automático não rodou: {auto['erro']}" if auto.get("erro") else "")

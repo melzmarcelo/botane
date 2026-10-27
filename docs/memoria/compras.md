@@ -481,3 +481,38 @@
   - Recebida no Omie DEPOIS de importada: `mudou_no_omie` a relê quando a lista traz a marca; senão a
     releitura das abertas resolve.
   - Cobertura: `smoke_notas_recebidas.py` (transação desfeita, Omie de mentira; a parte 5 pela API).
+- 🔑 **"Lançar notas recebidas" cobre as antigas, as ajustadas e o caminho de VOLTA** (1.1.139,
+  27/10/2026, pedido do dono: *"notas que vieram e estão com algum problema … quando ajustar ao rodar
+  a sincronização devem realizar o processo automaticamente e caso tenha nota presa de antes de
+  marcar … também … foi recebida, depois voltada para conferência, no sistema deve estornar e voltar
+  para conferência, e depois quando recebida novamente no Omie, atualizar sozinha"*). Sem migração.
+  - `lancar_as_recebidas` não filtra mais por `lancar_recebidas_desde` (a coluna fica, só informa):
+    TODA nota aberta cuja marca guardada diz recebida. A travada por item/conversão entra na busca
+    seguinte ao ajuste (a seleção é refeita a cada rodada). ⚠️ A antiga só vale depois de RELIDA
+    (marca velha no `bruto`): a releitura das abertas do botão, ou a etapa que muda na lista.
+  - 🔑 **A ETAPA é o gatilho** (`mudou_no_omie`, campo `etapa`): a lista traz `cEtapa` (a marca
+    `cRecebido`, talvez não), comparado com o `cEtapa` do `bruto` guardado. Mudou → o detalhe decide.
+    Vale para a aberta (relê, e a marca nova lança) e para a LANÇADA (`_lancada_mudou_de_etapa`).
+  - LANÇADA: **estorna só quando ERA recebida (no `bruto`) e o detalhe diz que não é mais** (e não
+    cancelada). Estorno NA DATA ORIGINAL de cada movimento (`estornar_lancamento(na_data_original=True)`,
+    a mesma função do botão de estorno), depois `atualizar_nota` (vínculos preservados) → a nota volta
+    a CONCILIADA/IMPORTADA. Recebida de novo, a etapa muda outra vez e ela é lançada sozinha.
+    Ainda recebida (etapa andou entre etapas de recebida) ou lançada à mão nunca recebida: só o
+    `bruto` é trocado, para não pedir o detalhe a cada busca. Assina `agenda_id_usuario`; auditoria
+    `estornar` com `automatico: true`.
+  - ⚠️ **Período fechado NÃO estorna**: a recusa do `_travar_periodo_fechado` vira `travadas` com
+    `campos: ["recebimento_desfeito"]` e `motivo` (a tela de integração mostra). Sem a opção ligada,
+    etapa sozinha na lançada nem pede o detalhe.
+  - 🔑 **A vigia** (`VIGIA_DIAS = 30`, `_com_vigia`): com a opção ligada a lista é varrida pelo menos
+    30 dias para trás (janela automática E a de `dias`; o `desde` manda sozinho) — senão o recebimento
+    desfeito de uma nota de duas semanas ficaria fora da janela. Lista é barata; detalhe só com etapa
+    mudada.
+  - 🔑 **O CORTE de data** (migração 136, `integracoes.lancar_recebidas_corte`): só nota com
+    `coalesce(data_entrada, data_emissao)` a partir dele é lançada sozinha. O dono escolheu
+    **01/10/2026** (a 136 grava na linha do Omie que existe, só onde está nulo): no ar havia 17
+    IMPORTADA de setembro e outubro, várias de equipamento e obra (ARTICO refrigeração R$ 17.971,
+    AM Vidros, a NF 23 de R$ 20.000 sem emitente) que ninguém lançou de propósito. Campo de data na
+    tela da integração; o PUT só mexe nele quando o campo VEM (`model_fields_set`), nulo limpa.
+    ⚠️ O estorno do recebimento desfeito NÃO olha o corte.
+  - Resposta: `desfeitas` (botão, agenda e a tela de integração listam). Cobertura:
+    `smoke_notas_recebidas.py` 4–4i (55) e `verificar-opcoes-notas-omie.mjs` (5).

@@ -1797,6 +1797,15 @@ FERRAMENTAS: list[Ferramenta] = [
                         "um": {"type": "string",
                                "description": "Unidade do que foi contado; sem ela, a de "
                                               "estoque."},
+                        "parcelas": {
+                            "type": "array",
+                            "description": "Contagem em mais de uma unidade (3 UN + 948 ML, "
+                                           "a garrafa aberta): substitui qtd_contada/um; o "
+                                           "sistema converte e soma.",
+                            "items": {"type": "object",
+                                      "properties": {"qtd": {"type": "number"},
+                                                     "um": {"type": "string"}},
+                                      "required": ["qtd"]}},
                         "observacao": {"type": "string"}},
                     "required": ["id_produto"]})},
         metodo="PUT"),

@@ -298,6 +298,18 @@ def juntar(cur, absorvida: str, principal: str, id_usuario: int | None) -> dict:
         cur.execute(f"UPDATE {tabela} SET {coluna} = %s WHERE upper({coluna}) = %s",
                     (p_sigla, A))
         feito[f"{tabela}.{coluna}"] = cur.rowcount
+    # ⚠️ A contagem em PARCELAS (135) guarda a unidade dentro do JSON: sem isto, a
+    # parcela "948 UN1" ficaria apontando para uma sigla que deixou de existir.
+    cur.execute(
+        """UPDATE inventario_itens ii
+              SET parcelas = (SELECT jsonb_agg(CASE WHEN upper(e->>'um') = %s
+                                                    THEN jsonb_set(e, '{um}', to_jsonb(%s::text))
+                                                    ELSE e END ORDER BY o)
+                                FROM jsonb_array_elements(ii.parcelas) WITH ORDINALITY t(e, o))
+            WHERE ii.parcelas IS NOT NULL
+              AND EXISTS (SELECT 1 FROM jsonb_array_elements(ii.parcelas) e
+                           WHERE upper(e->>'um') = %s)""", (A, p_sigla, A))
+    feito["inventario_itens.parcelas"] = cur.rowcount
     # Quem traduzia PARA a absorvida passa a traduzir para a principal.
     cur.execute("UPDATE unidade_apelidos SET sigla = %s WHERE upper(sigla) = %s", (p_sigla, A))
     feito["apelidos_reapontados"] = cur.rowcount

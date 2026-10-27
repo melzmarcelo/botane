@@ -20,7 +20,7 @@ entregue.
 | [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `fila_e_rascunhos`, `relatorio_fichas`, `producao`, `rendimento`, `rendimento_por_local` |
 | [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas` |
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes`, `preco_custo`, `custo_referencia` |
-| [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `duas_lojas`, `alertas`, `lotes` |
+| [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `contagem_parcelas`, `transferencias`, `duas_lojas`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `venda_consumo_interno`, `venda_motivo`, `vendas_motivos`, `consumo_pessoa`, `receber`, `pdv_legal`, `rotulos_cabem` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo`, `erros` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `cmv_conferencia`, `grupos_cmv`, `ciclos`, `relatorios` |
@@ -93,7 +93,7 @@ Saldos, movimentos, ajustes, inventário e transferências entre lojas.
 
 - **Rotas:** `estoque.py`, `ajustes.py`, `inventario.py`, `transferencias.py`, `alertas.py`
 - **Serviços:** `estoque.py` (**a única porta de escrita no razão**), `ajustes.py`, `inventario_selecao.py`, `transferencias.py`, `alertas.py`
-- **Telas:** `estoque/`, `ajustes/`, `inventario/`, `transferencias/`, `rede/`, `alertas/`
+- **Telas:** `estoque/`, `ajustes/`, `inventario/` (roteiro `verificar-parcelas.mjs`), `transferencias/`, `rede/`, `alertas/`
 - **Permissões:** `estoque.saldos`, `estoque.entradas`, `estoque.saidas`, `estoque.perdas`, `estoque.ajuste`, `estoque.custo`, `estoque.inventario`, `estoque.inventario_criar`, `estoque.transferencias`, `estoque.transferencia_receber`, `estoque.retroativo`
 
 ⚠️ **`estoque_movimentos` é append-only.** Correção é estorno, nunca `UPDATE` ou

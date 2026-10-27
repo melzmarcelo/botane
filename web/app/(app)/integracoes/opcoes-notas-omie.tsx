@@ -11,6 +11,8 @@ export default function OpcoesNotasOmie({
   soRecebidas,
   lancarRecebidas,
   lancarDesde,
+  corte,
+  aoMudarCorte,
   aguardandoDesde,
   desabilitado,
   aoMudar,
@@ -19,6 +21,9 @@ export default function OpcoesNotasOmie({
   lancarRecebidas: boolean;
   /** Desde quando o lançamento automático vale (o que veio do servidor). */
   lancarDesde: string | null;
+  /** AAAA-MM-DD: só nota com entrada a partir daqui é lançada sozinha. Vazio = sem corte. */
+  corte: string;
+  aoMudarCorte: (valor: string) => void;
   /** A nota mais antiga que esperava recebimento na última busca. */
   aguardandoDesde: string | null;
   desabilitado: boolean;
@@ -73,11 +78,33 @@ export default function OpcoesNotasOmie({
             A que pede conferência de conversão, ou tem item pendente, fica na fila como hoje.
             Quem salva esta tela assina os lançamentos.
           </span>
-          {/* 🔑 As conciliadas que já esperavam NÃO entram: ligar a opção não pode
-              despejar o atraso no razão (append-only) sem ninguém olhar. */}
-          <span className="block text-[13px] leading-snug text-alerta">
-            Vale para as notas que chegarem depois de ligar. As que já estão esperando continuam
-            no “Lançar as conciliadas”, com a prévia.
+          {/* 🔑 **Vale também para as que já esperavam** (27/10/2026, pedido do dono: "caso
+              tenha nota presa de antes de marcar, ao rodar, estas também podem ser
+              atualizadas"). Até a 1.1.139 só entravam as que chegavam depois de ligar.
+              E o caminho de volta: recebimento desfeito no Omie estorna sozinho. */}
+          <span className="block text-[13px] leading-snug text-alerta" id="lancar-recebidas-alcance">
+            Vale para as notas abertas recebidas no Omie a partir da data abaixo, também as que já
+            esperavam — e a que ficou por um item ou uma conversão entra na busca seguinte ao
+            ajuste. Se o
+            recebimento for desfeito no Omie (a nota volta para a conferência), o lançamento é
+            estornado e a nota volta à conferência; recebida de novo, entra de novo. Período
+            fechado nunca é mexido.
+          </span>
+          {/* 🔑 **O corte** (136, 27/10/2026): o dono escolheu 01/10 — antes disso havia
+              notas de equipamento e obra que ninguém lançou de propósito. */}
+          <span className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
+            Só notas com entrada a partir de
+            <input
+              type="date"
+              id="lancar-recebidas-corte"
+              className="campo w-[160px]"
+              disabled={desabilitado}
+              value={corte}
+              onChange={(e) => aoMudarCorte(e.target.value)}
+            />
+            <span className="text-suave">
+              {corte ? "— as anteriores ficam para lançar à mão." : "(vazio: todas)"}
+            </span>
           </span>
           {lancarRecebidas && lancarDesde && (
             <span className="block text-[13px] text-suave">

@@ -270,6 +270,12 @@ class InventarioRenomear(BaseModel):
     nome: str = Field(min_length=2, max_length=80)
 
 
+class ParcelaContagem(BaseModel):
+    """Um pedaço da contagem numa unidade: as 3 UN fechadas, ou os 948 ML da aberta."""
+    qtd: float = Field(ge=0)
+    um: str | None = Field(default=None, max_length=6)
+
+
 class ContagemItem(BaseModel):
     id_produto: int
     # ⚠️ O local da linha. Só é obrigatório quando a contagem cobre mais de um
@@ -281,6 +287,11 @@ class ContagemItem(BaseModel):
     # tela. Contar em caixa e deixar a conversão para a cabeça de quem conta é
     # onde o erro do inventário entra.
     um: str | None = Field(default=None, max_length=6)
+    # 🔑 **Ou em PARCELAS** (migração 135, 27/10/2026): "3 UN + 948 ML" — as
+    # garrafas fechadas e a aberta. Quando vem, manda: cada parcela converte para a
+    # unidade de estoque e a soma vira `qtd_contada`; `qtd_contada`/`um` são ignorados.
+    # Lista vazia é "não contei" (o mesmo que `qtd_contada` nulo).
+    parcelas: list[ParcelaContagem] | None = Field(default=None, max_length=8)
     observacao: str | None = None
 
 

@@ -58,8 +58,16 @@ try {
   checar("Somente recebidas e Lançar notas recebidas aparecem, desmarcadas",
     c.length === 2 && /somente recebidas/i.test(c[0].texto) && /lançar notas recebidas/i.test(c[1].texto)
       && !c[0].marcada && !c[1].marcada, c);
-  checar("a tela avisa que as conciliadas que já esperam não entram",
-    /continuam\s+no “Lançar as conciliadas”/i.test(c[1]?.texto ?? ""), c[1]?.texto);
+  // 🔑 Desde 27/10/2026 as que já esperavam também entram, e o recebimento desfeito estorna.
+  checar("a tela diz que as que já esperavam também entram, e que o desfeito estorna",
+    /também as que já esperavam/i.test(c[1]?.texto ?? "")
+      && /estornado/i.test(c[1]?.texto ?? ""), c[1]?.texto);
+
+  // 🔑 O corte de data (136): o campo aparece com o que o servidor tem.
+  const corte = await p.evaluate(() => document.querySelector("#lancar-recebidas-corte")?.value ?? null);
+  checar("o corte de data aparece, com o valor do servidor",
+    corte !== null && corte === (antes.lancar_recebidas_corte ?? "").slice(0, 10),
+    { corte, servidor: antes.lancar_recebidas_corte });
 
   console.log("\n2. marcar e salvar");
   await p.click("#opcoes-notas-omie label:nth-of-type(1) input");

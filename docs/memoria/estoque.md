@@ -609,6 +609,26 @@
   prateleira. É a mesma aritmética do custo médio que o sistema já carrega em qualquer
   entrada de preço quebrado; a tolerância de R$ 0,05 das suítes existe por isso.
 
+- 🔑 **Contagem em PARCELAS: "3 UN + 948 ML"** (1.1.139, migração 135, 27/10/2026). Pedido do
+  dono no teste do CAMPARI: estoque em UN, a dose sai 50 ML pela ficha (ML cadastrado no
+  produto, fator 0,001002 = garrafa de 998 ML), e o saldo vira UN com casas (3,95 UN) — o
+  sistema NÃO guarda "garrafas fechadas + aberta", e não precisa: valor e CMV são a mesma
+  conta. O que faltava era CONTAR assim.
+  - `PUT /inventarios/{id}/contagem` aceita `parcelas: [{qtd, um}]` (até 8). Quando vem,
+    manda: cada uma passa por `custos.converter_para_estoque` (a MESMA regra) e a soma é
+    `qtd_contada`. Uma parcela só grava como sempre (`qtd_informada`/`um_informada`,
+    `parcelas` nulo); várias vão para `inventario_itens.parcelas` (jsonb) e o informado
+    fica NULO — um número só ali mentiria. Lista vazia = não contei. Uma parcela que não
+    converte é 400 e nada grava.
+  - ⚠️ A unidade mora DENTRO do JSON, então `unidade_apelidos.juntar` reescreve as parcelas
+    (fora do `_REAPONTAR`, que é coluna a coluna).
+  - Tela: "+ somar outra unidade" abre a linha na primeira unidade ainda não usada; "tirar"
+    desfaz; o total convertido aparece ao lado. ⚠️ **A resposta da gravação só limpa o
+    rascunho se ele ainda é o que foi gravado**: clicar no "+ somar" tira o foco do campo
+    de cima (grava), e a resposta, chegando depois, apagava a linha recém-aberta.
+  - Conector `contar_inventario` aceita `parcelas`. Cobertura: `smoke_contagem_parcelas.py`
+    (20) e `verificar-parcelas.mjs` (7, rodado pela bateria).
+
 ## Armadilhas já pagas
 
 - 🔴 **Inventário por número não conferia a loja** (validação de 29/09/2026): ver, contar,

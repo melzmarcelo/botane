@@ -42,6 +42,8 @@ type Config = {
   so_recebidas: boolean;
   lancar_recebidas: boolean;
   lancar_recebidas_desde: string | null;
+  /** Só nota com entrada a partir desta data é lançada sozinha (136). */
+  lancar_recebidas_corte: string | null;
   aguardando_recebimento_desde: string | null;
   ultima_sincronizacao: string | null;
   ultimo_status: string | null;
@@ -137,7 +139,7 @@ export default function Omie() {
     app_key: "", app_secret: "", modo: "simulado", ativa: false,
     tag_fornecedor: "Fornecedor",
     agenda_frequencia: "MANUAL", agenda_hora: "3", agenda_janela_dias: "",
-    so_recebidas: false, lancar_recebidas: false,
+    so_recebidas: false, lancar_recebidas: false, lancar_recebidas_corte: "",
   });
   const [conferencia, setConferencia] = useState<Conferencia | null>(null);
   // 🔑 **O custo inicial dos produtos.** Medido na base: 2.323 produtos ativos
@@ -157,7 +159,8 @@ export default function Omie() {
                 agenda_frequencia: c.agenda_frequencia ?? "MANUAL",
                 agenda_hora: String(c.agenda_hora ?? 3),
                 agenda_janela_dias: c.agenda_janela_dias ? String(c.agenda_janela_dias) : "",
-                so_recebidas: !!c.so_recebidas, lancar_recebidas: !!c.lancar_recebidas });
+                so_recebidas: !!c.so_recebidas, lancar_recebidas: !!c.lancar_recebidas,
+                lancar_recebidas_corte: (c.lancar_recebidas_corte ?? "").slice(0, 10) });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -188,6 +191,7 @@ export default function Omie() {
           : null,
         so_recebidas: form.so_recebidas,
         lancar_recebidas: form.lancar_recebidas,
+        lancar_recebidas_corte: form.lancar_recebidas_corte || null,
       });
       aviso.sucesso("Integração salva. A chave fica cifrada e não volta pela tela.");
       await carregar();
@@ -475,6 +479,8 @@ export default function Omie() {
             soRecebidas={form.so_recebidas}
             lancarRecebidas={form.lancar_recebidas}
             lancarDesde={cfg.lancar_recebidas_desde}
+            corte={form.lancar_recebidas_corte}
+            aoMudarCorte={(v) => setForm({ ...form, lancar_recebidas_corte: v })}
             aguardandoDesde={cfg.aguardando_recebimento_desde}
             desabilitado={!podeConfigurar}
             aoMudar={(campo, valor) => setForm({ ...form, [campo]: valor })}

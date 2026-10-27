@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
@@ -35,6 +35,9 @@ import { qtd } from "@/lib/numeros";
 
 type Unidade = { um: string; fator: number };
 
+/** Um pedaço da contagem, como digitado: as 3 UN fechadas, ou os 948 ML da aberta. */
+type Parcela = { qtd: string; um: string };
+
 type Item = {
   id_produto: number;
   /** ⚠️ A linha é o par produto × local: o mesmo café pode estar em dois. */
@@ -49,6 +52,8 @@ type Item = {
   qtd_contada: number | null;
   qtd_informada: number | null;
   um_informada: string | null;
+  /** Contagem em mais de uma unidade (135): "3 UN + 948 ML". Nulo com uma só. */
+  parcelas: { qtd: number; um: string }[] | null;
   custo_medio: number;
   diferenca: number | null;
   contado_por: string | null;
@@ -108,7 +113,7 @@ export default function PaginaContagem() {
   const [busca, setBusca] = useState("");
   const [soPendentes, setSoPendentes] = useState(false);
   // ⚠️ A chave é `produto:local`, não o id do produto — ver `chaveDe`.
-  const [rascunho, setRascunho] = useState<Record<string, { qtd: string; um: string }>>({});
+  const [rascunho, setRascunho] = useState<Record<string, Parcela[]>>({});
   const [gravando, setGravando] = useState<string | null>(null);
   const [renomeando, setRenomeando] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
@@ -134,16 +139,26 @@ export default function PaginaContagem() {
 
   // O que a pessoa digitou, item a item — o servidor devolve o convertido, e
   // sobrescrever o campo enquanto ela digita seria arrancar o texto da mão.
-  const valorDe = (i: Item) =>
-    rascunho[chaveDe(i)]?.qtd ??
-    (i.qtd_informada !== null && i.qtd_informada !== undefined
-      ? String(Number(i.qtd_informada))
-      : i.qtd_contada !== null
-        ? String(Number(i.qtd_contada))
-        : "");
-
-  const unidadeDe = (i: Item) =>
-    rascunho[chaveDe(i)]?.um ?? i.um_informada ?? i.um_estoque ?? "";
+  // 🔑 **Em PARCELAS** (135, 27/10/2026, o CAMPARI do dono): "3 UN + 948 ML" — as
+  // garrafas fechadas e a aberta. Uma parcela é a contagem de sempre.
+  const parcelasDe = (i: Item): Parcela[] => {
+    const r = rascunho[chaveDe(i)];
+    if (r) return r;
+    if (i.parcelas?.length) {
+      return i.parcelas.map((x) => ({ qtd: String(Number(x.qtd)), um: x.um }));
+    }
+    return [
+      {
+        qtd:
+          i.qtd_informada !== null && i.qtd_informada !== undefined
+            ? String(Number(i.qtd_informada))
+            : i.qtd_contada !== null
+              ? String(Number(i.qtd_contada))
+              : "",
+        um: i.um_informada ?? i.um_estoque ?? "",
+      },
+    ];
+  };
 
   /**
    * Em que unidades este produto pode ser contado.
@@ -198,8 +213,12 @@ export default function PaginaContagem() {
     }
   }
 
-  async function gravarItem(item: Item, texto: string, um: string) {
-    const limpo = texto.trim().replace(",", ".");
+  async function gravarItem(item: Item, parcelas: Parcela[]) {
+    // Só as parcelas preenchidas vão: a linha nova em branco é a que a pessoa
+    // ainda vai digitar.
+    const cheias = parcelas
+      .map((x) => ({ qtd: x.qtd.trim().replace(",", "."), um: x.um }))
+      .filter((x) => x.qtd !== "");
     setGravando(chaveDe(item));
     try {
       const r = await api.put<Inventario>(`/inventarios/${id}/contagem`, {
@@ -209,15 +228,33 @@ export default function PaginaContagem() {
             // ⚠️ Vai sempre, mesmo na contagem de um local só: sem ele o
             // servidor recusa quando o produto está em duas prateleiras.
             id_local: item.id_local,
-            qtd_contada: limpo === "" ? null : Number(limpo),
-            um: um || null,
+            // Uma parcela vai como sempre foi; várias, como lista — o servidor
+            // converte cada uma e soma.
+            ...(cheias.length > 1
+              ? { parcelas: cheias.map((x) => ({ qtd: Number(x.qtd), um: x.um || null })) }
+              : {
+                  qtd_contada: cheias.length ? Number(cheias[0].qtd) : null,
+                  um: cheias[0]?.um || parcelas[0]?.um || null,
+                }),
             observacao: item.observacao,
           },
         ],
       });
       setInv(r);
       // O rascunho sai do caminho: daqui em diante vale o que o servidor diz.
+      // ⚠️ MENOS quando o rascunho JÁ NÃO é o que foi gravado, ou tem parcela em
+      // branco. Clicar em "+ somar" tira o foco do campo de cima (que grava) e abre
+      // a linha nova; a resposta chega DEPOIS, e apagar o rascunho levaria junto a
+      // linha que a pessoa acabou de abrir — o campo some debaixo do dedo.
       setRascunho((a) => {
+        const atual = a[chaveDe(item)];
+        if (
+          atual &&
+          (JSON.stringify(atual) !== JSON.stringify(parcelas) ||
+            (atual.length > 1 && atual.some((x) => x.qtd.trim() === "")))
+        ) {
+          return a;
+        }
         const { [chaveDe(item)]: _fora, ...resto } = a;
         return resto;
       });
@@ -483,13 +520,10 @@ export default function PaginaContagem() {
               mostrarLocal={inv.id_local === null}
               podeCadastrar={pode("cadastros.produtos")}
               gravando={gravando === chaveDe(i)}
-              valor={valorDe(i)}
-              unidade={unidadeDe(i)}
+              parcelas={parcelasDe(i)}
               opcoes={opcoesDe(i)}
-              aoDigitar={(qtdTexto, um) =>
-                setRascunho((a) => ({ ...a, [chaveDe(i)]: { qtd: qtdTexto, um } }))
-              }
-              aoGravar={(qtdTexto, um) => void gravarItem(i, qtdTexto, um)}
+              aoDigitar={(ps) => setRascunho((a) => ({ ...a, [chaveDe(i)]: ps }))}
+              aoGravar={(ps) => void gravarItem(i, ps)}
             />
           ))}
         </ul>
@@ -554,8 +588,7 @@ function LinhaContagem({
   mostrarLocal,
   podeCadastrar,
   gravando,
-  valor,
-  unidade,
+  parcelas,
   opcoes,
   aoDigitar,
   aoGravar,
@@ -565,23 +598,29 @@ function LinhaContagem({
   mostrarLocal: boolean;
   podeCadastrar: boolean;
   gravando: boolean;
-  valor: string;
-  unidade: string;
+  parcelas: Parcela[];
   opcoes: Unidade[];
-  aoDigitar: (qtd: string, um: string) => void;
-  aoGravar: (qtd: string, um: string) => void;
+  aoDigitar: (parcelas: Parcela[]) => void;
+  aoGravar: (parcelas: Parcela[]) => void;
 }) {
-  const campo = useRef<HTMLInputElement>(null);
   const contado = item.qtd_contada !== null && item.qtd_contada !== undefined;
   const dif =
     contado && item.qtd_sistema !== null && item.qtd_sistema !== undefined
       ? Number(item.qtd_contada) - Number(item.qtd_sistema)
       : null;
-  const fator = opcoes.find((o) => o.um === unidade)?.fator ?? 1;
-  const digitado = Number((valor || "0").replace(",", "."));
-  // Quanto isso vira no estoque. Só aparece quando a unidade contada não é a de
-  // estoque: em caso contrário seria repetir o número que já está no campo.
-  const emEstoque = fator !== 1 && digitado ? digitado * fator : null;
+  const fatorDe = (um: string) => opcoes.find((o) => o.um === um)?.fator ?? 1;
+  const numero = (t: string) => Number((t || "0").replace(",", "."));
+  const total = parcelas.reduce((soma, x) => soma + numero(x.qtd) * fatorDe(x.um), 0);
+  // Quanto isso vira no estoque. Só aparece quando há conta a fazer — outra
+  // unidade, ou mais de uma parcela: senão repetiria o número do campo.
+  const precisaConta =
+    parcelas.length > 1 || (parcelas[0] && fatorDe(parcelas[0].um) !== 1);
+  const emEstoque = precisaConta && total ? total : null;
+  const trocar = (n: number, mudanca: Partial<Parcela>) =>
+    parcelas.map((x, k) => (k === n ? { ...x, ...mudanca } : x));
+  // 🔑 **Somar outra unidade** (135, 27/10/2026): a garrafa aberta em ML ao lado das
+  // fechadas em UN. A parcela nova vem na primeira unidade que ainda não foi usada.
+  const livre = opcoes.find((o) => !parcelas.some((x) => x.um === o.um))?.um;
 
   return (
     <li className="rounded border border-linha bg-superficie p-3.5">
@@ -623,45 +662,79 @@ function LinhaContagem({
             </p>
           </div>
         )}
-        <label className="w-[118px] shrink-0">
-          <span className="rotulo-campo">Contei</span>
-          <input
-            ref={campo}
-            // `campo-toque`: 16px e alvo grande. Abaixo de 16px o Safari do
-            // iPhone dá zoom ao focar e a tela salta a cada produto contado —
-            // e a utilitária do Tailwind perde para `.campo`, por isso a classe.
-            className="campo campo-toque mono mt-1.5 text-right"
-            inputMode="decimal"
-            disabled={!aberto}
-            value={valor}
-            onChange={(e) => aoDigitar(e.target.value, unidade)}
-            onBlur={(e) => aoGravar(e.target.value, unidade)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                campo.current?.blur();
-              }
-            }}
-          />
-        </label>
-        <label className="w-[92px] shrink-0">
-          <span className="rotulo-campo">Unidade</span>
-          <select
-            className="campo campo-toque mt-1.5"
-            disabled={!aberto}
-            value={unidade}
-            onChange={(e) => {
-              aoDigitar(valor, e.target.value);
-              if (valor.trim()) aoGravar(valor, e.target.value);
-            }}
-          >
-            {opcoes.map((o) => (
-              <option key={o.um} value={o.um}>
-                {o.um}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex flex-col gap-2" data-parcelas={parcelas.length}>
+          {parcelas.map((x, n) => (
+            <div key={n} className="flex items-end gap-2">
+              <label className="w-[118px] shrink-0">
+                <span className={`rotulo-campo ${n ? "sr-only" : ""}`}>
+                  {n ? `Mais (parcela ${n + 1})` : "Contei"}
+                </span>
+                <input
+                  // `campo-toque`: 16px e alvo grande. Abaixo de 16px o Safari do
+                  // iPhone dá zoom ao focar e a tela salta a cada produto contado —
+                  // e a utilitária do Tailwind perde para `.campo`, por isso a classe.
+                  className={`campo campo-toque mono text-right ${n ? "" : "mt-1.5"}`}
+                  inputMode="decimal"
+                  data-parcela={n}
+                  disabled={!aberto}
+                  value={x.qtd}
+                  onChange={(e) => aoDigitar(trocar(n, { qtd: e.target.value }))}
+                  onBlur={(e) => aoGravar(trocar(n, { qtd: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                />
+              </label>
+              <label className="w-[92px] shrink-0">
+                <span className={`rotulo-campo ${n ? "sr-only" : ""}`}>Unidade</span>
+                <select
+                  className={`campo campo-toque ${n ? "" : "mt-1.5"}`}
+                  data-parcela-um={n}
+                  disabled={!aberto}
+                  value={x.um}
+                  onChange={(e) => {
+                    const novas = trocar(n, { um: e.target.value });
+                    aoDigitar(novas);
+                    if (x.qtd.trim()) aoGravar(novas);
+                  }}
+                >
+                  {opcoes.map((o) => (
+                    <option key={o.um} value={o.um}>
+                      {o.um}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {n > 0 && aberto && (
+                <button
+                  type="button"
+                  className="link-acao pb-2.5 text-[13px]"
+                  aria-label={`tirar a parcela ${n + 1}`}
+                  onClick={() => {
+                    const novas = parcelas.filter((_, k) => k !== n);
+                    aoDigitar(novas);
+                    aoGravar(novas);
+                  }}
+                >
+                  tirar
+                </button>
+              )}
+            </div>
+          ))}
+          {aberto && livre && parcelas.length < 8 && (
+            <button
+              type="button"
+              className="link-acao self-start text-[13px]"
+              data-somar-parcela
+              onClick={() => aoDigitar([...parcelas, { qtd: "", um: livre }])}
+            >
+              + somar outra unidade
+            </button>
+          )}
+        </div>
         <div className="min-w-0 flex-1 pb-2.5 text-[13px] text-suave">
           <p>
             {gravando

@@ -142,6 +142,8 @@ async def laco(parar: asyncio.Event) -> None:
                           f"{f.get('novas', 0)} nota(s) nova(s)"
                           + (f", {auto['lancadas']} recebida(s) lançada(s)"
                              if auto.get("lancadas") else "")
+                          + (f", {len(f['desfeitas'])} recebimento(s) desfeito(s) "
+                             "no Omie, estornado(s)" if f.get("desfeitas") else "")
                           + (f" — lançamento automático: {auto['erro']}"
                              if auto.get("erro") else ""))
         except Exception as e:  # noqa: BLE001
