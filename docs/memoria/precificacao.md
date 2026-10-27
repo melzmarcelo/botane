@@ -85,6 +85,30 @@
   para medir "seguir outra loja" e a desativa no fim, e fixa o produto na análise — a base
   local tem centenas de vendidos no mês.
 
+- 🔑 **A linha presa a categoria/setor DESATIVADO** (1.1.141, 27/10/2026, relato do dono: *"todas elas
+  estão apresentando VALE PARA tudo, não está mostrando a categoria correta"*). No ar havia 27 margens
+  por categoria (cadastradas em 17/10 13:11), todas em categorias que a reestruturação de 25/10
+  DESATIVOU — os produtos foram para as categorias novas, e as margens passaram a valer para ninguém
+  (o preço caiu para a margem geral). O seletor só listava categorias ATIVAS: sem a opção, o navegador
+  mostrava a primeira, "tudo", com o valor certo guardado por baixo (salvar sem mexer mantinha; tocar
+  no seletor gravaria "tudo").
+  - A tela pede categorias e setores com os inativos; o desativado só aparece no seletor da linha que já
+    aponta para ele, marcado "(desativada)", com a frase "não vale para os produtos de hoje" e um aviso
+    no cartão. A específica igual à geral diz "igual à geral" (a dúvida do "está duplicado?").
+  - 🔑 **Migração 138 refaz as margens nas categorias novas** (o dono: *"pode seguir com 38,5% e
+    fazer por migração"*). A margem de cada nova é a PREDOMINANTE entre os produtos que vieram para
+    ela (planilha `.tmp/reclass/reclassificacao_REVISAO.csv`, sem os arquivados): Doces 38,5;
+    Bebidas preparadas 38,5 (café 38,5 + drinks/sucos 41,5 + chá 48,5 — escolha do dono);
+    Alimentos embalados 23,5; Vinhos 18,5; Panificação 38,5; Salgados 38,5; Bebidas prontas 23,5;
+    Cervejas e destilados 23,5; Presentes/louças 13,5; Cafés e chás p/ revenda 28,5; Kits 33,5.
+    Pratos preparados dá 35,5 = a geral: sem linha. Serviços e embalagens, fora.
+    ⚠️ Por NOME, e só na loja com margem presa a uma das 27 antigas DESATIVADAS: cria as novas com o
+    nome das antigas ("Margem"), `ON CONFLICT DO NOTHING` (linha já refeita na tela fica), e apaga as
+    presas. O `db_updater` REAPLICA arquivo cujo checksum mudou — a guarda do cenário é o que a deixa
+    idempotente; e `DROP TABLE IF EXISTS` das temporárias para rodar duas vezes na mesma transação.
+  - Cobertura: `verificar-precificacao-config.mjs` (7, rodado pela bateria) e
+    `smoke_margens_categorias_novas.py` (8, transação desfeita, roda o arquivo da 138).
+
 ## O que ficou de fora, de propósito
 
 - **Canais** (salão × delivery): a taxa do aplicativo hoje entra como linha por categoria ou

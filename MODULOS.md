@@ -257,7 +257,7 @@ em [`docs/precificacao-estudo.md`](docs/precificacao-estudo.md).
 
 - **Rotas:** `precificacao.py`; a evolução de preço × custo mora em `cmv.py` (`/cmv/preco-custo/{id}`)
 - **Serviços:** `precificacao.py` (**o único lugar que sabe a conta do preço**), `preco_custo.py`
-- **Telas:** `precificacao/` (analisar e aplicar), `precificacao/configuracao/`, `precos/`
+- **Telas:** `precificacao/` (analisar e aplicar), `precificacao/configuracao/` (roteiro `verificar-precificacao-config.mjs`), `precos/`
 - **Permissões:** `precificacao.analisar`, `precificacao.aplicar`, `precificacao.configurar`
 - **Migração:** `105_precificacao.sql`
 

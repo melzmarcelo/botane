@@ -138,5 +138,10 @@ export function simplesEfetivo(rbt12: number): number | null {
 }
 
 /** As categorias e os setores em que uma linha pode valer. */
-export const listarCategorias = () => api.get<{ id: number; nome: string }[]>("/categorias");
-export const listarSetores = () => api.get<{ id: number; nome: string }[]>("/setores");
+// ⚠️ **Com as INATIVAS** (27/10/2026): a linha que aponta para uma categoria desativada
+// (a reestruturação de 25/10 desativou as antigas) precisa da opção dela no seletor —
+// sem ela o navegador mostrava a primeira, "tudo", e a margem da Chá parecia geral.
+export const listarCategorias = () =>
+  api.get<{ id: number; nome: string; ativo: boolean }[]>("/categorias?incluir_inativas=true");
+export const listarSetores = () =>
+  api.get<{ id: number; nome: string; ativo: boolean }[]>("/setores?incluir_inativos=true");

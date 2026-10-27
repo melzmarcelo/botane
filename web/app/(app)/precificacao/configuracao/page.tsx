@@ -62,8 +62,8 @@ export default function PaginaConfiguracaoDePrecificacao() {
   const [k, setK] = useState<ConfigDePrecificacao | null>(null);
   const [linhas, setLinhas] = useState<LinhaDaTela[]>([]);
   const [arredondamento, setArredondamento] = useState<Arredondamento>("NOVENTA");
-  const [categorias, setCategorias] = useState<{ id: number; nome: string }[]>([]);
-  const [setores, setSetores] = useState<{ id: number; nome: string }[]>([]);
+  const [categorias, setCategorias] = useState<{ id: number; nome: string; ativo: boolean }[]>([]);
+  const [setores, setSetores] = useState<{ id: number; nome: string; ativo: boolean }[]>([]);
   const [faturamento, setFaturamento] = useState<{ mes: string; receita: number }[]>([]);
   const [fixas, setFixas] = useState("");
   const [rbt, setRbt] = useState("");
@@ -112,6 +112,17 @@ export default function PaginaConfiguracaoDePrecificacao() {
     });
   };
 
+  // 🔑 **A linha presa a uma categoria ou setor DESATIVADO** (27/10/2026): a
+  // reestruturação de 25/10 desativou as categorias antigas e passou os produtos para
+  // as novas — a margem da "CHA" ficou valendo para ninguém, e a tela a mostrava como
+  // "tudo". Ela continua no seletor, marcada, e o cartão avisa.
+  const inativo = (vale: string) =>
+    vale.startsWith("C:")
+      ? categorias.some((c) => `C:${c.id}` === vale && !c.ativo)
+      : vale.startsWith("S:")
+        ? setores.some((s) => `S:${s.id}` === vale && !s.ativo)
+        : false;
+  const presas = (tipo: TipoDeLinha) => linhas.filter((l) => l.tipo === tipo && inativo(l.vale));
   const gerais = linhas.filter((l) => l.vale === "TUDO");
   const somaGeral = gerais.filter((l) => l.tipo === "PERCENTUAL").reduce((s, l) => s + numero(l.valor), 0);
   const margemGeral = gerais.filter((l) => l.tipo === "MARGEM").reduce((s, l) => s + numero(l.valor), 0);
@@ -148,8 +159,22 @@ export default function PaginaConfiguracaoDePrecificacao() {
       })),
     });
 
+  /** A linha GERAL de mesmo nome e tipo — a que a específica substitui. */
+  const geralDe = (l: LinhaDaTela) =>
+    l.vale === "TUDO" ? undefined
+      : linhas.find((g) => g.vale === "TUDO" && g.tipo === l.tipo
+          && g.nome.trim().toLowerCase() === l.nome.trim().toLowerCase());
+
   const tabela = (tipo: TipoDeLinha, unidadeDoValor: string, novoNome: string, rotuloNovo: string) => (
     <>
+      {presas(tipo).length > 0 && (
+        <Aviso tipo="erro">
+          <b>{presas(tipo).length} linha(s) apontam para categoria ou setor desativado</b> —
+          a reestruturação dos cadastros trocou as categorias antigas pelas novas, e os produtos
+          foram junto. Essas linhas não valem para os produtos que mudaram; para continuar valendo,
+          troque o <em>Vale para</em> para a categoria nova (ou tire a linha).
+        </Aviso>
+      )}
       <div className="grid-rolante">
         <table className="tabela">
           <thead>
@@ -162,7 +187,8 @@ export default function PaginaConfiguracaoDePrecificacao() {
           </thead>
           <tbody>
             {linhas.filter((l) => l.tipo === tipo).map((l) => (
-              <tr key={l.chave}>
+              <tr key={l.chave} data-linha-precificacao={l.vale}
+                  className={inativo(l.vale) ? "bg-alerta-claro" : ""}>
                 <td>
                   <input className="campo" value={l.nome} disabled={travada} aria-label="Nome da linha"
                          onChange={(e) => mudar(l.chave, { nome: e.target.value })} />
@@ -172,17 +198,40 @@ export default function PaginaConfiguracaoDePrecificacao() {
                           onChange={(e) => mudar(l.chave, { vale: e.target.value })}>
                     <option value="TUDO">tudo</option>
                     <optgroup label="Só uma categoria">
-                      {categorias.map((c) => <option key={c.id} value={`C:${c.id}`}>{c.nome}</option>)}
+                      {/* ⚠️ A desativada só aparece para a linha que JÁ aponta para ela:
+                          oferecê-la a uma linha nova seria convidar o erro de novo. */}
+                      {categorias.filter((c) => c.ativo || `C:${c.id}` === l.vale).map((c) => (
+                        <option key={c.id} value={`C:${c.id}`}>
+                          {c.nome}{c.ativo ? "" : " (desativada)"}
+                        </option>
+                      ))}
                     </optgroup>
                     <optgroup label="Só um setor">
-                      {setores.map((s) => <option key={s.id} value={`S:${s.id}`}>{s.nome}</option>)}
+                      {setores.filter((s) => s.ativo || `S:${s.id}` === l.vale).map((s) => (
+                        <option key={s.id} value={`S:${s.id}`}>
+                          {s.nome}{s.ativo ? "" : " (desativado)"}
+                        </option>
+                      ))}
                     </optgroup>
                   </select>
+                  {inativo(l.vale) && (
+                    <span className="mt-1 block text-[12.5px] text-[var(--color-alerta)]">
+                      desativada — não vale para os produtos de hoje
+                    </span>
+                  )}
                 </td>
                 <td className="num">
                   <input className="campo w-[110px] text-right tabular-nums" inputMode="decimal"
                          value={l.valor} disabled={travada} aria-label={`Valor de ${l.nome}`}
                          onChange={(e) => mudar(l.chave, { valor: e.target.value })} />
+                  {/* A específica igual à geral não muda preço nenhum — é a dúvida do
+                      "está duplicado?" respondida na própria linha. */}
+                  {(() => {
+                    const g = geralDe(l);
+                    return g && numero(g.valor) === numero(l.valor) && l.valor.trim() !== "" ? (
+                      <span className="mt-1 block text-[12.5px] text-suave">igual à geral</span>
+                    ) : null;
+                  })()}
                 </td>
                 {!travada && (
                   <td>
