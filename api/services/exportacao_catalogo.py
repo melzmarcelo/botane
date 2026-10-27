@@ -2979,6 +2979,152 @@ def _fichas(cur, id_unidade: int, f: dict) -> Saida:
         if linhas else [])
 
 
+
+# ---------------------------------------------------------------- patrimônio (139)
+
+def _opcoes_de(d: dict):
+    return lambda _c, _u: [{"valor": v, "nome": n} for v, n in d.items()]
+
+
+FILTROS["situacao_bem"] = {
+    "tipo": "multipla", "rotulo": "Situação", "ajuda": "todos, menos os baixados",
+    "opcoes": lambda _c, _u: _opcoes_de(_patrimonio().SITUACOES)(_c, _u)}
+FILTROS["preventiva_bem"] = {
+    "tipo": "multipla", "rotulo": "Preventiva", "ajuda": "todas",
+    "opcoes": lambda _c, _u: _opcoes_de(_patrimonio().PREVENTIVA)(_c, _u)}
+FILTROS["criticidade_bem"] = {
+    "tipo": "multipla", "rotulo": "Criticidade", "ajuda": "todas",
+    "opcoes": lambda _c, _u: _opcoes_de(_patrimonio().CRITICIDADES)(_c, _u)}
+FILTROS["busca_bem"] = {"tipo": "texto", "rotulo": "Equipamento, código, marca ou série contém",
+                        "ajuda": "todos os bens"}
+FILTROS["periodo_manutencao"] = {"tipo": "periodo", "rotulo": "Feitas entre",
+                                 "ajuda": "os últimos 12 meses, se não escolher"}
+
+
+def _patrimonio():
+    from services import patrimonio
+    return patrimonio
+
+
+def _bens(cur, id_unidade: int, f: dict) -> Saida:
+    """Os bens da loja, um por linha — com as MESMAS colunas da planilha da casa.
+
+    🔑 **Pedido do dono (27/10/2026)**, com `Inventario_Equipamentos_Botane.xlsx`. As
+    colunas e os nomes são os da planilha dele: a planilha baixada daqui volta pela
+    importação (Patrimônio ▸ Importar), corrigida no Excel.
+    ⚠️ **Na planilha, todas as colunas; no PDF, as que cabem numa folha deitada** — a
+    regra do cadastro de produtos (20/10/2026).
+    O anexo "Por setor" é a aba Resumo da planilha da casa.
+    """
+    p = _patrimonio()
+    linhas = p.listar(cur, id_unidade, {
+        "busca": f.get("busca_bem"), "situacao": _lista(f.get("situacao_bem")),
+        "preventiva": _lista(f.get("preventiva_bem")),
+        "criticidade": _lista(f.get("criticidade_bem")), "setores": _lista(f.get("setores"))})
+    largo = f.get("_formato") != "pdf"
+    colunas = ([("codigo", "Código"), ("apelido", "Apelido"), ("descricao", "Equipamento"),
+                ("produto", "Produto"), ("produto_codigo", "Código do produto"),
+                ("setor", "Setor"), ("local", "Local no sistema"), ("marca", "Marca"),
+                ("modelo", "Modelo"), ("numero_serie", "Nº de série / patrimônio"),
+                ("tensao_txt", "Tensão"), ("data_compra", "Data de compra"),
+                ("valor_compra", "Valor de compra"), ("fornecedor", "Fornecedor da compra"),
+                ("nota_fiscal", "Nota fiscal"), ("garantia_ate", "Garantia até"),
+                ("assistencia", "Fornecedor / assistência"),
+                ("assistencia_contato", "Contato"), ("criticidade_txt", "Criticidade"),
+                ("situacao_txt", "Situação"), ("preventiva_meses", "Preventiva a cada (meses)"),
+                ("ultima_preventiva", "Última preventiva"),
+                ("proxima_preventiva", "Próxima preventiva"),
+                ("preventiva_txt", "Status da preventiva"), ("observacao", "Observações")]
+               if largo else
+               [("codigo", "Código"), ("descricao", "Equipamento"), ("setor", "Setor"),
+                ("local", "Local"), ("marca", "Marca"), ("modelo", "Modelo"),
+                ("criticidade_txt", "Criticidade"), ("situacao_txt", "Situação"),
+                ("proxima_preventiva", "Próxima preventiva"),
+                ("preventiva_txt", "Preventiva")])
+    por_setor: dict[str, dict] = {}
+    for l in linhas:
+        s = por_setor.setdefault(l["setor"] or "Sem setor", {
+            "setor": l["setor"] or "Sem setor", "bens": 0, "alta": 0, "parados": 0,
+            "vencidas": 0, "vencendo": 0, "sem_plano": 0})
+        s["bens"] += 1
+        s["alta"] += l["criticidade"] == "ALTA"
+        s["parados"] += l["situacao"] in p.PARADOS
+        s["vencidas"] += l["status_preventiva"] == "VENCIDA"
+        s["vencendo"] += l["status_preventiva"] == "VENCE_30"
+        s["sem_plano"] += l["status_preventiva"] in ("SEM_PLANO", "SEM_REGISTRO")
+    quadro = sorted(por_setor.values(), key=lambda s: s["setor"].lower())
+    total = sum((Decimal(str(l["valor_compra"])) for l in linhas if l["valor_compra"] is not None),
+                Decimal(0))
+    resumo = [("Bens", len(linhas)),
+              ("Criticidade alta", sum(s["alta"] for s in quadro)),
+              ("Em manutenção ou parados", sum(s["parados"] for s in quadro)),
+              ("Preventiva vencida", sum(s["vencidas"] for s in quadro)),
+              (f"Vence em {p.JANELA_DIAS} dias", sum(s["vencendo"] for s in quadro)),
+              ("Sem plano", sum(s["sem_plano"] for s in quadro))]
+    if total:
+        resumo.append(("Valor de compra (R$)", total))
+    return Saida(
+        linhas, colunas, "Patrimônio — bens", resumo,
+        anexos=[(quadro, [("setor", "Setor"), ("bens", "Equipamentos"),
+                          ("alta", "Criticidade alta"), ("parados", "Em manutenção ou parados"),
+                          ("vencidas", "Preventiva vencida"),
+                          ("vencendo", f"Vence em {p.JANELA_DIAS} dias"),
+                          ("sem_plano", "Sem plano")], "Por setor", None)] if quadro else [])
+
+
+def _manutencoes(cur, id_unidade: int, f: dict) -> Saida:
+    """O que se fez nos bens no período, e quanto custou — por bem e por setor.
+
+    🔑 É o número que diz quando sai mais barato trocar do que consertar.
+    ⚠️ **Sem datas, os últimos 12 meses** — e não o mês corrente, como nos outros: a
+    preventiva é semestral ou anual, e um mês mostraria quase sempre nada.
+    """
+    p = _patrimonio()
+    hoje = relogio.hoje_da_casa()
+    inicio = f.get("inicio") or hoje - timedelta(days=364)
+    fim = f.get("fim") or hoje
+    busca = (f.get("busca_bem") or "").strip() or None
+    cur.execute(
+        """SELECT m.data, m.tipo, m.executado_por, m.custo, m.descricao AS o_que,
+                  b.codigo, b.descricao AS equipamento, s.nome AS setor, u.nome AS registrado_por
+             FROM bem_manutencoes m
+             JOIN bens b ON b.id = m.id_bem
+             LEFT JOIN setores s ON s.id = b.id_setor
+             LEFT JOIN usuarios u ON u.id = m.id_usuario
+            WHERE b.id_unidade = %(u)s AND m.data BETWEEN %(i)s AND %(f)s
+              AND (%(setores)s::int[] IS NULL OR b.id_setor = ANY(%(setores)s))
+              AND (%(busca)s::varchar IS NULL OR b.descricao ILIKE '%%' || %(busca)s || '%%'
+                   OR b.codigo ILIKE '%%' || %(busca)s || '%%')
+            ORDER BY m.data DESC, b.codigo""",
+        {"u": id_unidade, "i": inicio, "f": fim, "setores": _lista(f.get("setores")),
+         "busca": busca})
+    linhas = [dict(r) | {"tipo_txt": p.TIPOS_MANUTENCAO[r["tipo"]]} for r in cur.fetchall()]
+    total = sum((Decimal(str(l["custo"])) for l in linhas if l["custo"] is not None), Decimal(0))
+    por_setor: dict[str, dict] = {}
+    for l in linhas:
+        s = por_setor.setdefault(l["setor"] or "Sem setor", {
+            "setor": l["setor"] or "Sem setor", "preventivas": 0, "corretivas": 0,
+            "custo": Decimal(0)})
+        s["preventivas" if l["tipo"] == "PREVENTIVA" else "corretivas"] += 1
+        s["custo"] += Decimal(str(l["custo"] or 0))
+    quadro = sorted(por_setor.values(), key=lambda s: -s["custo"])
+    return Saida(
+        linhas,
+        [("data", "Data"), ("codigo", "Código"), ("equipamento", "Equipamento"),
+         ("setor", "Setor"), ("tipo_txt", "Tipo"), ("executado_por", "Feito por"),
+         ("custo", "Custo (R$)"), ("o_que", "O que foi feito"),
+         ("registrado_por", "Registrado por")],
+        "Patrimônio — manutenções",
+        [("Período", _intervalo(inicio, fim)), ("Registros", len(linhas)),
+         ("Preventivas", sum(1 for l in linhas if l["tipo"] == "PREVENTIVA")),
+         ("Corretivas", sum(1 for l in linhas if l["tipo"] == "CORRETIVA")),
+         ("Custo total (R$)", total)],
+        inicio, fim,
+        anexos=[(quadro, [("setor", "Setor"), ("preventivas", "Preventivas"),
+                          ("corretivas", "Corretivas"), ("custo", "Custo (R$)")],
+                 "Por setor", None)] if quadro else [])
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -3155,6 +3301,19 @@ RELATORIOS: dict[str, Relatorio] = {
         "etiquetas.imprimir", "etiquetas",
         ("periodo_etiqueta", "situacao_etiqueta", "eventos_etiqueta", "locais",
          "busca_etiqueta"), _etiquetas),
+    # 🔑 O patrimônio (139, 27/10/2026): os bens nas colunas da planilha da casa, e o que
+    # se gastou com manutenção.
+    "patrimonio": Relatorio(
+        "Patrimônio — bens",
+        "Os equipamentos e móveis da loja, um por linha, com as colunas da planilha de "
+        "inventário: série, compra, garantia, assistência, criticidade, situação e preventiva.",
+        "patrimonio.ver", "patrimonio",
+        ("situacao_bem", "preventiva_bem", "criticidade_bem", "setores", "busca_bem"), _bens),
+    "patrimonio-manutencoes": Relatorio(
+        "Patrimônio — manutenções",
+        "Cada preventiva e corretiva do período, com quem fez e quanto custou — por setor.",
+        "patrimonio.ver", "patrimonio-manutencoes",
+        ("periodo_manutencao", "setores", "busca_bem"), _manutencoes),
 }
 
 

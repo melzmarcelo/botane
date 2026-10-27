@@ -27,6 +27,11 @@ CHAVES = {
     "integracao.pdv": "integracao.pdv",
     "integracao.omie": "integracao.omie",
     "vendas.paradas": "cmv.painel",
+    # O patrimônio (139): quem vê os bens vê o que está parado ou vencido.
+    "patrimonio.critico_parado": "patrimonio.ver",
+    "patrimonio.preventiva_vencida": "patrimonio.ver",
+    "patrimonio.preventiva_30": "patrimonio.ver",
+    "patrimonio.a_cadastrar": "patrimonio.ver",
 }
 
 

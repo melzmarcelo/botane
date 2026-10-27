@@ -306,6 +306,7 @@
       <li class="grupo"><span class="rotulo">Conectado</span></li>
       <li><a href="#claude">20 · O Claude dentro do sistema</a></li>
       <li><a href="#precificacao">21 · Precificação</a></li>
+      <li><a href="#patrimonio">22 · Patrimônio</a></li>
       <li class="grupo"><span class="rotulo">Referência</span></li>
       <li><a href="#regras">As regras que não se negociam</a></li>
       <li><a href="#onde">Onde cada dado mora</a></li>
@@ -3940,6 +3941,86 @@
       </p>
     </section>
 
+    <!-- =========================================================== patrimonio -->
+    <section id="patrimonio">
+      <h2>22 · Patrimônio</h2>
+      <p class="chamada">
+        Os equipamentos e móveis da casa, um por um — e a manutenção de cada um.
+      </p>
+
+      <p>
+        Em <strong>Estoque ▸ Patrimônio</strong>. Cada <strong>bem</strong> é um item físico: a
+        batedeira da confeitaria é um, a outra batedeira é outro. Ele guarda marca, modelo, série,
+        tensão, compra, garantia, assistência técnica, criticidade, situação e o plano de
+        manutenção preventiva. <strong>Não mexe no estoque</strong>: o produto do tipo Patrimônio
+        continua sendo quantidade; o bem é o item com a história dele.
+      </p>
+
+      <h3>Começar pela planilha</h3>
+      <ol>
+        <li><strong>Importar planilha</strong> e escolher a planilha de inventário de equipamentos
+          (uma aba por setor). <strong>Ver prévia</strong> mostra o que entra e as linhas recusadas,
+          com o motivo (setor ou local com outro nome, criticidade escrita diferente).</li>
+        <li>As linhas de origem <em>Sugestão</em> entram como <strong>A confirmar</strong> — fora
+          dos alertas até alguém conferir que o equipamento existe. Desmarque a caixa para
+          deixá-las de fora.</li>
+        <li><strong>Importar</strong> grava. Importar a mesma planilha de novo <strong>atualiza</strong>
+          (o código da casa, como BAR-02, acha o bem) e célula vazia não apaga nada.</li>
+      </ol>
+      <p>
+        O botão <strong>Baixar</strong> da lista gera a planilha nas mesmas colunas: dá para
+        completar no Excel e mandar de volta pela importação.
+      </p>
+
+      <h3>O produto Patrimônio vira bem</h3>
+      <p>
+        Todo produto do tipo <strong>Patrimônio</strong> que entra no estoque (pela nota ou por
+        entrada) precisa ser cadastrado como bem, um por item. O quadro <strong>Entrou como
+        Patrimônio e falta cadastrar</strong>, no topo da tela, e o alerta do Início dizem quantos
+        faltam — 3 cafeteiras no estoque e 1 bem cadastrado = faltam 2. <strong>Cadastrar bem</strong>
+        abre o cadastro já com o produto e com a compra da última entrada (data, nota,
+        fornecedor e valor). No cadastro do produto, o quadro <strong>Bens deste produto</strong>
+        mostra cada item e o que falta.
+      </p>
+
+      <h3>A plaqueta</h3>
+      <p>
+        Cada bem ganha um código fixo, <span class="mono">PAT-0001</span>, que não muda quando o
+        bem troca de setor. Marque os bens na lista e use <strong>Imprimir plaquetas</strong>: sai
+        no mesmo rolo e na mesma impressora das etiquetas de validade. O QR da plaqueta, lido no
+        celular, abre a ficha do bem.
+      </p>
+
+      <h3>Manutenção</h3>
+      <div class="regra">
+        <p class="rotulo">A próxima preventiva é calculada</p>
+        <p>
+          Com <em>Preventiva a cada (meses)</em> e a data da <em>última</em>, o sistema calcula a
+          próxima. Registrar uma preventiva na ficha atualiza a última sozinho. Os alertas avisam
+          a preventiva <strong>vencida</strong>, a que vence em <strong>30 dias</strong> e o
+          equipamento de <strong>criticidade alta parado</strong>.
+        </p>
+      </div>
+      <p>
+        Na ficha do bem, <strong>Histórico de manutenção</strong> registra preventivas e corretivas
+        com data, quem fez, custo e o que foi feito — e, se a visita consertou, a situação volta
+        para <em>Em uso</em> no mesmo registro. O relatório <strong>Manutenções</strong> soma o custo
+        por bem e por setor: é o número que diz quando trocar sai mais barato que consertar.
+      </p>
+      <p>
+        Quando o bem é também um local de estoque (a câmara fria), a ficha mostra quanto está
+        guardado nele — e avisa se o equipamento estiver parado.
+      </p>
+      <p>
+        Um bem que saiu da casa se <strong>baixa</strong> (Situação ▸ Baixado, com o motivo) — ele
+        some da lista e o histórico fica. Apagar só vale para cadastro feito por engano.
+      </p>
+      <p>
+        Permissões: <em>ver</em>, <em>cadastrar</em> (importar, plaquetas, baixa) e
+        <em>registrar manutenção</em>. Cozinha e salão veem e registram a visita do técnico.
+      </p>
+    </section>
+
     <!-- =============================================================== regras -->
     <section id="regras">
       <h2>As regras que não se negociam</h2>
@@ -4288,6 +4369,7 @@
             <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
             <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">27/10</td><td><strong>Patrimônio</strong>: os equipamentos e móveis um por um, importados da planilha de inventário, com plaqueta de QR, plano de preventiva, histórico de manutenção (com o custo) e alertas de preventiva vencida e de equipamento crítico parado</td><td><a href="#patrimonio">22</a></td></tr>
             <tr><td class="mono">27/10</td><td>Relatórios: o <strong>Produzido por</strong> sai na planilha de Produtos e na impressão do produto (quando outro setor produz), e a folha do inventário ganhou <em>Contado em</em>, com a contagem como foi digitada (<span class="mono">3 UN + 948 ML</span>)</td><td><a href="#exportar">13</a></td></tr>
             <tr><td class="mono">27/10</td><td>Precificação ▸ Configuração: a linha de uma categoria ou setor <strong>desativado</strong> mostra a categoria dela, marcada, e o cartão avisa que ela não vale para os produtos de hoje (antes aparecia como "tudo"). A margem de categoria igual à geral diz <em>igual à geral</em>. As margens que estavam nas categorias antigas foram refeitas nas novas (a margem que predominava entre os produtos de cada uma; Bebidas preparadas com 38,5%)</td><td><a href="#precificacao">21</a></td></tr>
             <tr><td class="mono">27/10</td><td>Produção: <strong>Produzido por</strong> no cadastro do produto — o setor que faz pode não ser o dono do produto (a Confeitaria faz a bolacha da Cafeteria). A agenda aparece para quem faz, os insumos saem do estoque dele e o pronto entra no local do produto. A produção e a agenda mostram <em>Produz → Entra em</em>, e o local escolhido em <em>Entra em</em> passou a valer de verdade</td><td><a href="#producao">5</a></td></tr>

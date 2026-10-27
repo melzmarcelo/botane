@@ -115,6 +115,28 @@ def levantar(cur, id_unidade: int) -> list[dict]:
            "Usar hoje ou descartar no fim do dia.", "ver as etiquetas",
            "/etiquetas/painel?situacao=hoje")
 
+    # 🔑 O PATRIMÔNIO (139): o equipamento crítico parado é venda que não sai ou insumo que
+    # estraga; a preventiva vencida é a quebra que ainda dá para evitar. O link leva à lista
+    # já filtrada.
+    from services import patrimonio
+    r = patrimonio.alertas(cur, id_unidade)
+    juntar("patrimonio.critico_parado", CRITICO, "Equipamento crítico parado",
+           r.get("criticos_parados"),
+           "Criticidade alta, em manutenção ou parado — a venda ou o insumo dependem dele.",
+           "ver os equipamentos", "/patrimonio?criticidade=ALTA&situacao=PARADOS")
+    juntar("patrimonio.preventiva_vencida", ATENCAO, "Preventiva vencida", r.get("vencidas"),
+           "Passou da data da manutenção preventiva — é a quebra que ainda dá para evitar.",
+           "agendar o técnico", "/patrimonio?preventiva=VENCIDA")
+    juntar("patrimonio.preventiva_30", AVISO, f"Preventiva nos próximos {patrimonio.JANELA_DIAS} dias",
+           r.get("vencendo"), "Dá tempo de marcar com a assistência antes de vencer.",
+           "ver quais", "/patrimonio?preventiva=VENCE_30")
+    # 🔑 O produto Patrimônio que ENTROU (nota, entrada) e não virou bem: cada item físico
+    # precisa do cadastro dele para ter plaqueta e manutenção (pedido do dono, 27/10/2026).
+    juntar("patrimonio.a_cadastrar", ATENCAO, "Patrimônio que entrou e não virou bem",
+           r.get("a_cadastrar_itens"),
+           "Entrou no estoque como Patrimônio — cada item precisa ser cadastrado como bem.",
+           "cadastrar os bens", "/patrimonio#a-cadastrar")
+
     # 🔑 Os PEDIDOS do site (101): pedido novo parado é cliente esperando resposta, e o
     # confirmado sem lançamento no PDV é venda que ainda não existe no caixa.
     r = _um(cur, """

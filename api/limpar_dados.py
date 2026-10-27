@@ -42,6 +42,9 @@ OPERACAO = [
     # As etiquetas (100) apontam para o razão (a perda do descarte), a produção e o
     # produto — saem antes deles. A validade por produto sai com o produto.
     "etiqueta_usos", "etiquetas", "produto_validades",
+    # O patrimônio (139): o bem aponta para o produto (o "modelo"), o local e o usuário; a
+    # manutenção pendura no bem. Uma instalação nova nasce sem nenhum bem.
+    "bem_manutencoes", "bens",
     # Os pedidos do site (101) apontam para o cliente, o catálogo, o produto e a venda.
     "pedido_historico", "pedido_itens", "pedidos",
     # ⚠️ Os ITENS do catálogo (084) apontam para `produtos`, que saem logo abaixo: sem esta

@@ -198,6 +198,11 @@ class _Filtros:
         # 🔑 A lista das fichas técnicas (26/10/2026).
         situacao_ficha: list[str] | None = Query(default=None),
         versoes_ficha: str | None = None,
+        # 🔑 O patrimônio (139, 27/10/2026).
+        situacao_bem: list[str] | None = Query(default=None),
+        preventiva_bem: list[str] | None = Query(default=None),
+        criticidade_bem: list[str] | None = Query(default=None),
+        busca_bem: str | None = Query(default=None, max_length=80),
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
@@ -221,6 +226,8 @@ class _Filtros:
             "situacao_etiqueta": situacao_etiqueta, "eventos_etiqueta": eventos_etiqueta,
             "busca_etiqueta": busca_etiqueta,
             "situacao_ficha": situacao_ficha, "versoes_ficha": versoes_ficha,
+            "situacao_bem": situacao_bem, "preventiva_bem": preventiva_bem,
+            "criticidade_bem": criticidade_bem, "busca_bem": busca_bem,
         }
 
     def preenchidos(self) -> dict:

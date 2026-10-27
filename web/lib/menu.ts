@@ -132,6 +132,14 @@ export const MENU: GrupoMenu[] = [
       },
       { href: "/producao", nome: "Produção", icone: "panela", chave: "estoque.saidas" },
       { href: "/inventario", nome: "Inventário", icone: "inventario", chave: "estoque.inventario" },
+      // 🔑 **Patrimônio** (139, pedido do dono, 27/10/2026): os bens, a plaqueta e a manutenção.
+      // ⚠️ Mora em Estoque por ser "o que a casa tem", mas não mexe no razão.
+      {
+        href: "/patrimonio",
+        nome: "Patrimônio",
+        icone: "ferramenta",
+        chave: ["patrimonio.ver", "patrimonio.cadastrar", "patrimonio.manutencao"],
+      },
     ],
   },
   {

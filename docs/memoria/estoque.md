@@ -5,6 +5,10 @@
 
 ## O que já existe
 
+- 🔑 **Patrimônio mora em [`patrimonio.md`](patrimonio.md)** (1.1.143, migração 139): os bens um
+  por item, plaqueta, manutenção. Está no menu de Estoque, mas **não escreve no razão** — o
+  produto do tipo Patrimônio continua sendo quantidade aqui.
+
 - 🔑 **O PAINEL de estoque** (`/estoque/painel`, 1.1.122, 22/10/2026, pedido do dono: *"algo assim
   [o painel de vendas] para o estoque … visão para [negativo e abaixo do mínimo], que ao clicar,
   vá para a listagem para poder tomar a melhor decisão … uma visão por produto … com gráfico e

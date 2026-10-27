@@ -1576,6 +1576,57 @@ FERRAMENTAS: list[Ferramenta] = [
         "Quantas etiquetas estão ativas, vencendo e vencidas, e quanto foi descartado.",
         "/etiquetas/painel"),
 
+    # 🔑 O patrimônio (139, 27/10/2026): os bens da loja, um por item físico, e a manutenção.
+    Ferramenta(
+        "patrimonio", "Patrimônio",
+        "Os bens da loja (equipamentos, móveis), um por item físico: código da plaqueta, "
+        "setor, local, criticidade, situação e a preventiva (próxima data e status). "
+        "Sem `situacao`, os baixados ficam de fora.",
+        "/patrimonio",
+        {"busca": Param("string", "Nome do equipamento, código, marca, modelo ou série."),
+         "situacao": Param("string", "Só esta situação.",
+                           enum=["A_CONFIRMAR", "EM_USO", "EM_MANUTENCAO", "PARADO",
+                                 "DESATIVADO", "BAIXADO"]),
+         "preventiva": Param("string", "Só este status da preventiva.",
+                             enum=["VENCIDA", "VENCE_30", "SEM_REGISTRO", "EM_DIA",
+                                   "SEM_PLANO", "FORA"]),
+         "criticidade": Param("string", "Só esta criticidade.", enum=["ALTA", "MEDIA", "BAIXA"]),
+         "id_produto": Param("integer", "Só os bens deste produto do tipo Patrimônio."),
+         "limite": _lim(50, 500), "offset": _OFFSET}),
+    Ferramenta(
+        "patrimonio_a_cadastrar", "Patrimônio a cadastrar como bem",
+        "Os produtos do tipo Patrimônio que entraram no estoque e ainda não viraram bem: "
+        "saldo, quantos bens já existem, quantos faltam e onde estão.",
+        "/patrimonio/a-cadastrar"),
+    Ferramenta(
+        "resumo_do_patrimonio", "Resumo do patrimônio",
+        "Por setor: quantos bens, de criticidade alta, parados, com preventiva vencida, "
+        "vencendo em 30 dias, sem plano e a confirmar.",
+        "/patrimonio/resumo"),
+    Ferramenta(
+        "bem_patrimonial", "Um bem do patrimônio",
+        "Um bem inteiro: cadastro, garantia, assistência, o histórico de manutenção (com o "
+        "custo) e quanto estoque está guardado no local dele.",
+        "/patrimonio/{id_bem}",
+        {"id_bem": Param("integer", "Id do bem (de `patrimonio`).", obrigatorio=True)}),
+    Ferramenta(
+        "registrar_manutencao", "Registrar manutenção de um bem",
+        "Registra uma preventiva ou corretiva FEITA (data de hoje ou passada). A preventiva "
+        "mais nova anda o plano (a próxima é recalculada). Confirme com a pessoa antes.",
+        "/patrimonio/{id_bem}/manutencoes",
+        {"id_bem": Param("integer", "Id do bem (de `patrimonio`).", obrigatorio=True),
+         "tipo": Param("string", "Preventiva ou corretiva.", obrigatorio=True,
+                       enum=["PREVENTIVA", "CORRETIVA"], no_corpo=True),
+         "data": Param("string", _DATA + " Quando foi feito.", obrigatorio=True, no_corpo=True),
+         "executado_por": Param("string", "Técnico ou empresa.", no_corpo=True),
+         "custo": Param("number", "Quanto custou, em reais.", no_corpo=True),
+         "descricao": Param("string", "O que foi feito.", no_corpo=True),
+         "situacao_depois": Param("string", "A situação do bem depois da visita (ex.: EM_USO "
+                                            "quando a corretiva consertou).",
+                                  enum=["EM_USO", "EM_MANUTENCAO", "PARADO", "DESATIVADO"],
+                                  no_corpo=True)},
+        metodo="POST"),
+
     Ferramenta(
         "previa_ajuste_de_saldo", "Prévia do acerto de saldo",
         "O que o acerto de saldo faria, SEM fazer: o saldo de hoje, a diferença e o valor. "

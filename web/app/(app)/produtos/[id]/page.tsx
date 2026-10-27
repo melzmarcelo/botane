@@ -33,6 +33,7 @@ import {
 import { moedaParaNumero, numeroParaMoeda, qtd } from "@/lib/numeros";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
+import BensDoProduto from "./bens";
 import CodigosDoProduto, { CodigoExterno } from "./codigos";
 import CardapioVivoDoProduto from "./cardapio-vivo";
 import ComposicaoKit from "./kit";
@@ -1493,6 +1494,13 @@ export default function FormularioProduto() {
               naHora={f.modo_producao === "NA_HORA"}
               podeCriar={pode("fichas.editar")}
             />
+          )}
+          {/* 🔑 Os bens deste produto Patrimônio (139, pedido do dono, 27/10/2026) — ver
+              `bens.tsx`: cada item físico, e quantos faltam cadastrar pelo saldo. */}
+          {f.tipo === "PATRIMONIO" && !novo
+            && (pode("patrimonio.ver") || pode("patrimonio.cadastrar") || pode("patrimonio.manutencao")) && (
+            <BensDoProduto key={`bens-${recarga}`} idProduto={Number(id)}
+                           podeCadastrar={pode("patrimonio.cadastrar")} />
           )}
       </Cartao>
 

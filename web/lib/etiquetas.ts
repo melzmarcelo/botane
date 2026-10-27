@@ -176,7 +176,7 @@ export const emitir = (corpo: Emissao) =>
  * não abrir uma aba à toa — quem decide de novo a cada impressão é o servidor.
  */
 const CHAVE_MODO = "botane.etiquetas.impressao";
-function palpiteDireta(): boolean {
+export function palpiteDireta(): boolean {
   try {
     return localStorage.getItem(CHAVE_MODO) === "direta";
   } catch {

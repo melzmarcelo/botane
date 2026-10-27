@@ -47,6 +47,8 @@ export const ICONES = {
   lupa: "M8.2 13.4a5.2 5.2 0 1 0 0-10.4 5.2 5.2 0 0 0 0 10.4zM12.2 12.2 15.5 15.5",
   // Preços (05/10/2026): duas linhas que se afastam — preço e custo no tempo.
   preco: "M2.5 12.5l4-3.5 3 2 6-6M2.5 15.5l4-1 3 .5 6-2.5",
+  // Patrimônio (139): a chave inglesa — o equipamento e a manutenção dele.
+  ferramenta: "M12.2 2.6a3.7 3.7 0 0 0-4.6 4.6l-5 5a1.5 1.5 0 0 0 2.2 2.2l5-5a3.7 3.7 0 0 0 4.6-4.6l-2.1 2.1-2.1-.6-.6-2.1z",
 } as const;
 
 export type NomeIcone = keyof typeof ICONES;

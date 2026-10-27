@@ -27,6 +27,7 @@ entregue.
 | [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao`, `cardapio_vivo`, `cardapio_pedido`, `cardapio_testes` |
 | [Etiquetas](#etiquetas) | `docs/memoria/etiquetas.md` | `etiquetas` |
 | [Precificação](#precificação) | `docs/memoria/precificacao.md` | `precificacao`, `preco_custo` |
+| [Patrimônio](#patrimônio) | `docs/memoria/patrimonio.md` | `patrimonio` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
 
 ---
@@ -266,6 +267,27 @@ venda)`, com a margem dentro da soma. ⚠️ O sugerido é o PISO, não o alvo.
 
 ⚠️ **Por loja, podendo seguir outra** — e cada linha vale para tudo, para uma categoria ou
 para um setor; a mais específica de mesmo nome substitui a geral.
+
+## Patrimônio
+
+Os bens da casa (equipamentos, móveis), **um registro por item físico**, com plaqueta de QR,
+importação da planilha de inventário e a manutenção (plano de preventiva, histórico, alertas).
+Pedido do dono em 27/10/2026 — etapas 1 e 2 da proposta.
+
+- **Rotas:** `patrimonio.py`
+- **Serviços:** `patrimonio.py` (cadastro, status da preventiva, manutenção, alertas, plaqueta),
+  `patrimonio_planilha.py` (a importação), `planilha_xlsx.py` (lê .xlsx sem biblioteca)
+- **Telas:** `patrimonio/` (lista + resumo por setor), `patrimonio/[id]/` (ficha e manutenção;
+  `novo` cria), `patrimonio/importar/`, `patrimonio/b/[codigo]/` (o QR), `produtos/[id]/bens.tsx` (os bens do
+  produto Patrimônio); roteiro
+  `verificar-patrimonio.mjs`
+- **Relatórios:** `patrimonio` (as colunas da planilha da casa) e `patrimonio-manutencoes`
+- **Permissões:** `patrimonio.ver`, `patrimonio.cadastrar`, `patrimonio.manutencao`
+- **Migração:** `139_patrimonio.sql`
+
+⚠️ **Não é estoque**: nada aqui escreve no razão. O produto do tipo PATRIMONIO continua sendo
+quantidade; o bem é o item, com série, garantia e história próprios.
+⚠️ **A próxima preventiva e o status são calculados na consulta**, nunca gravados.
 
 ## Transversal
 

@@ -11076,7 +11076,7 @@ for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mj
                        "verificar-codigos-do-produto.mjs", "verificar-opcoes-notas-omie.mjs",
                        "verificar-reclassificar.mjs", "verificar-motivos.mjs",
                        "verificar-parcelas.mjs", "verificar-setor-produz.mjs",
-                       "verificar-precificacao-config.mjs"]) {
+                       "verificar-precificacao-config.mjs", "verificar-patrimonio.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {
