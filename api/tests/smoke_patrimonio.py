@@ -383,6 +383,13 @@ try:
     checar("o relatório traz o produto e o código dele",
            "Código do produto" in texto and pp["codigo"] in texto, texto[:600])
 finally:
+    # ⚠️ **Zera o saldo que a suíte criou ANTES de apagar o produto**: com saldo, o produto
+    # só é desativado — e um Patrimônio desativado com estoque fica somando na base (foi o
+    # que derrubou a checagem do `smoke_cmv` na bateria da 1.1.143).
+    for i in criados_produtos:
+        chamar("POST", "/ajustes/estoque", {"id_produto": i, "quantidade_certa": 0,
+                                            "id_local": id_local,
+                                            "observacao": "limpeza da suíte"}, token=token)
     with get_cursor() as cur:
         cur.execute("DELETE FROM bens WHERE descricao LIKE %s OR apelido LIKE %s",
                     (f"%{marca}%", f"%{marca}%"))

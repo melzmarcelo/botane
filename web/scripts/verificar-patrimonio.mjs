@@ -181,7 +181,12 @@ try {
     for (const m of d?.manutencoes ?? []) await api("DELETE", `/patrimonio/manutencoes/${m.id}`, undefined, token);
     await api("DELETE", `/patrimonio/${id}`, undefined, token);
   }
-  for (const id of produtos) await api("DELETE", `/produtos/${id}`, undefined, token);
+  // ⚠️ Zera o saldo antes de apagar: com saldo o produto só é desativado, e o Patrimônio
+  // desativado com estoque fica somando na base (derrubou o smoke_cmv na 1.1.143).
+  for (const id of produtos) {
+    await api("POST", "/ajustes/estoque", { id_produto: id, quantidade_certa: 0, observacao: "limpeza do roteiro" }, token);
+    await api("DELETE", `/produtos/${id}`, undefined, token);
+  }
   await api("DELETE", `/setores/${setor.id}`, undefined, token);
 }
 

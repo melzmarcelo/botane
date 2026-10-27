@@ -279,7 +279,12 @@ def _fora_do_cmv(mov, tipos):
         return 0.0
     ids = set()
     for t in tipos:
-        _, lista = chamar("GET", f"/produtos?tipo={t}&por_pagina=500", token=token)
+        # ⚠️ **Com os INATIVOS** (27/10/2026): produto desativado com saldo continua sendo
+        # estoque, e a apuração o tira do CMV pelo TIPO, ativo ou não. A lista só trazia os
+        # ativos, e a checagem quebrou no dia em que a base ganhou um Patrimônio desativado
+        # com saldo (o `por_pagina` nem existe na rota: o parâmetro é `limite`).
+        _, lista = chamar("GET", f"/produtos?tipo={t}&incluir_inativos=true&limite=1000",
+                          token=token)
         ids |= {p["id"] for p in (lista or [])}
     return sum(float(l["valor_final"]) for l in mov["linhas"] if l["id_produto"] in ids)
 

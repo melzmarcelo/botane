@@ -33,42 +33,41 @@ from services.reclassificacao import _chave, _por_nome
 MAXIMO_BYTES = 8 * 1024 * 1024
 
 # Cabeçalho (sem acento, minúsculo) → campo. Os da planilha da casa e os do relatório.
-COLUNAS = {
-    "codigo": "codigo", "apelido": "apelido",
-    "equipamento": "descricao", "descricao": "descricao", "bem": "descricao",
-    "setor": "setor", "local no sistema": "local", "local": "local",
-    "origem do registro": "origem", "origem": "origem",
-    "marca": "marca", "modelo": "modelo",
-    "no de serie / patrimonio": "numero_serie", "n de serie / patrimonio": "numero_serie",
-    "numero de serie": "numero_serie", "serie": "numero_serie",
-    "tensao": "tensao",
-    "data de compra": "data_compra", "valor de compra": "valor_compra",
-    "fornecedor da compra": "fornecedor", "nota fiscal": "nota_fiscal",
-    "garantia ate": "garantia_ate",
-    "fornecedor / assistencia": "assistencia", "assistencia": "assistencia",
-    "assistencia tecnica": "assistencia",
-    "contato": "assistencia_contato",
-    "criticidade": "criticidade", "situacao": "situacao",
-    "preventiva a cada (meses)": "preventiva_meses",
-    "ultima preventiva": "ultima_preventiva",
-    "observacoes": "observacao", "observacao": "observacao",
-    # 🔑 O produto Patrimônio do bem (27/10/2026): pelo código, senão pelo nome.
-    "produto": "produto", "codigo do produto": "codigo_produto",
-}
+# ⚠️ **Lista de pares, e não `{...}`**: é um de-para de CABEÇALHO para campo, não uma
+# gravação — e a varredura `smoke_rotulos_cabem` lê todo dicionário literal com chave de
+# nome de coluna ("criticidade", "tensao") como valor indo para o banco.
+COLUNAS = dict([
+    ("codigo", "codigo"), ("apelido", "apelido"), ("equipamento", "descricao"),
+    ("descricao", "descricao"), ("bem", "descricao"), ("setor", "setor"),
+    ("local no sistema", "local"), ("local", "local"), ("origem do registro", "origem"),
+    ("origem", "origem"), ("marca", "marca"), ("modelo", "modelo"),
+    ("no de serie / patrimonio", "numero_serie"), ("n de serie / patrimonio", "numero_serie"),
+    ("numero de serie", "numero_serie"), ("serie", "numero_serie"), ("tensao", "tensao"),
+    ("data de compra", "data_compra"), ("valor de compra", "valor_compra"),
+    ("fornecedor da compra", "fornecedor"), ("nota fiscal", "nota_fiscal"),
+    ("garantia ate", "garantia_ate"), ("fornecedor / assistencia", "assistencia"),
+    ("assistencia", "assistencia"), ("assistencia tecnica", "assistencia"),
+    ("contato", "assistencia_contato"), ("criticidade", "criticidade"),
+    ("situacao", "situacao"), ("preventiva a cada (meses)", "preventiva_meses"),
+    ("ultima preventiva", "ultima_preventiva"), ("observacoes", "observacao"),
+    ("observacao", "observacao"), ("produto", "produto"),
+    ("codigo do produto", "codigo_produto"),
+])
 _SITUACAO = {_chave(v): k for k, v in patrimonio.SITUACOES.items()}
 _CRITICIDADE = {_chave(v): k for k, v in patrimonio.CRITICIDADES.items()}
 _TENSAO = {_chave(v): k for k, v in patrimonio.TENSOES.items()} | {
     "110v": "110V", "220v": "220V", "380v": "380V", "na": "NA", "n/a": "NA"}
 # A ordem e o rótulo com que a prévia mostra o que muda.
-ROTULOS = {"apelido": "Apelido", "descricao": "Equipamento", "id_produto": "Produto",
-           "id_setor": "Setor",
-           "id_local": "Local", "marca": "Marca", "modelo": "Modelo",
-           "numero_serie": "Série", "tensao": "Tensão", "data_compra": "Compra",
-           "valor_compra": "Valor", "fornecedor": "Fornecedor", "nota_fiscal": "Nota",
-           "garantia_ate": "Garantia até", "assistencia": "Assistência",
-           "assistencia_contato": "Contato", "criticidade": "Criticidade",
-           "situacao": "Situação", "preventiva_meses": "Preventiva (meses)",
-           "ultima_preventiva": "Última preventiva", "observacao": "Observações"}
+ROTULOS = dict([
+    ("apelido", "Apelido"), ("descricao", "Equipamento"), ("id_produto", "Produto"),
+    ("id_setor", "Setor"), ("id_local", "Local"), ("marca", "Marca"), ("modelo", "Modelo"),
+    ("numero_serie", "Série"), ("tensao", "Tensão"), ("data_compra", "Compra"),
+    ("valor_compra", "Valor"), ("fornecedor", "Fornecedor"), ("nota_fiscal", "Nota"),
+    ("garantia_ate", "Garantia até"), ("assistencia", "Assistência"),
+    ("assistencia_contato", "Contato"), ("criticidade", "Criticidade"),
+    ("situacao", "Situação"), ("preventiva_meses", "Preventiva (meses)"),
+    ("ultima_preventiva", "Última preventiva"), ("observacao", "Observações"),
+])
 
 
 class PlanilhaInvalida(ValueError):
