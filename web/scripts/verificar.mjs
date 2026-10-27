@@ -11036,9 +11036,13 @@ try {
   const { total: aLancar } = await api("GET", "/notas?status=IMPORTADA&status=CONCILIADA&limite=1", null, token);
   await p.select("#notas-situacao", "abertas").catch(() => {});
   await p.waitForFunction(() => location.search.includes("situacao=abertas"), { timeout: 6000 }).catch(() => {});
-  await p.waitForFunction((n) => new RegExp(`^${n} nota\\(s\\)`).test(
-    [...document.querySelectorAll("main h2, main h3")].map((h) => h.textContent?.trim() ?? "")
-      .find((t) => /nota\(s\)/.test(t)) ?? ""), { timeout: 10000 }, aLancar).catch(() => {});
+  // ⚠️ O valor em reais chega numa SEGUNDA chamada (o resumo), depois da contagem: esperar
+  // os dois — a bateria da 1.1.142 leu "307 nota(s)" antes de o R$ chegar.
+  await p.waitForFunction((n) => {
+    const t = [...document.querySelectorAll("main h2, main h3")].map((h) => h.textContent?.trim() ?? "")
+      .find((x) => /nota\(s\)/.test(x)) ?? "";
+    return new RegExp(`^${n} nota\\(s\\)`).test(t) && (n === 0 || /R\$/.test(t));
+  }, { timeout: 15000 }, aLancar).catch(() => {});
   const tituloNotas = await p.evaluate(() =>
     [...document.querySelectorAll("main h2, main h3")].map((h) => h.textContent?.trim() ?? "")
       .find((t) => /nota\(s\)/.test(t)) ?? "");
