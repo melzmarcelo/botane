@@ -143,6 +143,13 @@
 
 ## Armadilhas já pagas
 
+- 🔑 **Campo novo na tela vai junto para o relatório dela, na mesma entrega** (pedido do
+  dono, 27/10/2026). O "Produzido por" (137) nasceu no cadastro e ficou fora da planilha de
+  Produtos e da impressão do produto; as parcelas da contagem (135) ficaram fora da folha do
+  inventário. Corrigido na 1.1.142. Onde olhar: `exportacao_catalogo.py` (o catálogo) e
+  `routers/exportacoes.py` (as impressões avulsas: produto, inventário, ficha, lotes).
+  Campo opcional só quando preenchido; coluna rara só quando alguma linha tem.
+
 - 🔑 **Três filtros do Consumo por pessoa NÃO chegavam ao relatório, e ninguém soube**
   (19/09/2026). `ciclo`, `pessoas` e `detalhe` eram declarados no catálogo, a janela os
   oferecia e a pessoa escolhia — mas `_Filtros` em `routers/exportacoes.py` não os recebia. O

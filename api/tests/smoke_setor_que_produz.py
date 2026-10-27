@@ -215,6 +215,27 @@ def painel_de(id_setor, sufixo):
     return [l["produto"] for l in ((pn or {}).get("producao") or {}).get("linhas", [])]
 
 
+print("\n8. o campo novo nos relatórios")
+
+
+def baixar(caminho):
+    req = urllib.request.Request(BASE + urllib.parse.quote(caminho, safe="/?=&."))
+    req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=90) as r:
+        return r.read().decode("utf-8-sig", errors="replace")
+
+
+planilha = baixar(f"/exportar/produtos.csv?setores={setor['CAFE']}")
+linha = next((x for x in planilha.splitlines() if f"BOLACHA QP {marca}" in x), "")
+checar("a planilha de Produtos tem a coluna 'Produzido por'", "Produzido por" in planilha,
+       planilha[:300])
+checar("e a bolacha sai com a Confeitaria nela", f"CONF QUEM PRODUZ {marca}" in linha, linha)
+ficha = baixar(f"/exportar/produto/{bolacha}.csv")
+checar("a impressão do produto diz 'Produzido por'",
+       "Produzido por" in ficha and f"CONF QUEM PRODUZ {marca}" in ficha, ficha[:400])
+ficha_far = baixar(f"/exportar/produto/{farinha}.csv")
+checar("e o produto sem setor que produz não ganha a linha", "Produzido por" not in ficha_far)
+
 checar("quem é da Confeitaria vê a bolacha",
        f"BOLACHA QP {marca}" in painel_de(setor["CONF"], "conf"))
 checar("quem é da Cafeteria NÃO vê", f"BOLACHA QP {marca}" not in painel_de(setor["CAFE"], "cafe"))

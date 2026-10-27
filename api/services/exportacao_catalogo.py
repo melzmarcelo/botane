@@ -585,7 +585,7 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
     # 1 s para 3,4 s numa base de 50 mil produtos — e a janela de exportação esperando.
     largo = f.get("_formato") != "pdf" and not f.get("_previa")
     extras = """, p.nome_curto, p.estoque_maximo, p.controla_validade, p.controla_estoque,
-                  p.producao_propria, p.modo_producao,
+                  p.producao_propria, p.modo_producao, sp.nome AS setor_producao,
                   lp.nome AS local_padrao, lv.nome AS local_venda,
                   p.marca, p.peso_liquido, p.peso_bruto, p.cest,
                   p.codigo_pdv, p.integrado_pdv,
@@ -596,6 +596,7 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
     juncoes = """
              LEFT JOIN locais_estoque lp ON lp.id = p.id_local_padrao
              LEFT JOIN locais_estoque lv ON lv.id = p.id_local_venda
+             LEFT JOIN setores sp ON sp.id = p.id_setor_producao
              -- Agregado UMA vez, não por linha.
              LEFT JOIN (SELECT pf.id_produto,
                                string_agg(f.nome, ' / ' ORDER BY pf.preferencial DESC,
@@ -659,6 +660,8 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
             ("preco_venda", "Preço de venda"),
             ("controla_estoque", "Controla estoque"), ("producao_propria", "Produção própria"),
             ("modo_producao", "Modo de produção"),
+            # 137 (27/10/2026): o setor que produz, quando não é o dono do produto.
+            ("setor_producao", "Produzido por"),
             ("local_padrao", "Local padrão"), ("local_venda", "Local de venda"),
             ("estoque_minimo", "Estoque mínimo"), ("estoque_maximo", "Estoque máximo"),
             ("perecivel", "Perecível"), ("validade_dias", "Validade (dias)"),

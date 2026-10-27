@@ -148,6 +148,15 @@ s = next((x for x in lista if x.get("id_produto") == idp and x.get("id_local") =
          None)
 checar("o saldo vira 3,948 UN", s and perto(s["quantidade"], 3.948), s or saldos)
 
+print("\n5b. a folha do inventário mostra como foi contado")
+req = urllib.request.Request(BASE + f"/exportar/inventario/{id_inv}.csv")
+req.add_header("Authorization", f"Bearer {token}")
+with urllib.request.urlopen(req, timeout=90) as r:
+    folha = r.read().decode("utf-8-sig", errors="replace")
+linha = next((x for x in folha.splitlines() if f"DESTILADO PARCELA {marca}" in x), "")
+checar("a coluna 'Contado em' existe", "Contado em" in folha, folha[:300])
+checar("e diz 3 UN + 948 ML", "3 UN + 948 ML" in linha, linha)
+
 print("\n6. juntar unidades reaponta a unidade dentro das parcelas")
 sig = f"Q{marca[-4:]}"
 st, r = chamar("POST", "/unidades-medida", {"sigla": sig, "nome": f"mililitro teste {marca}",

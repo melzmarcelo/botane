@@ -343,7 +343,7 @@ def inventario(nome: str, formato: str | None = None,
         cur.execute(
             """SELECT p.codigo, p.nome AS produto, p.um_estoque,
                       l.nome AS local, ii.qtd_sistema,
-                      ii.qtd_contada, ii.custo_medio,
+                      ii.qtd_contada, ii.custo_medio, ii.parcelas,
                       (coalesce(ii.qtd_contada, ii.qtd_sistema) - ii.qtd_sistema) AS diferenca,
                       round((coalesce(ii.qtd_contada, ii.qtd_sistema) - ii.qtd_sistema)
                             * ii.custo_medio, 2) AS impacto
@@ -364,12 +364,21 @@ def inventario(nome: str, formato: str | None = None,
     # ⚠️ A coluna do local só aparece quando a contagem cobre mais de um: numa
     # folha de um local só ela seria a mesma palavra repetida em cada linha.
     varios_locais = len({l["local"] for l in linhas}) > 1
+    # 135 (27/10/2026): a contagem em parcelas ("3 UN + 948 ML") sai como foi
+    # digitada, ao lado do total convertido. É o que a pessoa contou, não o saldo
+    # do sistema — vale também na cega. A coluna só existe se alguma linha tem.
+    for l in linhas:
+        l["parcelas_txt"] = " + ".join(
+            exportacao.quantidade_br(x.get("qtd"), x.get("um")) for x in (l.pop("parcelas") or []))
+    com_parcelas = any(l["parcelas_txt"] for l in linhas)
     colunas = [("codigo", "Código"), ("produto", "Produto"), ("um_estoque", "Unidade")]
     if varios_locais:
         colunas.append(("local", "Local"))
     if not cega_aberta:
         colunas.append(("qtd_sistema", "Saldo no sistema"))
     colunas.append(("qtd_contada", "Contado"))
+    if com_parcelas:
+        colunas.append(("parcelas_txt", "Contado em"))
     if not cega_aberta:
         colunas += [("diferenca", "Diferença"), ("custo_medio", "Custo médio"),
                     ("impacto", "Impacto (R$)")]
@@ -409,6 +418,7 @@ def produto(nome: str, formato: str | None = None,
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT p.*, c.nome AS categoria, s.nome AS setor, l.nome AS local_padrao,
+                      sp.nome AS setor_producao,
                       (SELECT pp.preco_venda FROM produto_precos pp
                         WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
                           AND (pp.id_unidade = %s OR pp.id_unidade IS NULL)
@@ -416,6 +426,7 @@ def produto(nome: str, formato: str | None = None,
                  FROM produtos p
                  LEFT JOIN categorias c ON c.id = p.id_categoria
                  LEFT JOIN setores s ON s.id = p.id_setor
+                 LEFT JOIN setores sp ON sp.id = p.id_setor_producao
                  LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
                 WHERE p.id = %s""",
             # A loja vem primeiro: o `%s` dela está na lista do SELECT.
@@ -483,6 +494,11 @@ def produto(nome: str, formato: str | None = None,
         ("Tipo", prod["tipo"]),
         ("Categoria", prod["categoria"] or "—"),
         ("Setor", prod["setor"] or "—"),
+    ]
+    # 137 (27/10/2026): só quando outro setor produz — o comum é o próprio dono.
+    if prod["setor_producao"]:
+        resumo.append(("Produzido por", prod["setor_producao"]))
+    resumo += [
         ("Unidade de estoque", prod["um_estoque"] or "—"),
         ("Situação", f"{prod['status']} · {'ativo' if prod['ativo'] else 'inativo'}"),
     ]

@@ -68,6 +68,14 @@
 
 ## Armadilhas já pagas
 
+- ⚠️ **"deploy readiness probe failed" sem log: ver QUAL componente falhou antes de mexer em
+  código** (27/10/2026). A 1.1.141 não subiu e o `/saude` ficou na 137 — parecia a migração
+  138 (a única com TEMP TABLE). Não era: o painel apontava o **web** ("não respondeu às
+  verificações de integridade"), sem nenhuma mudança que afetasse o start. Um **Retry** no
+  painel subiu o MESMO commit e a 138 rodou limpa. A implantação é tudo ou nada: com a web
+  caindo, a API nova é descartada junto e a migração não fica no banco. Primeiro passo:
+  Retry (sem push, sem bateria); só se falhar de novo, Runtime Logs do componente.
+
 - 🔴 **Deploy que não chega ao ar: olhar o BUILD antes de suspeitar do autodeploy**
   (22/10/2026). O `/saude` ficou na 1.1.119 depois de dois pushes, e a causa era o buildpack
   Python da DO pedindo 3.13.17, que dava 404 no armazenamento deles. O `api/.python-version` foi
