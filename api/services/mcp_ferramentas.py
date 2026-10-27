@@ -680,6 +680,10 @@ FERRAMENTAS: list[Ferramenta] = [
                                   no_corpo=True),
          "id_local_venda": Param("integer", "De onde a venda baixa (de `locais`).",
                                  no_corpo=True),
+         "id_setor_producao": Param("integer", "Setor que PRODUZ, quando não é o do produto "
+                                               "(de `setores`): a agenda e os insumos são "
+                                               "dele; o pronto entra no local do produto.",
+                                    no_corpo=True),
          "estoque_minimo": Param("number", "Mínimo para o alerta.", no_corpo=True),
          "estoque_maximo": Param("number", "Máximo de referência.", no_corpo=True),
          "perecivel": Param("boolean", "É perecível.", no_corpo=True),

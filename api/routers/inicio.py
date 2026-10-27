@@ -213,13 +213,16 @@ def _producao_do_setor(cur, id_unidade: int, ctx: Contexto) -> dict:
                   (a.data_prevista < current_date) AS atrasada
              FROM producao_agenda a
              JOIN produtos p ON p.id = a.id_produto
-             LEFT JOIN setores s ON s.id = p.id_setor
+             -- 🔑 O setor que PRODUZ (137), não o dono do produto: a bolacha da
+             -- Cafeteria feita pela Confeitaria aparece para a Confeitaria.
+             LEFT JOIN setores s ON s.id = coalesce(p.id_setor_producao, p.id_setor)
             WHERE a.id_unidade = %(u)s
               AND a.status = 'PLANEJADA'
               AND a.data_prevista <= current_date + 7
               -- ⚠️ Produto SEM setor entra sempre: ele não é de ninguém, e
               -- escondê-lo faria a linha sumir do painel de toda a casa.
-              AND (%(todos)s OR p.id_setor IS NULL OR p.id_setor = ANY(%(setores)s))
+              AND (%(todos)s OR coalesce(p.id_setor_producao, p.id_setor) IS NULL
+                   OR coalesce(p.id_setor_producao, p.id_setor) = ANY(%(setores)s))
             ORDER BY a.data_prevista, lower(p.nome)""",
         {"u": id_unidade, "todos": ctx.todos_setores,
          "setores": list(ctx.setores) or [0]},

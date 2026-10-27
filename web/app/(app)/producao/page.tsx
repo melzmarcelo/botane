@@ -170,11 +170,15 @@ export default function PaginaProducao() {
       /** Os modos desta ficha, para a tela oferecer a escolha sem outra chamada. */
       modos?: { id: number; nome: string; rendimento_qtd: number; porcoes: number | null;
                 quantidade_sugerida: number | null; local: string | null;
-                setor: string | null }[] } | null
+                setor: string | null }[];
+      /** 🔑 As duas pontas (137): quem produz e onde o produzido entra. */
+      setor_que_produz?: string | null; local_destino?: string | null } | null
   >(null);
 
   useEffect(() => {
-    if (!f.id_produto || !f.id_local) {
+    // ⚠️ Sem local escolhido também prevê (137): o destino é o do PRODUTO, e é o
+    // servidor quem o diz.
+    if (!f.id_produto) {
       setVigente(null);
       return;
     }
@@ -184,7 +188,8 @@ export default function PaginaProducao() {
       api
         .get<typeof vigente>(
           `/producao-agenda/necessario?id_produto=${f.id_produto}` +
-            `&quantidade=${quanto}&id_local=${f.id_local}&medida=${f.medida}` +
+            `&quantidade=${quanto}` + (f.id_local ? `&id_local=${f.id_local}` : "") +
+            `&medida=${f.medida}` +
             (f.id_modo ? `&id_modo=${f.id_modo}` : ""),
         )
         .then((r) => valeu && setVigente(r))
@@ -212,10 +217,9 @@ export default function PaginaProducao() {
       setLocais(ls);
       setHistorico(h.itens);
       pag.setTotal(h.total);
-      setF((atual) => ({
-        ...atual,
-        id_local: atual.id_local || String(ls.find((l) => l.principal)?.id ?? ls[0]?.id ?? ""),
-      }));
+      // 🔑 **Sem local pré-escolhido** (137): vazio é "o local do produto" — o
+      // servidor resolve. Pré-escolher o principal da casa fazia o produzido parecer
+      // ir para lá, e o defeito do destino ficava escondido atrás do rótulo.
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -446,18 +450,29 @@ export default function PaginaProducao() {
                   </span>
                 )}
               </Campo>
-              <Campo rotulo="Local" className="sm:col-span-2">
+              <Campo rotulo="Entra em" className="sm:col-span-2">
                 <select
                   className="campo"
+                  id="producao-destino"
                   value={f.id_local}
                   onChange={(e) => setF({ ...f, id_local: e.target.value })}
                 >
+                  <option value="">— o local do produto —</option>
                   {locaisOferecidos.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.nome}
                     </option>
                   ))}
                 </select>
+                {/* 🔑 **As duas pontas, escritas** (137): "Produz: Confeitaria → Entra em:
+                    Estoque Cafeteria". Quem produz e onde o pronto fica podem ser
+                    setores diferentes, e a tela tem de dizer isso antes do clique. */}
+                {vigente && (vigente.setor_que_produz || vigente.local_destino) && (
+                  <span className="mt-1.5 block text-[13px] text-suave" id="producao-pontas">
+                    {vigente.setor_que_produz ? `Produz: ${vigente.setor_que_produz} → ` : ""}
+                    Entra em: <b className="text-tinta">{vigente.local_destino ?? "—"}</b>
+                  </span>
+                )}
               </Campo>
               {/* 🔑 **O MODO de rendimento** (16/09/2026, pedido do dono: *"este
                   será o modo que será selecionado ao agendar ou produzir"*). Ele

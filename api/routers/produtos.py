@@ -49,7 +49,7 @@ router = APIRouter(prefix="/produtos", tags=["produtos"])
 _EDITAVEIS = (
     "codigo", "nome", "nome_curto", "tipo", "id_categoria", "id_setor",
     "producao_propria", "controla_estoque", "um_estoque", "um_compra", "fator_compra",
-    "id_local_padrao", "id_local_venda", "modo_producao",
+    "id_local_padrao", "id_local_venda", "id_setor_producao", "modo_producao",
     "perecivel", "validade_dias", "controla_lote", "controla_validade",
     "estoque_minimo", "estoque_maximo", "ncm", "codigo_barras", "codigo_omie",
     "codigo_pdv",
@@ -901,12 +901,14 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT p.*, c.nome AS categoria, s.nome AS setor, l.nome AS local_padrao,
+                      sp.nome AS setor_producao,
                       -- Quem absorveu este cadastro, com nome e código: uma tela que
                       -- diz "foi fundido" sem dizer EM QUE manda procurar.
                       f.nome AS fundido_em_nome, f.codigo AS fundido_em_codigo
                  FROM produtos p
                  LEFT JOIN categorias c ON c.id = p.id_categoria
                  LEFT JOIN setores s ON s.id = p.id_setor
+                 LEFT JOIN setores sp ON sp.id = p.id_setor_producao
                  LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
                  LEFT JOIN produtos f ON f.id = p.fundido_em
                 WHERE p.id = %s""",

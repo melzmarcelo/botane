@@ -70,6 +70,8 @@ type Form = {
   fator_compra: string;
   id_local_padrao: string;
   id_local_venda: string;
+  /** 🔑 Quem PRODUZ (137). Vazio = o setor do produto. */
+  id_setor_producao: string;
   perecivel: boolean;
   validade_dias: string;
   controla_lote: boolean;
@@ -97,7 +99,7 @@ type Form = {
 const VAZIO: Form = {
   codigo: "", nome: "", nome_curto: "", tipo: "INSUMO", id_categoria: "", id_setor: "",
   producao_propria: false, modo_producao: "PARA_ESTOQUE", controla_estoque: true, um_estoque: "", um_compra: "",
-  fator_compra: "1", id_local_padrao: "", id_local_venda: "", perecivel: false, validade_dias: "", controla_lote: false,
+  fator_compra: "1", id_local_padrao: "", id_local_venda: "", id_setor_producao: "", perecivel: false, validade_dias: "", controla_lote: false,
   integrado_pdv: false,
   controla_validade: false, estoque_minimo: "", estoque_maximo: "", ncm: "",
   cest: "", marca: "", peso_liquido: "", peso_bruto: "",
@@ -514,6 +516,7 @@ export default function FormularioProduto() {
       // ⚠️ Vazio vai como NULO: "não escolhi" é diferente de "o local zero", e é
       // o nulo que faz a venda continuar no local de estoque.
       id_local_venda: num(f.id_local_venda),
+      id_setor_producao: num(f.id_setor_producao),
       perecivel: f.perecivel,
       validade_dias: num(f.validade_dias),
       controla_lote: f.controla_lote,
@@ -1441,6 +1444,43 @@ export default function FormularioProduto() {
                   );
                 })}
               </ul>
+              {/* 🔑 **Quem PRODUZ** (migração 137, 27/10/2026, pedido do dono: "a
+                  Confeitaria produz bolachas que vão junto com o café … após pronto,
+                  vai direto para o estoque da Cafeteria"). O setor do produto diz a
+                  quem ele PERTENCE (o CMV); este diz quem o faz: a agenda aparece para
+                  esse setor, e os insumos saem primeiro dos locais dele. O produzido
+                  continua entrando no local de estoque do produto. */}
+              <div className="mt-4 max-w-[420px]">
+                <Campo rotulo="Produzido por" dica="o setor que faz — vazio, o do produto">
+                  <select
+                    className="campo"
+                    id="produto-setor-producao"
+                    disabled={!podeEditar}
+                    aria-label="Produzido por"
+                    value={f.id_setor_producao}
+                    onChange={(e) => set("id_setor_producao", e.target.value)}
+                  >
+                    <option value="">— o setor do produto —</option>
+                    {setores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nome}
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+                {f.id_setor_producao && f.id_setor_producao !== f.id_setor && (
+                  <p className="mt-1.5 text-[13px] leading-snug text-suave" id="produto-setor-producao-explica">
+                    A agenda aparece para{" "}
+                    <b>{setores.find((s) => String(s.id) === f.id_setor_producao)?.nome}</b>, e os
+                    insumos saem primeiro dos locais desse setor. O produto pronto entra no local de
+                    estoque dele
+                    {f.id_local_padrao
+                      ? ` (${locais.find((l) => String(l.id) === f.id_local_padrao)?.nome ?? ""})`
+                      : ""}
+                    .
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

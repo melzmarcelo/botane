@@ -1664,14 +1664,18 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
     # rendimento da ficha e a produção usava o do local, para o mesmo pedido.
     # O local de reserva se resolve como na PRODUÇÃO. Sem isto, o saldo era
     # procurado num local nulo, nada casava e a folha dizia que faltava tudo.
+    escolhido = id_local
     if id_local is None:
         id_local = local_padrao(cur, id_unidade)
+    # 🔑 As MESMAS duas pontas da produção (137).
+    quem_produz = _locais_de_quem_produz(cur, id_produto, id_unidade, id_local)
+    destino = _destino_da_producao(cur, id_produto, id_unidade, escolhido, id_local)
     # ⚠️ **O MESMO modo da produção**, escolhido ou herdado da prateleira: a
     # massa que vai ao forno para a vitrine não rende o mesmo que a que vai crua
     # para a câmara, e prever por um modo e produzir por outro seria prever
     # outra coisa.
-    modo = modo_da_producao(cur, ficha["id"], id_local, id_modo, ficha["rendimento_qtd"],
-                            ficha["porcoes"])
+    modo = modo_da_producao(cur, ficha["id"], escolhido or destino, id_modo,
+                            ficha["rendimento_qtd"], ficha["porcoes"])
     rendimento = modo["rendimento_qtd"]
     rend_do_local = modo["rendimento_do_local"]
     ums = custos._carregar_ums(cur)
@@ -1726,8 +1730,9 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         # com outra regra seria prever outra coisa: a folha diria que falta
         # açúcar no central enquanto a produção o tiraria da Confeitaria, e
         # quem lesse a previsão iria comprar o que já tem.
-        onde = _de_onde_sai(cur, id_alvo, id_unidade, id_local,
-                            local_item or id_local, convertida or 0)
+        onde = _de_onde_sai(cur, id_alvo, id_unidade, quem_produz,
+                            _local_desta_loja(cur, local_item, id_unidade, id_local),
+                            convertida or 0)
         cur.execute(
             """SELECT coalesce(sum(quantidade), 0) AS aqui,
                       coalesce(sum(quantidade) FILTER (WHERE id_local = %s), 0) AS no_local,
@@ -1791,10 +1796,21 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
             "observacao": item["observacao"],
         })
 
+    # 🔑 As duas pontas, para a tela dizer "Produz: Confeitaria → Entra em: Cafeteria".
+    cur.execute(
+        """SELECT (SELECT nome FROM locais_estoque WHERE id = %s) AS destino,
+                  (SELECT s.nome FROM produtos p
+                     JOIN setores s ON s.id = coalesce(p.id_setor_producao, p.id_setor)
+                    WHERE p.id = %s) AS quem_produz""",
+        (destino, id_produto),
+    )
+    pontas = cur.fetchone()
     return {
         "id_ficha": ficha["id"], "versao": ficha["versao"], "id_produto": id_produto,
         "produto": ficha["produto"], "codigo": ficha["codigo"],
         "um_estoque": ficha["um_estoque"],
+        "id_local_destino": destino, "local_destino": pontas["destino"],
+        "setor_que_produz": pontas["quem_produz"],
         # O que a bancada precisa saber além das quantidades.
         "modo_preparo": ficha["modo_preparo"],
         "tempo_preparo_min": ficha["tempo_preparo_min"],
@@ -1846,7 +1862,60 @@ def _local_desta_loja(cur, id_local: int | None, id_unidade: int, alternativo: i
     return id_local if linha and linha["id_unidade"] == id_unidade else alternativo
 
 
-def _de_onde_sai(cur, id_produto: int, id_unidade: int, id_local_producao: int | None,
+def _locais_de_quem_produz(cur, id_produto: int, id_unidade: int,
+                           id_local: int | None) -> list[int]:
+    """De onde quem PRODUZ tira os insumos primeiro — em ordem.
+
+    🔑 **O setor que produz** (`produtos.id_setor_producao`, 137, pedido do dono: a
+    Confeitaria faz a bolacha que mora na Cafeteria): os locais DESSE setor nesta
+    loja, o principal antes. A farinha sai do estoque da Confeitaria, que é onde
+    ela foi parar de manhã.
+    ⚠️ Sem setor que produz (ou sem local dele nesta loja) é o de sempre: o local
+    da produção.
+    """
+    cur.execute("SELECT id_setor_producao FROM produtos WHERE id = %s", (id_produto,))
+    setor = (cur.fetchone() or {}).get("id_setor_producao")
+    if setor:
+        cur.execute(
+            """SELECT id FROM locais_estoque
+                WHERE id_unidade = %s AND ativo AND id_setor = %s
+                ORDER BY principal DESC, id""",
+            (id_unidade, setor),
+        )
+        locais = [r["id"] for r in cur.fetchall()]
+        if locais:
+            return locais
+    return [id_local] if id_local else []
+
+
+def _destino_da_producao(cur, id_produto: int, id_unidade: int, escolhido: int | None,
+                         alternativo: int) -> int:
+    """Onde o PRODUZIDO entra: o local do produto, ou o escolhido onde ele mora.
+
+    🔑 **O seletor da agenda se chama "Prateleira de destino", e não era** (achado
+    em 27/10/2026, na análise da bolacha da Confeitaria): o produzido entrava SEMPRE
+    no `id_local_padrao`, e o escolhido só valia para o modo e os insumos. A massa
+    de pizza feita para a vitrine (066) entrava na câmara.
+    ⚠️ O escolhido só vale onde o produto MORA (uma linha de saldo nesta loja) —
+    a mesma régua dos seletores. A tela de produção mandava o local principal da
+    casa por padrão; sem esta guarda, todo produto passaria a entrar lá.
+    """
+    cur.execute("SELECT id_local_padrao FROM produtos WHERE id = %s", (id_produto,))
+    padrao = _local_desta_loja(cur, (cur.fetchone() or {}).get("id_local_padrao"),
+                               id_unidade, alternativo)
+    if escolhido and escolhido != padrao:
+        cur.execute(
+            """SELECT 1 FROM estoque_saldos
+                WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
+            (id_unidade, escolhido, id_produto),
+        )
+        if cur.fetchone():
+            return escolhido
+    return padrao
+
+
+def _de_onde_sai(cur, id_produto: int, id_unidade: int,
+                 id_local_producao: int | list[int] | None,
                  id_local_do_produto: int, quantidade) -> int:
     """O local de quem PRODUZ, quando o insumo está lá; senão, o do produto.
 
@@ -1867,16 +1936,22 @@ def _de_onde_sai(cur, id_produto: int, id_unidade: int, id_local_producao: int |
     açúcar, sai de lá; se acabou, sai do central. Decidir pelo cadastro faria a
     produção falhar no dia em que o pacote da manhã acabou no meio da tarde.
     """
-    if not id_local_producao or id_local_producao == id_local_do_produto:
-        return id_local_do_produto
-    cur.execute(
-        """SELECT quantidade FROM estoque_saldos
-            WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
-        (id_unidade, id_local_producao, id_produto),
-    )
-    linha = cur.fetchone()
-    if linha and dec(linha["quantidade"]) >= dec(quantidade):
-        return id_local_producao
+    # 🔑 Uma LISTA quando quem produz é um setor com vários locais (137): o primeiro
+    # que tem o bastante. O local do próprio insumo no meio da lista encerra a busca —
+    # é para lá que a reserva iria de qualquer jeito.
+    candidatos = (id_local_producao if isinstance(id_local_producao, list)
+                  else [id_local_producao] if id_local_producao else [])
+    for local in candidatos:
+        if local == id_local_do_produto:
+            return id_local_do_produto
+        cur.execute(
+            """SELECT quantidade FROM estoque_saldos
+                WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
+            (id_unidade, local, id_produto),
+        )
+        linha = cur.fetchone()
+        if linha and dec(linha["quantidade"]) >= dec(quantidade):
+            return local
     return id_local_do_produto
 
 
@@ -1926,14 +2001,19 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
             status_code=400,
             detail="Este produto não tem ficha homologada — homologue a ficha antes de produzir.",
         )
+    escolhido = id_local
     if id_local is None:
         id_local = local_padrao(cur, id_unidade)
+    # 🔑 As duas pontas (137): de onde quem produz tira os insumos, e onde o
+    # produzido entra.
+    quem_produz = _locais_de_quem_produz(cur, id_produto, id_unidade, id_local)
+    local_produzido = _destino_da_producao(cur, id_produto, id_unidade, escolhido, id_local)
 
     qtd = dec(quantidade)
-    # ⚠️ O modo sai do ESCOLHIDO, senão da prateleira, senão do setor dela — e o
-    # `id_local` já foi resolvido acima, então aqui ele nunca é nulo.
-    modo = modo_da_producao(cur, ficha["id"], id_local, id_modo, ficha["rendimento_qtd"],
-                            ficha["porcoes"])
+    # ⚠️ O modo sai do ESCOLHIDO, senão da prateleira, senão do setor dela. Sem
+    # prateleira escolhida, a do DESTINO (antes era o local principal da casa).
+    modo = modo_da_producao(cur, ficha["id"], escolhido or local_produzido, id_modo,
+                            ficha["rendimento_qtd"], ficha["porcoes"])
     rendimento = modo["rendimento_qtd"]
     rend_do_local = modo["rendimento_do_local"]
 
@@ -1974,7 +2054,9 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         """INSERT INTO producoes (id_unidade, id_local, id_produto, id_ficha, versao_ficha,
                                   quantidade, observacao, id_usuario, id_venda, id_modo)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-        (id_unidade, id_local, id_produto, ficha["id"], ficha["versao"], qtd, observacao,
+        # ⚠️ `producoes.id_local` passa a ser o DESTINO (137): é a resposta que a
+        # lista de produções dá para "onde está o que se fez".
+        (id_unidade, local_produzido, id_produto, ficha["id"], ficha["versao"], qtd, observacao,
          id_usuario,
          # 🔑 **A venda que disparou a produção** (110), quando foi uma: é por
          # aqui que cancelar a venda acha o consumo de insumo a devolver.
@@ -2084,7 +2166,7 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         # de quem produz faria a saída bater num lugar por onde o insumo nunca
         # passou, com saldo negativo e custo provisório. Então a ordem é: o
         # local de quem produz primeiro, o local do produto como reserva.
-        onde = _de_onde_sai(cur, id_alvo, id_unidade, id_local,
+        onde = _de_onde_sai(cur, id_alvo, id_unidade, quem_produz,
                             _local_desta_loja(cur, local_do_item, id_unidade, id_local),
                             convertida)
         r = lancar(
@@ -2116,11 +2198,9 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         )
 
     unitario = (custo_consumido / qtd).quantize(CASAS_CUSTO) if qtd else Decimal(0)
-    # O produzido também entra no local dele: o molho vai para a câmara, não
-    # para onde por acaso se lançou a produção.
-    cur.execute("SELECT id_local_padrao FROM produtos WHERE id = %s", (id_produto,))
-    local_produzido = (cur.fetchone() or {}).get("id_local_padrao")
-    local_produzido = _local_desta_loja(cur, local_produzido, id_unidade, id_local)
+    # O produzido entra no local DELE (ou no escolhido onde ele mora) — resolvido
+    # lá em cima, em `_destino_da_producao`: o molho vai para a câmara, a bolacha
+    # da Confeitaria para a Cafeteria.
     # 🔑 **A produção nasce com LOTE e VALIDADE** (módulo de Etiquetas, 28/09/2026).
     # Antes o que a cozinha fazia entrava sem data, e o FEFO e o alerta de
     # vencimento só enxergavam o que veio de nota. O lote é `P<id da produção>` e a

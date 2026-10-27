@@ -158,22 +158,38 @@ export default function AgendaProducao({
       local: string | null; setor: string | null }[]
   >([]);
 
+  /** 🔑 As duas pontas (137): quem produz e onde o pronto entra — da MESMA prévia. */
+  const [pontas, setPontas] = useState<
+    { setor_que_produz?: string | null; local_destino?: string | null } | null
+  >(null);
+
   useEffect(() => {
     const id = Number(f.id_produto);
     if (!id) {
       setModos([]);
+      setPontas(null);
       return;
     }
     let valeu = true;
     api
-      .get<{ modos?: typeof modos }>(
-        `/producao-agenda/necessario?id_produto=${id}&quantidade=1`)
-      .then((r) => valeu && setModos(r.modos ?? []))
-      .catch(() => valeu && setModos([]));
+      .get<{ modos?: typeof modos; setor_que_produz?: string | null;
+             local_destino?: string | null }>(
+        `/producao-agenda/necessario?id_produto=${id}&quantidade=1` +
+          (f.id_local ? `&id_local=${f.id_local}` : ""))
+      .then((r) => {
+        if (!valeu) return;
+        setModos(r.modos ?? []);
+        setPontas({ setor_que_produz: r.setor_que_produz, local_destino: r.local_destino });
+      })
+      .catch(() => {
+        if (!valeu) return;
+        setModos([]);
+        setPontas(null);
+      });
     return () => {
       valeu = false;
     };
-  }, [f.id_produto]);
+  }, [f.id_produto, f.id_local]);
 
   const carregar = useCallback(async () => {
     try {
@@ -396,6 +412,12 @@ export default function AgendaProducao({
                 </option>
               ))}
             </select>
+            {pontas && (pontas.setor_que_produz || pontas.local_destino) && (
+              <span className="mt-1.5 block text-[13px] text-suave" id="agenda-pontas">
+                {pontas.setor_que_produz ? `Produz: ${pontas.setor_que_produz} → ` : ""}
+                Entra em: <b className="text-tinta">{pontas.local_destino ?? "—"}</b>
+              </span>
+            )}
           </Campo>
           {/* 🔑 **O MODO de rendimento**, e ele fica GRAVADO na linha: cumprir a
               agenda três dias depois pelo rendimento padrão seria a quantidade

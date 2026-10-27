@@ -666,6 +666,28 @@
   Cobertura: `tests/smoke_fila_e_rascunhos.py`. ⚠️ A suíte CANCELA a venda de teste — ela vale
   R$ 2 milhões de propósito (para caber no topo da fila) e, viva, inflaria a receita do dia.
 
+- 🔑 **Quem PRODUZ x a quem o produto PERTENCE** (1.1.140, migração 137, 27/10/2026, pedido do
+  dono: *"a Confeitaria produz bolachas que vão junto com o café … após pronto, este produto vai
+  direto para o estoque da Cafeteria"*).
+  - `produtos.id_setor_producao` (nulo = o `id_setor`). `id_setor` continua sendo o DONO (CMV por
+    setor, relatórios); o novo decide a agenda do painel (`inicio._producao_do_setor`, por
+    `coalesce(id_setor_producao, id_setor)`) e de onde saem os insumos.
+  - `estoque._locais_de_quem_produz`: os locais ativos DESSE setor na loja (principal antes), e
+    `_de_onde_sai` aceita LISTA — o primeiro com saldo; o local do próprio insumo encerra a busca;
+    sem saldo em nenhum, o local do insumo (a regra de 01/09). Sem setor que produz: `[id_local]`,
+    como sempre.
+  - 🔑 **Defeito achado na análise e corrigido** (`_destino_da_producao`): o seletor da agenda se
+    chamava "Prateleira de destino" e o produzido entrava SEMPRE no `id_local_padrao` — o
+    escolhido só valia para o modo e os insumos (a massa da vitrine entrava na câmara). Agora o
+    escolhido vale quando o produto MORA lá (linha de saldo); senão, o padrão. ⚠️ A tela de
+    produção pré-escolhia o local principal da CASA: passou a vir vazio ("— o local do produto
+    —", o campo virou "Entra em"), senão a guarda acima seria a única coisa entre o produto e o
+    principal. `producoes.id_local` passa a gravar o DESTINO. O modo sem escolha usa o destino
+    (antes, o principal da casa).
+  - A prévia (`previsao_producao`) usa as MESMAS duas funções e devolve `id_local_destino`,
+    `local_destino` e `setor_que_produz`; a produção e a agenda mostram "Produz: X → Entra em: Y".
+  - Cobertura: `smoke_setor_que_produz.py` (18) e `verificar-setor-produz.mjs` (6).
+
 ## Armadilhas já pagas
 
 - 🔑 **Não dava para saber QUAL commit estava no ar, e isso custou uma ida e volta.** `VERSAO` é

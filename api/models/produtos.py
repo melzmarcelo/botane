@@ -66,6 +66,10 @@ class ProdutoBase(BaseModel):
     # consumo de insumo. Separar os papéis é o que permite a mesma massa estar na
     # câmara como insumo e na vitrine para vender.
     id_local_venda: int | None = None
+    # 🔑 **Quem PRODUZ** (migração 137, pedido do dono: a Confeitaria faz a bolacha que
+    # mora na Cafeteria). Nulo = o próprio `id_setor`. Decide a agenda de quem vê e
+    # de onde saem os insumos; o produto continua pertencendo ao `id_setor`.
+    id_setor_producao: int | None = None
     # PARA_ESTOQUE: produz, guarda, sai depois (a massa de pizza).
     # NA_HORA: a venda produz e baixa junto (o café passado).
     modo_producao: str = "PARA_ESTOQUE"
@@ -202,6 +206,8 @@ class ProdutoUpdate(ProdutoBase):
     id_local_padrao: int | None = None
     # De onde a VENDA baixa, como em `ProdutoBase`.
     id_local_venda: int | None = None
+    # Quem produz (137), como em `ProdutoBase`.
+    id_setor_producao: int | None = None
     modo_producao: str | None = None
     producao_propria: bool | None = None
     controla_estoque: bool | None = None
@@ -359,6 +365,9 @@ class ProdutoResponse(BaseModel):
     # De onde a VENDA baixa, como em `ProdutoBase`.
     id_local_venda: int | None = None
     local_padrao: str | None = None
+    # Quem produz (137). Nulo = o setor do produto.
+    id_setor_producao: int | None = None
+    setor_producao: str | None = None
     modo_producao: str = "PARA_ESTOQUE"
     perecivel: bool
     validade_dias: int | None = None

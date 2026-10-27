@@ -17,7 +17,7 @@ entregue.
 | Módulo | Memória | Suítes |
 |---|---|---|
 | [Cadastros](#cadastros) | `docs/memoria/cadastros.md` | `cadastros`, `pessoas`, `produto_do_omie`, `vinculo`, `conversao`, `acucar_500g`, `utensilios`, `troca_de_unidade`, `openfoodfacts`, `kits`, `descricoes` |
-| [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `fila_e_rascunhos`, `relatorio_fichas`, `producao`, `rendimento`, `rendimento_por_local` |
+| [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `fila_e_rascunhos`, `relatorio_fichas`, `producao`, `rendimento`, `rendimento_por_local`, `setor_que_produz` |
 | [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas` |
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes`, `preco_custo`, `custo_referencia` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `contagem_parcelas`, `transferencias`, `duas_lojas`, `alertas`, `lotes` |
@@ -55,7 +55,7 @@ mínimo, máximo e as embalagens, e é recusada em produto que já tem razão.
 
 - **Rotas:** `fichas.py`, `producao_agenda.py`
 - **Serviços:** `producao_agenda.py`, e o custo da ficha vive em `custos.py`
-- **Telas:** `fichas/`, `producao/`
+- **Telas:** `fichas/`, `producao/` (roteiro `verificar-setor-produz.mjs`)
 - **Permissões:** `fichas.visualizar`, `fichas.editar`, `fichas.homologar`, `fichas.custos`, `producao.agenda`
 
 ⚠️ **A ficha é versionada e o custo é congelado no uso** — recalcular depois
