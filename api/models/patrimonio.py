@@ -14,7 +14,9 @@ TipoManutencao = Literal["PREVENTIVA", "CORRETIVA"]
 CAMPOS = ("apelido", "descricao", "id_produto", "id_setor", "id_local", "marca", "modelo",
           "numero_serie", "tensao", "data_compra", "valor_compra", "fornecedor",
           "nota_fiscal", "garantia_ate", "assistencia", "assistencia_contato", "criticidade",
-          "situacao", "motivo_baixa", "preventiva_meses", "ultima_preventiva", "observacao")
+          "situacao", "motivo_baixa", "preventiva_meses", "ultima_preventiva", "observacao",
+          # 141: a vida útil (vazia = o padrão de 10 anos) e quando saiu da casa.
+          "vida_util_anos", "data_baixa")
 
 
 class Bem(BaseModel):
@@ -42,6 +44,10 @@ class Bem(BaseModel):
     preventiva_meses: int | None = Field(default=None, ge=1, le=120)
     ultima_preventiva: date | None = None
     observacao: str | None = Field(default=None, max_length=500)
+    # 141 — em anos; vazia = o padrão (10, o da Receita para máquinas e móveis).
+    vida_util_anos: int | None = Field(default=None, ge=1, le=50)
+    # 141 — vazia na baixa = hoje (o banco preenche); fora do baixado, o banco limpa.
+    data_baixa: date | None = None
 
     @model_validator(mode="after")
     def _baixa_com_motivo(self):

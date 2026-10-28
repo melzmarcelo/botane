@@ -38,7 +38,7 @@ const FONTE_PATRIMONIO = fonteProdutos("tipo=PATRIMONIO");
 type Form = Record<string, string>;
 const TEXTOS = ["descricao", "apelido", "marca", "modelo", "numero_serie", "fornecedor",
   "nota_fiscal", "assistencia", "assistencia_contato", "observacao", "motivo_baixa"] as const;
-const DATAS = ["data_compra", "garantia_ate", "ultima_preventiva"] as const;
+const DATAS = ["data_compra", "garantia_ate", "ultima_preventiva", "data_baixa"] as const;
 const ESCOLHAS = ["tensao", "criticidade", "situacao", "id_setor", "id_local"] as const;
 
 const VAZIO: Form = { situacao: "EM_USO" };
@@ -50,6 +50,7 @@ function paraForm(b: BemDetalhe): Form {
     f[k] = v === null || v === undefined ? "" : String(v);
   }
   f.preventiva_meses = b.preventiva_meses ? String(b.preventiva_meses) : "";
+  f.vida_util_anos = b.vida_util_anos ? String(b.vida_util_anos) : "";
   f.id_produto = b.id_produto ? String(b.id_produto) : "";
   f.valor_compra = b.valor_compra !== null ? numeroParaMoeda(b.valor_compra) : "";
   return f;
@@ -65,6 +66,9 @@ function paraCorpo(f: Form): BemForm {
   c.id_local = f.id_local ? Number(f.id_local) : null;
   c.id_produto = f.id_produto ? Number(f.id_produto) : null;
   c.preventiva_meses = f.preventiva_meses ? Number(f.preventiva_meses) : null;
+  c.vida_util_anos = f.vida_util_anos ? Number(f.vida_util_anos) : null;
+  // Fora do baixado a data não vale (o banco limpa); vazia na baixa, o banco põe hoje.
+  if (c.situacao !== "BAIXADO") c.data_baixa = null;
   c.valor_compra = f.valor_compra ? moedaParaNumero(f.valor_compra) : null;
   return c;
 }
@@ -269,6 +273,12 @@ export default function FichaDoBem() {
                        value={f.motivo_baixa ?? ""} onChange={muda("motivo_baixa")} />
               </Campo>
             )}
+            {f.situacao === "BAIXADO" && (
+              <Campo rotulo="Data da baixa" opcional dica="vazia, fica hoje — a depreciação para nela">
+                <input type="date" className="campo" id="bem-data-baixa" max={hoje()} disabled={travado}
+                       value={f.data_baixa ?? ""} onChange={muda("data_baixa")} />
+              </Campo>
+            )}
             <Campo rotulo="Criticidade" opcional
                    dica="Alta: parar o equipamento para a venda ou estraga insumo. Média: atrapalha. Baixa: tem alternativa.">
               <select className="campo" id="bem-criticidade" disabled={travado}
@@ -331,7 +341,13 @@ export default function FichaDoBem() {
               <input className="campo" maxLength={80} disabled={travado}
                      value={f.assistencia_contato ?? ""} onChange={muda("assistencia_contato")} />
             </Campo>
+            <Campo rotulo="Vida útil (anos)" opcional
+                   dica="vazia, 10 — o padrão da Receita para máquinas e móveis; computador é 5">
+              <input type="number" min={1} max={50} className="campo" id="bem-vida-util" disabled={travado}
+                     placeholder="10" value={f.vida_util_anos ?? ""} onChange={muda("vida_util_anos")} />
+            </Campo>
           </div>
+          {bem && <ValorDoBem bem={bem} />}
         </Cartao>
 
         <Cartao titulo="Manutenção preventiva"
@@ -379,6 +395,30 @@ export default function FichaDoBem() {
         </Confirmacao>
       )}
     </div>
+  );
+}
+
+/** 141 — o valor de hoje (ou o da baixa), calculado pelo servidor com a conta do relatório. */
+function ValorDoBem({ bem }: { bem: BemDetalhe }) {
+  const v = bem.valor;
+  if (v.sem_valor) {
+    return <p className="mt-4 text-[13.5px] text-suave" id="bem-valor-atual">
+      Sem valor de compra — o bem não entra no valor do patrimônio.</p>;
+  }
+  if (v.sem_data) {
+    return <p className="mt-4 text-[13.5px] text-suave" id="bem-valor-atual">
+      Sem data de compra, não deprecia: conta pelo valor de compra ({reais(v.valor_atual ?? 0)}).</p>;
+  }
+  return (
+    <p className="mt-4 text-[13.5px]" id="bem-valor-atual">
+      <b>{bem.situacao === "BAIXADO" ? "Valor na baixa" : "Valor atual"}: {reais(v.valor_atual ?? 0)}</b>
+      <span className="text-suave">
+        {" "}· depreciação {reais(v.depreciacao ?? 0)} ({v.depreciado_pct?.toLocaleString("pt-BR")}%)
+        em {v.meses} {v.meses === 1 ? "mês" : "meses"} · {reais(v.quota_mensal ?? 0)} por mês
+        · vida útil {v.vida_util} anos{v.vida_padrao ? " (padrão)" : ""}
+        {v.depreciado_total ? " · totalmente depreciado" : v.fim_vida ? ` · até ${dataBr(v.fim_vida)}` : ""}
+      </span>
+    </p>
   );
 }
 

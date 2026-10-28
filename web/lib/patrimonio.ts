@@ -54,6 +54,10 @@ export type Bem = {
   observacao: string | null;
   /** A última conferência (fechada) em que o bem foi VISTO. */
   conferido_em: string | null;
+  /** 141 — em anos; vazia = o padrão (10). */
+  vida_util_anos: number | null;
+  /** 141 — quando saiu da casa (o banco põe hoje se a baixa vier sem data). */
+  data_baixa: string | null;
   proxima_preventiva: string | null;
   status_preventiva: string;
   em_garantia: boolean;
@@ -78,7 +82,50 @@ export type BemDetalhe = Bem & {
   custo_manutencao: number;
   /** O estoque guardado no local do bem (a câmara fria). Valor só para quem vê estoque. */
   estoque_no_local: { produtos: number; valor: number | null } | null;
+  /** 141 — a depreciação até hoje (ou até a baixa), a mesma conta do relatório do valor. */
+  valor: Depreciacao;
 };
+
+/** A conta da depreciação de um bem (linear, por mês inteiro) — feita pelo servidor. */
+export type Depreciacao = {
+  vida_util: number;
+  vida_padrao: boolean;
+  sem_valor: boolean;
+  sem_data: boolean;
+  meses: number | null;
+  quota_mensal: number | null;
+  depreciacao: number | null;
+  valor_atual: number | null;
+  depreciado_pct: number | null;
+  depreciado_total: boolean;
+  fim_vida: string | null;
+};
+
+export type BemValor = Depreciacao & {
+  id: number; codigo: string; apelido: string | null; descricao: string;
+  situacao: string; situacao_txt: string; id_setor: number | null; setor: string | null;
+  local: string | null; data_compra: string | null; valor_compra: number | null;
+  vida_util_anos: number | null; data_baixa: string | null;
+};
+export type SomaValor = {
+  bens: number; sem_valor: number; sem_data: number; depreciados: number;
+  valor_compra: number; depreciacao: number; valor_atual: number;
+};
+export type ValorPatrimonio = {
+  data: string;
+  vida_util_padrao: number;
+  setores: (SomaValor & { setor: string; id_setor: number | null })[];
+  total: SomaValor;
+  bens: BemValor[];
+};
+
+/** 141 — o valor do patrimônio numa data (hoje, sem data). */
+export function valorDoPatrimonio(data: string, setores: number[]) {
+  const q = new URLSearchParams();
+  if (data) q.set("data", data);
+  setores.forEach((s) => q.append("setores", String(s)));
+  return api.get<ValorPatrimonio>(`/patrimonio/valor?${q}`);
+}
 
 export type ResumoSetor = {
   setor: string;

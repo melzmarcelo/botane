@@ -11,6 +11,9 @@
  *   5. a importação mostra a prévia e só grava no segundo clique;
  *   6. o produto Patrimônio que entra aparece em "falta cadastrar"; o "Cadastrar bem" chega
  *      com o produto e a última entrada; o cadastro do produto lista o bem.
+ *   7. a conferência pelas plaquetas (etapa 3, 140);
+ *   8. o valor do patrimônio (etapa 4, 141): os totais batem com a API, a ficha mostra o
+ *      valor atual e a vida útil trocada refaz a conta.
  * O que o roteiro cria é apagado no fim.
  *
  *    node scripts/verificar-patrimonio.mjs   (API na 9200 e web na 3100 de pé)
@@ -251,6 +254,52 @@ try {
   checar("a chapa lida fica com a data de hoje", chapaDepois?.conferido_em === hoje, chapaDepois?.conferido_em);
   checar("e o aparelho deixa de estar conferindo",
     await p.evaluate(() => localStorage.getItem("botane.patrimonio.conferindo")) === null);
+
+  console.log("\n8. o valor do patrimônio (etapa 4, 141)");
+  const { status: stV, dados: comValor } = await api("POST", "/patrimonio", {
+    descricao: `Vitrine web ${MARCA}`, id_setor: setor.id, valor_compra: 12000, data_compra: "2024-01-15",
+  }, token);
+  checar("o bem com valor nasce", stV === 201, comValor);
+  criados.push(comValor.id);
+  const { dados: esperado } = await api("GET", `/patrimonio/valor?setores=${setor.id}`, undefined, token);
+  const brl = (n) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  await p.goto(`${WEB}/patrimonio`, { waitUntil: "networkidle2" });
+  await p.waitForSelector("#patrimonio-valor", { timeout: 20000 });
+  await p.click("#patrimonio-valor");
+  await p.waitForSelector("#valor-setor", { timeout: 20000 });
+  await p.waitForFunction((n) => [...document.querySelectorAll("#valor-setor option")].some((o) => o.textContent === n),
+                          { timeout: 15000 }, `SETOR PATWEB ${MARCA}`).catch(() => {});
+  await p.select("#valor-setor", String(setor.id));
+  await p.waitForFunction((c) => document.querySelector("#valor-bens")?.innerText.includes(c),
+                          { timeout: 20000 }, comValor.codigo).catch(() => {});
+  const tela = await p.evaluate((c) => ({
+    totais: document.querySelector("#valor-totais")?.innerText ?? "",
+    linha: document.querySelector(`#valor-bens tr[data-codigo="${c}"]`)?.innerText ?? "",
+    setores: document.querySelector("#valor-setores")?.innerText ?? "",
+  }), comValor.codigo);
+  checar("a tela do valor abre pelo botão da lista e filtra pelo setor",
+    tela.linha.includes(`Vitrine web ${MARCA}`) && tela.setores.includes(`SETOR PATWEB ${MARCA}`), tela);
+  checar("os totais batem com a API (valor atual e depreciação)",
+    tela.totais.includes(brl(esperado.total.valor_atual)) && tela.totais.includes(brl(esperado.total.depreciacao)),
+    { tela: tela.totais, api: esperado.total });
+  checar("a linha diz a vida útil padrão", /10 anos\s*\(padrão\)/.test(tela.linha), tela.linha);
+  checar("o bem sem valor de compra é contado à parte",
+    esperado.total.sem_valor > 0 && tela.totais.includes(`${esperado.total.sem_valor} sem valor de compra`), tela.totais);
+
+  await p.goto(`${WEB}/patrimonio/${comValor.id}`, { waitUntil: "networkidle2" });
+  await p.waitForSelector("#bem-valor-atual", { timeout: 20000 }).catch(() => {});
+  const ficha = await p.evaluate(() => document.querySelector("#bem-valor-atual")?.innerText ?? "");
+  checar("a ficha mostra o valor atual, a mesma conta",
+    ficha.includes(brl(esperado.bens.find((b) => b.id === comValor.id).valor_atual)) && /\(padrão\)/.test(ficha), ficha);
+  await p.type("#bem-vida-util", "5");
+  await p.click("#bem-salvar");
+  await p.waitForFunction(() => /vida útil 5 anos/.test(document.querySelector("#bem-valor-atual")?.innerText ?? ""),
+                          { timeout: 15000 }).catch(() => {});
+  const ficha5 = await p.evaluate(() => document.querySelector("#bem-valor-atual")?.innerText ?? "");
+  checar("trocar a vida útil para 5 anos refaz a conta na hora", /vida útil 5 anos/.test(ficha5) && !/padrão/.test(ficha5), ficha5);
+  await p.select("#bem-situacao", "BAIXADO");
+  await p.waitForSelector("#bem-data-baixa", { timeout: 5000 }).catch(() => {});
+  checar("dar baixa mostra a data da baixa", !!(await p.$("#bem-data-baixa")));
 } finally {
   await navegador.close();
   try { fs.unlinkSync(csv); } catch { /* já não existe */ }

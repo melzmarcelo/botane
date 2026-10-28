@@ -3024,6 +3024,10 @@ def _bens(cur, id_unidade: int, f: dict) -> Saida:
         "busca": f.get("busca_bem"), "situacao": _lista(f.get("situacao_bem")),
         "preventiva": _lista(f.get("preventiva_bem")),
         "criticidade": _lista(f.get("criticidade_bem")), "setores": _lista(f.get("setores"))})
+    from services.patrimonio_valor import calcular
+    hoje = relogio.hoje_da_casa()
+    for l in linhas:
+        l["valor_atual"] = calcular(l, hoje)["valor_atual"]
     largo = f.get("_formato") != "pdf"
     colunas = ([("codigo", "Código"), ("apelido", "Apelido"), ("descricao", "Equipamento"),
                 ("produto", "Produto"), ("produto_codigo", "Código do produto"),
@@ -3040,7 +3044,11 @@ def _bens(cur, id_unidade: int, f: dict) -> Saida:
                 ("preventiva_txt", "Status da preventiva"),
                 # 140: a última conferência em que o bem foi VISTO. Só exportação —
                 # a importação ignora a coluna (quem a escreve é a conferência).
-                ("conferido_em", "Conferido em"), ("observacao", "Observações")]
+                ("conferido_em", "Conferido em"),
+                # 141: a vida útil (vazia = o padrão) volta pela importação; o valor
+                # atual e a data da baixa são só leitura.
+                ("vida_util_anos", "Vida útil (anos)"), ("valor_atual", "Valor atual"),
+                ("data_baixa", "Data da baixa"), ("observacao", "Observações")]
                if largo else
                [("codigo", "Código"), ("descricao", "Equipamento"), ("setor", "Setor"),
                 ("local", "Local"), ("marca", "Marca"), ("modelo", "Modelo"),
@@ -3129,6 +3137,44 @@ def _manutencoes(cur, id_unidade: int, f: dict) -> Saida:
         anexos=[(quadro, [("setor", "Setor"), ("preventivas", "Preventivas"),
                           ("corretivas", "Corretivas"), ("custo", "Custo (R$)")],
                  "Por setor", None)] if quadro else [])
+
+
+def _valor_patrimonio(cur, id_unidade: int, f: dict) -> Saida:
+    """141 — o valor do patrimônio numa data: compra, depreciação acumulada e valor atual,
+    bem a bem e por setor. 🔑 Pedido do dono (28/10/2026, etapa 4): "valor patrimonial por
+    setor e depreciação, só como relatório" — é o que o contador pede no fechamento do ano.
+    ⚠️ A conta é a de `services/patrimonio_valor.py`, a mesma da tela e da ficha.
+    """
+    from services import patrimonio_valor
+    v = patrimonio_valor.valor(cur, id_unidade, f.get("data"), _lista(f.get("setores")))
+    ate, t = v["data"], v["total"]
+    for b in v["bens"]:
+        b["vida_txt"] = f"{b['vida_util']} (padrão)" if b["vida_padrao"] else b["vida_util"]
+        b["obs"] = ("sem valor de compra" if b["sem_valor"]
+                    else "sem data de compra — não deprecia" if b["sem_data"]
+                    else "totalmente depreciado" if b["depreciado_total"] else None)
+    resumo = [("Bens", t["bens"]), ("Valor de compra (R$)", Decimal(str(t["valor_compra"]))),
+              ("Depreciação acumulada (R$)", Decimal(str(t["depreciacao"]))),
+              ("Valor atual (R$)", Decimal(str(t["valor_atual"]))),
+              ("Vida útil padrão (anos)", v["vida_util_padrao"])]
+    if t["sem_valor"]:
+        resumo.append(("Sem valor de compra", t["sem_valor"]))
+    if t["sem_data"]:
+        resumo.append(("Sem data de compra (não depreciam)", t["sem_data"]))
+    return Saida(
+        v["bens"],
+        [("codigo", "Código"), ("descricao", "Equipamento"), ("setor", "Setor"),
+         ("situacao_txt", "Situação"), ("data_compra", "Compra"),
+         ("valor_compra", "Valor de compra (R$)"), ("vida_txt", "Vida útil (anos)"),
+         ("meses", "Meses"), ("quota_mensal", "Cota mensal (R$)"),
+         ("depreciacao", "Depreciação (R$)"), ("valor_atual", "Valor atual (R$)"),
+         ("obs", "Observação")],
+        f"Patrimônio — valor em {ate.strftime('%d/%m/%Y')}", resumo, ate, ate,
+        anexos=[(v["setores"], [("setor", "Setor"), ("bens", "Bens"),
+                                ("valor_compra", "Valor de compra (R$)"),
+                                ("depreciacao", "Depreciação (R$)"),
+                                ("valor_atual", "Valor atual (R$)")],
+                 "Por setor", None)] if v["setores"] else [])
 
 
 RELATORIOS: dict[str, Relatorio] = {
@@ -3315,6 +3361,12 @@ RELATORIOS: dict[str, Relatorio] = {
         "inventário: série, compra, garantia, assistência, criticidade, situação e preventiva.",
         "patrimonio.ver", "patrimonio",
         ("situacao_bem", "preventiva_bem", "criticidade_bem", "setores", "busca_bem"), _bens),
+    # 🔑 A etapa 4 (141, 28/10/2026): o valor e a depreciação.
+    "patrimonio-valor": Relatorio(
+        "Patrimônio — valor e depreciação",
+        "O valor dos bens numa data: compra, depreciação acumulada (linear, pela vida útil) "
+        "e valor atual — bem a bem e por setor.",
+        "patrimonio.ver", "patrimonio-valor", ("data", "setores"), _valor_patrimonio),
     "patrimonio-manutencoes": Relatorio(
         "Patrimônio — manutenções",
         "Cada preventiva e corretiva do período, com quem fez e quanto custou — por setor.",

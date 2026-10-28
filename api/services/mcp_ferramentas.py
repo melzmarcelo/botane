@@ -1606,6 +1606,15 @@ FERRAMENTAS: list[Ferramenta] = [
         "vencendo em 30 dias, sem plano e a confirmar.",
         "/patrimonio/resumo"),
     Ferramenta(
+        "valor_do_patrimonio", "Valor e depreciação do patrimônio",
+        "O valor dos bens numa data: valor de compra, depreciação acumulada (linear, pela "
+        "vida útil de cada bem — 10 anos se vazia) e valor atual, por setor e bem a bem. "
+        "Os \"A confirmar\" não contam; o baixado conta até a data da baixa; bem sem data de "
+        "compra entra pelo valor de compra, sem depreciar.",
+        "/patrimonio/valor",
+        {"data": Param("string", _DATA + " A data da posição (hoje, se vazia)."),
+         "setores": Param("integer", "Só este setor (id, de `setores`).")}),
+    Ferramenta(
         "conferencias_do_patrimonio", "Conferências do patrimônio",
         "As conferências do patrimônio pelas plaquetas (a aberta primeiro): setor, situação, "
         "quantos bens eram esperados, quantos foram lidos, quantos faltam e quantos foram "

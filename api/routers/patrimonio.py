@@ -5,6 +5,8 @@ importação; manutenção com plano, histórico e alertas). A regra mora em
 `services/patrimonio.py`; a planilha em `services/patrimonio_planilha.py`.
 """
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 
 import auditoria
@@ -15,6 +17,7 @@ from seguranca import Contexto, requer_permissao, unidade_atual
 from services import patrimonio as servico
 from services import patrimonio_planilha as planilha
 from services import patrimonio_conferencia as conferencia
+from services import patrimonio_valor as valor_servico
 
 router = APIRouter(prefix="/patrimonio", tags=["Patrimônio"])
 
@@ -57,6 +60,15 @@ def resumo(ctx: Contexto = Depends(_VER)) -> dict:
     """Por setor: quantos, críticos, parados, preventiva vencida, vencendo e sem plano."""
     with get_cursor() as cur:
         return servico.resumo(cur, unidade_atual(cur, ctx))
+
+
+@router.get("/valor")
+def valor(data: date | None = None, setores: list[int] | None = Query(default=None),
+          ctx: Contexto = Depends(_VER)) -> dict:
+    """141 — o valor do patrimônio numa data (hoje, sem data): compra, depreciação e valor
+    atual, por setor e bem a bem."""
+    with get_cursor() as cur:
+        return valor_servico.valor(cur, unidade_atual(cur, ctx), data, setores)
 
 
 @router.get("/a-cadastrar")

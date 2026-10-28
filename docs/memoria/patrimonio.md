@@ -12,8 +12,8 @@
   preventiva). Da proposta em 4 etapas, *"pode seguir com as etapas 1 e 2"*:
   1. cadastro com plaqueta de QR e importação da planilha;
   2. manutenção: plano de preventiva, histórico (preventiva e corretiva, com custo) e alertas.
-  A **3**, a conferência pelas plaquetas, veio em 28/10/2026 (ver abaixo). ⏳ Fica a **4**:
-  a depreciação. A ligação com as notas — o item do tipo Patrimônio que entra vira
+  A **3**, a conferência pelas plaquetas, e a **4**, o valor e a depreciação, vieram em
+  28/10/2026 (ver abaixo) — a proposta está inteira. A ligação com as notas — o item do tipo Patrimônio que entra vira
   pendência de cadastrar o bem — já veio junto da 1, a pedido do dono.
 
 - 🔑 **A CONFERÊNCIA pelas plaquetas** (1.1.146, migração `140_conferencia_patrimonio.sql`,
@@ -59,6 +59,34 @@
     (leitura pelo link "digitado", a plaqueta pela câmera comum contando, fechar com baixa).
     ⚠️ O roteiro do navegador não consegue apagar o bem conferido: deixa-o BAIXADO e o setor
     desativado (a suíte da API apaga por SQL).
+
+- 🔑 **O VALOR e a DEPRECIAÇÃO** (1.1.147, migração `141_depreciacao_patrimonio.sql`,
+  `services/patrimonio_valor.py`, 28/10/2026 — *"pode seguir com a etapa 4 do patrimônio"*;
+  da proposta: "valor patrimonial por setor e depreciação, só como relatório").
+  - 🔑 **Só relatório, e CALCULADO** — nada é gravado mês a mês e nada vai para o CMV. Mudar
+    a vida útil ou a data de compra muda também o relatório de ontem (o errado era o de antes).
+  - **Linear, por mês INTEIRO** (o método da Receita): cota = compra ÷ meses da vida útil; o
+    mês conta no "aniversário" da compra (de 15/01 a 14/02 é zero). Sem valor residual: ao fim
+    da vida, zero. Centavos arredondados na acumulada, nunca somando cotas arredondadas.
+  - **`bens.vida_util_anos`** (1 a 50), **vazia = 10 anos** (`VIDA_UTIL_PADRAO`, o da Receita
+    para máquinas, equipamentos e móveis). ⚠️ Não se grava o padrão no bem: esconderia quem
+    foi escolhido de propósito. A ficha e o relatório dizem "(padrão)".
+  - 🔑 **`bens.data_baixa` é de GATILHO** (`tg_bem_data_baixa`, o segundo do projeto, pela
+    razão do 036): a baixa entra pela ficha, pelo fechamento da conferência, pela planilha e
+    pelo conector. Baixado sem data → hoje; saiu do baixado → a data some. A ficha deixa
+    corrigir (não no futuro). Os já baixados receberam `atualizado_em::date`.
+  - **Quem conta no valor numa data**: o "A confirmar" NÃO (ninguém viu se existe); o
+    desativado SIM; o baixado até a data da baixa ("Baixado depois (dd/mm)"); o comprado
+    depois da data, não. **Sem data de compra** entra pelo valor de compra, sem depreciar
+    (marcado); **sem valor**, conta como bem e não soma.
+  - A mesma conta (`calcular`) na tela **Patrimônio ▸ Valor** (`/patrimonio/valor`: data,
+    setor, totais, por setor e bem a bem), na ficha (`bem.valor`, "Valor atual" ou "Valor na
+    baixa") e no relatório **`patrimonio-valor`** (filtros data e setores; anexo por setor).
+    O relatório `patrimonio` ganhou **Vida útil (anos)**, **Valor atual** e **Data da baixa**;
+    a importação lê a vida útil (as outras duas são só leitura).
+  - Permissão: `patrimonio.ver` (o valor de compra já aparecia no resumo para quem vê).
+  - Conector: `valor_do_patrimonio`.
+  - Cobertura: `smoke_patrimonio_valor.py` (36) e a seção 8 do `verificar-patrimonio.mjs`.
 
 - 🔑 **Patrimônio NÃO é estoque.** O produto do tipo PATRIMONIO conta QUANTIDADE por local, a
   custo médio; a batedeira tem série, garantia, estado e história PRÓPRIOS. `bens` é um
@@ -183,7 +211,8 @@
    e é justamente o saldo que diz quantos bens faltam cadastrar. Cadastrar o bem NÃO baixa
    o estoque.
 2. Plaqueta para qualquer bem cadastrado — sem corte por valor.
-3. Sem depreciação (só o valor de compra guardado).
+3. ~~Sem depreciação~~ → veio na etapa 4 (141): linear, vida útil padrão de 10 anos, sem
+   valor residual; o "A confirmar" fica fora do valor.
 4. Assistência técnica e fornecedor da compra são TEXTO (como na planilha), não um vínculo
    com Pessoas.
 5. Os alertas são da loja inteira, não só do setor de quem olha.

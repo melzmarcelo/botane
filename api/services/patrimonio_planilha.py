@@ -51,7 +51,8 @@ COLUNAS = dict([
     ("situacao", "situacao"), ("preventiva a cada (meses)", "preventiva_meses"),
     ("ultima preventiva", "ultima_preventiva"), ("observacoes", "observacao"),
     ("observacao", "observacao"), ("produto", "produto"),
-    ("codigo do produto", "codigo_produto"),
+    ("codigo do produto", "codigo_produto"), ("vida util (anos)", "vida_util_anos"),
+    ("vida util", "vida_util_anos"),
 ])
 _SITUACAO = {_chave(v): k for k, v in patrimonio.SITUACOES.items()}
 _CRITICIDADE = {_chave(v): k for k, v in patrimonio.CRITICIDADES.items()}
@@ -67,6 +68,7 @@ ROTULOS = dict([
     ("assistencia_contato", "Contato"), ("criticidade", "Criticidade"),
     ("situacao", "Situação"), ("preventiva_meses", "Preventiva (meses)"),
     ("ultima_preventiva", "Última preventiva"), ("observacao", "Observações"),
+    ("vida_util_anos", "Vida útil (anos)"),
 ])
 
 
@@ -235,6 +237,14 @@ def _converter(l: dict, setores: dict, locais: dict,
         if not 1 <= meses <= 120:
             return {}, f"Preventiva a cada “{l['preventiva_meses']}” meses — use de 1 a 120"
         d["preventiva_meses"] = meses
+    if l.get("vida_util_anos"):
+        try:
+            anos = int(_numero(l["vida_util_anos"]))
+        except (ValueError, ArithmeticError):
+            anos = 0
+        if not 1 <= anos <= 50:
+            return {}, f"Vida útil de “{l['vida_util_anos']}” anos — use de 1 a 50"
+        d["vida_util_anos"] = anos
     if d.get("situacao") == "BAIXADO":
         d["motivo_baixa"] = (l.get("observacao") or "baixado na planilha")[:200]
     return d, None

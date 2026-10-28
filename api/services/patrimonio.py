@@ -163,6 +163,9 @@ def obter(cur, id_bem: int, id_unidade: int, *, ve_valor_estoque: bool = False) 
     bem["manutencoes"] = [dict(r) | {"tipo_txt": TIPOS_MANUTENCAO[r["tipo"]]}
                           for r in cur.fetchall()]
     bem["custo_manutencao"] = float(sum((m["custo"] or 0) for m in bem["manutencoes"]))
+    # 141: a depreciação até hoje (ou até a baixa) — a mesma conta do relatório do valor.
+    from services.patrimonio_valor import calcular
+    bem["valor"] = calcular(bem, relogio.hoje_da_casa())
     # 🔑 **O equipamento que É um local de estoque** (a câmara fria): parado, ele avisa
     # quanto está guardado dentro. O valor só para quem vê estoque.
     bem["estoque_no_local"] = None
@@ -203,6 +206,8 @@ def _validar(cur, id_unidade: int, dados: dict, id_bem: int | None = None) -> No
         r = cur.fetchone()
         if not r or r["id_unidade"] not in (None, id_unidade):
             raise HTTPException(status_code=400, detail="Setor que não é desta loja")
+    if dados.get("data_baixa") and dados["data_baixa"] > relogio.hoje_da_casa():
+        raise HTTPException(status_code=400, detail="A data da baixa não pode ser no futuro.")
     if dados.get("id_produto"):
         # 🔑 **O bem nasce de um produto do tipo PATRIMÔNIO** (27/10/2026, pedido do dono:
         # *"o equipamento poderia ser um produto patrimônio … ai vinculamos todo o

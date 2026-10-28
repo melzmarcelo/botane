@@ -144,7 +144,7 @@ arquivo por módulo**. **Antes de mexer num módulo, leia o arquivo dele.**
 | Portal de Clientes (ex-Reservas) | [`reservas.md`](docs/memoria/reservas.md) | site do cliente, cadastro, reserva de mesa: parâmetro da loja, configuração, salões e mesas |
 | Etiquetas | [`etiquetas.md`](docs/memoria/etiquetas.md) | etiquetas de validade de produzidos, abertos e descongelados; QR, baixa e descarte |
 | Precificação | [`precificacao.md`](docs/memoria/precificacao.md) | configuração por loja (impostos, taxas, margem), análise e aplicação de preços, preço × custo |
-| Patrimônio | [`patrimonio.md`](docs/memoria/patrimonio.md) | os bens (um por item), plaqueta com QR, importação da planilha, manutenção preventiva e corretiva, conferência pelas plaquetas |
+| Patrimônio | [`patrimonio.md`](docs/memoria/patrimonio.md) | os bens (um por item), plaqueta com QR, importação da planilha, manutenção preventiva e corretiva, conferência pelas plaquetas, valor e depreciação |
 
 E o que atravessa todos, em [`docs/memoria/_transversais/`](docs/memoria/_transversais/):
 `padroes-de-ui.md`, `exportacao-e-relatorios.md`, `infra-e-deploy.md` e `geral.md`.
