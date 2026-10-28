@@ -5,6 +5,19 @@
 
 ## O que já existe
 
+- 🔑 **Escolher arquivo é um BOTÃO da casa, nunca o controle nativo** (28/10/2026, pedido do
+  dono: *"para selecionar um arquivo, colocar um botão, a seleção no texto confunde, usa isto
+  como padrão"*). Planilha: `SeletorDeArquivo` (`components/ui.tsx`) — botão "Escolher…" →
+  "Trocar arquivo", e o nome do arquivo ao lado. Foto, vídeo e PDF que sobem na hora usam o
+  `<label className="btn …">` com o input `sr-only` dentro, ou input `hidden` + botão (Empresa,
+  ficha, produto, catálogos, Compras/XML) — também botão.
+  - ⚠️ O `id` fica no INPUT escondido (é o que os roteiros preenchem com `uploadFile`); o botão
+    é `<id>-botao`.
+  - ⚠️ Limpar o `value` a cada clique: sem isso, escolher de novo o MESMO arquivo não dispara
+    `onChange`.
+  - Varredura de `type="file"` em 28/10: só Patrimônio › Importar e Produtos › Reclassificar
+    mostravam o nativo; as duas passaram para o componente. Campo de arquivo NOVO entra por ele.
+
 - 🔑 **Ir a um registro e voltar ao MESMO ponto** (06/10/2026, pedido do dono: *"estou na
   precificação e quero ver o cadastro de produto, tenho que copiar o nome, ir lá, voltar,
   buscar. Da movimentação, com o número do documento, a partir dali ir lá, ver, e voltar,

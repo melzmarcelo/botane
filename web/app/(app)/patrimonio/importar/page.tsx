@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
 import BotaoExportar from "@/components/exportar";
 import ExplicaTela from "@/components/explica-tela";
-import { Aviso, Cartao, Vazio } from "@/components/ui";
+import { Aviso, Cartao, SeletorDeArquivo, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
 import { importar, type ResultadoImportacao } from "@/lib/patrimonio";
 import { useSessao } from "@/lib/sessao";
@@ -82,8 +82,9 @@ export default function ImportarPatrimonio() {
 
       <Cartao titulo="Mande a planilha" descricao="Primeiro a prévia: nada é gravado sem você confirmar.">
         <div className="flex flex-wrap items-center gap-3">
-          <input id="patrimonio-arquivo" type="file" accept=".xlsx,.csv,text/csv" disabled={!podeCadastrar}
-                 onChange={(e) => { setArquivo(e.target.files?.[0] ?? null); setPrevia(null); }} />
+          <SeletorDeArquivo id="patrimonio-arquivo" accept=".xlsx,.csv,text/csv" disabled={!podeCadastrar}
+                            rotulo="Escolher a planilha" arquivo={arquivo}
+                            onEscolher={(f) => { setArquivo(f); setPrevia(null); }} />
           <label className="flex items-center gap-2 text-[14px]">
             <input type="checkbox" id="patrimonio-sugestoes" checked={sugestoes}
                    onChange={(e) => { setSugestoes(e.target.checked); setPrevia(null); }} />

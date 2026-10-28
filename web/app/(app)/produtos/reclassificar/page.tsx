@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSessao } from "@/lib/sessao";
 import { useAviso } from "@/components/aviso-flutuante";
-import { Aviso, Cartao, Vazio } from "@/components/ui";
+import { Aviso, Cartao, SeletorDeArquivo, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
 import ExplicaTela from "@/components/explica-tela";
 import BotaoExportar from "@/components/exportar";
@@ -74,12 +74,13 @@ export default function PaginaReclassificar() {
 
       <Cartao titulo="2. Mande de volta" descricao="Primeiro a prévia: nada é gravado sem você confirmar.">
         <div className="flex flex-wrap items-center gap-3">
-          <input
+          <SeletorDeArquivo
             id="planilha-reclassificar"
-            type="file"
             accept=".csv,text/csv"
             disabled={!podeEditar}
-            onChange={(e) => { setArquivo(e.target.files?.[0] ?? null); setPrevia(null); }}
+            rotulo="Escolher a planilha"
+            arquivo={arquivo}
+            onEscolher={(f) => { setArquivo(f); setPrevia(null); }}
           />
           <button
             type="button"

@@ -133,6 +133,65 @@ export function Vazio({ children }: { children: ReactNode }) {
   return <p className="px-1 py-8 text-center text-[15px] text-suave">{children}</p>;
 }
 
+/**
+ * Escolher um arquivo: um BOTÃO da casa e o nome do arquivo ao lado.
+ *
+ * 🔑 **Pedido do dono (28/10/2026)**: *"para selecionar um arquivo, colocar um botão, a
+ * seleção no texto confunde, usa isto como padrão"*. O controle nativo do navegador é um
+ * texto "Escolher arquivo / Nenhum arquivo escolhido" com a cara do sistema operacional —
+ * não parece com nada do sistema, e ninguém acha onde clicar. O campo nativo fica
+ * escondido; foto e logo já faziam assim (Empresa, ficha, produto), cada uma à mão.
+ * ⚠️ O `id` fica no INPUT escondido, não no botão: é ele que os roteiros preenchem
+ * (`uploadFile` funciona em campo escondido).
+ * ⚠️ O valor é limpo a cada clique: sem isso, escolher de novo o MESMO arquivo (depois de
+ * corrigir a planilha no Excel) não dispara `onChange` e a prévia não volta.
+ */
+export function SeletorDeArquivo({
+  id,
+  accept,
+  arquivo,
+  onEscolher,
+  disabled,
+  rotulo = "Escolher arquivo",
+}: {
+  id: string;
+  accept: string;
+  arquivo: File | null;
+  onEscolher: (f: File | null) => void;
+  disabled?: boolean;
+  rotulo?: string;
+}) {
+  const entrada = useRef<HTMLInputElement>(null);
+  return (
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
+      <input
+        ref={entrada}
+        id={id}
+        type="file"
+        accept={accept}
+        className="hidden"
+        disabled={disabled}
+        onChange={(e) => onEscolher(e.target.files?.[0] ?? null)}
+      />
+      <button
+        type="button"
+        className="btn btn-secundario"
+        id={`${id}-botao`}
+        disabled={disabled}
+        onClick={() => {
+          if (entrada.current) entrada.current.value = "";
+          entrada.current?.click();
+        }}
+      >
+        {arquivo ? "Trocar arquivo" : rotulo}
+      </button>
+      <span className={`min-w-0 truncate text-[13.5px] ${arquivo ? "text-tinta" : "text-suave"}`}>
+        {arquivo ? arquivo.name : "nenhum arquivo escolhido"}
+      </span>
+    </span>
+  );
+}
+
 export function Carregando({ children = "Carregando…" }: { children?: ReactNode }) {
   return <p className="px-1 py-8 text-center text-[14px] text-suave">{children}</p>;
 }

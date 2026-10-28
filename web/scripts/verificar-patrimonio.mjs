@@ -122,7 +122,21 @@ try {
   fs.writeFileSync(csv, `Código;Equipamento;Setor;Marca\nIMP-${MARCA};Liquidificador web ${MARCA};SETOR PATWEB ${MARCA};Walita\n`, "utf8");
   await p.goto(`${WEB}/patrimonio/importar`, { waitUntil: "networkidle2" });
   const entrada = await p.waitForSelector("#patrimonio-arquivo", { timeout: 20000 });
+  // 🔑 Pedido do dono (28/10): escolher arquivo é um BOTÃO da casa, não o controle nativo.
+  const antesDeEscolher = await p.evaluate(() => ({
+    nativoVisivel: document.querySelector("#patrimonio-arquivo")?.offsetParent !== null,
+    botao: document.querySelector("#patrimonio-arquivo-botao")?.textContent?.trim() ?? "",
+  }));
+  checar("escolher a planilha é um botão, e o seletor nativo fica escondido",
+    !antesDeEscolher.nativoVisivel && antesDeEscolher.botao === "Escolher a planilha", antesDeEscolher);
   await entrada.uploadFile(csv);
+  await p.waitForFunction((n) => document.body.innerText.includes(n), { timeout: 5000 },
+    path.basename(csv)).catch(() => {});
+  const depoisDeEscolher = await p.evaluate(() =>
+    document.querySelector("#patrimonio-arquivo-botao")?.parentElement?.innerText ?? "");
+  checar("depois de escolher, o botão vira Trocar e o nome do arquivo aparece ao lado",
+    depoisDeEscolher.includes("Trocar arquivo") && depoisDeEscolher.includes(path.basename(csv)),
+    depoisDeEscolher);
   await p.click("#patrimonio-previa");
   await p.waitForSelector("#patrimonio-novos", { timeout: 15000 }).catch(() => {});
   const previa = await p.evaluate(() => ({
