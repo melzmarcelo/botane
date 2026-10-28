@@ -5,6 +5,20 @@
 
 ## O que já existe
 
+- 🔑 **O botão de relatório se chama IMPRIMIR, não "Baixar"** (28/10/2026, pedido do dono:
+  *"hoje utilizamos a palavra Baixar em botão de relatório, gostaria que em todos estes locais
+  onde realizamos a impressão, seja considerado o termo Imprimir"*). `BotaoExportar` tem
+  `rotulo = "Imprimir"`; a janela é "Imprimir — <relatório>"; e, escolhido pelo dono, o **PDF
+  ABRE NUMA ABA** (`api.abrir`, botão "Imprimir PDF") em vez de baixar — a planilha continua
+  arquivo ("Gerar planilha"), porque planilha não se imprime. O mesmo no lote de consumo e nos
+  QR das reservas. ⚠️ `api.abrir` abre a aba ANTES do primeiro `await` (senão é popup
+  bloqueado); sem aba, baixa com o nome do `Content-Disposition`.
+  - ⚠️ **Dois "Imprimir" na mesma tela não**: Vendas ▸ Por motivo tinha o `window.print()`
+    chamado "Imprimir" — virou **"Imprimir a tela"**. Botão novo de imprimir a tela segue isso.
+  - "Baixar" continua onde é ESTOQUE ("Baixar todas" as vendas sem baixa) ou BAIXA de bem —
+    é outro verbo. "Gerar a planilha atual" (Patrimônio ▸ Importar) é a planilha para editar.
+  - Nas notas abaixo, "Baixar" é o nome antigo do mesmo botão.
+
 - 🔑 **Baixar deixou de ser um clique cego** (`services/exportacao_catalogo.py`,
   `components/exportar.tsx`, 29/08/2026). O botão de `/produtos` despejava os **3.226** do
   cadastro, sempre; o de saldos trazia os 99 locais; o razão MANDAVA `id_produto` e o servidor

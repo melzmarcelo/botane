@@ -52,5 +52,6 @@ export function baixarQr(qr: QrDaCasa, p: ImpressaoQr) {
     primeira_mesa: String(p.primeira_mesa),
   });
   if (qr.id_catalogo) q.set("id_catalogo", String(qr.id_catalogo));
-  return api.baixar(`/reservas/qrcodes/pdf?${q}`);
+  // Abre numa aba, para imprimir (28/10/2026: "Imprimir" no lugar de "Baixar").
+  return api.abrir(`/reservas/qrcodes/pdf?${q}`);
 }

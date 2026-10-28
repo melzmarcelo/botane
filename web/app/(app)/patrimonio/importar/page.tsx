@@ -76,7 +76,7 @@ export default function ImportarPatrimonio() {
           <li>Célula vazia não muda nada. Próxima preventiva e status são calculados aqui.</li>
         </ul>
         <div className="mt-3">
-          <BotaoExportar relatorio="patrimonio" rotulo="Baixar a planilha atual" />
+          <BotaoExportar relatorio="patrimonio" rotulo="Gerar a planilha atual" />
         </div>
       </Cartao>
 

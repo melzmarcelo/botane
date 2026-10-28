@@ -41,7 +41,7 @@ export default function PaginaAuditoria() {
           </ExplicaTela>
         </div>
         {/* 🔑 O registro do período em planilha ou PDF (23/10/2026). */}
-        <BotaoExportar relatorio="auditoria" rotulo="Baixar auditoria" />
+        <BotaoExportar relatorio="auditoria" rotulo="Imprimir auditoria" />
       </header>
 
       <nav className="flex flex-wrap gap-1 border-b border-linha">

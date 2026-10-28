@@ -106,7 +106,7 @@ export default function PaginaContasAReceber() {
         <div className="flex flex-wrap gap-2">
           <BotaoExportar
             relatorio="consumo-pessoa"
-            rotulo="Baixar relatório"
+            rotulo="Imprimir relatório"
             iniciais={{
               situacao_consumo: "aberto",
               inicio: de,

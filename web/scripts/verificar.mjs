@@ -849,8 +849,8 @@ try {
   // fornecedor, responder ao contador — e coisa de quem CONSULTA.
   const baixarProduto = await p.evaluate(() =>
     [...document.querySelectorAll("button")].some(
-      (b) => b.textContent?.trim() === "Baixar"));
-  checar("a tela do produto oferece baixar os dados dele", baixarProduto);
+      (b) => b.textContent?.trim() === "Imprimir"));
+  checar("a tela do produto oferece imprimir os dados dele", baixarProduto);
 
 
   checar("o formulário do produto tem o código de barras (EAN/GTIN)", fiscais.ean, fiscais);
@@ -1908,7 +1908,7 @@ try {
         // que se quer é só saber QUAL cartão está marcado.
         escolhido: (marcado?.textContent ?? "").trim().startsWith("PDF") ? "PDF" : "outro",
         botao: [...(d?.querySelectorAll("button") ?? [])].some((b) =>
-          /^Baixar PDF/.test(b.textContent?.trim() ?? "")),
+          /^Imprimir PDF/.test(b.textContent?.trim() ?? "")),
       };
     });
     checar("a ficha tem botão de imprimir", janelaFicha.abriu, janelaFicha);
@@ -3951,8 +3951,8 @@ try {
   // botao visivel para quem levaria 403 ao clicar.
   const temBaixar = await p.evaluate(() =>
     [...document.querySelectorAll("button")].some(
-      (b) => b.textContent?.trim() === "Baixar"));
-  checar("com o botao de baixar o arquivo", temBaixar);
+      (b) => b.textContent?.trim() === "Imprimir"));
+  checar("com o botao de imprimir o arquivo", temBaixar);
 
   // 🔑 **Contas a receber** (22/10/2026) substitui os periodos de consumo. ⚠️ O
   // endereco antigo `/consumo` continua levando para la: estava no menu e nos
@@ -4235,16 +4235,17 @@ try {
   // ⚠️ Espera o BOTÃO, não o texto do cabeçalho: as abas desenham depois da apuração, e
   // numa base pesada "Food cost" aparece antes delas (falhou assim em 29/09/2026).
   await p.waitForFunction(() => [...document.querySelectorAll('[role="tablist"] button')]
-    .some((x) => x.textContent?.trim() === "Baixar"), { timeout: 30000 }).catch(() => {});
+    .some((x) => x.textContent?.trim() === "Imprimir"), { timeout: 30000 }).catch(() => {});
   const naBarra = await p.evaluate(() => {
     const nav = document.querySelector('[role="tablist"]');
     const b = [...(nav?.querySelectorAll("button") ?? [])]
-      .find((x) => x.textContent?.trim() === "Baixar");
+      .find((x) => x.textContent?.trim() === "Imprimir");
     return { existe: !!b, botao: b ? b.className.includes("btn") : null,
              quantos: [...document.querySelectorAll("button")]
-               .filter((x) => /^Baixar/i.test(x.textContent?.trim() ?? "")).length };
+               .filter((x) => /^Imprimir/i.test(x.textContent?.trim() ?? "")).length };
   });
-  checar("a barra das abas tem o botão Baixar", naBarra.existe, naBarra);
+  // 28/10/2026: "Baixar" virou "Imprimir" em todo botão de relatório (pedido do dono).
+  checar("a barra das abas tem o botão Imprimir", naBarra.existe, naBarra);
   // ⚠️ Botão de verdade, não `link-acao`: ele TIRA a tela de dentro do sistema,
   // e isso não é um link de navegação.
   checar("e ele é botão, não link", naBarra.botao === true, naBarra);
@@ -4261,7 +4262,7 @@ try {
   await assentar(1800);
   await p.evaluate(() => {
     [...document.querySelectorAll('[role="tablist"] button')]
-      .find((b) => b.textContent?.trim() === "Baixar")?.click();
+      .find((b) => b.textContent?.trim() === "Imprimir")?.click();
   });
   await p.waitForFunction(() => document.querySelector('[role="dialog"]'),
     { timeout: 15000 }).catch(() => {});
@@ -4276,7 +4277,7 @@ try {
     }));
     return { datas: d.querySelectorAll('input[type="date"]').length, sels };
   });
-  checar("a janela de baixar abre", !!janelaCmv, janelaCmv);
+  checar("a janela de imprimir abre", !!janelaCmv, janelaCmv);
   // 🔑 *"esta vai abrir o filtro do período, e não datas como está"*.
   checar("e o período nela é o ciclo do CMV, sem campo de data",
     janelaCmv?.datas === 0
@@ -5711,7 +5712,7 @@ try {
                                 ["/fidelidade/painel", "Relatório da fidelidade"],
                                 ["/usuarios", "Usuários e acessos"],
                                 ["/papeis", "Permissões por papel"],
-                                ["/auditoria", "Baixar auditoria"],
+                                ["/auditoria", "Imprimir auditoria"],
                                 ["/etiquetas/painel", "Lista de etiquetas"]]) {
     await irPara(p, `${WEB}${tela}`);
     await assentar(2000);
@@ -5731,7 +5732,7 @@ try {
   await assentar(1800);
   await p.evaluate(() => {
     [...document.querySelectorAll("button")]
-      .find((x) => /^Baixar/i.test(x.textContent?.trim() ?? ""))
+      .find((x) => x.textContent?.trim() === "Imprimir")
       ?.click();
   });
   await assentar(2400);
@@ -5754,7 +5755,8 @@ try {
       caixinhas: (d?.querySelectorAll('input[type="checkbox"]') ?? []).length,
     };
   });
-  checar("o Baixar abre a janelaExp de exportação", janelaExp.abriu, janelaExp);
+  checar("o Imprimir abre a janela de exportação", janelaExp.abriu, janelaExp);
+  checar("e a janela se chama Imprimir", /^Imprimir — /.test(janelaExp.titulo), janelaExp.titulo);
   checar("com os filtros do processo, em escolha múltipla",
     janelaExp.rotulos.includes("Tipos de produto") && janelaExp.caixinhas > 3, janelaExp);
   checar("e a escolha entre planilha e PDF", janelaExp.formatos, janelaExp);
@@ -5775,7 +5777,7 @@ try {
     const corpo = d.children[1];
     corpo.scrollTop = corpo.scrollHeight;
     const botao = [...d.querySelectorAll("button")].find((b) =>
-      /^Baixar (planilha|PDF)/.test(b.textContent?.trim() ?? ""));
+      /^(Imprimir PDF|Gerar planilha)/.test(b.textContent?.trim() ?? ""));
     const cartao = d.getBoundingClientRect();
     const bb = botao?.getBoundingClientRect();
     return {
@@ -5788,7 +5790,7 @@ try {
   checar("a janela cabe na tela de um notebook", coube.cabe, coube);
   checar("com o miolo rolando por dentro", coube.rola, coube);
   // O botão fica FORA da rolagem: rolado até o fim, ele continua onde estava.
-  checar("e o botão de baixar sempre à vista", coube.botaoAlcancavel, coube);
+  checar("e o botão de imprimir sempre à vista", coube.botaoAlcancavel, coube);
   await p.setViewport({ width: 1440, height: 1000 });
   await assentar(500);
   // ⚠️ Fechar antes de seguir: janela aberta trava a rolagem do corpo, e o
@@ -5907,8 +5909,8 @@ try {
     await new Promise((r) => setTimeout(r, 1600));
     const tem = await p.evaluate(() =>
       [...document.querySelectorAll("button")].some((b) =>
-        /^Baixar/i.test(b.textContent?.trim() ?? "")));
-    checar(`${nome} oferece baixar`, tem);
+        b.textContent?.trim() === "Imprimir"));
+    checar(`${nome} oferece imprimir`, tem);
   }
   await foto(p, "31-cmv-exportar");
 
@@ -10918,8 +10920,8 @@ try {
   checar("e o filtro vai na URL, com a lista de não fornecedores",
     p.url().includes("tipo=outras") && /pessoa\(s\)/.test(listaOutras), p.url());
   const temRelatorio = await p.evaluate(() => [...document.querySelectorAll("main button")]
-    .some((b) => b.textContent?.trim() === "Baixar"));
-  checar("e a tela oferece baixar o relatório de pessoas", temRelatorio);
+    .some((b) => b.textContent?.trim() === "Imprimir"));
+  checar("e a tela oferece imprimir o relatório de pessoas", temRelatorio);
 
   // (O "renomear o ciclo de consumo" de 20/10 saiu com o ciclo, em 22/10/2026.)
 
@@ -10991,13 +10993,13 @@ try {
     numeros: [...document.querySelectorAll("[data-numero-painel]")].map((e) => e.getAttribute("data-numero-painel")),
     hora: /Por hora do cupom/.test(document.querySelector("main")?.innerText ?? ""),
     produtos: document.querySelectorAll("#painel-vendas-produtos tbody tr").length,
-    baixar: [...document.querySelectorAll("main button")].some((b) => b.textContent?.trim() === "Baixar"),
+    baixar: [...document.querySelectorAll("main button")].some((b) => b.textContent?.trim() === "Imprimir"),
   }));
   checar("o painel abre no dia, com faturado, cupons e ticket — ou diz que não há venda",
     telaPainel.vazio || (telaPainel.resumo && telaPainel.numeros.includes("Ticket médio")), telaPainel);
   checar("e, com venda, mostra a hora e os mais vendidos",
     telaPainel.vazio || (telaPainel.hora && telaPainel.produtos > 0), telaPainel);
-  checar("e oferece baixar o relatório do recorte", telaPainel.baixar, telaPainel);
+  checar("e oferece imprimir o relatório do recorte", telaPainel.baixar, telaPainel);
 
   // Trocar para MÊS: a URL leva o recorte, e a evolução aparece.
   await p.click('[data-modo="mes"]').catch(() => {});

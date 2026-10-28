@@ -681,7 +681,7 @@ export default function FormularioProduto() {
           {!novo && (
             <BotaoExportar
               relatorio={`produto/${id}`}
-              rotulo="Baixar"
+              rotulo="Imprimir"
               avulso={{
                 rotulo: `Produto — ${f.nome || "sem nome"}`,
                 descricao:

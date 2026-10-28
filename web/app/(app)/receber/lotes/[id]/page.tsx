@@ -73,7 +73,7 @@ export default function PaginaLote() {
     try {
       await baixarLote(idLote, formato);
     } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar o relatório");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível gerar o relatório");
     }
   }
 
@@ -100,7 +100,7 @@ export default function PaginaLote() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button id="lote-pdf" className="btn btn-secundario" onClick={() => baixar("pdf")}>
-            Baixar PDF
+            Imprimir
           </button>
           <button className="btn btn-secundario" onClick={() => baixar("csv")}>
             Planilha

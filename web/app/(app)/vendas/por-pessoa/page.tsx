@@ -243,7 +243,7 @@ export default function PaginaConsumoPorPessoa() {
       <div className="flex flex-wrap gap-2">
         <BotaoExportar
           relatorio="consumo-pessoa"
-          rotulo="Baixar"
+          rotulo="Imprimir"
           iniciais={{
             situacao_consumo: situacao,
             inicio: de,

@@ -523,7 +523,7 @@ export default function PaginaCmv() {
             <span className="nao-imprimir ml-auto self-center">
               <BotaoExportar
                 relatorio="cmv"
-                rotulo="Baixar"
+                rotulo="Imprimir"
                 iniciais={{ inicio, fim, aba: aba === "quebra" ? `quebra-${eixo}` : aba }}
               />
             </span>

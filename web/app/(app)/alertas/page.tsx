@@ -205,7 +205,7 @@ export default function PaginaAlertas() {
         descricao="O que vai faltar antes da próxima entrega — a base da lista de compras."
         acao={
           minimos.length ? (
-            <BotaoExportar relatorio="saldos" rotulo="Baixar estoque" />
+            <BotaoExportar relatorio="saldos" rotulo="Imprimir estoque" />
           ) : undefined
         }
       >

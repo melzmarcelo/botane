@@ -26,7 +26,9 @@ import { MOTIVOS_VENDA } from "../tipos";
  * 🔑 **Imprimir** usa o `@media print` da casa: some o menu e os botões, ficam o
  * período, os filtros e os quadros. ⚠️ Por isso o que filtra NÃO é `<button>` nos
  * cartões e nas tabelas — o print esconde todo botão, e o cartão sumiria do papel.
- * 🔑 **Baixar leva o MESMO recorte** (`vendas-motivos`).
+ * 🔑 **Imprimir (o relatório) leva o MESMO recorte** (`vendas-motivos`). ⚠️ O da tela
+ * virou "Imprimir a tela" (28/10/2026): com "Baixar" renomeado para "Imprimir", eram
+ * dois botões com o mesmo nome fazendo coisas diferentes.
  */
 
 /** Uma cor por motivo, sempre a mesma — a cor segue o motivo, nunca a posição. */
@@ -140,7 +142,7 @@ export default function DocumentosPorMotivo() {
             <Link href="/vendas?motivo=QUALQUER" className="btn btn-secundario">Documentos</Link>
             <button type="button" className="btn btn-secundario" id="motivos-imprimir"
                     onClick={() => window.print()}>
-              Imprimir
+              Imprimir a tela
             </button>
             {inicio && (
               <BotaoExportar

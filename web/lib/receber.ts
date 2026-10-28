@@ -127,8 +127,11 @@ export const tirarDocumento = (id: number, idVenda: number) =>
   api.delete<Mensagem & { cancelado: boolean }>(`/receber/lotes/${id}/documentos/${idVenda}`);
 
 /** O documento do lote, para mandar à pessoa (PDF ou planilha). */
+/** O PDF abre numa aba, para imprimir (28/10/2026, "Imprimir" no lugar de "Baixar");
+ *  a planilha continua sendo arquivo. */
 export const baixarLote = (id: number, formato: "pdf" | "csv") =>
-  api.baixar(`/exportar/lote-consumo/${id}.${formato}`);
+  formato === "pdf" ? api.abrir(`/exportar/lote-consumo/${id}.pdf`)
+                    : api.baixar(`/exportar/lote-consumo/${id}.csv`);
 
 /** Todos os lotes em cobrança num PDF só — cada lote na sua página, por nome. */
 export const baixarLotesAbertos = () => api.baixar("/exportar/lotes-consumo-abertos.pdf");

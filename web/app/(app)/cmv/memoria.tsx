@@ -95,7 +95,7 @@ function QuadroEstoque({ q, titulo, posicao }: { q: Quadro; titulo: string; posi
           {q.mostrando < q.total && (
             <p className="mt-3 text-[13px] text-suave">
               Mostrando {q.mostrando} de {q.total} — <b>o rodapé soma a tabela inteira</b>. Para a
-              lista completa, baixe o documento.
+              lista completa, use o Imprimir.
             </p>
           )}
         </>

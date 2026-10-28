@@ -10,7 +10,13 @@ import { api } from "@/lib/api";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 
 /**
- * Baixar deixou de ser um clique cego.
+ * Imprimir (ex-"Baixar") deixou de ser um clique cego.
+ *
+ * 🔑 **"Imprimir", e o PDF abre numa ABA** (pedido do dono, 28/10/2026: *"hoje
+ * utilizamos a palavra Baixar em botão de relatório … seja considerado o termo
+ * Imprimir"*). O PDF vai para uma aba nova (`api.abrir`) — de lá se imprime ou se
+ * salva; a planilha continua sendo arquivo ("Gerar planilha"), porque planilha não se
+ * imprime, se confere no Excel.
  *
  * Antes, cada tela tinha um botão que despejava a planilha inteira: o cadastro
  * de produtos saía com os 3.226, sempre, e a posição de estoque com todos os
@@ -188,9 +194,13 @@ function Dialogo({
     try {
       // A extensão vai no CAMINHO: é ela que decide o formato, e assim a URL
       // que gerou o arquivo nunca discorda do arquivo.
-      await api.baixar(`/exportar/${rel.chave}.${formato}${query}`);
+      const caminho = `/exportar/${rel.chave}.${formato}${query}`;
+      // ⚠️ `api.abrir` abre a aba ANTES do primeiro `await` — ainda dentro do clique,
+      // senão o navegador a bloqueia como popup.
+      if (formato === "pdf") await api.abrir(caminho);
+      else await api.baixar(caminho);
       aviso.sucesso(
-        formato === "pdf" ? "PDF gerado." : "Planilha gerada.",
+        formato === "pdf" ? "PDF aberto numa aba nova." : "Planilha gerada.",
       );
       aoFechar();
     } catch (e) {
@@ -204,12 +214,12 @@ function Dialogo({
 
   return (
     <Modal
-      titulo={rel ? `Baixar — ${rel.rotulo}` : "Baixar"}
+      titulo={rel ? `Imprimir — ${rel.rotulo}` : "Imprimir"}
       descricao={rel?.descricao}
       aoFechar={aoFechar}
       largura="680px"
       /* ⚠️ Fora da rolagem: com cinco filtros a janela passa da altura da tela,
-         e um botão de baixar que rolou para fora da vista é um botão que não
+         e um botão de imprimir que rolou para fora da vista é um botão que não
          existe. A contagem fica ao lado dele porque é o número que se olha
          imediatamente antes de clicar. */
       rodape={
@@ -233,7 +243,7 @@ function Dialogo({
               onClick={() => void baixar()}
               disabled={baixando || !!naoCabeNoPdf || !!erro}
             >
-              {baixando ? "Gerando…" : formato === "pdf" ? "Baixar PDF" : "Baixar planilha"}
+              {baixando ? "Gerando…" : formato === "pdf" ? "Imprimir PDF" : "Gerar planilha"}
             </button>
           </div>
         </div>
@@ -513,7 +523,7 @@ function Dialogo({
             <Aviso tipo="erro">
               São {previa!.linhas.toLocaleString("pt-BR")} linhas — o PDF para acima de{" "}
               {previa!.maximo_pdf.toLocaleString("pt-BR")}, porque vira um arquivo de
-              milhares de páginas que ninguém abre. Estreite o filtro ou baixe a planilha,
+              milhares de páginas que ninguém abre. Estreite o filtro ou gere a planilha,
               que não tem teto.
             </Aviso>
           )}
@@ -525,16 +535,16 @@ function Dialogo({
 }
 
 /**
- * O botão de baixar de uma tela. Uma linha por tela — a janela vem junto.
+ * O botão de imprimir de uma tela. Uma linha por tela — a janela vem junto.
  *
  * ⚠️ `iniciais` semeia a janela com o que a TELA já está filtrando. Sem isso,
- * filtrar na tela e clicar em baixar daria outro arquivo — e quem conferisse os
+ * filtrar na tela e clicar em imprimir daria outro arquivo — e quem conferisse os
  * dois acharia que um dos dois mente.
  */
 export default function BotaoExportar({
   relatorio,
   iniciais = {},
-  rotulo = "Baixar",
+  rotulo = "Imprimir",
   className = "btn btn-secundario",
   avulso,
   formatoPadrao,

@@ -357,7 +357,7 @@ export const api = {
   },
 
   /**
-   * Abre um PDF da API numa aba nova, para imprimir (as etiquetas).
+   * Abre um PDF da API numa aba nova, para imprimir (as etiquetas e os relatórios).
    *
    * ⚠️ **A aba abre ANTES do pedido**: aberta depois do `await`, o navegador a trata
    * como popup não pedido e a bloqueia. Sem aba (bloqueio mesmo assim), baixa.
@@ -381,13 +381,16 @@ export const api = {
       }
       throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
     }
+    // Sem aba, baixa — com o nome que o servidor deu, como `baixar`.
+    const nome = /filename="?([^"]+)"?/.exec(r.headers.get("Content-Disposition") ?? "")?.[1]
+      ?? "botane.pdf";
     const url = URL.createObjectURL(await r.blob());
     if (aba) {
       aba.location.href = url;
     } else {
       const a = document.createElement("a");
       a.href = url;
-      a.download = "etiquetas.pdf";
+      a.download = nome;
       document.body.appendChild(a);
       a.click();
       a.remove();

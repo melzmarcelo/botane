@@ -95,7 +95,7 @@ export default function PainelDeVendas() {
           <>
             O estudo das vendas de um recorte: faturado, cupons e ticket comparados com o período
             anterior, a evolução, o dia da semana, a hora e os mais vendidos. Cupom cancelado e
-            consumo interno ficam fora das somas. <b>Baixar</b> leva o mesmo recorte, com todos os
+            consumo interno ficam fora das somas. <b>Imprimir</b> leva o mesmo recorte, com todos os
             produtos.
           </>
         }

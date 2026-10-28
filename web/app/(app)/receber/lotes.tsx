@@ -55,7 +55,7 @@ export default function ListaDeLotes({ versao }: { versao: number }) {
     try {
       await baixarLotesAbertos();
     } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar os lotes");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível gerar o PDF dos lotes");
     } finally {
       setBaixando(false);
     }
@@ -64,7 +64,7 @@ export default function ListaDeLotes({ versao }: { versao: number }) {
   return (
     <Cartao
       titulo="Lotes de cobrança"
-      descricao="Um por pessoa. Abra o lote para baixar o relatório, dar baixa ou tirar um documento."
+      descricao="Um por pessoa. Abra o lote para imprimir o relatório, dar baixa ou tirar um documento."
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

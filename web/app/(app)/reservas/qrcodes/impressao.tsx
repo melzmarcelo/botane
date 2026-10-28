@@ -65,7 +65,7 @@ export default function ImpressaoDoQr({ qr, aoFechar }: { qr: QrDaCasa; aoFechar
             </button>
             <button type="button" className="btn btn-primario" onClick={() => void baixar()}
                     aria-busy={ocupado} disabled={ocupado}>
-              {ocupado ? "Gerando…" : "Baixar PDF"}
+              {ocupado ? "Gerando…" : "Imprimir"}
             </button>
           </div>
         </div>
