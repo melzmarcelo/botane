@@ -1606,6 +1606,19 @@ FERRAMENTAS: list[Ferramenta] = [
         "vencendo em 30 dias, sem plano e a confirmar.",
         "/patrimonio/resumo"),
     Ferramenta(
+        "conferencias_do_patrimonio", "Conferências do patrimônio",
+        "As conferências do patrimônio pelas plaquetas (a aberta primeiro): setor, situação, "
+        "quantos bens eram esperados, quantos foram lidos, quantos faltam e quantos foram "
+        "achados vindos de outro setor.",
+        "/patrimonio/conferencias"),
+    Ferramenta(
+        "conferencia_do_patrimonio", "Uma conferência do patrimônio",
+        "Uma conferência inteira: cada bem, se foi lido, por quem, e o que o fechamento fez "
+        "(conferido, transferido, baixado ou não encontrado).",
+        "/patrimonio/conferencias/{id_conferencia}",
+        {"id_conferencia": Param("integer", "Id da conferência (de "
+                                 "`conferencias_do_patrimonio`).", obrigatorio=True)}),
+    Ferramenta(
         "bem_patrimonial", "Um bem do patrimônio",
         "Um bem inteiro: cadastro, garantia, assistência, o histórico de manutenção (com o "
         "custo) e quanto estoque está guardado no local dele.",

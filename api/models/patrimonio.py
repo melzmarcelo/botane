@@ -71,3 +71,26 @@ class Manutencao(BaseModel):
     # 🔑 A situação do bem DEPOIS da visita: a corretiva que consertou devolve o bem ao
     # uso no mesmo gesto — senão ele ficaria "em manutenção" até alguém lembrar.
     situacao_depois: Situacao | None = None
+
+
+# ---------------------------------------------------------------- conferência (140)
+
+class ConferenciaAbrir(BaseModel):
+    """Sem setor = a loja inteira."""
+    id_setor: int | None = None
+    observacao: str | None = Field(default=None, max_length=300)
+
+
+class Leitura(BaseModel):
+    """O que a plaqueta deu: o link do QR, o código ou o apelido da casa."""
+    texto: str = Field(min_length=1, max_length=300)
+
+
+class ConferenciaFechar(BaseModel):
+    # Os itens NÃO lidos que a pessoa decidiu baixar; o resto do não lido é mantido.
+    baixar: list[int] = Field(default_factory=list, max_length=2000)
+    motivo_baixa: str | None = Field(default=None, max_length=200)
+    # O bem lido aqui que o sistema punha em outro setor vem para este.
+    transferir: bool = True
+    # O "A confirmar" que foi visto passa a "Em uso".
+    confirmar: bool = True

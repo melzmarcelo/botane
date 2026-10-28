@@ -277,6 +277,16 @@ def excluir(cur, id_bem: int, id_unidade: int) -> dict:
         raise HTTPException(status_code=409,
                             detail="Este bem tem manutenção registrada — dê baixa em vez de "
                                    "apagar, para o histórico continuar existindo.")
+    # ⚠️ A conferência FECHADA também é história (140): apagar o bem tiraria a linha dele
+    # da folha assinada. A aberta não conta — a leitura ainda pode ser desfeita.
+    cur.execute(
+        """SELECT count(*) AS n FROM bem_conferencia_itens i
+             JOIN bem_conferencias c ON c.id = i.id_conferencia
+            WHERE i.id_bem = %s AND c.status = 'FECHADA'""", (id_bem,))
+    if cur.fetchone()["n"]:
+        raise HTTPException(status_code=409,
+                            detail="Este bem já passou por uma conferência — dê baixa em vez "
+                                   "de apagar, para o histórico continuar existindo.")
     cur.execute("DELETE FROM bens WHERE id = %s", (id_bem,))
     return bem
 

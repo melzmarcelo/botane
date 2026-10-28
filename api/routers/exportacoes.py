@@ -401,6 +401,52 @@ def inventario(nome: str, formato: str | None = None,
     return _render(saida, f"inventario-{apelido}", ext, timbre, ctx.nome)
 
 
+@router.get("/conferencia-patrimonio/{nome}")
+def conferencia_patrimonio(nome: str, formato: str | None = None,
+                           ctx: Contexto = Depends(contexto_atual)) -> Response:
+    """A folha da conferência do patrimônio (140) — cada bem esperado ou achado, se foi
+    lido, por quem, e o que o fechamento fez. É o papel que se assina.
+
+    Aberta, ela serve também de lista para conferir no papel: sai com o que falta ler.
+    """
+    _exige_alguma(ctx, "patrimonio.ver", "patrimonio.conferir", "patrimonio.cadastrar")
+    bruto, ext = _partir(nome, formato)
+    id_conferencia = _id_do_caminho(bruto, "Conferência")
+    from services import patrimonio_conferencia as conferencia
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        c = conferencia.obter(cur, id_conferencia, id_unidade)
+        timbre = catalogo_motor.papel_timbrado(cur)
+        auditoria.registrar(cur, ctx.id_usuario, "exportacao",
+                            f"conferencia-patrimonio-{id_conferencia}", "exportar",
+                            depois={"formato": ext, "linhas": len(c["itens"])},
+                            id_unidade=id_unidade)
+    # A sessão do banco já é a da casa: o `lido_em` chega no fuso certo.
+    linhas = [i | {"lido": bool(i["lido_em"]), "de_fora": not i["esperado"]}
+              for i in c["itens"]]
+    colunas = [("codigo", "Código"), ("descricao", "Equipamento"), ("setor_antes", "Setor antes"),
+               ("situacao_antes_txt", "Situação antes"), ("lido", "Lido"),
+               ("lido_em", "Lido em"), ("lido_por_nome", "Por"),
+               ("de_fora", "Era de outro setor")]
+    if c["status"] == "FECHADA":
+        colunas.append(("resultado_txt", "Resultado"))
+    resumo = [("Escopo", c["escopo"]), ("Situação", c["status_txt"]),
+              ("Aberta em", c["aberta_em"]),
+              ("Aberta por", c["aberta_por_nome"]),
+              ("Esperados", c["esperados"]), ("Lidos", c["lidos"]),
+              ("Faltam ler", c["faltam"]), ("Achados de outro setor", c["de_fora"])]
+    if c["fechada_em"]:
+        resumo += [("Encerrada em", c["fechada_em"]),
+                   ("Encerrada por", c["fechada_por_nome"])]
+    if c["observacao"]:
+        resumo.append(("Observação", c["observacao"]))
+    saida = catalogo_motor.Saida(
+        linhas, colunas, f"Conferência do patrimônio nº {id_conferencia} — {c['escopo']}", resumo)
+    apelido = exportacao.slug(c["escopo"]) or str(id_conferencia)
+    return _render(saida, f"conferencia-patrimonio-{id_conferencia}-{apelido}", ext, timbre,
+                   ctx.nome)
+
+
 @router.get("/produto/{nome}")
 def produto(nome: str, formato: str | None = None,
             ctx: Contexto = Depends(contexto_atual)) -> Response:

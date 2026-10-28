@@ -52,6 +52,8 @@ export type Bem = {
   preventiva_meses: number | null;
   ultima_preventiva: string | null;
   observacao: string | null;
+  /** A última conferência (fechada) em que o bem foi VISTO. */
+  conferido_em: string | null;
   proxima_preventiva: string | null;
   status_preventiva: string;
   em_garantia: boolean;
@@ -145,7 +147,7 @@ export type DoProduto = {
 export const doProduto = (id: number) => api.get<DoProduto>(`/patrimonio/do-produto/${id}`);
 export const obter = (id: number) => api.get<BemDetalhe>(`/patrimonio/${id}`);
 export const porCodigo = (codigo: string) =>
-  api.get<{ id: number; id_unidade: number }>(
+  api.get<{ id: number; id_unidade: number; conferencia_aberta: number | null }>(
     `/patrimonio/codigo/${encodeURIComponent(codigo.trim())}`);
 
 /** O corpo do cadastro: texto vazio vai como nulo. */
@@ -192,3 +194,96 @@ export function importar(arquivo: File, simular: boolean, incluirSugestoes: bool
 /** "2026-10-27" → "27/10/2026". */
 export const dataBr = (iso: string | null | undefined) =>
   iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—";
+
+// ---------------------------------------------------------------- conferência (140)
+
+/** Uma conferência na lista: quantos esperados, lidos, faltam e achados de outro setor. */
+export type ConferenciaResumo = {
+  id: number;
+  id_setor: number | null;
+  setor: string | null;
+  escopo: string;
+  status: "ABERTA" | "FECHADA" | "CANCELADA";
+  status_txt: string;
+  aberta_em: string;
+  fechada_em: string | null;
+  aberta_por_nome: string | null;
+  esperados: number;
+  lidos: number;
+  faltam: number;
+  de_fora: number;
+};
+
+export type ItemConferencia = {
+  id: number;
+  id_bem: number;
+  esperado: boolean;
+  lido_em: string | null;
+  lido_por_nome: string | null;
+  resultado: string | null;
+  resultado_txt: string | null;
+  situacao_antes: string;
+  situacao_antes_txt: string;
+  setor_antes: string | null;
+  codigo: string;
+  apelido: string | null;
+  descricao: string;
+  situacao: string;
+  situacao_txt: string;
+  criticidade: string | null;
+  setor: string | null;
+  local: string | null;
+};
+
+export type Conferencia = ConferenciaResumo & {
+  observacao: string | null;
+  fechada_por_nome: string | null;
+  itens: ItemConferencia[];
+  message?: string;
+};
+
+export type Leitura = {
+  bem: { id: number; codigo: string; descricao: string };
+  id_item: number;
+  novo: boolean;
+  ja_lido: boolean;
+  de_fora: boolean;
+  message: string;
+  contagem: { esperados: number; lidos: number; faltam: number; de_fora: number };
+};
+
+export const conferencias = () => api.get<ConferenciaResumo[]>("/patrimonio/conferencias");
+export const conferencia = (id: number) => api.get<Conferencia>(`/patrimonio/conferencias/${id}`);
+export const abrirConferencia = (id_setor: number | null, observacao: string | null) =>
+  api.post<Conferencia & { message: string }>("/patrimonio/conferencias", { id_setor, observacao });
+export const lerPlaqueta = (id: number, texto: string) =>
+  api.post<Leitura>(`/patrimonio/conferencias/${id}/leituras`, { texto });
+export const desfazerLeitura = (id: number, idItem: number) =>
+  api.delete<Conferencia & { message: string }>(`/patrimonio/conferencias/${id}/leituras/${idItem}`);
+export const fecharConferencia = (id: number, corpo: {
+  baixar: number[]; motivo_baixa: string | null; transferir: boolean; confirmar: boolean;
+}) => api.post<Conferencia & { message: string }>(`/patrimonio/conferencias/${id}/fechar`, corpo);
+export const cancelarConferencia = (id: number) =>
+  api.post<Conferencia & { message: string }>(`/patrimonio/conferencias/${id}/cancelar`, {});
+
+/**
+ * 🔑 **"Este aparelho está conferindo"** — a câmera comum do celular abre a plaqueta em
+ * `/patrimonio/b/…`, e é por esta marca que aquela tela conta a leitura em vez de abrir a
+ * ficha. É conveniência DO APARELHO (quem abriu a conferência nele), por isso
+ * `localStorage`: em outro celular a plaqueta continua abrindo a ficha.
+ */
+const CHAVE_CONFERINDO = "botane.patrimonio.conferindo";
+export function marcarConferindo(id: number | null) {
+  try {
+    if (id) localStorage.setItem(CHAVE_CONFERINDO, String(id));
+    else localStorage.removeItem(CHAVE_CONFERINDO);
+  } catch { /* sem armazenamento: a plaqueta só abre a ficha */ }
+}
+export function conferindoAqui(): number | null {
+  try {
+    const v = Number(localStorage.getItem(CHAVE_CONFERINDO));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}

@@ -12,9 +12,53 @@
   preventiva). Da proposta em 4 etapas, *"pode seguir com as etapas 1 e 2"*:
   1. cadastro com plaqueta de QR e importação da planilha;
   2. manutenção: plano de preventiva, histórico (preventiva e corretiva, com custo) e alertas.
-  ⏳ Ficaram para depois: **3** a conferência patrimonial pelo QR (abrir por setor, ler as
-  plaquetas, fechar com transferência/baixa) e **4** a ligação com as notas do Omie (item do
-  tipo Patrimônio → cadastrar os bens) e a depreciação.
+  A **3**, a conferência pelas plaquetas, veio em 28/10/2026 (ver abaixo). ⏳ Fica a **4**:
+  a depreciação. A ligação com as notas — o item do tipo Patrimônio que entra vira
+  pendência de cadastrar o bem — já veio junto da 1, a pedido do dono.
+
+- 🔑 **A CONFERÊNCIA pelas plaquetas** (1.1.146, migração `140_conferencia_patrimonio.sql`,
+  `services/patrimonio_conferencia.py`, 28/10/2026 — *"pode seguir com a etapa 3 do
+  patrimônio"*). Abrir (um setor ou a loja inteira) → ler → fechar.
+  - **Não é inventário de estoque**: confere PRESENÇA de cada bem, não quantidade; nada toca o
+    razão.
+  - 🔑 **A lista de esperados é FOTOGRAFIA da abertura** (`bem_conferencia_itens.esperado`).
+    Baixado não entra; desativado e "A confirmar" entram (o segundo é justamente o que a
+    conferência confirma). Bem lido que não estava na lista entra `esperado = false` — o "de
+    outro setor".
+  - ⚠️ **Uma aberta por setor, e loja inteira × setor não se sobrepõem** (índice único parcial
+    + checagem no serviço): o mesmo bem em duas listas abertas não saberia onde contar.
+  - **Ler** aceita o LINK do QR (o leitor USB e a câmera devolvem a URL inteira — o código
+    sai pelo padrão `PAT-\d+`), o código digitado e o **apelido** da casa. Segunda leitura =
+    "já lido", não conta duas. Bem de outra loja e bem BAIXADO são 409 nomeados.
+  - 🔑 **Três jeitos de ler, uma rota**: câmera DENTRO da tela (`components/leitor-qr.tsx`,
+    `BarcodeDetector` — Chrome do Android; sem biblioteca no pacote); leitor/teclado; e a
+    câmera COMUM do celular (iPhone): a plaqueta abre `/patrimonio/b/…`, e se ESTE aparelho
+    está marcado como conferindo (`localStorage botane.patrimonio.conferindo`, marcado ao abrir
+    a tela da conferência, limpo ao fechar/cancelar) e a conferência aberta é a que procura o
+    bem (`conferencia_aberta` em `GET /patrimonio/codigo/…`), a leitura conta ali. Em outro
+    aparelho a plaqueta continua abrindo a ficha.
+  - **Fechar**: lido e esperado → CONFERIDO (`bens.conferido_em` = hoje; "A confirmar" → "Em
+    uso", desligável); lido de fora → TRANSFERIDO para o setor (o local sai quando é de outro
+    setor — "Cozinha · Bar" mentiria); não lido → **MANTIDO por padrão** (NAO_ENCONTRADO) ou
+    BAIXADO, bem a bem, com motivo (vazio = "Não encontrado na conferência nº X"). ⚠️ Manter é
+    o padrão: o equipamento no conserto não pode sumir porque não estava na hora. Baixar o que
+    FOI lido é 400. **Cancelar** não muda nenhum bem.
+  - ⚠️ **Conferência FECHADA é história**: o bem que passou por uma não se apaga (409, como o
+    com manutenção), e o setor que teve conferência é DESATIVADO em vez de apagado
+    (`routers/cadastros.py`, senão a chave estrangeira dava 500).
+  - **Folha da conferência** (`/exportar/conferencia-patrimonio/{id}.pdf|csv`, botão no
+    cabeçalho): aberta, lista o que falta (dá para conferir no papel); fechada, o resultado de
+    cada bem, para assinar. O relatório `patrimonio` ganhou a coluna **Conferido em** (só
+    exportação: a importação ignora — quem escreve é a conferência).
+  - Leitura não vai para a auditoria (dezenas por volta; o item guarda quem e quando); abrir,
+    fechar e cancelar vão.
+  - **Permissão** `patrimonio.conferir` (Administrador, Gerente, Conferente) — o fechamento
+    transfere e baixa. Quem só vê acompanha e baixa a folha.
+  - Conector: `conferencias_do_patrimonio`, `conferencia_do_patrimonio` (leitura).
+  - Cobertura: `smoke_patrimonio_conferencia.py` (31) e a seção 7 do `verificar-patrimonio.mjs`
+    (leitura pelo link "digitado", a plaqueta pela câmera comum contando, fechar com baixa).
+    ⚠️ O roteiro do navegador não consegue apagar o bem conferido: deixa-o BAIXADO e o setor
+    desativado (a suíte da API apaga por SQL).
 
 - 🔑 **Patrimônio NÃO é estoque.** O produto do tipo PATRIMONIO conta QUANTIDADE por local, a
   custo médio; a batedeira tem série, garantia, estado e história PRÓPRIOS. `bens` é um
@@ -143,3 +187,6 @@
 4. Assistência técnica e fornecedor da compra são TEXTO (como na planilha), não um vínculo
    com Pessoas.
 5. Os alertas são da loja inteira, não só do setor de quem olha.
+6. (Conferência, 28/10) Não lido é MANTIDO por padrão; a baixa é escolha bem a bem.
+7. (Conferência) O "A confirmar" visto vira "Em uso" no fechamento (dá para desligar).
+8. (Conferência) Sem alerta de "bem nunca conferido" nem de conferência esquecida aberta.

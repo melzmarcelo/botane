@@ -204,6 +204,9 @@ export default function FichaDoBem() {
               </Etiqueta>
             )}
             {bem.em_garantia && <Etiqueta cor="erva">em garantia até {dataBr(bem.garantia_ate)}</Etiqueta>}
+            <span className="text-suave" id="bem-conferido">
+              {bem.conferido_em ? `conferido em ${dataBr(bem.conferido_em)}` : "nunca conferido"}
+            </span>
             {podeCadastrar && (
               <button type="button" className="btn btn-secundario" id="bem-plaqueta"
                       onClick={() => imprimirPlaquetas([bem.id]).catch((x) =>

@@ -272,18 +272,25 @@ para um setor; a mais específica de mesmo nome substitui a geral.
 
 Os bens da casa (equipamentos, móveis), **um registro por item físico**, com plaqueta de QR,
 importação da planilha de inventário e a manutenção (plano de preventiva, histórico, alertas).
-Pedido do dono em 27/10/2026 — etapas 1 e 2 da proposta.
+Pedido do dono em 27/10/2026 — etapas 1 e 2 da proposta; a **conferência pelas plaquetas**
+(etapa 3) em 28/10/2026.
 
 - **Rotas:** `patrimonio.py`
 - **Serviços:** `patrimonio.py` (cadastro, status da preventiva, manutenção, alertas, plaqueta),
-  `patrimonio_planilha.py` (a importação), `planilha_xlsx.py` (lê .xlsx sem biblioteca)
+  `patrimonio_planilha.py` (a importação), `planilha_xlsx.py` (lê .xlsx sem biblioteca),
+  `patrimonio_conferencia.py` (abrir, ler, fechar com transferência/baixa)
 - **Telas:** `patrimonio/` (lista + resumo por setor), `patrimonio/[id]/` (ficha e manutenção;
-  `novo` cria), `patrimonio/importar/`, `patrimonio/b/[codigo]/` (o QR), `produtos/[id]/bens.tsx` (os bens do
+  `novo` cria), `patrimonio/importar/`, `patrimonio/b/[codigo]/` (o QR — e a leitura da conferência no aparelho que confere),
+  `patrimonio/conferencias/` e `[id]/` (a leitura), `components/leitor-qr.tsx` (câmera),
+  `produtos/[id]/bens.tsx` (os bens do
   produto Patrimônio); roteiro
   `verificar-patrimonio.mjs`
-- **Relatórios:** `patrimonio` (as colunas da planilha da casa) e `patrimonio-manutencoes`
-- **Permissões:** `patrimonio.ver`, `patrimonio.cadastrar`, `patrimonio.manutencao`
-- **Migração:** `139_patrimonio.sql`
+- **Relatórios:** `patrimonio` (as colunas da planilha da casa) e `patrimonio-manutencoes`;
+  a folha `exportar/conferencia-patrimonio/{id}`
+- **Permissões:** `patrimonio.ver`, `patrimonio.cadastrar`, `patrimonio.manutencao`,
+  `patrimonio.conferir`
+- **Migração:** `139_patrimonio.sql`, `140_conferencia_patrimonio.sql`
+- **Suítes:** `smoke_patrimonio.py`, `smoke_patrimonio_conferencia.py`
 
 ⚠️ **Não é estoque**: nada aqui escreve no razão. O produto do tipo PATRIMONIO continua sendo
 quantidade; o bem é o item, com série, garantia e história próprios.

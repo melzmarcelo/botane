@@ -120,7 +120,11 @@ def atualizar_setor(id_setor: int, body: SetorUpdate,
 def desativar_setor(id_setor: int,
                     ctx: Contexto = Depends(requer_permissao("cadastros.setores"))) -> dict:
     with get_cursor() as cur:
-        cur.execute("SELECT count(*) AS n FROM produtos WHERE id_setor = %s", (id_setor,))
+        # ⚠️ A conferência do patrimônio (140) também é história do setor: a folha dela
+        # diria "setor —" e o DELETE pararia na chave estrangeira com 500.
+        cur.execute("""SELECT (SELECT count(*) FROM produtos WHERE id_setor = %s)
+                            + (SELECT count(*) FROM bem_conferencias WHERE id_setor = %s) AS n""",
+                    (id_setor, id_setor))
         if cur.fetchone()["n"]:
             # Nunca apaga o que já foi usado: o histórico ficaria sem nome.
             cur.execute("UPDATE setores SET ativo = false WHERE id = %s", (id_setor,))

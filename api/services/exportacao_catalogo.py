@@ -3037,7 +3037,10 @@ def _bens(cur, id_unidade: int, f: dict) -> Saida:
                 ("situacao_txt", "Situação"), ("preventiva_meses", "Preventiva a cada (meses)"),
                 ("ultima_preventiva", "Última preventiva"),
                 ("proxima_preventiva", "Próxima preventiva"),
-                ("preventiva_txt", "Status da preventiva"), ("observacao", "Observações")]
+                ("preventiva_txt", "Status da preventiva"),
+                # 140: a última conferência em que o bem foi VISTO. Só exportação —
+                # a importação ignora a coluna (quem a escreve é a conferência).
+                ("conferido_em", "Conferido em"), ("observacao", "Observações")]
                if largo else
                [("codigo", "Código"), ("descricao", "Equipamento"), ("setor", "Setor"),
                 ("local", "Local"), ("marca", "Marca"), ("modelo", "Modelo"),

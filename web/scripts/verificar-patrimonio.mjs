@@ -58,6 +58,8 @@ checar("o bem de teste nasce", st0 === 201, bem);
 const csv = path.join(AQUI, `_patrimonio_${MARCA}.csv`);
 const criados = [bem.id];
 const produtos = [];
+const bensConf = [];
+const setoresConf = [];
 
 const navegador = await puppeteer.launch({ executablePath: CHROME, headless: true });
 try {
@@ -187,6 +189,68 @@ try {
   const noProduto = await p.evaluate(() => document.body.innerText);
   checar("o cadastro do produto lista o bem e diz que falta 1",
     noProduto.includes(criado?.codigo ?? "??") && /Faltam\s+1/.test(noProduto), noProduto.slice(0, 200));
+
+  console.log("\n7. a conferência pelas plaquetas (etapa 3, 140)");
+  // Setor e bens PRÓPRIOS: o que passa por conferência fechada não se apaga (é história).
+  const { dados: setorConf } = await api("POST", "/setores", { nome: `CONF PATWEB ${MARCA}` }, token);
+  setoresConf.push(setorConf.id);
+  for (const d of ["Chapa", "Coifa", "Fritadeira"]) {
+    const { dados: b } = await api("POST", "/patrimonio",
+      { descricao: `${d} conf web ${MARCA}`, id_setor: setorConf.id }, token);
+    bensConf.push(b);
+  }
+  const [chapa, coifa, fritadeira] = bensConf;
+  await p.goto(`${WEB}/patrimonio/conferencias`, { waitUntil: "networkidle2" });
+  await p.waitForSelector("#conferencia-setor", { timeout: 20000 });
+  await p.waitForFunction((id) => !!document.querySelector(`#conferencia-setor option[value="${id}"]`),
+                          { timeout: 10000 }, String(setorConf.id)).catch(() => {});
+  await p.select("#conferencia-setor", String(setorConf.id));
+  await p.click("#conferencia-abrir");
+  await p.waitForFunction(() => /\/patrimonio\/conferencias\/\d+$/.test(location.pathname), { timeout: 15000 }).catch(() => {});
+  const idConf = Number((p.url().match(/\/conferencias\/(\d+)$/) ?? [])[1]);
+  checar("abrir leva à tela de leitura", !!idConf, p.url());
+  await p.waitForSelector("#conferencia-leitura", { timeout: 15000 }).catch(() => {});
+  const prog0 = await p.evaluate(() => document.querySelector("#conferencia-progresso")?.innerText ?? "");
+  checar("com os 3 bens do setor a ler", /0 de 3 lidos/.test(prog0), prog0);
+  // O leitor de código USB "digita" o LINK inteiro e dá Enter.
+  await p.type("#conferencia-leitura", `${WEB}/patrimonio/b/${chapa.codigo}\n`);
+  await p.waitForFunction(() => /conferido/.test(document.querySelector("#conferencia-ultima")?.innerText ?? ""),
+                          { timeout: 15000 }).catch(() => {});
+  const ultima = await p.evaluate(() => ({
+    msg: document.querySelector("#conferencia-ultima")?.innerText ?? "",
+    prog: document.querySelector("#conferencia-progresso")?.innerText ?? "",
+    campo: document.querySelector("#conferencia-leitura")?.value,
+  }));
+  checar("a leitura diz numa linha que conferiu, e o campo limpa para a próxima",
+    ultima.msg.includes(chapa.codigo) && /1 de 3 lidos/.test(ultima.prog) && ultima.campo === "", ultima);
+  checar("este aparelho fica marcado como o que confere",
+    await p.evaluate(() => localStorage.getItem("botane.patrimonio.conferindo")) === String(idConf));
+  // A câmera COMUM do celular: a plaqueta abre o sistema e a leitura conta lá.
+  await p.goto(`${WEB}/patrimonio/b/${coifa.codigo}`, { waitUntil: "networkidle2" });
+  await p.waitForSelector("#plaqueta-conferida", { timeout: 15000 }).catch(() => {});
+  const pelaCamera = await p.evaluate(() => document.querySelector("#plaqueta-conferida")?.innerText ?? "");
+  checar("a plaqueta aberta pela câmera comum conta na conferência (2 de 3)",
+    pelaCamera.includes(coifa.codigo) && /2 de 3 lidos/.test(pelaCamera), pelaCamera);
+  await p.goto(`${WEB}/patrimonio/conferencias/${idConf}`, { waitUntil: "networkidle2" });
+  await p.waitForSelector("#conferencia-fechar", { timeout: 15000 });
+  await p.click("#conferencia-fechar");
+  await p.waitForSelector("#conferencia-baixar", { timeout: 10000 });
+  await p.click(`#conferencia-baixar input[data-codigo="${fritadeira.codigo}"]`);
+  await p.waitForSelector("#conferencia-motivo", { timeout: 5000 });
+  await p.type("#conferencia-motivo", "descartada");
+  await p.click("#conferencia-confirmar-fechar");
+  await p.waitForFunction(() => /Fechada/.test(document.querySelector("main header")?.innerText ?? ""),
+                          { timeout: 15000 }).catch(() => {});
+  const fechada = await p.evaluate(() => ({
+    cab: document.querySelector("main header")?.innerText ?? "",
+    nao: document.querySelector("#conferencia-faltam")?.innerText ?? "",
+  }));
+  checar("fechar com a baixa escolhida: a conferência fica Fechada e a fritadeira Baixada",
+    /Fechada/.test(fechada.cab) && fechada.nao.includes(fritadeira.codigo) && /Baixado/.test(fechada.nao), fechada);
+  const { dados: chapaDepois } = await api("GET", `/patrimonio/${chapa.id}`, undefined, token);
+  checar("a chapa lida fica com a data de hoje", chapaDepois?.conferido_em === hoje, chapaDepois?.conferido_em);
+  checar("e o aparelho deixa de estar conferindo",
+    await p.evaluate(() => localStorage.getItem("botane.patrimonio.conferindo")) === null);
 } finally {
   await navegador.close();
   try { fs.unlinkSync(csv); } catch { /* já não existe */ }
@@ -201,6 +265,15 @@ try {
     await api("DELETE", `/produtos/${id}`, undefined, token);
   }
   await api("DELETE", `/setores/${setor.id}`, undefined, token);
+  // ⚠️ O bem que passou por conferência FECHADA não se apaga (é a folha assinada): fica
+  // BAIXADO, fora das listas. O setor com conferência é desativado em vez de apagado.
+  for (const b of bensConf) {
+    const { status } = await api("DELETE", `/patrimonio/${b.id}`, undefined, token);
+    if (status === 409) {
+      await api("PUT", `/patrimonio/${b.id}`, { situacao: "BAIXADO", motivo_baixa: "limpeza do roteiro" }, token);
+    }
+  }
+  for (const id of setoresConf) await api("DELETE", `/setores/${id}`, undefined, token);
 }
 
 console.log(`\n${ok} passaram, ${falhas.length} falharam`);

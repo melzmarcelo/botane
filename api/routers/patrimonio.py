@@ -9,16 +9,20 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 
 import auditoria
 from database import get_cursor
-from models.patrimonio import Bem, BemParcial, Manutencao
+from models.patrimonio import (Bem, BemParcial, ConferenciaAbrir, ConferenciaFechar,
+                                Leitura, Manutencao)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import patrimonio as servico
 from services import patrimonio_planilha as planilha
+from services import patrimonio_conferencia as conferencia
 
 router = APIRouter(prefix="/patrimonio", tags=["Patrimônio"])
 
-_VER = requer_permissao("patrimonio.ver", "patrimonio.cadastrar", "patrimonio.manutencao")
+_VER = requer_permissao("patrimonio.ver", "patrimonio.cadastrar", "patrimonio.manutencao",
+                        "patrimonio.conferir")
 _CADASTRAR = requer_permissao("patrimonio.cadastrar")
 _MANUTENCAO = requer_permissao("patrimonio.manutencao", "patrimonio.cadastrar")
+_CONFERIR = requer_permissao("patrimonio.conferir")
 
 
 def _filtros(busca, situacao, preventiva, criticidade, setores, id_local,
@@ -79,7 +83,9 @@ def por_codigo(codigo: str, ctx: Contexto = Depends(_VER)) -> dict:
         r = servico.por_codigo(cur, codigo)
         if not ctx.ve_unidade(r["id_unidade"]):
             raise HTTPException(status_code=404, detail="Nenhum bem com este código")
-        return r
+        # 🔑 A conferência aberta que procura este bem (140): a câmera do celular abre a
+        # plaqueta, e quem está conferindo tem a leitura contada ali mesmo.
+        return r | {"conferencia_aberta": conferencia.aberta_do_bem(cur, r["id"])}
 
 
 @router.get("/plaquetas.pdf")
@@ -120,6 +126,78 @@ async def importar(arquivo: UploadFile = File(...), simular: bool = True,
     with get_cursor() as cur:
         return planilha.aplicar(cur, unidade_atual(cur, ctx), linhas, ctx.id_usuario,
                                 simular=simular, incluir_sugestoes=incluir_sugestoes)
+
+
+# ---------------------------------------------------------------- conferência (140)
+# ⚠️ ANTES de `/{id_bem}`: senão "conferencias" é lido como número de bem e vira 422.
+
+@router.get("/conferencias")
+def conferencias(ctx: Contexto = Depends(_VER)) -> list[dict]:
+    """As conferências da loja, a aberta primeiro."""
+    with get_cursor() as cur:
+        return conferencia.listar(cur, unidade_atual(cur, ctx))
+
+
+@router.post("/conferencias", status_code=201)
+def abrir_conferencia(body: ConferenciaAbrir, ctx: Contexto = Depends(_CONFERIR)) -> dict:
+    """Abre a conferência de um setor (ou da loja inteira) e fotografa os bens esperados."""
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        c = conferencia.abrir(cur, id_unidade, ctx.id_usuario, body.id_setor, body.observacao)
+        auditoria.registrar(cur, ctx.id_usuario, "bem_conferencia", c["id"], "abrir",
+                            depois={"setor": c["escopo"], "esperados": c["esperados"]},
+                            id_unidade=id_unidade)
+        return c | {"message": f"Conferência de {c['escopo']} aberta: "
+                               f"{c['esperados']} bem(ns) a ler."}
+
+
+@router.get("/conferencias/{id_conferencia}")
+def obter_conferencia(id_conferencia: int, ctx: Contexto = Depends(_VER)) -> dict:
+    with get_cursor() as cur:
+        return conferencia.obter(cur, id_conferencia, unidade_atual(cur, ctx))
+
+
+@router.post("/conferencias/{id_conferencia}/leituras", status_code=201)
+def ler_plaqueta(id_conferencia: int, body: Leitura, ctx: Contexto = Depends(_CONFERIR)) -> dict:
+    """Uma plaqueta lida — o link do QR, o código digitado ou o apelido da casa.
+    ⚠️ Sem auditoria por leitura: são dezenas por conferência, e o item já guarda quem
+    leu e quando. O que se audita é abrir e fechar."""
+    with get_cursor() as cur:
+        return conferencia.ler(cur, id_conferencia, unidade_atual(cur, ctx), ctx.id_usuario,
+                               body.texto)
+
+
+@router.delete("/conferencias/{id_conferencia}/leituras/{id_item}")
+def desfazer_leitura(id_conferencia: int, id_item: int,
+                     ctx: Contexto = Depends(_CONFERIR)) -> dict:
+    with get_cursor() as cur:
+        return conferencia.desfazer_leitura(cur, id_conferencia, unidade_atual(cur, ctx),
+                                            id_item) | {"message": "Leitura desfeita."}
+
+
+@router.post("/conferencias/{id_conferencia}/fechar")
+def fechar_conferencia(id_conferencia: int, body: ConferenciaFechar,
+                       ctx: Contexto = Depends(_CONFERIR)) -> dict:
+    """Aplica o resultado: conferido, transferido para cá, baixado ou mantido."""
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        c = conferencia.fechar(cur, id_conferencia, id_unidade, ctx.id_usuario,
+                               baixar=body.baixar, motivo_baixa=body.motivo_baixa,
+                               transferir=body.transferir, confirmar=body.confirmar)
+        auditoria.registrar(cur, ctx.id_usuario, "bem_conferencia", id_conferencia, "fechar",
+                            depois=c["resultado"] | {"baixados": body.baixar},
+                            id_unidade=id_unidade)
+        return c
+
+
+@router.post("/conferencias/{id_conferencia}/cancelar")
+def cancelar_conferencia(id_conferencia: int, ctx: Contexto = Depends(_CONFERIR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        c = conferencia.cancelar(cur, id_conferencia, id_unidade, ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "bem_conferencia", id_conferencia, "cancelar",
+                            id_unidade=id_unidade)
+        return c
 
 
 @router.get("/{id_bem}")

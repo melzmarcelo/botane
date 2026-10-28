@@ -127,6 +127,11 @@ export default function PaginaPatrimonio() {
             </Link>
           </>
         )}
+        {/* Etapa 3 (140): a conferência pelas plaquetas. Quem só vê também entra — para
+            acompanhar a volta e baixar a folha. */}
+        <Link href="/patrimonio/conferencias" className="btn btn-secundario" id="patrimonio-conferencias">
+          Conferência
+        </Link>
         <BotaoExportar relatorio="patrimonio" iniciais={iniciais} />
         <BotaoExportar relatorio="patrimonio-manutencoes" rotulo="Manutenções"
                        iniciais={{ setores: iniciais.setores, busca_bem: iniciais.busca_bem }} />
