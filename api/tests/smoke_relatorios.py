@@ -134,7 +134,7 @@ checar("produto sem setor aparece como 'Sem setor'",
 
 print("2. a soma dos grupos fecha com o CMV total")
 st, apuracao = chamar("GET", f"/cmv/apuracao{periodo}", token=token)
-soma = sum(float(g["cmv"]) for g in grupos)
+soma = sum(float(g["cmv"]) for g in grupos if not g["fora_do_cmv"])
 checar("a apuração responde", st == 200, apuracao)
 checar("a soma dos grupos é o CMV do período",
        perto(soma, apuracao.get("cmv_real"), 0.05), (soma, apuracao.get("cmv_real")))
@@ -146,8 +146,8 @@ print("3. o mesmo por categoria")
 st, cats = chamar("GET", f"/cmv/por-grupo{periodo}&agrupar=categoria", token=token)
 checar("o relatório por categoria responde", st == 200, cats)
 checar("e fecha com o mesmo total",
-       perto(sum(float(g["cmv"]) for g in cats), apuracao.get("cmv_real"), 0.05),
-       sum(float(g["cmv"]) for g in cats))
+       perto(sum(float(g["cmv"]) for g in cats if not g["fora_do_cmv"]), apuracao.get("cmv_real"), 0.05),
+       sum(float(g["cmv"]) for g in cats if not g["fora_do_cmv"]))
 st, r = chamar("GET", f"/cmv/por-grupo{periodo}&agrupar=fornecedor", token=token)
 checar("agrupamento inventado e recusado (422)", st == 422, st)
 
@@ -166,8 +166,8 @@ for eixo in ("local", "produto", "loja"):
            (st, str(linhas)[:120]))
     if st == 200 and linhas:
         checar(f"e a soma por {eixo} fecha com o CMV do periodo",
-               perto(sum(float(g["cmv"]) for g in linhas), apuracao.get("cmv_real"), 0.05),
-               (eixo, sum(float(g["cmv"]) for g in linhas), apuracao.get("cmv_real")))
+               perto(sum(float(g["cmv"]) for g in linhas if not g["fora_do_cmv"]), apuracao.get("cmv_real"), 0.05),
+               (eixo, sum(float(g["cmv"]) for g in linhas if not g["fora_do_cmv"]), apuracao.get("cmv_real")))
 
 # 🔑 **Empresa e o que o USUARIO enxerga**, e amplia ate o limite da permissao.
 # Numa casa de uma loja so, o escopo de empresa devolve exatamente a mesma conta
@@ -462,7 +462,7 @@ checar("enquanto o bar pesa só o dele",
 # 🔑 **A identidade continua fechando** — é ela que dá sentido ao corte por
 # grupo, e é o que este relatório arriscava ao mudar de grão.
 st, apur = chamar("GET", f"/cmv/apuracao?inicio={hoje_rel}&fim={hoje_rel}", token=token)
-soma_setores = sum(float(l["cmv"]) for l in (por_setor or []))
+soma_setores = sum(float(l["cmv"]) for l in (por_setor or []) if not l["fora_do_cmv"])
 folga = 0.01 * max(1, len(por_setor or []))
 checar("e a soma dos setores continua fechando com o CMV do periodo",
        abs(soma_setores - float(apur.get("cmv_real", 0))) <= folga,
@@ -472,7 +472,7 @@ checar("e a soma dos setores continua fechando com o CMV do periodo",
 # grão fino só é enrolado depois. Somar é associativo.
 st, por_cat = chamar(
     "GET", f"/cmv/por-grupo?agrupar=categoria&inicio={hoje_rel}&fim={hoje_rel}", token=token)
-soma_cat = sum(float(l["cmv"]) for l in (por_cat or []))
+soma_cat = sum(float(l["cmv"]) for l in (por_cat or []) if not l["fora_do_cmv"])
 checar("a soma por CATEGORIA fecha com a mesma conta",
        abs(soma_cat - soma_setores) <= folga, (soma_cat, soma_setores))
 

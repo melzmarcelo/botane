@@ -253,7 +253,9 @@ FERRAMENTAS: list[Ferramenta] = [
         {**_PERIODO, "escopo": _ESCOPO}),
     Ferramenta(
         "cmv_por_grupo", "CMV por grupo",
-        "O CMV aberto por setor, categoria, grupo, local, produto ou loja.",
+        "O CMV aberto por setor, categoria, grupo, local, produto ou loja. Linha com "
+        "fora_do_cmv=true (utensílio, patrimônio) NÃO está no CMV real: a soma das "
+        "outras é o CMV do período.",
         "/cmv/por-grupo",
         {"agrupar": Param("string", "Como abrir o CMV.", padrao="setor",
                           enum=["setor", "categoria", "grupo", "local", "produto", "loja"]),

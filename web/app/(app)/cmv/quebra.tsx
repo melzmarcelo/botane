@@ -20,6 +20,10 @@ import { Carregando, Cartao, Vazio } from "@/components/ui";
  * tabela seria uma divisão arbitrária de um total, e ninguém poderia agir sobre
  * uma linha. A bateria cobra isso em todos os eixos.
  *
+ * ⚠️ **O que está fora do CMV real aparece, mas fora da soma** (27/10/2026): a
+ * linha vem marcada pela API, fica no fim, sem barra nem participação, e o total
+ * soma só o resto — é o mesmo "FORA do CMV real" do painel.
+ *
  * ⚠️ **A barra é proposital**: a participação se lê de relance e o número exato
  * fica ao lado, para quem quiser conferir. Um número sozinho obriga a comparar
  * quatro casas decimais de cabeça.
@@ -33,6 +37,8 @@ type Linha = {
   perdas: number;
   produtos: number;
   participacao_pct: number;
+  /** Utensílio, patrimônio: aparece, mas NÃO está no CMV real nem na soma. */
+  fora_do_cmv: boolean;
 };
 
 export const EIXOS = {
@@ -85,8 +91,9 @@ export default function Quebra({
     void carregar();
   }, [carregar]);
 
-  const soma = (linhas ?? []).reduce((s, l) => s + Number(l.cmv), 0);
-  const maior = Math.max(1, ...(linhas ?? []).map((l) => Math.abs(Number(l.cmv))));
+  const noCmv = (linhas ?? []).filter((l) => !l.fora_do_cmv);
+  const soma = noCmv.reduce((s, l) => s + Number(l.cmv), 0);
+  const maior = Math.max(1, ...noCmv.map((l) => Math.abs(Number(l.cmv))));
 
   return (
     <Cartao
@@ -116,9 +123,12 @@ export default function Quebra({
               </thead>
               <tbody>
                 {linhas.slice(0, quantas).map((l) => (
-                  <tr key={l.grupo}>
+                  <tr key={l.grupo} className={l.fora_do_cmv ? "text-suave" : undefined} data-fora={l.fora_do_cmv ? "1" : undefined}>
                     <td>
                       <span className="font-medium">{l.grupo}</span>
+                      {l.fora_do_cmv && l.grupo !== "Fora do CMV real" && (
+                        <span className="ml-2 text-[12px] text-alerta">fora do CMV real</span>
+                      )}
                       <span className="block text-[12.5px] text-suave">
                         {l.produtos} produto(s)
                         {Number(l.perdas) > 0 && ` · ${reais(l.perdas)} de perda`}
@@ -131,7 +141,7 @@ export default function Quebra({
                     <td>
                       {/* A barra usa o MAIOR da lista como régua, não o total:
                           com cem linhas, todas somem contra o total. */}
-                      <span className="block h-2 min-w-[90px] overflow-hidden rounded-full bg-superficie2">
+                      {!l.fora_do_cmv && <span className="block h-2 min-w-[90px] overflow-hidden rounded-full bg-superficie2">
                         <span
                           className="block h-full rounded-full bg-erva"
                           style={{
@@ -141,15 +151,15 @@ export default function Quebra({
                             )}%`,
                           }}
                         />
-                      </span>
+                      </span>}
                     </td>
-                    <td className="num">{pct(l.participacao_pct)}</td>
+                    <td className="num">{l.fora_do_cmv ? "fora" : pct(l.participacao_pct)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-linha2 font-semibold">
-                  <td>Total</td>
+                  <td>Total{noCmv.length < linhas.length && <span className="block text-[12px] font-normal text-suave">sem as linhas fora do CMV real</span>}</td>
                   <td colSpan={3}></td>
                   <td className="num">{reais(soma)}</td>
                   <td></td>

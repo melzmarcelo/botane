@@ -840,7 +840,10 @@ def _quadro_da_quebra(grupos: list[dict], titulo: str, rotulo_eixo: str) -> tupl
             [("grupo", rotulo_eixo), ("estoque_inicial", "Estoque inicial"),
              ("compras", "Compras"), ("estoque_final", "Estoque final"),
              ("cmv", "CMV"), ("perdas", "Perdas"), ("produtos", "Produtos"),
-             ("participacao_pct", "Participação %")],
+             ("participacao_pct", "Participação %"),
+             # ⚠️ Quem soma a coluna CMV no arquivo precisa saber qual linha não
+             # entra no CMV real — senão a soma "não fecha" com a apuração.
+             ("fora_do_cmv", "Fora do CMV real")],
             titulo, None)
 
 

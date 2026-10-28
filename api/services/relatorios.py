@@ -15,7 +15,7 @@ uma conta só. Isto aqui é leitura.
 
 from datetime import date, timedelta
 
-from services.cmv import TIPOS_COMPRA
+from services.cmv import TIPOS_COMPRA, tipos_fora_do_cmv
 from services.custos import dec
 
 
@@ -67,6 +67,21 @@ def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
     duas, e hoje ela exigia trocar de loja no seletor e somar de cabeça. Passar
     a lista faz a varredura correr as duas de uma vez; o `cmv` continua fechando
     porque cada loja tem o próprio estoque e os valores são aditivos.
+
+    🔑 **O que está FORA do CMV real vem marcado (`fora_do_cmv`) e não entra na
+    participação** (27/10/2026). A apuração tira os tipos de grupo com
+    `considerar_no_cmv = false` (utensílio, patrimônio) das três pontas; esta
+    quebra não tirava. Enquanto o item ficava parado no estoque a parte dele dava
+    zero e as somas fechavam por coincidência — no primeiro utensílio baixado
+    como perda, ou no acerto de saldo de um patrimônio, a quebra mostrava um custo
+    que o CMV real não tem (achado pela bateria da 1.1.143).
+    ⚠️ **O dinheiro continua na tela**, como no painel: no eixo `grupo` o próprio
+    grupo vem marcado; no `produto`, o próprio produto. Nos eixos que MISTURAM
+    tipos (setor, categoria, prateleira, loja) o que está fora vai para UMA linha,
+    "Fora do CMV real" — deixá-lo dentro da linha da Cozinha faria o setor pesar
+    um custo que não é dele no food cost.
+    ⚠️ **A soma das linhas SEM a marca é o CMV do período** — é essa a
+    identidade que a bateria cobra, em todos os eixos.
     """
     if agrupar not in ("setor", "categoria", "grupo", "local", "produto", "loja"):
         raise ValueError(
@@ -98,6 +113,15 @@ def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
     rotulo = {"setor": "Sem setor", "categoria": "Sem categoria",
               "grupo": "Sem grupo", "local": "Sem prateleira",
               "produto": "Sem produto", "loja": "Sem loja"}[agrupar]
+    fora = list(tipos_fora_do_cmv(cur))
+    # ⚠️ Eixo puro (grupo e produto: cada linha é de um tipo só) mantém a linha e
+    # só a marca; eixo misto manda o que está fora para uma linha própria.
+    if agrupar in ("grupo", "produto"):
+        nome_linha, param_linha = "coalesce(g.nome, %s)", [rotulo]
+    else:
+        nome_linha = ("CASE WHEN p.tipo = ANY(%s) THEN 'Fora do CMV real' "
+                      "ELSE coalesce(g.nome, %s) END")
+        param_linha = [fora, rotulo]
 
     cur.execute(
         f"""
@@ -182,7 +206,7 @@ def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
             UNION SELECT id_unidade, id_produto, id_local FROM transferencias
             UNION SELECT id_unidade, id_produto, id_local FROM perdas
         )
-        SELECT coalesce(g.nome, %s) AS grupo,
+        SELECT {nome_linha} AS grupo,
                coalesce(sum(i.valor), 0) AS estoque_inicial,
                coalesce(sum(c.valor), 0) + coalesce(sum(t.valor), 0) AS compras,
                coalesce(sum(f.valor), 0) AS estoque_final,
@@ -195,7 +219,8 @@ def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
                coalesce(sum(pd.valor), 0) AS perdas,
                count(DISTINCT p.id) FILTER (
                    WHERE coalesce(i.valor, 0) <> 0 OR coalesce(c.valor, 0) <> 0
-                      OR coalesce(f.valor, 0) <> 0) AS produtos
+                      OR coalesce(f.valor, 0) <> 0) AS produtos,
+               bool_or(p.tipo = ANY(%s)) AS fora_do_cmv
           FROM chaves k
           JOIN produtos p ON p.id = k.id_produto
           {junta}
@@ -219,18 +244,20 @@ def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
         -- foi uma transferência entre lojas tem CMV, e sumiria da lista.
         HAVING coalesce(sum(i.valor), 0) <> 0 OR coalesce(sum(c.valor), 0) <> 0
             OR coalesce(sum(f.valor), 0) <> 0 OR coalesce(sum(t.valor), 0) <> 0
-         ORDER BY 5 DESC
+         ORDER BY fora_do_cmv, 5 DESC
         """,
         (unidades, inicio, unidades, fim + timedelta(days=1),
          unidades, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
          unidades, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
          unidades, inicio, fim + timedelta(days=1),
-         unidades, inicio, fim + timedelta(days=1), rotulo),
+         unidades, inicio, fim + timedelta(days=1), *param_linha, fora),
     )
     linhas = [dict(r) for r in cur.fetchall()]
-    total = sum(dec(l["cmv"]) for l in linhas)
+    total = sum(dec(l["cmv"]) for l in linhas if not l["fora_do_cmv"])
     for l in linhas:
-        l["participacao_pct"] = float(dec(l["cmv"]) / total * 100) if total else 0.0
+        # ⚠️ Participação é fatia do CMV real: a linha de fora não tem fatia.
+        l["participacao_pct"] = (0.0 if l["fora_do_cmv"] or not total
+                                 else float(dec(l["cmv"]) / total * 100))
     return linhas
 
 

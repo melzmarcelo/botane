@@ -129,6 +129,9 @@
 - **Limpeza**: `bem_manutencoes` e `bens` em OPERACAO (`limpar_dados.py`) — o bem aponta
   para o produto, o local e o usuário.
 - Cobertura: `smoke_patrimonio.py` (50) e `verificar-patrimonio.mjs` (16).
+  ⚠️ **A limpeza NÃO zera o saldo do produto de teste** (ele fica desativado com estoque): o
+  acerto para zero é uma saída de Patrimônio no período, e foi ele que expôs a quebra do CMV
+  contando o tipo fora do CMV (ver `cmv.md`, 1.1.144). O `smoke_cmv` já desconta os inativos.
 
 ## ⏳ Decidido sem o dono — validar
 

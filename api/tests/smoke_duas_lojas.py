@@ -422,7 +422,7 @@ try:
                        unidade=unidade)
         checar(f"o CMV por grupo da {nome} responde", st == 200, (st, g))
         grupos = g.get("grupos", g) if isinstance(g, dict) else g
-        total = sum(float(x.get("cmv") or x.get("cmv_real") or 0) for x in (grupos or []))
+        total = sum(float(x.get("cmv") or x.get("cmv_real") or 0) for x in (grupos or []) if not x.get("fora_do_cmv"))
         ap = depois_f if unidade == FILIAL else depois_m
         checar(f"e a soma dos grupos da {nome} é o CMV dela",
                perto(total, ap.get("cmv_real"), 0.05), (total, ap.get("cmv_real")))

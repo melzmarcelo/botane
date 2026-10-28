@@ -325,6 +325,24 @@
   congelada (`cmv_movimentacao`, migração 018) também não tem a coluna: mês fechado ficaria
   sem ela. É migração própria, não efeito colateral de outra coisa.
 
+- 🔑 **A QUEBRA do CMV também separa o que está fora do CMV real** (1.1.144, 27/10/2026).
+  `relatorios.cmv_por_grupo` não recebia `tipos_fora_do_cmv` — o mesmo descompasso da
+  movimentação acima, só que aqui a quebra PROMETE fechar com o CMV real. Enquanto o utensílio
+  ou o patrimônio ficava parado no estoque a parte dele dava zero e as somas fechavam por
+  coincidência; a bateria da 1.1.143 abriu a diferença quando a suíte do patrimônio zerou o
+  saldo de uma batedeira (um acerto = saída dentro do período). Na casa, o mesmo aconteceria no
+  primeiro utensílio baixado como perda.
+  - Cada linha traz `fora_do_cmv`. Eixo **puro** (`grupo`, `produto`): a linha fica e vem
+    marcada. Eixo **misto** (`setor`, `categoria`, `local`, `loja`): o que está fora vai para
+    UMA linha, "Fora do CMV real" — dentro da Cozinha, faria o setor pesar no food cost um
+    custo que não é dele.
+  - ⚠️ **A identidade agora é: a soma das linhas SEM a marca = CMV real.** A participação é
+    fatia do CMV real (a linha de fora vale 0), o Total da tela soma só o resto, o Início
+    ("onde o custo pesa") ignora a linha marcada e o arquivo exportado leva a coluna "Fora do
+    CMV real". O dinheiro continua visível, como no painel.
+  - Regressão: `smoke_grupos_cmv` 7c (perda de material com o grupo fora, quatro eixos, medida
+    por DELTA porque a base compartilhada já tem utensílio mexido).
+
 - ⚠️ **A fotografia do razão não sobrevive a lançamento retroativo — e não é dos ciclos.**
   `saldo_apos` é calculado na ordem de LANÇAMENTO (decisão certa: por data, o CMV de ontem
   mudaria sozinho). Como o saldo de uma data passada é lido do último movimento antes dela, um

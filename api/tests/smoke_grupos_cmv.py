@@ -276,7 +276,7 @@ checar("o grupo conta os produtos que se mexeram",
 print("\n6. a soma dos grupos fecha com o CMV do período")
 st, por_grupo = chamar("GET", f"/cmv/por-grupo?agrupar=grupo&{periodo}", token=token)
 checar("o relatório por grupo responde", st == 200, st)
-soma = sum(float(l["cmv"]) for l in por_grupo)
+soma = sum(float(l["cmv"]) for l in por_grupo if not l["fora_do_cmv"])
 # ⚠️ É a propriedade que dá sentido ao corte: não é rateio, é a mesma conta
 # restrita a cada grupo. A folga é de centavo, do arredondamento por linha.
 checar("a soma dos grupos é o CMV do período",
@@ -367,6 +367,55 @@ checar("com o mesmo valor de antes", g_fora and perto(float(g_fora["cmv"]), valo
        (g_fora and g_fora["cmv"], valor_do_grupo))
 checar("e marcado como fora do CMV",
        g_fora and g_fora.get("considerar_no_cmv") is False, g_fora)
+
+print("\n7c. a QUEBRA do CMV também deixa o que está fora fora da soma")
+# 🔑 **Regressão da 1.1.143.** A apuração tirava o tipo fora do CMV das três
+# pontas e a quebra (por grupo, setor, prateleira…) não: enquanto o item ficava
+# parado a parte dele dava zero, e as somas fechavam por coincidência. Uma PERDA
+# do item fora do CMV dentro do período é o que abre a diferença — e o que a
+# bateria acusou quando a suíte do patrimônio zerou o saldo de uma batedeira.
+EIXOS_7C = ("grupo", "setor", "local", "produto")
+
+
+def _fora_por_eixo() -> dict[str, float]:
+    """Quanto as linhas marcadas como fora somam, por eixo — o DELTA é o que se mede
+    (a base compartilhada já tem utensílio e patrimônio mexidos por outras suítes)."""
+    r = {}
+    for e in EIXOS_7C:
+        _, ls = chamar("GET", f"/cmv/por-grupo?agrupar={e}&{periodo}", token=token)
+        r[e] = sum(float(l["cmv"]) for l in ls if l["fora_do_cmv"])
+    return r
+
+
+fora_antes = _fora_por_eixo()
+st, perda = chamar("POST", "/estoque/saidas", {
+    "tipo": "SAIDA_PERDA", "id_produto": id_limpeza, "quantidade": 3,
+    "id_local": local["id"], "id_motivo_perda": 1, "observacao": f"perda fora {marca}",
+}, token=token)
+checar("perda do material fora do CMV lançada", st == 201, (st, perda))
+st, ap_perda = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
+checar("a perda do que está fora NÃO mexe no CMV real",
+       perto(float(ap_perda["cmv_real"]), float(sem_grupo["cmv_real"]), 0.02),
+       (ap_perda["cmv_real"], sem_grupo["cmv_real"]))
+for eixo in EIXOS_7C:
+    st, linhas = chamar("GET", f"/cmv/por-grupo?agrupar={eixo}&{periodo}", token=token)
+    no_cmv = sum(float(l["cmv"]) for l in linhas if not l["fora_do_cmv"])
+    fora = sum(float(l["cmv"]) for l in linhas if l["fora_do_cmv"])
+    checar(f"por {eixo}: a soma SEM as linhas de fora é o CMV real",
+           perto(no_cmv, float(ap_perda["cmv_real"]), max(0.05, 0.005 * len(linhas))),
+           (eixo, no_cmv, ap_perda["cmv_real"]))
+    # 3 unidades a 4,00: o dinheiro não some da tela, vai para a linha marcada.
+    checar(f"por {eixo}: e os 12,00 da perda aparecem na linha marcada",
+           perto(fora - fora_antes[eixo], 12.0, 0.02), (eixo, fora, fora_antes[eixo]))
+st, setores = chamar("GET", f"/cmv/por-grupo?agrupar=setor&{periodo}", token=token)
+checar("no eixo misto o que está fora vira UMA linha, sem participação",
+       [l["participacao_pct"] for l in setores if l["grupo"] == "Fora do CMV real"] == [0.0],
+       [(l["grupo"], l["participacao_pct"]) for l in setores if l["fora_do_cmv"]])
+# Desfaz a perda AINDA com o grupo fora: estornada no período, ela se anula, e as
+# checagens de "voltar ao que era" abaixo continuam medindo só a régua.
+st, r = chamar("POST", f"/estoque/movimentos/{(perda or {}).get('id')}/estornar",
+               {"motivo": f"Perda de teste {marca}"}, token=token)
+checar("e a perda de teste é estornada", st == 201, (st, r))
 
 # Voltar a considerar devolve o CMV ao que era: a régua é reversível.
 chamar("PUT", f"/cmv/grupos/{id_grupo}",

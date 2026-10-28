@@ -416,7 +416,9 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             resposta["pesos"] = [
                 {"grupo": g["grupo"], "cmv": float(g["cmv"]),
                  "participacao_pct": g["participacao_pct"]}
-                for g in grupos[:4]
+                # ⚠️ Só o que está NO CMV real: a linha "Fora do CMV real" não pesa
+                # no food cost, e no quadro "onde o custo pesa" pareceria um setor.
+                for g in [g for g in grupos if not g["fora_do_cmv"]][:4]
             ]
 
     return resposta
