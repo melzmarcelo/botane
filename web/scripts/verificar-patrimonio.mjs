@@ -270,8 +270,11 @@ try {
   await p.waitForFunction((n) => [...document.querySelectorAll("#valor-setor option")].some((o) => o.textContent === n),
                           { timeout: 15000 }, `SETOR PATWEB ${MARCA}`).catch(() => {});
   await p.select("#valor-setor", String(setor.id));
-  await p.waitForFunction((c) => document.querySelector("#valor-bens")?.innerText.includes(c),
-                          { timeout: 20000 }, comValor.codigo).catch(() => {});
+  // ⚠️ Espera os TOTAIS do setor, não o código do bem: com todos os setores na tela o código
+  // já está lá antes de o filtro valer, e os totais eram lidos ainda os da loja inteira.
+  await p.waitForFunction((n) => (" " + (document.querySelector("#valor-totais")?.innerText ?? "").replace(/\s+/g, " "))
+                            .includes(` ${n} bem`),
+                          { timeout: 20000 }, esperado.total.bens).catch(() => {});
   const tela = await p.evaluate((c) => ({
     totais: document.querySelector("#valor-totais")?.innerText ?? "",
     linha: document.querySelector(`#valor-bens tr[data-codigo="${c}"]`)?.innerText ?? "",

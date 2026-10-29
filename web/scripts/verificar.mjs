@@ -8787,8 +8787,11 @@ try {
     sugeridos: [...document.querySelectorAll("main table tbody tr")].length,
     erro: /Falha ao carregar/.test(document.body.innerText),
   }));
-  checar("a análise abre com o resumo e a lista", telaAnalise.abriu && telaAnalise.ladrilhos >= 4
-    && !telaAnalise.erro, telaAnalise);
+  // ⚠️ Sem configuração os ladrilhos SOMEM (auditoria de 29/10/2026: "abaixo da margem: 0 de 0"
+  // era número de uma conta que não existe); configurada, são quatro.
+  checar("a análise abre com o resumo e a lista", telaAnalise.abriu && !telaAnalise.erro
+    && (telaAnalise.avisaSemConfig ? telaAnalise.ladrilhos === 0 : telaAnalise.ladrilhos >= 4),
+    telaAnalise);
   // 🔑 Pedido do dono (08/10/2026): aplicar vale na hora aqui, e o PDV só recebe
   // se o envio estiver ligado — esta é a lista que alguém leva para acertar lá.
   // ⚠️ O botão depende do catálogo de exportação, que chega um instante depois.
