@@ -1015,8 +1015,10 @@
           <tr><td><strong>Produzido</strong></td><td>Produção, a partir de uma ficha</td><td>Venda</td></tr>
           <tr><td><strong>Revenda</strong></td><td>Nota de compra</td><td>Venda, sem ficha nenhuma</td></tr>
           <tr><td><strong>Embalagem</strong></td><td>Nota de compra</td><td>Ficha ou consumo interno</td></tr>
-          <tr><td><strong>Material de limpeza</strong></td><td>Nota de compra</td><td>Consumo — não é comida</td></tr>
+          <tr><td><strong>Material operacional</strong></td><td>Nota de compra</td><td>Consumo da rotina — limpeza, descartável, escritório, a copa; não é comida</td></tr>
           <tr><td><strong>Utensílios</strong></td><td>Nota de compra</td><td>Quebra e reposição — não é consumido</td></tr>
+          <tr><td><strong>Patrimônio</strong></td><td>Nota de compra</td><td>Não sai: é bem durável (processador, batedeira, móvel) — fora do CMV; o bem um por um vive em <a href="#patrimonio">Patrimônio</a></td></tr>
+          <tr><td><strong>Serviço</strong></td><td>Não entra: não é físico</td><td>Venda (taxa de entrega) — <strong>nunca</strong> controla estoque</td></tr>
           <tr><td><strong>Kit</strong></td><td>Não entra: é combinação</td><td>Venda — o custo vem dos componentes</td></tr>
         </tbody>
       </table>
@@ -1136,6 +1138,12 @@
         padrão.
       </p>
       <p>
+        A coluna <strong>O que é lá</strong> mostra o nome que o código tem do lado de fora e,
+        quando a nota mais nova diz outra coisa, <em>na última nota: …</em> logo abaixo. Nome
+        errado — o pão que o Omie rotulou como costela — se troca em <strong>corrigir</strong>,
+        na própria linha: muda só o nome, sem mexer no vínculo, no fator nem no estoque.
+      </p>
+      <p>
         <strong>Produto sem estoque que tem custo</strong> — a água da torneira, o gelo — recebe o
         custo à mão em <strong>Informar custo</strong>, no bloco de custo. É o último recurso: só
         responde quando não há custo médio nem preço de fornecedor, e a carga do Omie não passa
@@ -1156,6 +1164,21 @@
         fornecedor — se juntam em lote em <strong>Integrações ▸ Cadastros com o mesmo
         nome</strong>, ao lado de quem os produz.
       </p>
+
+      <h3>Reclassificar por planilha</h3>
+      <p>
+        O lote põe o <em>mesmo</em> valor em vários produtos; quando cada um tem o seu destino,
+        o caminho é <strong>Reclassificar por planilha</strong> (endereço
+        <span class="mono">/produtos/reclassificar</span>). Imprima a planilha de Produtos,
+        corrija no Excel só as colunas <strong>Tipo</strong>, <strong>Categoria</strong>,
+        <strong>Setor</strong> e <strong>Local padrão</strong> — pelo nome, como aparecem nas
+        Tabelas de apoio —, salve como CSV e mande de volta pelo botão.
+      </p>
+      <ul>
+        <li>Célula vazia, ou igual ao que já está, não muda nada; as outras colunas são ignoradas.</li>
+        <li>Primeiro vem a <strong>prévia</strong>: o que muda, o que fica igual e as linhas recusadas, com o motivo. Nada é gravado antes de confirmar.</li>
+        <li>Cada produto alterado fica na auditoria.</li>
+      </ul>
 
       <h3>Trocar a unidade de um produto que já tem estoque</h3>
       <p>
@@ -1655,6 +1678,31 @@
           A tela mostra <em>quando o agendador rodou</em> e <em>quando alguma nota nova
           chegou</em>. Sem as duas, “não está rodando” e “roda e não acha nada” ficam
           indistinguíveis — e a segunda é o normal na maior parte dos dias.
+        </p>
+      </div>
+
+      <h3>Só as recebidas, e lançar sozinho</h3>
+      <p>
+        No Omie a nota passa por etapas — faturada pelo fornecedor, recebida, conferida. Em
+        <strong>Integrações ▸ Omie</strong> duas opções olham a marca de <strong>recebida</strong>:
+      </p>
+      <ul>
+        <li><strong>Somente recebidas</strong> — a busca só traz a nota já recebida no Omie. A que
+          ainda não foi fica para a próxima busca: o sistema lembra dela e volta a procurar até 60
+          dias para trás. As notas que já estão aqui continuam na fila.</li>
+        <li><strong>Lançar notas recebidas</strong> — a nota recebida entra no estoque na própria
+          busca, sem clicar em lançar, desde que esteja pronta (todo item com produto, produto com
+          unidade, período aberto). A que pede conferência de conversão ou tem item pendente fica
+          na fila, e entra na busca seguinte ao ajuste. Vale também para as que já esperavam, a
+          partir da <strong>data de corte</strong> da tela — as anteriores ficam para lançar à mão.
+          Quem salva a tela assina os lançamentos.</li>
+      </ul>
+      <div class="regra">
+        <p class="rotulo">O caminho de volta também é sozinho</p>
+        <p>
+          Se o recebimento for <strong>desfeito no Omie</strong>, o lançamento é estornado e a nota
+          volta à conferência; recebida de novo, entra de novo. A lista de notas avisa quais foram.
+          Período do CMV fechado nunca é mexido.
         </p>
       </div>
     </section>
@@ -2436,11 +2484,13 @@
       </p>
       <p>
         Três tipos existem só para isso, e o que os separa importa:
-        <strong>Embalagem</strong> sai com o pedido e não volta; <strong>Material de
-        limpeza</strong> acaba com o uso; <strong>Utensílios</strong> não são consumidos —
+        <strong>Embalagem</strong> sai com o pedido e não volta; <strong>Material
+        operacional</strong> (limpeza, descartável, escritório) acaba com o uso; <strong>Utensílios</strong> não são consumidos —
         uma taça vive meses e some num sábado. Ela quebra, some e é reposta, e a pergunta que
         ela responde (“quanto se quebrou e se repôs no mês?”) não é a mesma das outras duas.
-        Por isso tem grupo próprio.
+        Por isso tem grupo próprio. <strong>Patrimônio</strong> e <strong>Serviço</strong>
+        ficam num grupo que nasce <em>fora do CMV real</em>: o bem durável não é consumo do
+        mês, e o serviço não tem estoque.
       </p>
       <div class="regra">
         <p class="rotulo">Entra ou não entra no CMV real</p>
@@ -4390,49 +4440,18 @@
     <section id="novidades">
       <h2>O que mudou, por data</h2>
       <p class="chamada">
-        O que entrou no sistema desde a primeira parte — para quem volta depois de um tempo.
+        O que entrou no sistema desde a primeira parte, do mais novo para o mais antigo — para quem volta depois de um tempo.
       </p>
       <div class="tabela-caixa">
         <table>
           <thead><tr><th>Quando</th><th>O que entrou</th><th>Onde ler</th></tr></thead>
           <tbody>
-            <tr><td class="mono">04/09</td><td>Fornecedor virou <strong>Pessoa</strong>; política de cupom; <strong>período de consumo</strong>; relatório de consumo por pessoa; <em>Meu consumo</em></td><td><a href="#pessoas">14</a></td></tr>
-            <tr><td class="mono">08/09</td><td>Código de barras no produto; trocar de unidade converte o custo; consumo só dentro de ciclo aberto</td><td><a href="#produto">2</a>, <a href="#pessoas">14</a></td></tr>
-            <tr><td class="mono">09/09</td><td><strong>Alteração em lote</strong> de produtos; filtros e página no endereço; de-para das unidades das notas; preço do PDV na busca de vendas; integrações em abas</td><td><a href="#produto">2</a>, <a href="#nota">3</a></td></tr>
-            <tr><td class="mono">10/09</td><td>A nota confere a conversão que ela declara; nota em cadastro arquivado; custo com duas casas em toda tela</td><td><a href="#nota">3</a></td></tr>
-            <tr><td class="mono">11/09</td><td><strong>Custo médio da loja</strong>, não da prateleira; baixa do que foi vendido e não saiu</td><td><a href="#lojas">12</a>, <a href="#venda">8</a></td></tr>
-            <tr><td class="mono">12–13/09</td><td>Duplicar ficha; rendimento pela soma dos ingredientes; tamanho da porção; rascunho se exclui; custo previsto na tela do produto; uma linha por produto na lista de fichas</td><td><a href="#ficha">4</a></td></tr>
-            <tr><td class="mono">14/09</td><td>Código do produto por fornecedor; trocar o produto de um item na conferência; <strong>Reservas</strong>: configuração e salões</td><td><a href="#nota">3</a>, <a href="#portal">16</a></td></tr>
-            <tr><td class="mono">15/09</td><td>Menu novo: <strong>Ctrl+K</strong>, atalhos, ícones; <strong>reprocessar</strong> o estoque de um produto; produzir em porções ou receitas</td><td><a href="#navegar">navegar</a>, <a href="#ajustes">6</a>, <a href="#producao">5</a></td></tr>
-            <tr><td class="mono">16/09</td><td><strong>Modos de rendimento</strong>; folha da produção com o que realmente saiu; produto em quatro abas; <strong>CMV em sete abas</strong>; venda com hora no razão</td><td><a href="#ficha">4</a>, <a href="#producao">5</a>, <a href="#cmv">9</a></td></tr>
-            <tr><td class="mono">19–21/09</td><td>Trocar a unidade de produto com estoque; <strong>conector do Claude</strong> (ler e gravar); catálogos; o <strong>site do cliente</strong> com reserva</td><td><a href="#produto">2</a>, <a href="#claude">20</a>, <a href="#portal">16</a></td></tr>
-            <tr><td class="mono">22–24/09</td><td>Cardápio montado com produtos e aba Catálogo; duas lojas no site; <strong>Portal de Clientes</strong>; agenda em calendário; exceção do dia; termo de consentimento; <strong>fidelidade</strong> com QR e localização</td><td><a href="#portal">16</a>, <a href="#fidelidade">18</a></td></tr>
-            <tr><td class="mono">26/09</td><td>“A cada 10, a próxima é grátis”; <strong>custo da ficha pela porção</strong>; consumo por pessoa por documento; <strong>consumo interno</strong>; incluir produto achado na contagem</td><td><a href="#fidelidade">18</a>, <a href="#trilha">custos</a>, <a href="#pessoas">14</a>, <a href="#inventario">7</a></td></tr>
-            <tr><td class="mono">27/09</td><td>Fidelidade: código do caixa, selos, tela de QR codes e o <strong>painel</strong></td><td><a href="#fidelidade">18</a></td></tr>
-            <tr><td class="mono">28/09</td><td>Menu: <strong>CMV</strong> direto; grupo <strong>Vendas</strong> com Períodos e Documentos; Visão da rede em Administração</td><td><a href="#navegar">navegar</a></td></tr>
-            <tr><td class="mono">29/09</td><td><strong>Cardápio e site em inglês e alemão</strong>: seletor PT · EN · DE no site, tradução pelo Claude ao salvar, correção à mão</td><td><a href="#portal">16</a></td></tr>
-            <tr><td class="mono">29/09</td><td><strong>Tela inicial nova</strong>: o dia numa faixa, o período ao lado da atenção, as listas lado a lado; meta de food cost da loja</td><td><a href="#navegar">navegar</a></td></tr>
-            <tr><td class="mono">28/09</td><td><strong>Pedidos pelo cardápio</strong>: carrinho no site, confirmação com troca de produtos, lançado no PDV, painel e aviso no Início</td><td><a href="#portal">16</a></td></tr>
-            <tr><td class="mono">28/09</td><td><strong>WhatsApp</strong> por loja com confirmação de presença; <strong>etiquetas de validade</strong> e a produção com lote</td><td><a href="#whatsapp">19</a>, <a href="#etiquetas">15</a></td></tr>
-            <tr><td class="mono">03/10</td><td>Ficha: campo <strong>Observações</strong>; as porções também nos modos</td><td><a href="#ficha">4</a></td></tr>
-            <tr><td class="mono">05/10</td><td><strong>Precificação</strong>: configuração por loja, o preço mínimo de cada produto, aplicar e o <strong>preço × custo</strong> no tempo</td><td><a href="#precificacao">21</a></td></tr>
-            <tr><td class="mono">05/10</td><td><strong>Lançar as conciliadas</strong> de uma vez; <strong>Antes de fechar</strong> no CMV; <strong>Por onde começar</strong> nas fichas; rascunho <em>em uso</em>; aviso de data retroativa; conferir o custo de referência; nome e logo da casa pela Empresa; o menu sem os atalhos fixados</td><td><a href="#nota">3</a>, <a href="#cmv">9</a>, <a href="#ficha">4</a>, <a href="#ajustes">6</a></td></tr>
-            <tr><td class="mono">06/10</td><td>Cada loja só vê o que é dela; links entre telas; aba <strong>Vinculados</strong> e <em>desvincular</em>; validade por situação no produto; <strong>usei uma parte</strong> na etiqueta; o painel da mesa</td><td><a href="#lojas">12</a>, <a href="#produto">2</a>, <a href="#etiquetas">15</a>, <a href="#portal">16</a></td></tr>
-            <tr><td class="mono">07/10</td><td>A <strong>planta do salão</strong>; <strong>conjuntos de mesas</strong>; os dias do salão e a reserva pelo site</td><td><a href="#portal">16</a></td></tr>
-            <tr><td class="mono">08/10</td><td><strong>Preços a acertar no PDV</strong>; a sugestão de custo provisório avisa</td><td><a href="#precificacao">21</a></td></tr>
-            <tr><td class="mono">08/10</td><td>Cancelar a venda devolve a produção; produções da loja, com onde entrou; <strong>no rendimento</strong>; <strong>Informar custo</strong>; ficha <strong>operacional</strong>; ingrediente ainda não produzido custa o que a ficha prevê</td><td><a href="#venda">8</a>, <a href="#producao">5</a>, <a href="#produto">2</a>, <a href="#ficha">4</a></td></tr>
-            <tr><td class="mono">09/10</td><td><strong>Estornar produção</strong>; nota <strong>cancelada no Omie</strong> e <strong>Atualizar do Omie</strong> na lista; o Claude grava em quase todo o sistema</td><td><a href="#producao">5</a>, <a href="#nota">3</a>, <a href="#claude">20</a></td></tr>
-            <tr><td class="mono">14/10</td><td>A venda recusada não derruba a importação; <strong>integração parada</strong> vira alerta; <strong>Auditoria ▸ Erros</strong>; menu do Portal em subgrupos</td><td><a href="#venda">8</a>, <a href="#alertas">10</a>, <a href="#acesso">11</a>, <a href="#navegar">navegar</a></td></tr>
-            <tr><td class="mono">14/10</td><td><strong>Cardápio Vivo</strong>: o cardápio da mesa como feed, QR e NFC por mesa, tela de entrada com avaliação e Wi-Fi, favoritos</td><td><a href="#cardapio-vivo">17</a></td></tr>
-            <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
-            <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
-            <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
-            <tr><td class="mono">27/10</td><td><strong>Patrimônio</strong>: os equipamentos e móveis um por um, importados da planilha de inventário, com plaqueta de QR, plano de preventiva, histórico de manutenção (com o custo) e alertas de preventiva vencida e de equipamento crítico parado</td><td><a href="#patrimonio">22</a></td></tr>
-            <tr><td class="mono">27/10</td><td>A <strong>quebra do CMV</strong> (por setor, grupo, prateleira, produto) separa o que está <strong>fora do CMV real</strong> — utensílio e patrimônio aparecem numa linha marcada e não entram no total nem na participação</td><td><a href="#cmv">9</a></td></tr>
-            <tr><td class="mono">28/10</td><td>Escolher a planilha (Patrimônio › Importar e Produtos › Reclassificar) agora é um <strong>botão</strong>, com o nome do arquivo ao lado</td><td><a href="#patrimonio">22</a>, <a href="#cadastro">1</a></td></tr>
+            <tr><td class="mono">28/10</td><td>Escolher a planilha (Patrimônio › Importar e Produtos › Reclassificar) agora é um <strong>botão</strong>, com o nome do arquivo ao lado</td><td><a href="#patrimonio">22</a>, <a href="#produto">2</a></td></tr>
             <tr><td class="mono">28/10</td><td><strong>Conferência do patrimônio</strong>: abrir por setor, ler as plaquetas (câmera, leitor ou o código) e fechar — o visto fica conferido, o de outro setor é transferido e o que não apareceu se mantém ou se baixa</td><td><a href="#patrimonio-conferencia">22</a></td></tr>
             <tr><td class="mono">28/10</td><td><strong>Valor do patrimônio</strong>: valor de compra, depreciação e valor atual numa data, por setor e bem a bem — com a vida útil na ficha (10 anos se vazia) e a data da baixa</td><td><a href="#patrimonio-valor">22</a></td></tr>
             <tr><td class="mono">28/10</td><td>Os botões de relatório passam a se chamar <strong>Imprimir</strong> (eram “Baixar”): o PDF abre numa aba nova, pronto para imprimir, e a planilha continua chegando como arquivo (“Gerar planilha”). Em Vendas ▸ Por motivo, o que imprime a própria tela virou <em>Imprimir a tela</em></td><td><a href="#exportar">13</a></td></tr>
+            <tr><td class="mono">27/10</td><td><strong>Patrimônio</strong>: os equipamentos e móveis um por um, importados da planilha de inventário, com plaqueta de QR, plano de preventiva, histórico de manutenção (com o custo) e alertas de preventiva vencida e de equipamento crítico parado</td><td><a href="#patrimonio">22</a></td></tr>
+            <tr><td class="mono">27/10</td><td>A <strong>quebra do CMV</strong> (por setor, grupo, prateleira, produto) separa o que está <strong>fora do CMV real</strong> — utensílio e patrimônio aparecem numa linha marcada e não entram no total nem na participação</td><td><a href="#cmv">9</a></td></tr>
             <tr><td class="mono">27/10</td><td>Relatórios: o <strong>Produzido por</strong> sai na planilha de Produtos e na impressão do produto (quando outro setor produz), e a folha do inventário ganhou <em>Contado em</em>, com a contagem como foi digitada (<span class="mono">3 UN + 948 ML</span>)</td><td><a href="#exportar">13</a></td></tr>
             <tr><td class="mono">27/10</td><td>Precificação ▸ Configuração: a linha de uma categoria ou setor <strong>desativado</strong> mostra a categoria dela, marcada, e o cartão avisa que ela não vale para os produtos de hoje (antes aparecia como "tudo"). A margem de categoria igual à geral diz <em>igual à geral</em>. As margens que estavam nas categorias antigas foram refeitas nas novas (a margem que predominava entre os produtos de cada uma; Bebidas preparadas com 38,5%)</td><td><a href="#precificacao">21</a></td></tr>
             <tr><td class="mono">27/10</td><td>Produção: <strong>Produzido por</strong> no cadastro do produto — o setor que faz pode não ser o dono do produto (a Confeitaria faz a bolacha da Cafeteria). A agenda aparece para quem faz, os insumos saem do estoque dele e o pronto entra no local do produto. A produção e a agenda mostram <em>Produz → Entra em</em>, e o local escolhido em <em>Entra em</em> passou a valer de verdade</td><td><a href="#producao">5</a></td></tr>
@@ -4452,6 +4471,9 @@
             <tr><td class="mono">23/10</td><td>Quatro relatórios novos, em PDF e planilha: <strong>Compras</strong>, <strong>Perdas e ajustes</strong>, <strong>Margem dos pratos</strong> e <strong>Recebimentos</strong></td><td><a href="#exportar">13</a></td></tr>
             <tr><td class="mono">23/10</td><td>Venda lançada à mão: <strong>alterar a data e o número</strong> do documento (não em lote recebido). Documento em lote de cobrança, em qualquer situação, não ganha item</td><td><a href="#venda">8</a></td></tr>
             <tr><td class="mono">23/10</td><td>Contas a receber: o <strong>PDF de todos os lotes em cobrança</strong> de uma vez, cada lote na sua página</td><td><a href="#pessoas">14</a></td></tr>
+            <tr><td class="mono">23/10</td><td><strong>Tipos de produto</strong> refeitos: <em>Material de limpeza</em> virou <strong>Material operacional</strong> (limpeza, descartável, escritório, a copa) e entraram <strong>Patrimônio</strong> e <strong>Serviço</strong>, fora do CMV real. <strong>Reclassificar por planilha</strong>: tipo, categoria, setor e local de cada produto, com prévia</td><td><a href="#produto">2</a>, <a href="#cmv">9</a></td></tr>
+            <tr><td class="mono">23/10</td><td>Integrações ▸ Omie: <strong>Somente recebidas</strong> (a busca só traz a nota já recebida lá) e <strong>Lançar notas recebidas</strong> (a recebida e pronta entra no estoque na própria busca)</td><td><a href="#nota">3</a></td></tr>
+            <tr><td class="mono">23/10</td><td>Aba <strong>Vinculados</strong>: o nome de um código se <strong>corrige</strong> na linha, e aparece o que a nota mais nova diz dele</td><td><a href="#produto">2</a></td></tr>
             <tr><td class="mono">22/10</td><td>Sem <strong>períodos de consumo</strong>: o consumo se lança em qualquer data e fica em aberto; em <strong>Vendas ▸ Contas a receber</strong> gera-se o <strong>lote de cobrança</strong> de cada pessoa, baixa-se o relatório para mandar e, quando o pagamento chega, dá-se <strong>baixa</strong> (inclusive por permuta)</td><td><a href="#pessoas">14</a></td></tr>
             <tr><td class="mono">22/10</td><td>Estoque ganhou o <strong>Painel</strong>: negativos, abaixo do mínimo (com em quantos dias acaba e quanto custa repor), parados, validade e perdas do mês — cada cartão leva à lista de Saldos já filtrada; o andamento de cada produto em gráfico; e as perdas por motivo, setor, categoria, prateleira e produto, ao lado da falta da contagem. Saldos ganhou o filtro <strong>Situação</strong></td><td><a href="#ajustes">6</a>, <a href="#alertas">10</a></td></tr>
             <tr><td class="mono">22/10</td><td>Produziu pela <strong>agenda</strong>? O sistema pergunta se quer <strong>emitir as etiquetas</strong> e, no sim, abre Etiquetas já com a produção</td><td><a href="#etiquetas">15</a></td></tr>
@@ -4459,15 +4481,46 @@
             <tr><td class="mono">22/10</td><td>Produtos ganhou o botão <strong>Importar</strong>: escolha PDV ou Omie, veja os produtos que ainda não estão no cadastro (todos marcados) e desmarque o que não quer trazer. No PDV, a busca já atualiza os preços de venda</td><td><a href="#produto">2</a></td></tr>
             <tr><td class="mono">22/10</td><td>Na venda <strong>à mão</strong>, o produto aparece e fica gravado pelo <strong>nome curto</strong>, o mesmo do PDV (o nome do cadastro vai na linha de baixo da busca), e a busca acha por ele</td><td><a href="#venda">8</a></td></tr>
             <tr><td class="mono">21/10</td><td>Integrações ▸ PDV Legal ganhou <strong>Trazer as categorias do PDV</strong>: desmarcada, nem a busca de vendas nem o Importar cardápio criam categoria ou mudam a do produto — ela passa a ser só daqui</td><td><a href="#nota">3</a></td></tr>
-<tr><td class="mono">21/10</td><td>As planilhas de <strong>produtos e pessoas</strong> levam só os campos que a tela mostra: saíram o código e a unidade no Omie, a origem do cadastro e as datas internas</td><td><a href="#exportar">exportar</a></td></tr>
-<tr><td class="mono">21/10</td><td><strong>Filtros nas notas de entrada</strong>: situação (com &ldquo;a lançar&rdquo;), origem, período e só com item sem produto, com o total em reais no título</td><td><a href="#nota">3</a></td></tr>
-<tr><td class="mono">21/10</td><td><strong>Painel de vendas</strong> (Vendas ▸ Painel, ou clicando nas vendas da tela inicial): dia, semana, mês ou período, comparado com o anterior, com evolução, dia da semana, hora, categoria, setor e os mais vendidos — e o mesmo recorte para baixar</td><td><a href="#trilha">números</a></td></tr>
-<tr><td class="mono">21/10</td><td>Enquanto o Botané não envia nada ao PDV, a busca de vendas <strong>alinha os cadastros com o PDV</strong> — categoria, setor, nome curto, fiscais e preço; a ficha da pessoa abre para qualquer cadastro</td><td><a href="#nota">3</a>, <a href="#pessoas">14</a></td></tr>
+            <tr><td class="mono">21/10</td><td>As planilhas de <strong>produtos e pessoas</strong> levam só os campos que a tela mostra: saíram o código e a unidade no Omie, a origem do cadastro e as datas internas</td><td><a href="#exportar">exportar</a></td></tr>
+            <tr><td class="mono">21/10</td><td><strong>Filtros nas notas de entrada</strong>: situação (com &ldquo;a lançar&rdquo;), origem, período e só com item sem produto, com o total em reais no título</td><td><a href="#nota">3</a></td></tr>
+            <tr><td class="mono">21/10</td><td><strong>Painel de vendas</strong> (Vendas ▸ Painel, ou clicando nas vendas da tela inicial): dia, semana, mês ou período, comparado com o anterior, com evolução, dia da semana, hora, categoria, setor e os mais vendidos — e o mesmo recorte para baixar</td><td><a href="#trilha">números</a></td></tr>
+            <tr><td class="mono">21/10</td><td>Enquanto o Botané não envia nada ao PDV, a busca de vendas <strong>alinha os cadastros com o PDV</strong> — categoria, setor, nome curto, fiscais e preço; a ficha da pessoa abre para qualquer cadastro</td><td><a href="#nota">3</a>, <a href="#pessoas">14</a></td></tr>
             <tr><td class="mono">20/10</td><td>Venda pelo <strong>preço do dia da venda</strong> e <strong>acrescentar itens</strong>; perda com <strong>Descarte</strong> e observação obrigatória; Pessoas por tipo e o <strong>relatório de pessoas</strong>; o cadastro de produtos inteiro na planilha; <strong>Sincronizar com o Omie</strong>, a releitura antes do lote e a nota <strong>não encontrada no Omie</strong>; renomear o ciclo de consumo</td><td><a href="#venda">8</a>, <a href="#ajustes">6</a>, <a href="#pessoas">14</a>, <a href="#exportar">13</a>, <a href="#nota">3</a></td></tr>
             <tr><td class="mono">20/10</td><td><strong>Excluir catálogo</strong> que já esteve no ar (com o nome digitado); <strong>apagar a medição de um período</strong>; o Claude também desvincula código e homologa ficha</td><td><a href="#portal">16</a>, <a href="#cardapio-vivo">17</a>, <a href="#claude">20</a></td></tr>
             <tr><td class="mono">20/10</td><td>Anúncios: o <strong>ritmo que aprende</strong>, as seções em que combina, o <strong>grupo de controle</strong> com o efeito dos anúncios e as <strong>variações do texto</strong> com vencedora</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">20/10</td><td>A atenção dos cartões e das <strong>aberturas de seção</strong> no editor do catálogo, por 30 dias, 90 dias ou 12 meses, com o resumo diário além da retenção</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">19/10</td><td>Atenção × Vendas e testes A/B <strong>por Cardápio Vivo</strong>; <strong>O que falta</strong> com cartões e traduções; prévia <strong>com os anúncios</strong>; <strong>esgotado que volta sozinho</strong>; relatório do anúncio além da retenção</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
+            <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">14/10</td><td>A venda recusada não derruba a importação; <strong>integração parada</strong> vira alerta; <strong>Auditoria ▸ Erros</strong>; menu do Portal em subgrupos</td><td><a href="#venda">8</a>, <a href="#alertas">10</a>, <a href="#acesso">11</a>, <a href="#navegar">navegar</a></td></tr>
+            <tr><td class="mono">14/10</td><td><strong>Cardápio Vivo</strong>: o cardápio da mesa como feed, QR e NFC por mesa, tela de entrada com avaliação e Wi-Fi, favoritos</td><td><a href="#cardapio-vivo">17</a></td></tr>
+            <tr><td class="mono">09/10</td><td><strong>Estornar produção</strong>; nota <strong>cancelada no Omie</strong> e <strong>Atualizar do Omie</strong> na lista; o Claude grava em quase todo o sistema</td><td><a href="#producao">5</a>, <a href="#nota">3</a>, <a href="#claude">20</a></td></tr>
+            <tr><td class="mono">08/10</td><td><strong>Preços a acertar no PDV</strong>; a sugestão de custo provisório avisa</td><td><a href="#precificacao">21</a></td></tr>
+            <tr><td class="mono">08/10</td><td>Cancelar a venda devolve a produção; produções da loja, com onde entrou; <strong>no rendimento</strong>; <strong>Informar custo</strong>; ficha <strong>operacional</strong>; ingrediente ainda não produzido custa o que a ficha prevê</td><td><a href="#venda">8</a>, <a href="#producao">5</a>, <a href="#produto">2</a>, <a href="#ficha">4</a></td></tr>
+            <tr><td class="mono">07/10</td><td>A <strong>planta do salão</strong>; <strong>conjuntos de mesas</strong>; os dias do salão e a reserva pelo site</td><td><a href="#portal">16</a></td></tr>
+            <tr><td class="mono">06/10</td><td>Cada loja só vê o que é dela; links entre telas; aba <strong>Vinculados</strong> e <em>desvincular</em>; validade por situação no produto; <strong>usei uma parte</strong> na etiqueta; o painel da mesa</td><td><a href="#lojas">12</a>, <a href="#produto">2</a>, <a href="#etiquetas">15</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">05/10</td><td><strong>Precificação</strong>: configuração por loja, o preço mínimo de cada produto, aplicar e o <strong>preço × custo</strong> no tempo</td><td><a href="#precificacao">21</a></td></tr>
+            <tr><td class="mono">05/10</td><td><strong>Lançar as conciliadas</strong> de uma vez; <strong>Antes de fechar</strong> no CMV; <strong>Por onde começar</strong> nas fichas; rascunho <em>em uso</em>; aviso de data retroativa; conferir o custo de referência; nome e logo da casa pela Empresa; o menu sem os atalhos fixados</td><td><a href="#nota">3</a>, <a href="#cmv">9</a>, <a href="#ficha">4</a>, <a href="#ajustes">6</a></td></tr>
+            <tr><td class="mono">03/10</td><td>Ficha: campo <strong>Observações</strong>; as porções também nos modos</td><td><a href="#ficha">4</a></td></tr>
+            <tr><td class="mono">29/09</td><td><strong>Cardápio e site em inglês e alemão</strong>: seletor PT · EN · DE no site, tradução pelo Claude ao salvar, correção à mão</td><td><a href="#portal">16</a></td></tr>
+            <tr><td class="mono">29/09</td><td><strong>Tela inicial nova</strong>: o dia numa faixa, o período ao lado da atenção, as listas lado a lado; meta de food cost da loja</td><td><a href="#navegar">navegar</a></td></tr>
+            <tr><td class="mono">28/09</td><td>Menu: <strong>CMV</strong> direto; grupo <strong>Vendas</strong> com Períodos e Documentos; Visão da rede em Administração</td><td><a href="#navegar">navegar</a></td></tr>
+            <tr><td class="mono">28/09</td><td><strong>Pedidos pelo cardápio</strong>: carrinho no site, confirmação com troca de produtos, lançado no PDV, painel e aviso no Início</td><td><a href="#portal">16</a></td></tr>
+            <tr><td class="mono">28/09</td><td><strong>WhatsApp</strong> por loja com confirmação de presença; <strong>etiquetas de validade</strong> e a produção com lote</td><td><a href="#whatsapp">19</a>, <a href="#etiquetas">15</a></td></tr>
+            <tr><td class="mono">27/09</td><td>Fidelidade: código do caixa, selos, tela de QR codes e o <strong>painel</strong></td><td><a href="#fidelidade">18</a></td></tr>
+            <tr><td class="mono">26/09</td><td>“A cada 10, a próxima é grátis”; <strong>custo da ficha pela porção</strong>; consumo por pessoa por documento; <strong>consumo interno</strong>; incluir produto achado na contagem</td><td><a href="#fidelidade">18</a>, <a href="#trilha">custos</a>, <a href="#pessoas">14</a>, <a href="#inventario">7</a></td></tr>
+            <tr><td class="mono">22–24/09</td><td>Cardápio montado com produtos e aba Catálogo; duas lojas no site; <strong>Portal de Clientes</strong>; agenda em calendário; exceção do dia; termo de consentimento; <strong>fidelidade</strong> com QR e localização</td><td><a href="#portal">16</a>, <a href="#fidelidade">18</a></td></tr>
+            <tr><td class="mono">19–21/09</td><td>Trocar a unidade de produto com estoque; <strong>conector do Claude</strong> (ler e gravar); catálogos; o <strong>site do cliente</strong> com reserva</td><td><a href="#produto">2</a>, <a href="#claude">20</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">16/09</td><td><strong>Modos de rendimento</strong>; folha da produção com o que realmente saiu; produto em quatro abas; <strong>CMV em sete abas</strong>; venda com hora no razão</td><td><a href="#ficha">4</a>, <a href="#producao">5</a>, <a href="#cmv">9</a></td></tr>
+            <tr><td class="mono">15/09</td><td>Menu novo: <strong>Ctrl+K</strong>, atalhos, ícones; <strong>reprocessar</strong> o estoque de um produto; produzir em porções ou receitas</td><td><a href="#navegar">navegar</a>, <a href="#ajustes">6</a>, <a href="#producao">5</a></td></tr>
+            <tr><td class="mono">14/09</td><td>Código do produto por fornecedor; trocar o produto de um item na conferência; <strong>Reservas</strong>: configuração e salões</td><td><a href="#nota">3</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">12–13/09</td><td>Duplicar ficha; rendimento pela soma dos ingredientes; tamanho da porção; rascunho se exclui; custo previsto na tela do produto; uma linha por produto na lista de fichas</td><td><a href="#ficha">4</a></td></tr>
+            <tr><td class="mono">11/09</td><td><strong>Custo médio da loja</strong>, não da prateleira; baixa do que foi vendido e não saiu</td><td><a href="#lojas">12</a>, <a href="#venda">8</a></td></tr>
+            <tr><td class="mono">10/09</td><td>A nota confere a conversão que ela declara; nota em cadastro arquivado; custo com duas casas em toda tela</td><td><a href="#nota">3</a></td></tr>
+            <tr><td class="mono">09/09</td><td><strong>Alteração em lote</strong> de produtos; filtros e página no endereço; de-para das unidades das notas; preço do PDV na busca de vendas; integrações em abas</td><td><a href="#produto">2</a>, <a href="#nota">3</a></td></tr>
+            <tr><td class="mono">08/09</td><td>Código de barras no produto; trocar de unidade converte o custo; consumo só dentro de ciclo aberto</td><td><a href="#produto">2</a>, <a href="#pessoas">14</a></td></tr>
+            <tr><td class="mono">04/09</td><td>Fornecedor virou <strong>Pessoa</strong>; política de cupom; <strong>período de consumo</strong>; relatório de consumo por pessoa; <em>Meu consumo</em></td><td><a href="#pessoas">14</a></td></tr>
           </tbody>
         </table>
       </div>
@@ -4477,7 +4530,7 @@
 
 <footer>
   <p style="margin:0">
-    Manual de referência do sistema, atualizado na versão 1.1.125 (22/10/2026). A
+    Manual de referência do sistema, atualizado na versão 1.1.149 (29/10/2026). A
     versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
     cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>
