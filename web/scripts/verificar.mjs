@@ -3826,7 +3826,7 @@ try {
   await area.type(`${prod6.codigo}; Prato de teste; 10; 30,00`);
   await assentar(500);
   const textoPrevia = await p.evaluate(() => document.body.innerText);
-  checar("a tela reconhece a linha colada", /1 linha\(s\) reconhecida/.test(textoPrevia),
+  checar("a tela reconhece a linha colada", /1 linha reconhecida/.test(textoPrevia),
     textoPrevia.match(/.{0,40}reconhecid.{0,30}/)?.[0]);
   // ⚠️ A prévia mostra o que o sistema ENTENDEU, não o que foi colado: separador
   // errado vira uma linha só com tudo dentro, e sem isto só apareceria depois
