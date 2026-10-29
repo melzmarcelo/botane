@@ -386,6 +386,7 @@ export default function PaginaLancarVenda() {
           <Campo rotulo="Documento" dica="reimportar o mesmo não duplica">
             <input
               className="campo"
+              id="venda-documento"
               placeholder="número do cupom ou do fechamento"
               value={documento}
               onChange={(e) => setDocumento(e.target.value)}

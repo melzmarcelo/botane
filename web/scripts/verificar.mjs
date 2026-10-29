@@ -3813,8 +3813,9 @@ try {
   });
   await assentar(500);
   await p.evaluate((d) => {
-    const campos = [...document.querySelectorAll("input")];
-    const alvo = campos.find((c) => c.placeholder?.includes("fechamento-"));
+    // ⚠️ Pelo id: o exemplo do campo mudou (auditoria de 29/10/2026) e a busca pelo texto
+    // dele deixou a venda sem o documento da rodada — o teste falhou duas telas depois.
+    const alvo = document.querySelector("#venda-documento");
     if (alvo) {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
       setter.call(alvo, d);
