@@ -5,6 +5,14 @@
 
 ## O que já existe
 
+- 🔑 **CMV negativo é conta que não fecha, e a tela diz isso** (29/10/2026, auditoria: a semana
+  de 26/10 no ar deu CMV real de −R$ 5.599 e food cost de −45%, mostrados como número comum).
+  Negativo quer dizer estoque final maior que inicial + compras: entrou mercadoria que não passou
+  por compra (nota não lançada, contagem a mais, ajuste de entrada, inicial faltando). O painel
+  ganha um aviso de erro com o link para a Memória de cálculo, o CMV real fica em vermelho e o
+  food cost vira "—"; no Início, a coluna do food cost diz "—" e some a régua (o CMV negativo
+  ali já era vermelho com legenda). ⚠️ O número do servidor não mudou: é só a leitura.
+
 - 🔑 **O painel da EMPRESA morria em 500 em todo período sem venda** (06/10/2026, bateria de
   duas lojas). `_apurar_escopo` devolvia `cobertura_ficha_pct = None` quando a receita somada
   era zero; `motor.apurar`, para uma loja só, devolve 0 — e o modelo de resposta exige número.

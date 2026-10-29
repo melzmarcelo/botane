@@ -293,7 +293,9 @@ export default function PaginaVendas() {
               </option>
             ))}
           </select>
-          <span className="flex items-center gap-2">
+          {/* ⚠️ `flex-wrap` (auditoria de 29/10/2026): as duas datas lado a lado passavam da
+              largura do celular (398 px numa tela de 390). */}
+          <span className="flex flex-wrap items-center gap-2">
             <input
               className="campo max-w-[170px]"
               type="date"

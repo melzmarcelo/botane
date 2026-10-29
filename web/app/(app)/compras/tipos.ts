@@ -96,8 +96,17 @@ export const CORES: Record<string, "erva" | "alerta" | "neutro"> = {
   NAO_ENCONTRADA: "neutro",
 };
 
-/** O status em português — `NAO_ENCONTRADA` em caixa baixa não se lê. */
+/**
+ * O status em português — `NAO_ENCONTRADA` em caixa baixa não se lê.
+ * ⚠️ **Todos com rótulo** (auditoria de 29/10/2026): só este tinha, e o resto caía no
+ * código em minúsculas — a lista inteira dizia "lancada", sem cedilha. Os nomes são os
+ * mesmos do filtro de situação (`filtros-notas.tsx`).
+ */
 export const ROTULO_STATUS: Record<string, string> = {
+  IMPORTADA: "importada",
+  CONCILIADA: "conciliada",
+  LANCADA: "lançada",
+  CANCELADA: "cancelada",
   NAO_ENCONTRADA: "não encontrada no Omie",
 };
 export const rotuloStatus = (status: string) => ROTULO_STATUS[status] ?? status.toLowerCase();

@@ -38,7 +38,10 @@ export default function PeriodoAteAgora({ d, periodo }: { d: Dinheiro; periodo: 
   const meta = d.meta_food_cost_pct;
   // A régua vai até 60% (ou até a meta com folga): acima disso a casa tem outra conversa.
   const teto = Math.max(60, (meta ?? 0) * 1.5, fc ?? 0);
-  const acimaDaMeta = fc !== null && meta !== null && fc > meta;
+  // ⚠️ Com o CMV negativo o food cost também sai negativo, e −45% não é um número
+  // (auditoria de 29/10/2026, visto no ar): a coluna diz "—" e por quê.
+  const semConta = d.cmv_mes < 0;
+  const acimaDaMeta = !semConta && fc !== null && meta !== null && fc > meta;
 
   return (
     <section className="cartao p-4" aria-label="período">
@@ -55,12 +58,14 @@ export default function PeriodoAteAgora({ d, periodo }: { d: Dinheiro; periodo: 
                 sub={d.cmv_mes < 0
                   ? "negativo: há entrada sem compra lançada — confira no painel"
                   : `CMV ${periodo.termos.do}`} />
-        <Coluna rotulo="Food cost" valor={fc === null ? "—" : pct(fc)} href="/cmv"
+        <Coluna rotulo="Food cost" valor={fc === null || semConta ? "—" : pct(fc)} href="/cmv"
                 tom={acimaDaMeta ? "alerta" : undefined}
-                sub={fc === null
+                sub={semConta
+                  ? "sem número enquanto o CMV estiver negativo"
+                  : fc === null
                   ? `sem vendas importadas ${periodo.termos.neste}`
                   : `sobre ${reais(d.receita_mes)} de receita${meta !== null ? ` · meta ${pct(meta)}` : ""}`}>
-          {fc !== null && (
+          {fc !== null && !semConta && (
             <span className="relative mt-2 block h-1.5 rounded bg-superficie2" aria-hidden="true">
               <i className={`absolute inset-y-0 left-0 rounded ${acimaDaMeta ? "bg-alerta" : "bg-erva"}`}
                  style={{ width: `${Math.min(100, (fc / teto) * 100)}%` }} />

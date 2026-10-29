@@ -139,7 +139,9 @@ export default function PaginaProdutos() {
           </>
         }
         acoes={
-          <div className="flex gap-2">
+          // ⚠️ `flex-wrap` (auditoria de 29/10/2026): no celular os quatro botões numa linha
+          // empurravam "Novo produto" para fora da tela (420 px numa de 390).
+          <div className="flex flex-wrap gap-2">
           {/* ⚠️ Este botão despejava os 3.226 produtos, sempre — não havia
               recorte nenhum. Agora a janela pergunta tipo, categoria, setor e
               situação antes de gerar. */}

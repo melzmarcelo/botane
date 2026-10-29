@@ -78,7 +78,9 @@ export default function BarraDeFiltros({ f }: { f: FiltrosNotas }) {
         <option value="">todas as origens</option>
         {ORIGENS.map((o) => <option key={o.valor} value={o.valor}>{o.nome}</option>)}
       </select>
-      <span className="flex items-center gap-1.5">
+      {/* ⚠️ `flex-wrap` (auditoria de 29/10/2026): os dois campos de data lado a lado passavam
+          da largura do celular (427 px numa tela de 390). */}
+      <span className="flex flex-wrap items-center gap-1.5">
         <span className="text-suave">de</span>
         <input type="date" className="campo py-1" style={LARGURA} id="notas-de" aria-label="entrada de"
                value={f.de} max={f.ate || undefined} onChange={(e) => f.setDe(e.target.value)} />

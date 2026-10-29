@@ -32,7 +32,7 @@ function Indicador({ rotulo, valor, sub, href, aoClicar, tom, id }: {
   const corpo = (
     <>
       <p className="rotulo">{rotulo}</p>
-      <p className={`mono mt-1 text-[22px] font-bold leading-none ${tom === "alerta" ? "text-alerta" : ""}`}>
+      <p className={`mono mt-1 text-[18px] font-bold leading-none sm:text-[22px] ${tom === "alerta" ? "text-alerta" : ""}`}>
         {valor}
       </p>
       {sub && <p className="mt-1 text-[12.5px] leading-snug text-suave">{sub}</p>}
@@ -148,7 +148,9 @@ export default function Geral({ g, aoVerPerdas, aoVerProduto }: {
         )}
       </Cartao>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* ⚠️ `min-w-0` nos filhos (auditoria de 29/10/2026): sem ele as barras e a lista
+          viravam a largura mínima da coluna e o painel passava de 390 para 411 px no celular. */}
+      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Cartao>
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-[15px] font-bold">Saldo negativo</h2>
@@ -215,16 +217,23 @@ export default function Geral({ g, aoVerPerdas, aoVerProduto }: {
                   <th className="text-left">Produto</th>
                   <th className="text-right">Saldo</th>
                   <th className="text-right">Valor</th>
-                  <th className="text-left">Última saída</th>
+                  {/* No celular a última saída desce para baixo do nome: com quatro colunas o
+                      nome do produto quebrava uma palavra por linha. */}
+                  <th className="hidden text-left sm:table-cell">Última saída</th>
                 </tr>
               </thead>
               <tbody>
                 {g.parados.lista.map((p) => (
                   <tr key={p.id_produto}>
-                    <td><LinkProduto id={p.id_produto}>{p.produto}</LinkProduto></td>
+                    <td>
+                      <LinkProduto id={p.id_produto}>{p.produto}</LinkProduto>
+                      <span className="block text-[12px] text-suave sm:hidden">
+                        {p.ultima_saida ? `última saída ${dataBr(p.ultima_saida.slice(0, 10))}` : "nunca saiu"}
+                      </span>
+                    </td>
                     <td className="mono text-right">{qtd(p.quantidade)} {p.um_estoque}</td>
                     <td className="mono text-right">{reais(p.valor)}</td>
-                    <td className="text-suave">{p.ultima_saida ? dataBr(p.ultima_saida.slice(0, 10)) : "nunca saiu"}</td>
+                    <td className="hidden text-suave sm:table-cell">{p.ultima_saida ? dataBr(p.ultima_saida.slice(0, 10)) : "nunca saiu"}</td>
                   </tr>
                 ))}
               </tbody>

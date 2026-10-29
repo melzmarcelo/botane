@@ -723,6 +723,43 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   white-space: nowrap;
 }
 .tabela td { padding: 10px 14px; border-top: 1px solid var(--color-linha); vertical-align: middle; }
+
+/* 🔑 **Tabela de DIGITAR que empilha no celular** (auditoria de 29/10/2026). Em Vendas ▸
+   Lançar, a linha do item tinha produto, quantidade, valor e total lado a lado: no celular
+   a tabela rolava para o lado e a quantidade nascia fora da tela — quem lança em pé, no
+   balcão, digitava o produto e precisava arrastar a linha para achar onde pôr o número.
+   Abaixo de `sm`, cada linha vira um bloco: a PRIMEIRA célula ocupa a largura toda e as
+   outras vão duas a duas, cada uma com o rótulo que o `thead` (escondido) dava, lido de
+   `data-rotulo`. ⚠️ Só para tabela de entrada de dados; tabela de LER continua rolando
+   (`.grid-rolante`), porque comparar linha com linha pede as colunas alinhadas.
+   ⚠️ O invólucro perde a rolagem própria (`.grid-empilha`): com os blocos, a lista é
+   comprida por natureza, e rolagem dentro de rolagem prende o dedo. */
+@media (max-width: 639.98px) {
+  .grid-empilha { overflow: visible; max-height: none; }
+  .tabela-empilha thead { display: none; }
+  .tabela-empilha, .tabela-empilha tbody { display: block; }
+  .tabela-empilha tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+    padding: 14px 0;
+    border-top: 1px solid var(--color-linha);
+  }
+  .tabela-empilha tr:first-child { border-top: 0; padding-top: 4px; }
+  .tabela.tabela-empilha td { display: block; padding: 0; border: 0; min-width: 0; text-align: left; }
+  .tabela-empilha td:first-child { grid-column: 1 / -1; }
+  .tabela-empilha td[data-rotulo]::before {
+    content: attr(data-rotulo);
+    display: block;
+    margin-bottom: 4px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-suave);
+  }
+  .tabela-empilha td:empty { display: none; }
+}
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* ---- impressão: o Ctrl+P do painel vira o PDF que vai para o contador ---- */

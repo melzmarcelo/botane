@@ -47,7 +47,10 @@ export default function Indicadores({ p }: { p: PainelAtencao }) {
                   ? `atendido em ${String(g.tempo_medio_min).replace(".", ",")} min, em média` : "sem atendimento medido"} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* ⚠️ `min-w-0` nos filhos (auditoria de 29/10/2026): a tabela "Vídeo × foto" rola dentro
+          do cartão, mas sem ele a largura dela virava o mínimo da coluna e a tela passava de
+          390 para 441 px no celular. */}
+      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Cartao titulo="Funil da sessão" descricao="Todas as sessões abertas no recorte.">
           <ol className="flex flex-col gap-2.5" aria-label="Funil da sessão">
             {funil.map((f) => (

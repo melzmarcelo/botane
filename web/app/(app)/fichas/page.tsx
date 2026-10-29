@@ -46,6 +46,7 @@ export default function PaginaFichas() {
 
   const [lista, setLista] = useState<Ficha[] | null>(null);
   const [semFicha, setSemFicha] = useState<ProdutoResumo[]>([]);
+  const [totalSemFicha, setTotalSemFicha] = useState(0);
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [status, setStatus] = useEstadoNaUrl<string>("status", "");
   const [erro, setErro] = useState("");
@@ -76,9 +77,12 @@ export default function PaginaFichas() {
       // Produzido sem ficha nenhuma: é a fila de trabalho da cozinha. ⚠️ Quem
       // responde é o SERVIDOR (`sem_ficha=true`): comparar com as fichas desta
       // PÁGINA acusaria como sem ficha todo produto cuja ficha está na próxima.
-      setSemFicha(
-        await api.get<ProdutoResumo[]>("/produtos?tipo=PRODUZIDO&sem_ficha=true&limite=100"),
-      );
+      // ⚠️ **O total vem do cabeçalho X-Total, não do tamanho da lista** (auditoria de
+      // 29/10/2026): pedia-se `limite=100` e a faixa contava a lista — "100 produtos sem
+      // ficha" quando eram 714. Agora vêm só os quatro nomes que a faixa mostra.
+      const sem = await api.listar<ProdutoResumo>("/produtos?tipo=PRODUZIDO&sem_ficha=true&limite=4");
+      setSemFicha(sem.itens);
+      setTotalSemFicha(sem.total ?? sem.itens.length);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -146,9 +150,10 @@ export default function PaginaFichas() {
 
       {!!semFicha.length && podeEditar && (
         <Aviso tipo="info">
-          {semFicha.length} produto(s) de produção própria ainda sem ficha:{" "}
+          {totalSemFicha.toLocaleString("pt-BR")}{" "}
+          {totalSemFicha === 1 ? "produto produzido ainda sem ficha nenhuma" : "produtos produzidos ainda sem ficha nenhuma"}:{" "}
           {semFicha.slice(0, 4).map((p) => p.nome).join(", ")}
-          {semFicha.length > 4 ? "…" : ""}
+          {totalSemFicha > 4 ? "…" : ""}
         </Aviso>
       )}
 

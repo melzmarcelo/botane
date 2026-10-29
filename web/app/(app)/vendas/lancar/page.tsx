@@ -541,8 +541,11 @@ export default function PaginaLancarVenda() {
       {aba === "manual" ? (
         <Cartao titulo="Itens" descricao="Um por linha. A busca aceita código ou nome.">
           <form onSubmit={lancarManual} className="flex flex-col gap-4">
-            <div className="grid-rolante">
-              <table className="tabela">
+            {/* 🔑 No celular cada item vira um bloco (`.tabela-empilha`, globals.css):
+                produto em cima, quantidade e valor lado a lado embaixo. Antes a tabela
+                rolava para o lado e a quantidade ficava fora da tela. */}
+            <div className="grid-rolante grid-empilha">
+              <table className="tabela tabela-empilha">
                 <thead>
                   <tr>
                     <th style={{ minWidth: 260 }}>Produto</th>
@@ -581,24 +584,25 @@ export default function PaginaLancarVenda() {
                           aoEscolher={(item: ItemBusca | null) => void escolherProduto(n, item)}
                         />
                       </td>
-                      <td>
+                      <td data-rotulo="Qtd">
                         <input
                           className="campo mono"
                           type="number"
+                          inputMode="decimal"
                           step="0.001"
                           min="0"
                           value={i.quantidade}
                           onChange={(e) => trocar(n, { quantidade: e.target.value })}
                         />
                       </td>
-                      <td>
+                      <td data-rotulo={mudaAlgo ? "Preço cheio" : "Valor unitário"}>
                         <CampoMoeda
                           valor={i.valor_unitario}
                           aoMudar={(v) => trocar(n, { valor_unitario: v, preco_auto: false })}
                         />
                       </td>
                       {mudaAlgo && (
-                        <td className="num tabular-nums">
+                        <td className="num tabular-nums" data-rotulo="Sai por">
                           {(() => {
                             const a = ajustada(n);
                             if (!a) return <span className="text-suave">—</span>;
@@ -614,7 +618,7 @@ export default function PaginaLancarVenda() {
                           })()}
                         </td>
                       )}
-                      <td className="num tabular-nums">
+                      <td className="num tabular-nums" data-rotulo="Total">
                         {reais(
                           ajustada(n)
                             ? (Number(i.quantidade.replace(",", ".")) || 0) *

@@ -5,6 +5,27 @@
 
 ## O que já existe
 
+- 🔑 **Item de grade leva `min-w-0`, sempre** (29/10/2026, auditoria das telas no celular).
+  Grade (`grid`) e flex começam com `min-width: auto`: o filho não encolhe abaixo do próprio
+  conteúdo. Com uma linha `truncate`, uma tabela dentro de `overflow-x-auto` ou barras
+  `whitespace-nowrap`, esse conteúdo é LARGO — e a coluna inteira estica além da tela. Foi a
+  causa de seis telas que rolavam para o lado no celular (Início 439 px, Produtos 420, Estoque ›
+  Painel 411, Notas 427, Documentos 398, Cardápio Vivo › Atenção 441, numa tela de 390).
+  - Grade de cartões: `[&>*]:min-w-0` na grade, ou `min-w-0` em cada item.
+  - Linha de botões ou filtros que pode não caber: `flex-wrap`.
+  - ⚠️ **Medir abrindo a página JÁ no tamanho de celular.** Trocar de 1440 para 390 com a
+    página aberta, como fazia a primeira passada, esconde o defeito. A sonda é
+    `web/scripts/_sonda-largura.mjs /rota …` (lista quem passa da borda, o mais interno
+    primeiro); as fotos, `web/scripts/_foto-cel.mjs pasta /rota …`. Com o Git Bash, rodar com
+    `MSYS_NO_PATHCONV=1`, senão "/rota" vira caminho de pasta.
+
+- 🔑 **Tabela de DIGITAR empilha no celular: `.tabela-empilha`** (29/10/2026, auditoria).
+  Vendas › Lançar tinha produto, quantidade, valor e total lado a lado; no celular a quantidade
+  nascia fora da tela. Abaixo de `sm`, a classe (em `globals.css`) esconde o `thead`, põe a
+  primeira célula na largura toda e as outras duas a duas, com o rótulo lido de `data-rotulo`.
+  O invólucro leva `grid-empilha` para perder a rolagem própria. ⚠️ Só para tabela de entrada
+  de dados: tabela de LER continua rolando, porque comparar linhas pede colunas alinhadas.
+
 - 🔑 **Escolher arquivo é um BOTÃO da casa, nunca o controle nativo** (28/10/2026, pedido do
   dono: *"para selecionar um arquivo, colocar um botão, a seleção no texto confunde, usa isto
   como padrão"*). Planilha: `SeletorDeArquivo` (`components/ui.tsx`) — botão "Escolher…" →

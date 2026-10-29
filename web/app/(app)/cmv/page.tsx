@@ -240,6 +240,11 @@ export default function PaginaCmv() {
   const variânciaAlta = a && a.cmv_teorico > 0 && Math.abs(a.variancia_pct ?? 0) > 5;
   /** Abaixo disto o CMV teórico — e a variância com ele — medem o cadastro. */
   const pobreDeFicha = !!a && a.receita > 0 && a.cobertura_ficha_pct < 95;
+  // 🔑 **CMV negativo não é economia, é conta que não fecha** (auditoria de 29/10/2026: a
+  // semana de 26/10 no ar deu −R$ 5.599 e food cost de −45%, mostrados como número comum).
+  // O estoque final ficou maior que o inicial mais as compras — entrou mercadoria que não
+  // passou por compra. O food cost dele não é um número: a tela diz "—" e explica.
+  const cmvNegativo = !!a && a.cmv_real < 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -400,20 +405,37 @@ export default function PaginaCmv() {
             </Aviso>
           )}
 
+          {cmvNegativo && (
+            <Aviso tipo="erro">
+              <b>O CMV real saiu negativo ({reais(a.cmv_real)}): esta conta não fecha.</b> O
+              estoque final ficou maior que o inicial mais as compras — entrou mercadoria que não
+              passou por compra: nota não lançada, contagem a mais no inventário, ajuste de
+              entrada ou o estoque inicial faltando. O food cost fica sem número até isso ser
+              acertado.{" "}
+              <button type="button" className="underline" onClick={() => setAba("memoria")}>
+                abrir a memória de cálculo
+              </button>
+            </Aviso>
+          )}
+
           <div className="grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-2 lg:grid-cols-4">
             {[
               {
                 r: "CMV real", selo: "do razão", v: reais(a.cmv_real),
-                d: "o que saiu do estoque: comprado, contado e baixado",
-                cor: "text-erva",
+                d: cmvNegativo
+                  ? "negativo: entrou mercadoria sem compra — veja o aviso acima"
+                  : "o que saiu do estoque: comprado, contado e baixado",
+                cor: cmvNegativo ? "text-erro" : "text-erva",
               },
               {
                 r: "Receita", v: reais(a.receita),
                 d: `${a.vendas} venda(s) no período`,
               },
               {
-                r: "Food cost", v: pct(a.food_cost_pct),
-                d: `CMV real ÷ receita${escopo === "empresa" ? " · empresa inteira" : ""}`,
+                r: "Food cost", v: cmvNegativo ? "—" : pct(a.food_cost_pct),
+                d: cmvNegativo
+                  ? "não se calcula com o CMV negativo"
+                  : `CMV real ÷ receita${escopo === "empresa" ? " · empresa inteira" : ""}`,
               },
               // ⚠️ O teórico leva o SELO da cobertura: sem ele, ele compete de
               // igual para igual com o real, e não é a mesma coisa.

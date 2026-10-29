@@ -86,18 +86,21 @@ export default function Inicio() {
       <FaixaHoje p={p} />
 
       {/* O período ao lado do que precisa de atenção. ⚠️ No celular (uma coluna) a atenção
-          vem PRIMEIRO: é o que pede ação. Sem dinheiro, a atenção divide a linha com a casa. */}
+          vem PRIMEIRO: é o que pede ação. Sem dinheiro, a atenção divide a linha com a casa.
+          ⚠️ `min-w-0` em cada item da grade (auditoria de 29/10/2026): a linha da atenção é
+          `truncate`, e sem ele o texto inteiro vira a largura mínima da coluna — no celular os
+          dois cartões passavam de 390 para 439 px e a tela rolava para o lado. */}
       <div className="grid gap-4 lg:grid-cols-12">
         {d && (
-          <div className="order-2 lg:order-none lg:col-span-8">
+          <div className="order-2 min-w-0 lg:order-none lg:col-span-8">
             <PeriodoAteAgora d={d} periodo={p.periodo} />
           </div>
         )}
-        <div className={`order-1 lg:order-none ${d ? "lg:col-span-4" : "lg:col-span-6"}`}>
+        <div className={`order-1 min-w-0 lg:order-none ${d ? "lg:col-span-4" : "lg:col-span-6"}`}>
           <Atencao alertas={p.alertas} deste={p.periodo.termos.deste} />
         </div>
         {!d && (
-          <div className="order-3 lg:col-span-6">
+          <div className="order-3 min-w-0 lg:col-span-6">
             <ACasa o={o} etiquetasHoje={etiquetasHoje} />
           </div>
         )}
@@ -111,10 +114,10 @@ export default function Inicio() {
 
       {d && (
         <div className="grid gap-4 lg:grid-cols-12">
-          <div className="lg:col-span-8">
+          <div className="min-w-0 lg:col-span-8">
             <OndeOCustoPesa pesos={p.pesos} periodo={p.periodo} compras={d.compras_mes} />
           </div>
-          <div className="lg:col-span-4">
+          <div className="min-w-0 lg:col-span-4">
             <ACasa o={o} etiquetasHoje={etiquetasHoje} />
           </div>
         </div>
