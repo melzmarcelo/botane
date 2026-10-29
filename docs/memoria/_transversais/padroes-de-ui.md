@@ -5,6 +5,26 @@
 
 ## O que já existe
 
+- 🔑 **Plural da casa: `plural(n, "item", "itens")` e `concorda(n, um, varios)`** em
+  `lib/numeros.ts` (1.1.152, auditoria de 29/10/2026). `plural` já escreve o número com milhar
+  ("3.798 ativos"); `concorda` só devolve a palavra. Substituem "item(ns)", "cupom(ns)",
+  "porção(ões)". Trocados em Início, Produtos, Fichas, Vendas, Lançar venda, Contas a receber,
+  Notas de entrada, Painel de vendas, Catálogos e Papéis; o resto troca ao editar a tela.
+  ⚠️ Só para CONTAGEM: quantidade fracionária usa `concorda(Number(q) === 1 …)` ao lado do `qtd`.
+  ⚠️ Bateria que procurava "nota(s)" ou "produto(s) marcado" foi ajustada; teste novo não
+  procura texto com "(s)".
+- 🔑 **Paginação: o `rotulo` vai no PLURAL** ("notas", "produtos"). Ela só aparece com mais de
+  uma página, então o total nunca é 1.
+- 🔑 **Eixo dos gráficos de barra: `marcasDoEixo` e `eixoReais`** em
+  `vendas/painel/graficos.tsx` (1.1.152). Marcas redondas (passo 1, 2 ou 5 × 10ⁿ) e "R$" na
+  frente. ⚠️ Antes cada tela tinha a sua cópia do `eixoReais` (painel, perdas, motivos) e o eixo
+  dividia o máximo × 1,1 em quatro — 0, 2, 5, 7, 10.
+- ⚠️ **Lista que vem inteira do servidor e pode crescer leva `fatiar` + `Paginacao`** (Catálogos,
+  1.1.152: 450 na base de teste, 40 mil px). Lista lateral de escolha (Papéis) rola dentro do
+  cartão com `max-h-[60vh] overflow-y-auto`.
+- ⚠️ **Grade de cartões de alturas diferentes leva `items-start`** (Início, listas do dia): com o
+  `stretch` padrão, o cartão vazio ganhava um vão branco até a altura do maior.
+
 - 🔑 **Menu "Mais" para o que é de vez em quando** (`components/menu-mais.tsx`, 1.1.151,
   auditoria de 29/10/2026). Topo de tela = um principal, dois ou três secundários, os botões
   condicionais (pendências) à vista, e o resto no `<MenuMais>`; os itens são os MESMOS botões da

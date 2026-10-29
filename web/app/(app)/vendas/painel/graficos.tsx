@@ -30,7 +30,28 @@ export type Barra = {
   partes?: { chave: string; valor: number; cor: string }[];
 };
 
-const M = { esquerda: 64, direita: 12, topo: 12, base: 30 };
+const M = { esquerda: 76, direita: 12, topo: 12, base: 30 };
+
+/** Reais sem centavos no eixo: "R$ 12 mil" se lê; "R$ 12.000,00" empilhado, não. */
+export const eixoReais = (v: number) =>
+  v >= 1000
+    ? `R$ ${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`
+    : `R$ ${v.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+
+/**
+ * As marcas do eixo em números REDONDOS — passo de 1, 2 ou 5 vezes uma potência de 10.
+ * ⚠️ Dividir o máximo em quatro dava 0, 2, 5, 7, 10 (auditoria de 29/10/2026): o leitor
+ * não sabe se o "2" é 2 ou 2,5. O teto é a última marca, logo acima da maior barra.
+ */
+export function marcasDoEixo(maximo: number): { teto: number; marcas: number[] } {
+  if (!(maximo > 0)) return { teto: 1, marcas: [0, 1] };
+  const bruto = maximo / 4;
+  const p = 10 ** Math.floor(Math.log10(bruto));
+  const f = bruto / p;
+  const passo = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+  const n = Math.max(1, Math.ceil(maximo / passo - 1e-9));
+  return { teto: passo * n, marcas: Array.from({ length: n + 1 }, (_, k) => k * passo) };
+}
 
 export function GraficoBarras({ barras, altura, rotulo, noEixo, aoClicar, W = 1080 }: {
   barras: Barra[];
@@ -49,12 +70,11 @@ export function GraficoBarras({ barras, altura, rotulo, noEixo, aoClicar, W = 10
   const [sobre, setSobre] = useState<number | null>(null);
   if (!barras.length) return null;
 
-  const teto = Math.max(...barras.map((b) => b.valor)) * 1.1 || 1;
+  const { teto, marcas: grade } = marcasDoEixo(Math.max(...barras.map((b) => b.valor)));
   const largura = W - M.esquerda - M.direita;
   const passo = largura / barras.length;
   const grossura = Math.max(2, Math.min(56, passo * 0.72));
   const y = (v: number) => M.topo + (altura - M.topo - M.base) * (1 - v / teto);
-  const grade = [0, 1, 2, 3, 4].map((k) => (teto * k) / 4);
   // ⚠️ Rótulos do eixo espaçados: com 60 dias, um rótulo por barra vira borrão.
   const cada = Math.max(1, Math.ceil(barras.length / 12));
 

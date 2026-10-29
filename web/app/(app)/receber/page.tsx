@@ -14,6 +14,7 @@ import { useSessao } from "@/lib/sessao";
 import { dataBr } from "../vendas/tipos";
 import DocumentosDaPessoa from "./documentos";
 import ListaDeLotes from "./lotes";
+import { plural } from "@/lib/numeros";
 
 /**
  * Contas a receber do consumo — o que está em aberto, os lotes e a baixa.
@@ -136,13 +137,13 @@ export default function PaginaContasAReceber() {
             {reais(dados?.total ?? 0)}
           </p>
           <p className="mt-1 text-[13px] text-suave">
-            {todas.length} pessoa(s) com consumo ainda não cobrado
+            {plural(todas.length, "pessoa", "pessoas")} com consumo ainda não cobrado
           </p>
         </Cartao>
         <Cartao titulo="Em cobrança">
           <p className="text-[26px] font-bold tabular-nums">{reais(dados?.em_cobranca ?? 0)}</p>
           <p className="mt-1 text-[13px] text-suave">
-            {dados?.lotes_em_cobranca ?? 0} lote(s) enviados, esperando o pagamento
+            {plural(dados?.lotes_em_cobranca ?? 0, "lote enviado", "lotes enviados")}, esperando o pagamento
           </p>
         </Cartao>
         <Cartao titulo="Desconto concedido">
@@ -177,7 +178,7 @@ export default function PaginaContasAReceber() {
                   disabled={!alvo.length || ocupado}
                   onClick={() => setConfirmando(true)}
                 >
-                  {marcadas.size ? `Gerar ${alvo.length} lote(s)`
+                  {marcadas.size ? `Gerar ${plural(alvo.length, "lote", "lotes")}`
                     : termo ? `Gerar lotes dos ${alvo.length} da busca` : "Gerar lotes de todos"}
                 </button>
               </div>

@@ -193,7 +193,7 @@ export default function PainelDaFidelidade() {
             </table>
           </div>
         )}
-        <Paginacao p={pag} rotulo="participante(s)" />
+        <Paginacao p={pag} rotulo="participantes" />
       </Cartao>
 
       {aberto && (

@@ -2,15 +2,11 @@
 
 import LinkProduto from "@/components/link-produto";
 import { Cartao, Vazio } from "@/components/ui";
-import { inteiro, pct, qtd, reais } from "@/lib/numeros";
+import { inteiro, pct, plural, qtd, reais } from "@/lib/numeros";
 import type { Ordem, PainelVendas } from "@/lib/vendas-painel";
 
-import { BarrasDeitadas, GraficoBarras } from "./graficos";
+import { BarrasDeitadas, eixoReais, GraficoBarras } from "./graficos";
 import { dataBr, rotuloDoPonto, tituloDoPonto } from "./periodo";
-
-/** Reais sem centavos no eixo: "R$ 12 mil" se lê; "R$ 12.000,00" empilhado, não. */
-const eixoReais = (v: number) =>
-  v >= 1000 ? `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : inteiro(v);
 
 function Variacao({ v, rotulo }: { v: number | null; rotulo: string }) {
   if (v === null) return <span>sem base para comparar</span>;
@@ -47,14 +43,21 @@ export function Resumo({ p }: { p: PainelVendas }) {
                 sub={<Variacao v={c.pct_ticket} rotulo="o anterior" />} />
         <Numero rotulo="Itens vendidos" valor={qtd(t.itens)}
                 sub={t.cupons ? `${(t.itens / t.cupons).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} por cupom` : undefined} />
-        <Numero rotulo="Média por dia" valor={reais(t.media_por_dia)}
-                sub={`${inteiro(t.dias)} dia(s) com venda`} />
+        {/* ⚠️ Num dia só, a média por dia repetia o faturado (auditoria de 29/10/2026):
+            ali o cartão mostra o mesmo dia da semana passada, que é a régua do dia. */}
+        {p.inicio === p.fim ? (
+          <Numero rotulo="Mesmo dia, semana passada" valor={reais(c.receita)}
+                  sub={`${dataBr(c.inicio)} · ${plural(c.cupons, "cupom", "cupons")}`} />
+        ) : (
+          <Numero rotulo="Média por dia" valor={reais(t.media_por_dia)}
+                  sub={`${plural(t.dias, "dia", "dias")} com venda`} />
+        )}
       </div>
       <p className="mt-3 border-t border-dashed border-linha pt-2.5 text-[12.5px] text-suave">
-        Comparado com {sobre}: {reais(c.receita)} em {inteiro(c.cupons)} cupom(ns).
+        Comparado com {sobre}: {reais(c.receita)} em {plural(c.cupons, "cupom", "cupons")}.
         {t.desconto !== null && t.desconto > 0 && <> Descontos dos cupons: {reais(t.desconto)} (já tirados do faturado).</>}
         {p.canceladas && p.canceladas.cupons > 0 && (
-          <> {inteiro(p.canceladas.cupons)} cupom(ns) cancelado(s) no PDV, somando {reais(p.canceladas.valor)} — fora das somas.</>
+          <> {plural(p.canceladas.cupons, "cupom cancelado", "cupons cancelados")} no PDV, somando {reais(p.canceladas.valor)} — fora das somas.</>
         )}
         {/* ⚠️ Com recorte, a receita é a BRUTA dos itens escolhidos: o desconto é do
             cupom inteiro, e repartir entre os itens seria inventar. */}
@@ -145,7 +148,7 @@ export function PorHora({ p, largo }: { p: PainelVendas; largo?: boolean }) {
       {/* ⚠️ Venda digitada não tem hora — contada à parte, nunca na meia-noite. */}
       {p.sem_hora && (
         <p className="mt-2 text-[12.5px] text-suave">
-          {inteiro(p.sem_hora.cupons)} cupom(ns) sem hora (lançados à mão), somando {reais(p.sem_hora.receita)}.
+          {plural(p.sem_hora.cupons, "cupom", "cupons")} sem hora (lançados à mão), somando {reais(p.sem_hora.receita)}.
         </p>
       )}
     </Cartao>
@@ -161,7 +164,9 @@ export function Grupos({ titulo, linhas, ativo, aoClicar }: {
   return (
     <Cartao>
       <h2 className="text-[15px] font-bold">{titulo}</h2>
-      <p className="mb-2 text-[12.5px] text-suave">clique num grupo para filtrar o painel por ele</p>
+      {/* ⚠️ O desconto é do CUPOM inteiro: repartir entre categorias seria inventar. Por isso
+          a soma do quadro passa do Faturado, e o quadro diz que é o valor bruto (auditoria de 29/10/2026). */}
+      <p className="mb-2 text-[12.5px] text-suave">valor dos itens, antes do desconto do cupom · clique num grupo para filtrar o painel por ele</p>
       {linhas.length ? (
         <BarrasDeitadas
           ativo={ativo}
@@ -169,7 +174,7 @@ export function Grupos({ titulo, linhas, ativo, aoClicar }: {
           valor={reais}
           linhas={linhas.slice(0, 12).map((g) => ({
             chave: String(g.id ?? "sem"), id: g.id, nome: g.nome, valor: g.receita,
-            detalhe: `${pct(g.participacao_pct)} · ${qtd(g.quantidade)} item(ns) · ${inteiro(g.cupons)} cupom(ns)`,
+            detalhe: `${pct(g.participacao_pct)} · ${qtd(g.quantidade)} ${Number(g.quantidade) === 1 ? "item" : "itens"} · ${plural(g.cupons, "cupom", "cupons")}`,
           }))}
         />
       ) : (

@@ -101,6 +101,19 @@ export const inteiro = (n: number | string | null | undefined) =>
     ? "—"
     : Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 
+/**
+ * Contagem com a palavra no número certo: `plural(1, "item", "itens")` → "1 item";
+ * `plural(3, "item", "itens")` → "3 itens"; 3798 sai "3.798".
+ * 🔑 No lugar de "item(ns)", "cupom(ns)", "porção(ões)" (auditoria de 29/10/2026).
+ * ⚠️ Só para CONTAGEM — quantidade fracionária ("1,5 kg") não é plural de palavra.
+ */
+export const plural = (n: number | string | null | undefined, um: string, varios: string) =>
+  `${inteiro(n ?? 0)} ${concorda(n, um, varios)}`;
+
+/** Só a palavra, concordando com `n` — para quando o número já está escrito antes. */
+export const concorda = (n: number | string | null | undefined, um: string, varios: string) =>
+  Number(n ?? 0) === 1 ? um : varios;
+
 // ---------------------------------------------------------------------------
 // Entrada de dinheiro
 // ---------------------------------------------------------------------------

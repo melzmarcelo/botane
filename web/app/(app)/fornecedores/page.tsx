@@ -176,7 +176,7 @@ export default function PaginaFornecedores() {
             ))}
           </ul>
         )}
-        <Paginacao p={pag} rotulo="pessoa(s)" />
+        <Paginacao p={pag} rotulo="pessoas" />
       </Cartao>
     </div>
   );

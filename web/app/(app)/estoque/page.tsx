@@ -701,7 +701,7 @@ export default function PaginaEstoque() {
                 </table>
               </div>
             )}
-            <Paginacao p={pagSaldos} rotulo="linha(s)" />
+            <Paginacao p={pagSaldos} rotulo="linhas" />
           </Cartao>
         </>
       )}
@@ -948,7 +948,7 @@ export default function PaginaEstoque() {
 
           {/* O razão cresce todo dia: trazer tudo de uma vez trava a tela
               justamente na casa que mais movimenta. */}
-          <Paginacao p={pagMov} rotulo="lançamento(s)" />
+          <Paginacao p={pagMov} rotulo="lançamentos" />
         </Cartao>
         </>
       )}

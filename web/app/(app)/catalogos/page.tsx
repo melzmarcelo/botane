@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import CabecalhoTela from "@/components/cabecalho-tela";
+import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Etiqueta, Vazio } from "@/components/ui";
 import { useSessao } from "@/lib/sessao";
 import * as cat from "@/lib/catalogos";
+import { plural } from "@/lib/numeros";
 import NovoCatalogo from "./novo-catalogo";
 
 /**
@@ -55,7 +57,7 @@ function pendencias(c: cat.Catalogo): string[] {
   const f: string[] = [];
   if (r.sem_foto) f.push(`${r.sem_foto} sem foto`);
   if (r.sem_descricao) f.push(`${r.sem_descricao} sem descrição`);
-  if (r.inativos) f.push(`${r.inativos} inativo(s)`);
+  if (r.inativos) f.push(plural(r.inativos, "inativo", "inativos"));
   return f;
 }
 
@@ -67,6 +69,13 @@ export default function PaginaCatalogos() {
   const [filtro, setFiltro] = useState<cat.Situacao | "">("");
   const [erro, setErro] = useState("");
   const [criando, setCriando] = useState(false);
+  // ⚠️ Paginada na TELA (auditoria de 29/10/2026): a lista vem inteira do servidor, e
+  // com 450 catálogos na base de teste a página passava de 40 mil pixels.
+  const pag = usePaginacao("catalogos", { filtros: [filtro] });
+  const { setTotal } = pag;
+  useEffect(() => {
+    setTotal(lista?.length ?? 0);
+  }, [lista, setTotal]);
 
   const carregar = useCallback(async () => {
     setErro("");
@@ -128,7 +137,7 @@ export default function PaginaCatalogos() {
         </Vazio>
       ) : (
         <ul className="grid gap-4 lg:grid-cols-2" aria-label="catálogos desta loja">
-          {lista.map((c) => {
+          {fatiar(lista, pag).map((c) => {
             const faltas = pendencias(c);
             return (
               <li key={c.id} className="cartao flex flex-col gap-3 p-5" data-catalogo={c.id}>
@@ -143,7 +152,7 @@ export default function PaginaCatalogos() {
                 </div>
                 <p className="text-[13.5px] text-suave">
                   {cat.APRESENTA_ORIGEM[c.origem]?.curto ?? c.origem}
-                  {c.origem === cat.ORIGEM_PRODUTOS && c.resumo?.pratos ? ` · ${c.resumo.pratos} prato(s)` : ""}
+                  {c.origem === cat.ORIGEM_PRODUTOS && c.resumo?.pratos ? ` · ${plural(c.resumo.pratos, "prato", "pratos")}` : ""}
                   {c.origem !== cat.ORIGEM_PRODUTOS && c.arquivo_nome ? ` · ${c.arquivo_nome}` : ""}
                   {" · "}{periodoEmPalavras(c)}
                   {c.exige_cadastro && " · exige cadastro"}
@@ -160,6 +169,7 @@ export default function PaginaCatalogos() {
           })}
         </ul>
       )}
+      {!!lista?.length && <Paginacao p={pag} rotulo="catálogos" />}
 
       {criando && op && <NovoCatalogo origens={op.origens} aoFechar={() => setCriando(false)} />}
     </div>

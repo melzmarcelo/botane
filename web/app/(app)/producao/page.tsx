@@ -656,7 +656,7 @@ export default function PaginaProducao() {
             </table>
           </div>
         )}
-        <Paginacao p={pag} rotulo="produção(ões)" />
+        <Paginacao p={pag} rotulo="produções" />
       </Cartao>}
 
       {estornando && (

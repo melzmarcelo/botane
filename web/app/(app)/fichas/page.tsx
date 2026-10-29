@@ -9,7 +9,7 @@ import { ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
-import { custo } from "@/lib/numeros";
+import { concorda, custo, plural } from "@/lib/numeros";
 import ExplicaTela from "@/components/explica-tela";
 import { useAviso } from "@/components/aviso-flutuante";
 import { baixarLivroDeFichas } from "@/lib/fichas";
@@ -184,7 +184,7 @@ export default function PaginaFichas() {
         </div>
       </Cartao>
 
-      <Cartao titulo={lista ? `${pag.total} ficha(s)` : "Fichas"}>
+      <Cartao titulo={lista ? plural(pag.total, "ficha", "fichas") : "Fichas"}>
         {!lista ? (
           <Carregando />
         ) : !lista.length ? (
@@ -208,9 +208,9 @@ export default function PaginaFichas() {
                     </div>
                     <p className="mt-1 text-[13px] text-suave">
                       v{f.versao}
-                      {f.versoes > 1 && ` de ${f.versoes}`} · {f.itens} item(ns) · rende{" "}
+                      {f.versoes > 1 && ` de ${f.versoes}`} · {plural(f.itens, "item", "itens")} · rende{" "}
                       {Number(f.rendimento_qtd)} {f.rendimento_um ?? ""} em{" "}
-                      {Number(f.porcoes)} porção(ões)
+                      {Number(f.porcoes)} {concorda(Number(f.porcoes), "porção", "porções")}
                     </p>
                     {veCusto && (
                       <p className="mono mt-1 text-[13.5px]">
@@ -264,7 +264,7 @@ export default function PaginaFichas() {
                       <td className="num">{f.itens}</td>
                       <td className="text-suave">
                         {Number(f.rendimento_qtd)} {f.rendimento_um ?? ""} ·{" "}
-                        {Number(f.porcoes)} porção(ões)
+                        {Number(f.porcoes)} {concorda(Number(f.porcoes), "porção", "porções")}
                       </td>
                       {veCusto && (
                         <td className="num">
@@ -294,7 +294,7 @@ export default function PaginaFichas() {
             )}
           </>
         )}
-        <Paginacao p={pag} rotulo="ficha(s)" />
+        <Paginacao p={pag} rotulo="fichas" />
       </Cartao>
     </div>
   );

@@ -1212,7 +1212,7 @@ try {
     await new Promise((r) => setTimeout(r, 400));
     const texto = document.body.innerText;
     return {
-      diz: /2\s*produto\(s\) marcado/i.test(texto),
+      diz: /2\s*produtos marcados/i.test(texto),
       temBotao: [...document.querySelectorAll("button")]
         .some((b) => /Alterar em lote/i.test(b.textContent ?? "")),
     };
@@ -4487,7 +4487,7 @@ try {
   const textoCompras = await p.evaluate(() => document.body.innerText);
   checar("sincroniza pela tela: as novas e a releitura na mesma frase",
     /nota\(s\) nova\(s\)/i.test(textoCompras)
-      && /relida\(s\)|nenhuma nota do Omie aberta/i.test(textoCompras),
+      && /relidas?\b|nenhuma nota do Omie aberta/i.test(textoCompras),
     textoCompras.slice(0, 300));
   // ⚠️ A fila de conciliação é da CASA INTEIRA e vem do servidor — antes a tela
   // somava só as notas da página carregada, e numa base com centenas de notas a
@@ -10998,12 +10998,21 @@ try {
     hora: /Por hora do cupom/.test(document.querySelector("main")?.innerText ?? ""),
     produtos: document.querySelectorAll("#painel-vendas-produtos tbody tr").length,
     baixar: [...document.querySelectorAll("main button")].some((b) => b.textContent?.trim() === "Imprimir"),
+    eixoHora: [...document.querySelectorAll('svg[aria-label="faturado por hora do cupom"] text')]
+      .map((t) => t.textContent ?? "").filter((t) => t.startsWith("R$")),
   }));
   checar("o painel abre no dia, com faturado, cupons e ticket — ou diz que não há venda",
     telaPainel.vazio || (telaPainel.resumo && telaPainel.numeros.includes("Ticket médio")), telaPainel);
   checar("e, com venda, mostra a hora e os mais vendidos",
     telaPainel.vazio || (telaPainel.hora && telaPainel.produtos > 0), telaPainel);
   checar("e oferece imprimir o relatório do recorte", telaPainel.baixar, telaPainel);
+  // 🔑 Auditoria de 29/10 (1.1.152): num dia só, a média por dia repetia o faturado — o
+  // cartão vira o mesmo dia da semana passada. E o eixo diz que é dinheiro.
+  checar("no modo Dia, o cartão é o mesmo dia da semana passada, não a média",
+    telaPainel.vazio || (telaPainel.numeros.includes("Mesmo dia, semana passada")
+      && !telaPainel.numeros.includes("Média por dia")), telaPainel.numeros);
+  checar("e o eixo do gráfico por hora vem em R$",
+    telaPainel.vazio || !telaPainel.hora || telaPainel.eixoHora.length >= 2, telaPainel.eixoHora);
 
   // Trocar para MÊS: a URL leva o recorte, e a evolução aparece.
   await p.click('[data-modo="mes"]').catch(() => {});
@@ -11016,7 +11025,10 @@ try {
   const mesTela = await p.evaluate(() => ({
     titulo: document.querySelector("h1")?.textContent ?? "",
     agrupar: !!document.querySelector("#painel-vendas-agrupar"),
+    numeros: [...document.querySelectorAll("[data-numero-painel]")].map((e) => e.getAttribute("data-numero-painel")),
+    vazio: /Nenhuma venda importada/.test(document.querySelector("main")?.innerText ?? ""),
   }));
+  checar("e no mês a média por dia volta", mesTela.vazio || mesTela.numeros.includes("Média por dia"), mesTela.numeros);
   checar("o título diz o mês, e a evolução pode ser agrupada",
     / de 20\d\d/.test(mesTela.titulo) && mesTela.agrupar, mesTela);
 
@@ -11043,17 +11055,21 @@ try {
   await p.select("#notas-situacao", "abertas").catch(() => {});
   await p.waitForFunction(() => location.search.includes("situacao=abertas"), { timeout: 6000 }).catch(() => {});
   // ⚠️ O valor em reais chega numa SEGUNDA chamada (o resumo), depois da contagem: esperar
-  // os dois — a bateria da 1.1.142 leu "307 nota(s)" antes de o R$ chegar.
-  await p.waitForFunction((n) => {
+  // os dois — a bateria da 1.1.142 leu "307 notas" antes de o R$ chegar.
+  // ⚠️ Desde a auditoria de 29/10 o título concorda ("1 nota", "307 notas") e o número
+  // sai com milhar ("1.234 notas"): comparar com o número formatado como a tela.
+  const aLancarTela = Number(aLancar).toLocaleString("pt-BR");
+  const ehTituloNotas = /^[\d.]+ notas?\b/;
+  await p.waitForFunction((n, re) => {
     const t = [...document.querySelectorAll("main h2, main h3")].map((h) => h.textContent?.trim() ?? "")
-      .find((x) => /nota\(s\)/.test(x)) ?? "";
-    return new RegExp(`^${n} nota\\(s\\)`).test(t) && (n === 0 || /R\$/.test(t));
-  }, { timeout: 15000 }, aLancar).catch(() => {});
-  const tituloNotas = await p.evaluate(() =>
+      .find((x) => new RegExp(re).test(x)) ?? "";
+    return t.startsWith(`${n} nota`) && (n === "0" || /R\$/.test(t));
+  }, { timeout: 15000 }, aLancarTela, ehTituloNotas.source).catch(() => {});
+  const tituloNotas = await p.evaluate((re) =>
     [...document.querySelectorAll("main h2, main h3")].map((h) => h.textContent?.trim() ?? "")
-      .find((t) => /nota\(s\)/.test(t)) ?? "");
+      .find((t) => new RegExp(re).test(t)) ?? "", ehTituloNotas.source);
   checar("'a lançar' vai na URL e o título conta as importadas e conciliadas",
-    p.url().includes("situacao=abertas") && tituloNotas.startsWith(`${aLancar} nota(s)`),
+    p.url().includes("situacao=abertas") && tituloNotas.startsWith(`${aLancarTela} nota`),
     { url: p.url(), tituloNotas, aLancar });
   checar("e o título traz o valor em reais", aLancar === 0 || /R\$/.test(tituloNotas), tituloNotas);
   await p.click("#notas-limpar-filtros").catch(() => {});

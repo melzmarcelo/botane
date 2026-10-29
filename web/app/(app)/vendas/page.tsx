@@ -12,7 +12,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/
 import CabecalhoTela from "@/components/cabecalho-tela";
 import BotaoExportar from "@/components/exportar";
 import MenuMais from "@/components/menu-mais";
-import { qtd } from "@/lib/numeros";
+import { concorda, plural, qtd } from "@/lib/numeros";
 import { CANAIS, dataBr, etiquetaDoMotivo, horaBr, MOTIVOS_VENDA, ORIGENS, Venda } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
@@ -213,7 +213,7 @@ export default function PaginaVendas() {
                         onClick={() => setVendoSemBaixa(true)}
                         title="Vendas cujo produto controla estoque e que nunca saíram do razão"
                       >
-                        {qtd(semBaixa!.unidades)} unidade(s) vendidas sem baixa
+                        {qtd(semBaixa!.unidades)} {concorda(semBaixa!.unidades, "unidade vendida", "unidades vendidas")} sem baixa
                       </button>
                     )}
                     {pendencias > 0 && pode("integracao.pdv") && (
@@ -223,7 +223,7 @@ export default function PaginaVendas() {
                         aria-busy={ocupado} disabled={ocupado}
                         title="Procura de novo o produto dos itens pendentes"
                       >
-                        Reconciliar {pendencias} pendente(s)
+                        Reconciliar {plural(pendencias, "pendente", "pendentes")}
                       </button>
                     )}
                     {/* O de vez em quando vai para o "Mais" (auditoria de 29/10/2026). */}
@@ -257,7 +257,7 @@ export default function PaginaVendas() {
           é saber que existe e conseguir chegar nela. */}
       {pendencias > 0 && (
         <Aviso tipo="info">
-          {pendencias} item(ns) vendido(s) não acharam produto no cadastro — enquanto
+          {plural(pendencias, "item vendido", "itens vendidos")} {concorda(pendencias, "não achou", "não acharam")} produto no cadastro — enquanto
           estiverem assim, essa receita não entra no CMV teórico.{" "}
           <Link href="/vendas/sem-vinculo" className="underline">
             resolver
@@ -265,7 +265,7 @@ export default function PaginaVendas() {
         </Aviso>
       )}
 
-      <Cartao titulo={lista ? `${pag.total ?? lista.length} venda(s)` : "Vendas"}>
+      <Cartao titulo={lista ? plural(pag.total ?? lista.length, "venda", "vendas") : "Vendas"}>
         <div className="mb-4 flex flex-wrap gap-3">
           <input
             className="campo max-w-[280px]"
@@ -365,7 +365,7 @@ export default function PaginaVendas() {
                   <span className="block text-[13px] text-suave sm:hidden">
                     {ORIGENS[v.origem] ?? v.origem.toLowerCase()}
                     {v.canal ? ` · ${CANAIS[v.canal] ?? v.canal.toLowerCase()}` : ""} ·{" "}
-                    {v.itens} item(ns) · {reais(Number(v.valor_total))}
+                    {plural(v.itens, "item", "itens")} · {reais(Number(v.valor_total))}
                   </span>
                 </Link>
                 <span className="hidden min-w-0 truncate text-[13px] text-suave sm:block">
@@ -389,7 +389,7 @@ export default function PaginaVendas() {
             ))}
           </ul>
         )}
-        <Paginacao p={pag} rotulo="venda(s)" />
+        <Paginacao p={pag} rotulo="vendas" />
       </Cartao>
 
       {/* 🔑 **A prévia inteira antes do botão.** Cada linha vira movimento no
@@ -400,7 +400,7 @@ export default function PaginaVendas() {
       {vendoSemBaixa && semBaixa && (
         <Modal
           titulo="Vendas que nunca saíram do estoque"
-          descricao={`${semBaixa.produtos} produto(s), ${qtd(semBaixa.unidades)} unidade(s)`}
+          descricao={`${plural(semBaixa.produtos, "produto", "produtos")}, ${qtd(semBaixa.unidades)} ${concorda(semBaixa.unidades, "unidade", "unidades")}`}
           aoFechar={() => setVendoSemBaixa(false)}
           largura="960px"
           rodape={
@@ -462,7 +462,7 @@ export default function PaginaVendas() {
                     </td>
                     <td className="num whitespace-nowrap">
                       {qtd(l.quantidade)} {l.um_estoque ?? ""}
-                      <span className="block text-[12px] text-suave">{l.itens} item(ns)</span>
+                      <span className="block text-[12px] text-suave">{plural(l.itens, "item", "itens")}</span>
                     </td>
                     <td className="whitespace-nowrap text-[13px] text-suave">
                       {dataBr(l.desde)} a {dataBr(l.ate)}

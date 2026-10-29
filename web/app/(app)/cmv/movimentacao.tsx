@@ -264,7 +264,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
         </div>
       )}
 
-      <Paginacao p={pag} rotulo="produto(s)" />
+      <Paginacao p={pag} rotulo="produtos" />
 
       <p className="mt-4 text-[13.5px] leading-snug text-suave">
         {confere ? (

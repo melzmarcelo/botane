@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import { plural } from "@/lib/numeros";
 import ExplicaTela from "@/components/explica-tela";
 import BotaoExportar from "@/components/exportar";
 
@@ -126,7 +127,9 @@ export default function PaginaPapeis() {
       <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
           <Cartao titulo="Papéis">
-            <ul className="flex flex-col gap-1">
+            {/* ⚠️ A lista ROLA dentro do cartão (auditoria de 29/10/2026): com 124 papéis na
+                base de teste a tela passava de 8 mil pixels, e o papel aberto ficava lá no topo. */}
+            <ul className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto overscroll-contain" id="papeis-lista">
               {papeis.map((p) => (
                 <li key={p.id}>
                   <button
@@ -140,7 +143,7 @@ export default function PaginaPapeis() {
                       {p.sistema && <Etiqueta>fábrica</Etiqueta>}
                     </span>
                     <span className="mono mt-0.5 block text-[11.5px] text-suave">
-                      {p.permissoes.length} permissões · {p.usuarios} usuário(s)
+                      {plural(p.permissoes.length, "permissão", "permissões")} · {plural(p.usuarios, "usuário", "usuários")}
                     </span>
                   </button>
                 </li>

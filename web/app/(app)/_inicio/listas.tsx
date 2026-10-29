@@ -5,6 +5,7 @@ import Link from "next/link";
 import { COR, ROTULO, type PedidoResumo } from "@/lib/pedidos";
 
 import { diaCurto, type Producao, type Reservas } from "./tipos";
+import { plural } from "@/lib/numeros";
 
 /**
  * As três listas do dia, lado a lado: pedidos do site, mesas e produção.
@@ -109,7 +110,7 @@ export function ListaDeProducao({ p }: { p: Producao }) {
            vazio={p.total ? null : `Nada planejado para os próximos sete dias${p.todos_setores ? "" : " nos seus setores"}.`}
            etiquetas={<>
              <Etq>{p.hoje} hoje</Etq>
-             {p.atrasadas > 0 && <Etq tom="erro">{p.atrasadas} atrasada(s)</Etq>}
+             {p.atrasadas > 0 && <Etq tom="erro">{plural(p.atrasadas, "atrasada", "atrasadas")}</Etq>}
              <Etq>{p.total} na semana</Etq>
            </>}>
       {p.linhas.map((l) => (

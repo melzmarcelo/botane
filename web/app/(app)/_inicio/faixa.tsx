@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
-import { inteiro } from "@/lib/numeros";
+import { inteiro, plural } from "@/lib/numeros";
 
 import type { Dia, Painel } from "./tipos";
 
@@ -78,7 +78,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
     const c = dia.comparacao;
     numeros.push(
       <Numero key="v" rotulo="Vendas" valor={inteiro(dia.vendas)} href={noPainel}
-              sub={`${inteiro(dia.itens)} item(ns)`} />,
+              sub={plural(dia.itens, "item", "itens")} />,
       <Numero key="f" rotulo="Faturado" valor={reais(dia.receita)} href={noPainel}
               sub={c && c.pct !== null
                 ? <span className={c.pct >= 0 ? "text-erva" : "text-alerta"}>
@@ -106,7 +106,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
   }
   if (p.producao) {
     numeros.push(<Numero key="pr" rotulo="Produção" valor={inteiro(p.producao.hoje)} href="/producao"
-      sub={p.producao.atrasadas ? <span className="text-erro">{p.producao.atrasadas} atrasada(s)</span> : "para hoje"} />);
+      sub={p.producao.atrasadas ? <span className="text-erro">{plural(p.producao.atrasadas, "atrasada", "atrasadas")}</span> : "para hoje"} />);
   }
   // 🔑 As etiquetas entram na faixa de quem NÃO vê dinheiro (a cozinha): para quem vê, a
   // faixa já tem seis números, e as etiquetas estão nos alertas e em "A casa".
@@ -145,7 +145,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
         <p className="mt-3 border-t border-dashed border-linha pt-2.5 text-[12.5px] text-suave">
           {/* ⚠️ A frase diz a CONTA: é o que faz a conferência com o PDV fechar. */}
           {dia.canceladas > 0 && (
-            <>{inteiro(dia.canceladas)} cupom(ns) cancelado(s) no PDV, somando {reais(dia.valor_cancelado)} — lá
+            <>{plural(dia.canceladas, "cupom cancelado", "cupons cancelados")} no PDV, somando {reais(dia.valor_cancelado)} — lá
               o dia tem {inteiro(dia.vendas + dia.canceladas)} cupons. </>
           )}
           {!dia.proximo && dia.data !== hoje && "É o dia mais recente com venda importada."}

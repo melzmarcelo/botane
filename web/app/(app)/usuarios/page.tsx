@@ -238,7 +238,7 @@ export default function PaginaUsuarios() {
             </table>
           </div>
         )}
-        <Paginacao p={pag} rotulo="usuário(s)" />
+        <Paginacao p={pag} rotulo="usuários" />
       </Cartao>
     </div>
   );

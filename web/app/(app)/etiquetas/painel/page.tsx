@@ -173,7 +173,7 @@ export default function PainelDeValidades() {
           aoReimprimir={(e) => void imprimir([e.id], true).catch(
             (x) => aviso.erro(x instanceof Error ? x.message : "Falha ao imprimir"))}
         />
-        <Paginacao p={pag} rotulo="etiqueta(s)" />
+        <Paginacao p={pag} rotulo="etiquetas" />
       </Cartao>
 
       {usandoParte && (

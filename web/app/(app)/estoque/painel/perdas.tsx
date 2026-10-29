@@ -4,7 +4,7 @@ import { Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { inteiro, pct, qtd, reais } from "@/lib/numeros";
 import type { GrupoPerda, PainelPerdas } from "@/lib/estoque-painel";
 
-import { BarrasDeitadas, GraficoBarras } from "../../vendas/painel/graficos";
+import { BarrasDeitadas, eixoReais, GraficoBarras } from "../../vendas/painel/graficos";
 import { dataBr, rotuloDoPonto, tituloDoPonto } from "../../vendas/painel/periodo";
 
 /**
@@ -19,9 +19,6 @@ import { dataBr, rotuloDoPonto, tituloDoPonto } from "../../vendas/painel/period
  */
 
 export type Recorte = "motivo" | "categoria" | "setor" | "local";
-
-const eixoReais = (v: number) =>
-  v >= 1000 ? `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : inteiro(v);
 
 function Numero({ rotulo, valor, sub, tom }: {
   rotulo: string; valor: string; sub?: React.ReactNode; tom?: "alerta";

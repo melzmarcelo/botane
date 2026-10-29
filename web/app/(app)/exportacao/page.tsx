@@ -312,7 +312,7 @@ export default function PaginaExportacao() {
                   </li>
                 ))}
               </ul>
-              <Paginacao p={pag} rotulo="erro(s)" />
+              <Paginacao p={pag} rotulo="erros" />
               </>
             )
           ) : (aba === "pendentes" ? pendentes : fila.integrados).length === 0 ? (

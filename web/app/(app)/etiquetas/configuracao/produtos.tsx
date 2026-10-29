@@ -77,7 +77,7 @@ export default function ProdutosComValidade() {
           </table>
         </div>
       )}
-      <Paginacao p={pag} rotulo="produto(s)" />
+      <Paginacao p={pag} rotulo="produtos" />
     </Cartao>
   );
 }

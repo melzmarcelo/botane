@@ -11,7 +11,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Modal, Vazio } from "@/components/ui";
-import { qtd } from "@/lib/numeros";
+import { concorda, plural, qtd } from "@/lib/numeros";
 import { CORES, dataBr, Nota, rotuloStatus } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
@@ -198,16 +198,16 @@ export default function PaginaCompras() {
       parou = r.parou_por_falhas;
       if (!r.proximo) break;
       antesDe = r.proximo;
-      setAndamento(`${soma.conferidas} conferida(s), faltam ${r.restantes}…`);
+      setAndamento(`${plural(soma.conferidas, "conferida", "conferidas")}, faltam ${r.restantes}…`);
     }
     const nada = !soma.atualizadas && !soma.canceladas && !soma.naoEncontradas && !soma.falhas;
     const frase =
       soma.conferidas === 0
         ? "nenhuma nota do Omie aberta para reler"
-        : `${soma.conferidas} nota(s) aberta(s) relida(s)` +
+        : `${plural(soma.conferidas, "nota aberta relida", "notas abertas relidas")}` +
           (soma.atualizadas ? `, ${soma.atualizadas} com valor diferente` : "") +
-          (soma.canceladas ? `, ${soma.canceladas} cancelada(s) lá` : "") +
-          (soma.naoEncontradas ? `, ${soma.naoEncontradas} não encontrada(s) lá (excluídas)` : "") +
+          (soma.canceladas ? `, ${plural(soma.canceladas, "cancelada", "canceladas")} lá` : "") +
+          (soma.naoEncontradas ? `, ${plural(soma.naoEncontradas, "não encontrada", "não encontradas")} lá (${concorda(soma.naoEncontradas, "excluída", "excluídas")})` : "") +
           (soma.falhas ? `, ${soma.falhas} não abriram` : "") +
           (nada ? " — nada mudou" : "") +
           (simulado ? " (modo simulado — dados de demonstração)" : "");
@@ -429,7 +429,7 @@ export default function PaginaCompras() {
                 onClick={() => setVendoArquivados(true)}
                 title="Itens de nota aberta apontando para cadastro que foi fundido em outro"
               >
-                {arquivados!.itens.length} item(ns) em cadastro arquivado
+                {plural(arquivados!.itens.length, "item", "itens")} em cadastro arquivado
               </button>
             )}
             {aPendentes > 0 && (
@@ -439,7 +439,7 @@ export default function PaginaCompras() {
                 aria-busy={ocupado} disabled={ocupado}
                 title="Procura de novo o produto dos itens pendentes"
               >
-                Reconciliar {aPendentes} pendente(s)
+                Reconciliar {plural(aPendentes, "pendente", "pendentes")}
               </button>
             )}
             {/* O de vez em quando vai para o "Mais" (auditoria de 29/10/2026): eram sete
@@ -483,7 +483,7 @@ export default function PaginaCompras() {
                         {r.numero ? `NF ${r.numero}` : r.arquivo}
                       </span>
                       <span className="block text-[13px] text-suave">
-                        {`${r.fornecedor ?? ""} · ${r.itens ?? 0} item(ns)` +
+                        {`${r.fornecedor ?? ""} · ${plural(r.itens ?? 0, "item", "itens")}` +
                           (r.pendentes ? ` · ${r.pendentes} a vincular` : "")}
                       </span>
                     </Link>
@@ -517,7 +517,7 @@ export default function PaginaCompras() {
 
       <Cartao
         titulo={notas
-          ? `${pag.total} nota(s)${resumo && resumo.notas === pag.total ? ` · ${reais(resumo.valor)}` : ""}`
+          ? `${plural(pag.total, "nota", "notas")}${resumo && resumo.notas === pag.total ? ` · ${reais(resumo.valor)}` : ""}`
           : "Notas"}
         acao={
           <input
@@ -573,7 +573,7 @@ export default function PaginaCompras() {
                     NF {n.numero ?? "—"} · {n.fornecedor ?? n.nome_emitente ?? "sem fornecedor"}
                   </span>
                   <span className="block text-[13px] text-suave sm:hidden">
-                    {n.data_emissao ? dataBr(n.data_emissao) : "sem data"} · {n.itens} item(ns) ·{" "}
+                    {n.data_emissao ? dataBr(n.data_emissao) : "sem data"} · {plural(n.itens, "item", "itens")} ·{" "}
                     {reais(Number(n.valor_total))}
                   </span>
                 </Link>
@@ -584,14 +584,14 @@ export default function PaginaCompras() {
                   {reais(Number(n.valor_total))}
                 </span>
                 <span className="flex items-center gap-2 sm:justify-end">
-                  {n.pendentes > 0 && <Etiqueta cor="alerta">{n.pendentes} pendente(s)</Etiqueta>}
+                  {n.pendentes > 0 && <Etiqueta cor="alerta">{plural(n.pendentes, "pendente", "pendentes")}</Etiqueta>}
                   <Etiqueta cor={CORES[n.status]}>{rotuloStatus(n.status)}</Etiqueta>
                 </span>
               </li>
             ))}
           </ul>
         )}
-        <Paginacao p={pag} rotulo="nota(s)" />
+        <Paginacao p={pag} rotulo="notas" />
       </Cartao>
 
       {/* 🔑 **A prévia inteira antes do botão único** (pedido do dono). São
@@ -626,7 +626,7 @@ export default function PaginaCompras() {
       {vendoArquivados && arquivados && (
         <Modal
           titulo="Itens apontando para cadastro arquivado"
-          descricao={`${arquivados.itens.length} item(ns) em ${arquivados.notas} nota(s) ainda não lançada(s)`}
+          descricao={`${plural(arquivados.itens.length, "item", "itens")} em ${plural(arquivados.notas, "nota ainda não lançada", "notas ainda não lançadas")}`}
           aoFechar={() => setVendoArquivados(false)}
           largura="900px"
           rodape={
@@ -672,7 +672,7 @@ export default function PaginaCompras() {
 
           {arquivados.sem_destino.length > 0 && (
             <Aviso tipo="erro">
-              Outros <b>{arquivados.sem_destino.length}</b> item(ns) apontam para cadastro
+              Outros <b>{arquivados.sem_destino.length}</b> {concorda(arquivados.sem_destino.length, "item aponta", "itens apontam")} para cadastro
               arquivado que <b>ninguém ativo herdou</b> — não há para onde repontar sozinho.
               Esses precisam de escolha na tela da nota.
             </Aviso>

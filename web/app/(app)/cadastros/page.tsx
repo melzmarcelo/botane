@@ -427,7 +427,7 @@ export default function PaginaCadastros() {
                   </li>
                 ))}
               </ul>
-              <Paginacao p={pag} rotulo="setor(es)" />
+              <Paginacao p={pag} rotulo="setores" />
 
             </>
           )}
@@ -577,7 +577,7 @@ export default function PaginaCadastros() {
                   </li>
                 ))}
               </ul>
-              <Paginacao p={pag} rotulo="local(is)" />
+              <Paginacao p={pag} rotulo="locais" />
 
             </>
           )}
@@ -744,7 +744,7 @@ export default function PaginaCadastros() {
                   </li>
                 ))}
               </ul>
-              <Paginacao p={pag} rotulo="categoria(s)" />
+              <Paginacao p={pag} rotulo="categorias" />
 
             </>
           )}
@@ -906,7 +906,7 @@ export default function PaginaCadastros() {
                     ))}
                   </tbody>
                 </table>
-              <Paginacao p={pag} rotulo="unidade(s)" />
+              <Paginacao p={pag} rotulo="unidades" />
               </div>
 
             </>

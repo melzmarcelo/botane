@@ -107,7 +107,10 @@ export default function Inicio() {
       </div>
 
       {listas.length > 0 && (
-        <div className={`grid gap-4 ${listas.length === 3 ? "lg:grid-cols-3" : listas.length === 2 ? "lg:grid-cols-2" : ""}`}>
+        // ⚠️ items-start: cada cartão na altura do PRÓPRIO conteúdo. Esticados, "Nenhum
+        // pedido em aberto" ficava com um vão branco até a altura de "Para produzir"
+        // (auditoria de 29/10/2026).
+        <div className={`grid items-start gap-4 ${listas.length === 3 ? "lg:grid-cols-3" : listas.length === 2 ? "lg:grid-cols-2" : ""}`}>
           {listas}
         </div>
       )}

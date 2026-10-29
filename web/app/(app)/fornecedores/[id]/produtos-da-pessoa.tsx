@@ -166,7 +166,7 @@ export default function ProdutosDaPessoa({ id }: { id: number }) {
           </table>
           {/* Dez por página, sem seletor: o tamanho é do cartão, não de quem
               olha. Ver `semTamanho` em `components/paginacao`. */}
-          <Paginacao p={pag} rotulo="produto(s)" semTamanho />
+          <Paginacao p={pag} rotulo="produtos" semTamanho />
         </div>
       )}
     </Cartao>

@@ -14,7 +14,7 @@ import { CANAIS, lerPlanilha, MOTIVOS_VENDA } from "../tipos";
 import { motivosDePerda } from "@/lib/etiquetas";
 import Voltar from "@/components/voltar";
 
-import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
+import { concorda, moedaParaNumero, numeroParaMoeda, plural } from "@/lib/numeros";
 import ExplicaTela from "@/components/explica-tela";
 
 /**
@@ -270,7 +270,7 @@ export default function PaginaLancarVenda() {
       (r.falhas?.length ? aviso.erro : aviso.sucesso)(
         r.message +
           (r.itens_sem_vinculo
-            ? ` · ${r.itens_sem_vinculo} item(ns) não acharam produto no cadastro`
+            ? ` · ${plural(r.itens_sem_vinculo, "item", "itens")} ${concorda(r.itens_sem_vinculo, "não achou", "não acharam")} produto no cadastro`
             : ""),
         { texto: "ver as vendas", ao: () => router.push("/vendas") },
       );
@@ -282,7 +282,7 @@ export default function PaginaLancarVenda() {
       }
       router.push("/vendas");
     } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : `Não foi possível lançar ${quantos} item(ns)`);
+      aviso.erro(e instanceof Error ? e.message : `Não foi possível lançar ${plural(quantos, "item", "itens")}`);
     } finally {
       setOcupado(false);
     }
@@ -531,7 +531,7 @@ export default function PaginaLancarVenda() {
         {cupomPrevia && cupomPrevia.sem_custo > 0 && (
           <div className="mt-3">
             <Aviso tipo="info">
-              <b>{cupomPrevia.sem_custo} item(ns) sem custo conhecido</b> — esses saem
+              <b>{plural(cupomPrevia.sem_custo, "item", "itens")} sem custo conhecido</b> — esses saem
               pelo preço de venda, porque o sistema não sabe quanto custam. Cadastre a
               ficha técnica ou o custo do produto para que a política valha para eles.
             </Aviso>
@@ -683,7 +683,7 @@ export default function PaginaLancarVenda() {
                 type="submit"
                 aria-busy={ocupado} disabled={ocupado || !prontos.length}
               >
-                {ocupado ? "Lançando…" : `Lançar ${prontos.length || ""} item(ns)`}
+                {ocupado ? "Lançando…" : (prontos.length ? `Lançar ${plural(prontos.length, "item", "itens")}` : "Lançar itens")}
               </button>
             </div>
           </form>
@@ -740,7 +740,7 @@ export default function PaginaLancarVenda() {
                 </table>
                 {previa.linhas.length > 12 && (
                   <p className="mt-2 text-[13px] text-suave">
-                    e mais {previa.linhas.length - 12} linha(s).
+                    e mais {plural(previa.linhas.length - 12, "linha", "linhas")}.
                   </p>
                 )}
               </div>
@@ -750,7 +750,7 @@ export default function PaginaLancarVenda() {
 
             {!!previa.linhas.length && (
               <p className="text-[13.5px] text-suave">
-                {previa.linhas.length} linha(s) reconhecida(s) ·{" "}
+                {plural(previa.linhas.length, "linha reconhecida", "linhas reconhecidas")} ·{" "}
                 <b>
                   {reais(previa.linhas.reduce((s, l) => s + l.quantidade * l.valor_unitario, 0))}
                 </b>{" "}

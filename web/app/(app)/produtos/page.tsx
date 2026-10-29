@@ -20,6 +20,7 @@ import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import CabecalhoTela from "@/components/cabecalho-tela";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import { plural, concorda } from "@/lib/numeros";
 
 type Contagem = { total: number; por_tipo: Record<string, number>; rascunhos: number; inativos: number };
 
@@ -190,7 +191,7 @@ export default function PaginaProdutos() {
       {podeEditar && marcados.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded border border-linha bg-superficie2 px-4 py-3">
           <span className="text-[14px]">
-            <b>{marcados.size}</b> produto(s) marcado(s)
+            <b>{marcados.size}</b> {concorda(marcados.size, "produto marcado", "produtos marcados")}
           </span>
           <button
             type="button"
@@ -238,7 +239,7 @@ export default function PaginaProdutos() {
 
       {contagem && contagem.rascunhos > 0 && (
         <Aviso tipo="info">
-          {contagem.rascunhos} produto(s) em rascunho — eles não entram no estoque enquanto não
+          {plural(contagem.rascunhos, "produto", "produtos")} em rascunho — eles não entram no estoque enquanto não
           tiverem unidade de estoque e fator de conversão.
         </Aviso>
       )}
@@ -317,8 +318,8 @@ export default function PaginaProdutos() {
       </Cartao>
 
       <Cartao
-        titulo={lista ? `${lista.length} produto(s)` : "Produtos"}
-        descricao={contagem ? `${contagem.total} ativos no total` : undefined}
+        titulo={lista ? plural(lista.length, "produto", "produtos") : "Produtos"}
+        descricao={contagem ? `${plural(contagem.total, "ativo", "ativos")} no total` : undefined}
       >
         {!lista ? (
           <Carregando />
@@ -445,7 +446,7 @@ export default function PaginaProdutos() {
 
             {/* Sem isto, lista cheia e lista cortada são indistinguíveis — e
                 quem procura um produto conclui que ele não existe. */}
-            <Paginacao p={pag} rotulo="produto(s)" />
+            <Paginacao p={pag} rotulo="produtos" />
           </>
         )}
       </Cartao>

@@ -195,7 +195,7 @@ export default function PremiosDaFidelidade() {
             </table>
           </div>
         )}
-        <Paginacao p={pag} rotulo="prêmio(s)" />
+        <Paginacao p={pag} rotulo="prêmios" />
       </Cartao>
 
       {entregando && (

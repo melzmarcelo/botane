@@ -208,11 +208,11 @@ export function fatiar<T>(itens: T[], p: { offset: number; porPagina: number }):
 
 export function Paginacao({
   p,
-  rotulo = "registro(s)",
+  rotulo = "registros",
   semTamanho = false,
 }: {
   p: Paginacao;
-  /** O nome do que está sendo listado: "nota(s)", "produto(s)". */
+  /** O nome do que está sendo listado, no PLURAL ("notas", "produtos"): a paginação só aparece com mais de uma página. */
   rotulo?: string;
   /**
    * Esconde o "por página" — a lista tem tamanho FIXO, decidido por quem a

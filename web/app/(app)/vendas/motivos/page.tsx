@@ -10,7 +10,7 @@ import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { inteiro, qtd, reais } from "@/lib/numeros";
 import { pedirMotivos, type AgruparMotivos, type PainelMotivos } from "@/lib/vendas-motivos";
 
-import { GraficoBarras } from "../painel/graficos";
+import { eixoReais, GraficoBarras } from "../painel/graficos";
 import { andar, dataBr, janela, MODOS, nomeDoRecorte, rotuloDoPonto, tituloDoPonto, type Modo } from "../painel/periodo";
 import { MOTIVOS_VENDA } from "../tipos";
 
@@ -39,9 +39,6 @@ const COR_MOTIVO: Record<string, string> = {
   BRINDE: "#3b6aa0",
   OUTROS: "#7c857b",
 };
-
-const eixoReais = (v: number) =>
-  v >= 1000 ? `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : inteiro(v);
 
 function Variacao({ v }: { v: number | null }) {
   if (v === null) return <span className="text-suave">sem base para comparar</span>;

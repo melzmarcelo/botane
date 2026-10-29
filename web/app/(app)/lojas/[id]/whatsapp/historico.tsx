@@ -101,7 +101,7 @@ export default function HistoricoDoWhatsapp({ idLoja, versao }: { idLoja: number
           </table>
         </div>
       )}
-      <Paginacao p={pag} rotulo="mensagem(ns)" />
+      <Paginacao p={pag} rotulo="mensagens" />
     </Cartao>
   );
 }

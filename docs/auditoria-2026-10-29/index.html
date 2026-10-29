@@ -66,7 +66,7 @@ code, .mono { font-family: var(--f-dado); font-size: .88em }
 
 <main>
   <header class="abre">
-    <p class="olho">Botané · versão 1.1.149 · 29/10/2026 · correções até a 1.1.151</p>
+    <p class="olho">Botané · versão 1.1.149 · 29/10/2026 · correções até a 1.1.152</p>
     <h1>Auditoria do sistema</h1>
     <p class="lead">Uma passada por todas as telas, no computador e no celular, procurando três
       tipos de melhoria: <strong>visual</strong> (o que aparece errado ou apertado),
@@ -158,18 +158,18 @@ code, .mono { font-family: var(--f-dado); font-size: .88em }
         <p class="faz">feito: sem configuração ficam só a faixa e a lista de custo e preço; somem os cartões, as colunas de sugestão e o Aplicar.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
-        <h3>Faturado e “por categoria” não batem à primeira vista</h3>
+        <h3>Faturado e “por categoria” não batem à primeira vista <span class="feito">corrigido</span></h3>
         <p class="onde">Vendas ▸ Painel</p>
         <p>O cartão diz R$ 964,50 e o quadro por categoria soma R$ 972,00. A diferença é o desconto
           dos cupons, que só aparece numa linha de texto abaixo.</p>
-        <p class="faz">dizer no quadro “valor bruto, antes do desconto”, ou somar já descontado.</p>
+        <p class="faz">feito: os quadros por categoria e por setor dizem “valor dos itens, antes do desconto do cupom”. Somar já descontado exigiria repartir o desconto do cupom entre categorias, o que seria inventar.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
-        <h3>Números sem separador de milhar</h3>
+        <h3>Números sem separador de milhar <span class="feito">corrigido</span></h3>
         <p class="onde">Produtos · “3798 ativos no total”</p>
         <p>O cabeçalho escreve 3798, e o rodapé da mesma lista escreve 3.798. O cabeçalho ainda sai
           na fonte de texto corrido, diferente do resto dos números.</p>
-        <p class="faz">passar o número pelo formatador da casa.</p>
+        <p class="faz">feito: “3.798 ativos no total”. A fonte serifada fica: a descrição de todo cartão é texto corrido, na voz da casa.</p>
       </div></article>
     </div>
   </section>
@@ -246,31 +246,31 @@ code, .mono { font-family: var(--f-dado); font-size: .88em }
         <p class="faz">feito: 40 × 40 de toque no Início, no Painel de vendas, em Por motivo e no Painel de estoque.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
-        <h3>“(s)”, “(ns)” e “(ões)” pelo sistema todo</h3>
+        <h3>“(s)”, “(ns)” e “(ões)” pelo sistema todo <span class="feito parcial">em parte</span></h3>
         <p class="onde">Produtos, Fichas, Vendas, Contas a receber, Início…</p>
         <p>“1 porção(ões)”, “61 item(ns)”, “14 cupom(ns)”, “4 lote(s) enviados”. As telas novas (Valor
           do patrimônio) já escrevem o plural certo.</p>
-        <p class="faz">uma função de plural da casa e trocar aos poucos, começando pelas telas mais usadas.</p>
+        <p class="faz">feito: a função existe (<code>plural</code>, em <code>lib/numeros.ts</code>) e já vale em Início, Produtos, Fichas, Vendas, Lançar venda, Contas a receber, Notas de entrada, Painel de vendas, Catálogos, Papéis e no rodapé de paginação de todas as listas. As telas de uso raro trocam quando forem editadas.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
-        <h3>Cartões vazios altos no Início</h3>
+        <h3>Cartões vazios altos no Início <span class="feito">corrigido</span></h3>
         <p class="onde">Início · Pedidos do site e Mesas</p>
         <p>Os dois cartões esticam até a altura de “Para produzir” e ficam com um vão branco embaixo
           de “Nenhum pedido em aberto”.</p>
-        <p class="faz">deixar cada cartão com a altura do próprio conteúdo.</p>
+        <p class="faz">feito: cada cartão fica com a altura do próprio conteúdo.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
-        <h3>Eixo do gráfico por hora com marcas quebradas</h3>
+        <h3>Eixo do gráfico por hora com marcas quebradas <span class="feito">corrigido</span></h3>
         <p class="onde">Vendas ▸ Painel · Por hora do cupom</p>
         <p>O eixo marca 0, 2, 5, 7 e 10 e não diz a unidade (é faturado em reais).</p>
-        <p class="faz">marcas redondas (0, 5, 10 ou 0, 2, 4…) e “R$” no eixo.</p>
+        <p class="faz">feito: marcas redondas e “R$” no eixo, em todos os gráficos de barra (Painel de vendas, Por motivo e perdas do Painel de estoque).</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
-        <h3>Telas que crescem sem fim</h3>
+        <h3>Telas que crescem sem fim <span class="feito">corrigido</span></h3>
         <p class="onde">Catálogos (40.500 px) · Papéis e permissões (8.100 px)</p>
         <p>Na base de teste, Catálogos abre todos os catálogos expandidos, um embaixo do outro.
           No ar há poucos, mas a tela não tem paginação nem recolhimento.</p>
-        <p class="faz">catálogos recolhidos por padrão; em Papéis, um papel aberto por vez.</p>
+        <p class="faz">feito: Catálogos com páginas (20 por vez); em Papéis, que já abria um papel por vez, a lista da esquerda rola dentro do cartão.</p>
       </div></article>
     </div>
   </section>
@@ -322,16 +322,16 @@ code, .mono { font-family: var(--f-dado); font-size: .88em }
         <p class="faz">feito: filtro “Rascunho parado” em Produtos (sem nota aberta, venda em 30 dias nem saldo). O arquivar em lote ficou de fora: a limpeza no ar está com a equipe, pela tela.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
-        <h3>“Média por dia” no modo Dia</h3>
+        <h3>“Média por dia” no modo Dia <span class="feito">corrigido</span></h3>
         <p class="onde">Vendas ▸ Painel</p>
         <p>Com um dia só, a média por dia repete o faturado.</p>
-        <p class="faz">no modo Dia, trocar o cartão por “mesmo dia da semana passada”.</p>
+        <p class="faz">feito: no modo Dia o cartão é “Mesmo dia, semana passada”, com a data e os cupons.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
-        <h3>“Itens vendidos sem produto” demora a abrir</h3>
+        <h3>“Itens vendidos sem produto” demora a abrir <span class="feito fora">medido</span></h3>
         <p class="onde">Vendas ▸ Itens vendidos sem produto</p>
         <p>Foi a tela mais lenta da passada: 12 segundos para abrir, contra 2 a 4 das outras.</p>
-        <p class="faz">medir a consulta no ar; se repetir, paginar no servidor.</p>
+        <p class="faz">medido de novo: a consulta responde em 0,2 s e a tela abre em 0,05 s. Os 12 s foram a primeira compilação da tela no modo de desenvolvimento. A consulta já usa índice e corta em 100 linhas; nada a mudar.</p>
       </div></article>
     </div>
   </section>

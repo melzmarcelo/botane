@@ -136,7 +136,7 @@ export default function ListaDePedidos() {
             </table>
           </div>
         )}
-        <Paginacao p={pag} rotulo="pedido(s)" />
+        <Paginacao p={pag} rotulo="pedidos" />
       </Cartao>
     </div>
   );

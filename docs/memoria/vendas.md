@@ -5,6 +5,17 @@
 
 ## O que já existe
 
+- 🔑 **Painel de vendas, modo Dia: o cartão "Média por dia" vira "Mesmo dia, semana passada"**
+  (1.1.152, auditoria de 29/10/2026 — num dia só a média repetia o faturado). Usa a
+  `comparacao` que o servidor já manda (`_anterior` compara um dia com o mesmo dia da semana
+  anterior); nada mudou na API.
+- ⚠️ **Os quadros Por categoria e Por setor são BRUTOS** (valor dos itens, antes do desconto do
+  cupom) e o subtítulo diz isso: a soma deles passa do Faturado. Repartir o desconto do cupom
+  entre categorias seria inventar — a mesma regra da lista de produtos.
+- ⚠️ **"Itens vendidos sem produto" demorou 12 s na auditoria**: medido de novo (rota 0,2 s,
+  tela 0,05 s); era a primeira compilação da tela no `next dev`. A consulta usa o índice
+  `ix_venda_item_produto` e corta em 100 — não mexer sem medir no ar.
+
 - 🔑 **Contas a receber procura pela pessoa** (`#receber-busca`, 1.1.151, auditoria de
   29/10/2026; eram 214 pessoas só com filtro de data). Filtra na tela, sem acento.
   ⚠️ Com a busca ativa e ninguém marcado, o lote é dos que a BUSCA mostra, e o botão diz isso

@@ -141,7 +141,7 @@ export default function Alteracoes() {
         </div>
         </>
       )}
-      <Paginacao p={pag} rotulo="evento(s)" />
+      <Paginacao p={pag} rotulo="eventos" />
     </Cartao>
   );
 }

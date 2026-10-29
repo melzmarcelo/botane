@@ -117,7 +117,7 @@ export default function PaginaInventario() {
             ))}
           </ul>
         )}
-        <Paginacao p={pag} rotulo="inventário(s)" />
+        <Paginacao p={pag} rotulo="inventários" />
       </Cartao>
     </div>
   );

@@ -165,7 +165,7 @@ export default function ClientesDoPortal() {
             </table>
           </div>
         )}
-        <Paginacao p={pag} rotulo="cliente(s)" />
+        <Paginacao p={pag} rotulo="clientes" />
       </Cartao>
     </div>
   );
