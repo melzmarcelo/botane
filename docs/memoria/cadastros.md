@@ -5,6 +5,12 @@
 
 ## O que já existe
 
+- 🔑 **`em_uso` virou três estados** (1.1.151, auditoria de 29/10/2026): `true` = em uso, `false`
+  = o AVESSO (rascunho que ninguém toca: sem nota aberta, sem venda em 30 dias, sem saldo),
+  ausente = sem recorte. Na tela, "Rascunho parado". ⚠️ "Parado" não é "nunca usado": vendido há
+  40 dias também é parado. Arquivar em lote NÃO foi feito de propósito — a limpeza dos rascunhos
+  no ar é da equipe, pela tela. Cobertura: `smoke_fila_e_rascunhos.py`.
+
 - 🔑 **Botão Importar na lista de produtos** (1.1.121, 22/10/2026, pedido do dono: *"colocar um
   botão Importar … opções do PDV ou do Omie. Aí realiza a busca e mostra os novos produtos, com
   um checkbox, padrão marcado … Na opção PDV, atualizar os preços também, mas isto não precisa

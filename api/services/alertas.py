@@ -283,10 +283,16 @@ def levantar(cur, id_unidade: int) -> list[dict]:
         # Só cobra o fechamento se houve venda no período — casa nova não é cobrada.
         if cur.fetchone()["n"]:
             nome = periodos.rotulo(anterior, fim_anterior, c["ciclo"])
-            juntar("cmv.mes_aberto", AVISO,
+            # 🔑 **Sobe para ATENÇÃO no segundo dia** (auditoria de 29/10/2026: no ar a
+            # semana de 19 a 25/10 seguia aberta na quarta seguinte). O primeiro dia é de
+            # lançar o que falta; depois disso, aberto é número apresentado que ainda muda.
+            # E o link abre o PERÍODO que falta, não o corrente.
+            atrasado = (relogio.hoje_da_casa() - fim_anterior).days >= 2
+            juntar("cmv.mes_aberto", ATENCAO if atrasado else AVISO,
                    f"Período ainda não fechado: {nome}", 1,
-                   "Fechar congela o período e evita que alguém lance para trás.",
-                   "fechar o período", "/cmv")
+                   "Fechar congela o período e evita que alguém lance para trás."
+                   + (" Já passou o dia de lançar o que faltava." if atrasado else ""),
+                   "fechar o período", f"/cmv?periodo={anterior.isoformat()}")
 
     ordem = {CRITICO: 0, ATENCAO: 1, AVISO: 2}
     alertas.sort(key=lambda a: (ordem[a["severidade"]], -a["quantidade"]))

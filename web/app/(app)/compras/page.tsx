@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import BotaoExportar from "@/components/exportar";
+import MenuMais from "@/components/menu-mais";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -56,6 +57,10 @@ type Arquivados = {
   notas: number;
   produtos: number;
 };
+
+/** As colunas da lista de notas a partir do `sm` (data, nota, itens, valor, situação). */
+const COLUNAS_NOTA =
+  "sm:grid sm:grid-cols-[92px_minmax(0,1fr)_56px_130px_220px] sm:items-center sm:gap-4";
 
 export default function PaginaCompras() {
   const router = useRouter();
@@ -391,8 +396,6 @@ export default function PaginaCompras() {
             <Link href="/compras/nova" className="btn btn-secundario">
               Digitar nota
             </Link>
-            {/* 🔑 Compras do período, por nota, fornecedor ou produto (23/10/2026). */}
-            <BotaoExportar relatorio="compras" rotulo="Relatório de compras" />
             {/* 🔑 O lote fica sempre à vista para quem lança: a janela é que diz
                 quantas estão prontas, quantas travam e o que destrava. */}
             {pode("compras.lancar") && (
@@ -439,16 +442,22 @@ export default function PaginaCompras() {
                 Reconciliar {aPendentes} pendente(s)
               </button>
             )}
-            {pode("compras.conciliar") && (
-              <button
-                className="btn btn-secundario"
-                onClick={vincularFornecedores}
-                aria-busy={ocupado} disabled={ocupado}
-                title="Amarra produto e fornecedor pelo que as notas já mostraram"
-              >
-                Vincular fornecedores
-              </button>
-            )}
+            {/* O de vez em quando vai para o "Mais" (auditoria de 29/10/2026): eram sete
+                botões em duas linhas, e o relatório pesava igual a importar a nota. */}
+            <MenuMais>
+              {/* 🔑 Compras do período, por nota, fornecedor ou produto (23/10/2026). */}
+              <BotaoExportar relatorio="compras" rotulo="Relatório de compras" />
+              {pode("compras.conciliar") && (
+                <button
+                  className="btn btn-secundario"
+                  onClick={vincularFornecedores}
+                  aria-busy={ocupado} disabled={ocupado}
+                  title="Amarra produto e fornecedor pelo que as notas já mostraram"
+                >
+                  Vincular fornecedores
+                </button>
+              )}
+            </MenuMais>
           </div>
         )}
       </header>
@@ -539,22 +548,42 @@ export default function PaginaCompras() {
               : "Nenhuma nota ainda. Importe um XML, digite a do mercado ou busque no Omie."}
           </Vazio>
         ) : (
+          // 🔑 **No computador, colunas** (auditoria de 29/10/2026): tudo ficava à esquerda e
+          // a situação na ponta, com uma faixa vazia no meio — e o valor, que é o que se
+          // compara, vinha pequeno e cinza. No celular continua a linha de antes.
           <ul className="flex flex-col gap-px bg-linha">
+            <li className={`${COLUNAS_NOTA} rotulo hidden bg-superficie pb-2`}
+                aria-hidden>
+              <span>Emissão</span>
+              <span>Nota</span>
+              <span className="text-right">Itens</span>
+              <span className="text-right">Valor</span>
+              <span className="text-right">Situação</span>
+            </li>
             {notas.map((n) => (
               <li
                 key={n.id}
-                className="flex flex-wrap items-center justify-between gap-3 bg-superficie py-3"
+                className={`${COLUNAS_NOTA} flex flex-wrap items-center justify-between gap-3 bg-superficie py-3`}
               >
+                <span className="mono hidden text-[13px] text-suave sm:block">
+                  {n.data_emissao ? dataBr(n.data_emissao) : "sem data"}
+                </span>
                 <Link href={`/compras/${n.id}`} className="min-w-0 text-left">
                   <span className="link-registro">
                     NF {n.numero ?? "—"} · {n.fornecedor ?? n.nome_emitente ?? "sem fornecedor"}
                   </span>
-                  <span className="block text-[13px] text-suave">
+                  <span className="block text-[13px] text-suave sm:hidden">
                     {n.data_emissao ? dataBr(n.data_emissao) : "sem data"} · {n.itens} item(ns) ·{" "}
                     {reais(Number(n.valor_total))}
                   </span>
                 </Link>
-                <span className="flex items-center gap-2">
+                <span className="hidden text-right text-[13px] tabular-nums text-suave sm:block">
+                  {n.itens}
+                </span>
+                <span className="mono hidden text-right font-semibold sm:block">
+                  {reais(Number(n.valor_total))}
+                </span>
+                <span className="flex items-center gap-2 sm:justify-end">
                   {n.pendentes > 0 && <Etiqueta cor="alerta">{n.pendentes} pendente(s)</Etiqueta>}
                   <Etiqueta cor={CORES[n.status]}>{rotuloStatus(n.status)}</Etiqueta>
                 </span>

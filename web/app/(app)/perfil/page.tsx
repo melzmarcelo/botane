@@ -50,8 +50,10 @@ export default function PaginaPerfil() {
   }
 
   return (
-    <div className="mx-auto flex max-w-[560px] flex-col gap-6">
-      <header>
+    // ⚠️ O formulário fica estreito, mas a tabela de chaves usa a largura toda: a 560 px ela
+    // cortava o "Último uso" (auditoria de 29/10/2026).
+    <div className="mx-auto flex max-w-[900px] flex-col gap-6">
+      <header className="max-w-[560px]">
         <p className="rotulo">Sua conta</p>
         <h1 className="mt-1 text-[30px] font-bold tracking-tight">Perfil</h1>
         <ExplicaTela>
@@ -60,7 +62,7 @@ export default function PaginaPerfil() {
         </ExplicaTela>
       </header>
 
-      <Cartao>
+      <Cartao className="max-w-[560px]">
         <form className="flex flex-col gap-4" onSubmit={salvar}>
           <Campo rotulo="Nome">
             <input

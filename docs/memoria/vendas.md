@@ -5,6 +5,14 @@
 
 ## O que já existe
 
+- 🔑 **Contas a receber procura pela pessoa** (`#receber-busca`, 1.1.151, auditoria de
+  29/10/2026; eram 214 pessoas só com filtro de data). Filtra na tela, sem acento.
+  ⚠️ Com a busca ativa e ninguém marcado, o lote é dos que a BUSCA mostra, e o botão diz isso
+  ("Gerar lotes dos N da busca") — nunca o de todos sem ver.
+- 🔑 **Lançar venda**: a dica do Motivo diz quando trocar (consumo interno, perda, prêmio,
+  brinde) — dizia "em branco, é venda" sem campo em branco à vista; o exemplo do Documento não
+  é mais uma data de agosto.
+
 - 🔑 **CONTAS A RECEBER substituiu o período de consumo** (1.1.125, migração 129, 22/10/2026,
   pedido do dono: *"tirar esta questão de períodos [...] o usuário possa lançar os documentos
   para a data que for necessário. Ai ter uma espécie de contas a receber [...] gerar um lote, e

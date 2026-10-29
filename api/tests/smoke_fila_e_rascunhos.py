@@ -142,6 +142,11 @@ st, usados = chamar("GET", f"/produtos?status=RASCUNHO&em_uso=true&busca=RASC-{m
                     token=token)
 checar("mas não na de rascunhos em uso", not any(x["id"] == id_rasc for x in (usados or [])),
        usados)
+# O avesso (29/10/2026): "Rascunho parado" na tela, candidato a arquivar.
+st, parados = chamar("GET", f"/produtos?status=RASCUNHO&em_uso=false&busca=RASC-{marca}",
+                     token=token)
+checar("e está na de rascunhos parados", any(x["id"] == id_rasc for x in (parados or [])),
+       (st, parados))
 
 print("\n4. em nota ABERTA, ele entra nos dois — e os dois contam igual")
 st, fornecedores = chamar("GET", "/fornecedores?limite=1", token=token)
@@ -159,6 +164,10 @@ st, usados = chamar("GET", f"/produtos?status=RASCUNHO&em_uso=true&busca=RASC-{m
                     token=token)
 checar("o filtro em uso passa a trazê-lo", any(x["id"] == id_rasc for x in (usados or [])),
        usados)
+st, parados = chamar("GET", f"/produtos?status=RASCUNHO&em_uso=false&busca=RASC-{marca}",
+                     token=token)
+checar("e o de parados deixa de trazê-lo", not any(x["id"] == id_rasc for x in (parados or [])),
+       (st, parados))
 st, _pagina = chamar("GET", "/produtos?status=RASCUNHO&em_uso=true&limite=1000", token=token)
 checar("alerta e lista contam a MESMA coisa", len(_pagina or []) == depois["quantidade"]
        or len(_pagina or []) == 1000, (len(_pagina or []), depois["quantidade"]))

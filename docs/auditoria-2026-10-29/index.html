@@ -53,6 +53,8 @@ section > p.intro { max-width: 65ch; color: var(--suave) }
 .g.baixa { color: var(--erva); background: var(--erva-claro) }
 .feito { display: inline-block; margin-left: 6px; font-family: var(--f-dado); font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
   padding: 2px 7px; border-radius: 999px; color: var(--superficie); background: var(--erva); vertical-align: 2px }
+.feito.parcial { background: var(--alerta) }
+.feito.fora { background: var(--suave) }
 figure { margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px }
 figure img { border: 1px solid var(--linha); border-radius: 8px; max-width: 100%; height: auto; display: block }
 figure.cel img { max-width: 300px }
@@ -64,7 +66,7 @@ code, .mono { font-family: var(--f-dado); font-size: .88em }
 
 <main>
   <header class="abre">
-    <p class="olho">Botané · versão 1.1.149 · 29/10/2026</p>
+    <p class="olho">Botané · versão 1.1.149 · 29/10/2026 · correções até a 1.1.151</p>
     <h1>Auditoria do sistema</h1>
     <p class="lead">Uma passada por todas as telas, no computador e no celular, procurando três
       tipos de melhoria: <strong>visual</strong> (o que aparece errado ou apertado),
@@ -121,42 +123,39 @@ code, .mono { font-family: var(--f-dado); font-size: .88em }
           ficha nenhuma”, para não se confundir com o alerta.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Sem meta de food cost, o Início não tem régua</h3>
+        <h3>Sem meta de food cost, o Início não tem régua <span class="feito parcial">em parte</span></h3>
         <p class="onde">No ar · parâmetros da loja</p>
         <p>A meta de food cost da loja está vazia no ar. Sem ela, a barra do food cost não marca onde
           deveria estar e o número fica solto.</p>
-        <p class="faz">definir a meta, e enquanto estiver vazia o cartão mostra “defina a meta” no lugar da barra.</p>
+        <p class="faz">feito: na tela: sem meta, o cartão diz “sem meta: defina na loja”. Definir a meta no ar é com você (Lojas ▸ a loja ▸ Meta de food cost).</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>O CMV teórico cobre só 38% da receita</h3>
+        <h3>O CMV teórico cobre só 38% da receita <span class="feito fora">fica de fora</span></h3>
         <p class="onde">No ar · CMV · cobertura de ficha 37,7%</p>
         <p>Com 426 produzidos sem ficha homologada e 2.175 saídas com custo provisório, o CMV teórico
           e a variância ainda medem o cadastro, não a cozinha. A tela já avisa isso, mas a lista de
           fichas a fazer não diz por onde começar.</p>
-        <p class="faz">ordenar os produzidos sem ficha pelo faturamento do mês (curva ABC). As 20
-          primeiras fichas devem cobrir boa parte da receita.</p>
+        <p class="faz">fica de fora: essa fila pela receita existiu (“Por onde começar”) e saiu da tela a seu pedido em 26/10. A rota continua na API, se quiser de volta.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>“Períodos fechados” lista períodos reabertos</h3>
+        <h3>“Períodos fechados” lista períodos reabertos <span class="feito">corrigido</span></h3>
         <p class="onde">CMV · quadro Períodos fechados</p>
         <p>Na base de teste todas as linhas dizem “reaberto” embaixo do título “Períodos fechados”.</p>
-        <p class="faz">chamar o quadro de “Fechamentos” e separar os reabertos com um filtro, ou
-          mostrá-los apagados.</p>
+        <p class="faz">feito: o quadro chama “Fechamentos”, os reabertos vêm apagados, e food cost de CMV negativo é “—” ali também.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>“Vencendo” mistura o que já venceu há meses</h3>
+        <h3>“Vencendo” mistura o que já venceu há meses <span class="feito">corrigido</span></h3>
         <p class="onde">Alertas · quadro Vencendo</p>
         <p>O quadro abre com lotes que “venceram há 292d”. Quem procura o que vai vencer amanhã
           precisa rolar por cima do que já é perda.</p>
-        <p class="faz">dois quadros: “Vencidos (dar baixa)” e “Vencem em até N dias”.</p>
+        <p class="faz">feito: dois quadros: “Vencidos — dar baixa” (só quando houver) e “Vencem nos próximos dias”.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Precificação mostra preço mínimo sem estar configurada</h3>
+        <h3>Precificação mostra preço mínimo sem estar configurada <span class="feito">corrigido</span></h3>
         <p class="onde">Precificação</p>
         <p>A faixa diz que a precificação não foi configurada, mas a tabela traz “mínimo sugerido”
           e os cartões dizem “abaixo da margem: 0 de 0”.</p>
-        <p class="faz">enquanto não houver configuração, esconder os cartões e a coluna de mínimo e
-          deixar só o convite para configurar.</p>
+        <p class="faz">feito: sem configuração ficam só a faixa e a lista de custo e preço; somem os cartões, as colunas de sugestão e o Aplicar.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
         <h3>Faturado e “por categoria” não batem à primeira vista</h3>
@@ -215,39 +214,36 @@ code, .mono { font-family: var(--f-dado); font-size: .88em }
           cancelada, não encontrada no Omie).</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Listas de notas e de documentos usam metade da largura</h3>
+        <h3>Listas de notas e de documentos usam metade da largura <span class="feito">corrigido</span></h3>
         <p class="onde">Notas de entrada · Vendas ▸ Documentos</p>
         <p>Cada linha põe tudo à esquerda (número, fornecedor, itens, valor) e só a situação na
           ponta direita. No computador sobra uma faixa vazia no meio, e o valor, que é o que se
           compara, vem em letra pequena e cinza.</p>
         <figure><img src="rel-notas.jpg" alt="Lista de notas de entrada com espaço vazio entre o nome da nota e a situação" width="900" height="282">
           <figcaption>Notas de entrada no computador.</figcaption></figure>
-        <p class="faz">no computador, colunas (data, número, fornecedor, itens, valor, situação),
-          com o valor alinhado à direita e o total da página no rodapé. No celular, como está.</p>
+        <p class="faz">feito: no computador, colunas com cabeçalho e o valor à direita, em negrito. No celular, como estava.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Texto cortado em seletores e campos</h3>
+        <h3>Texto cortado em seletores e campos <span class="feito">corrigido</span></h3>
         <p class="onde">CMV · Patrimônio · Perfil</p>
         <p>O período do CMV aparece como “outubro de 2026 (em cur”. No Patrimônio, a busca diz
           “Equipamento, código, n” e o filtro de situação, “Todos, menos os bai”. No Perfil, a tabela
           de chaves do Claude fica espremida numa coluna estreita e corta o “Último uso”.</p>
-        <p class="faz">dar largura mínima ao seletor de período, encurtar os textos dos filtros e
-          deixar a tabela de chaves usar a largura da página.</p>
+        <p class="faz">feito: seletor de período do CMV mais largo, busca do Patrimônio na linha inteira (“Sem os baixados” no filtro) e, no Perfil, a tabela de chaves com a largura da página.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Muitos botões soltos no topo das telas</h3>
+        <h3>Muitos botões soltos no topo das telas <span class="feito">corrigido</span></h3>
         <p class="onde">Notas de entrada (7) · Patrimônio (6) · Vendas ▸ Documentos (6)</p>
         <p>Em Notas de entrada os botões quebram em duas linhas, e o que importa no dia a dia
           (Importar, Lançar as conciliadas) tem o mesmo peso de “Vincular fornecedores”. No
           Patrimônio, Conferência, Valor e Manutenções são partes do módulo, mas aparecem como botões.</p>
-        <p class="faz">um botão principal, dois secundários e o resto num menu “Mais”; no Patrimônio,
-          abas (Bens · Conferência · Valor · Manutenções), como já é feito no CMV.</p>
+        <p class="faz">feito: botão “Mais” em Notas de entrada (Relatório de compras, Vincular fornecedores), em Documentos (Por motivo, Lista de vendas) e no Patrimônio, que ganhou abas Bens · Conferência · Valor.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Setas de data pequenas demais para o dedo</h3>
+        <h3>Setas de data pequenas demais para o dedo <span class="feito">corrigido</span></h3>
         <p class="onde">Início · Vendas ▸ Painel</p>
         <p>As setas ‹ › que trocam o dia têm cerca de 20 px. No celular é fácil errar o toque.</p>
-        <p class="faz">no mínimo 40 px de área de toque, com o ícone do mesmo tamanho de hoje.</p>
+        <p class="faz">feito: 40 × 40 de toque no Início, no Painel de vendas, em Por motivo e no Painel de estoque.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
         <h3>“(s)”, “(ns)” e “(ões)” pelo sistema todo</h3>
@@ -284,49 +280,46 @@ code, .mono { font-family: var(--f-dado); font-size: .88em }
     <p class="intro">Onde o caminho confunde, pede passo a mais ou deixa o erro passar.</p>
     <div class="lista">
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Motivo da venda: a opção e a dica dizem coisas diferentes</h3>
+        <h3>Motivo da venda: a opção e a dica dizem coisas diferentes <span class="feito">corrigido</span></h3>
         <p class="onde">Vendas ▸ Lançar · campo Motivo</p>
         <p>O campo já vem com “venda (não é consumo)” escolhido e a dica embaixo diz “em branco, é
           venda”. Não há campo em branco à vista.</p>
-        <p class="faz">trocar a dica por “escolha outro motivo para consumo interno, perda, prêmio
-          ou brinde”.</p>
+        <p class="faz">feito: a dica diz “troque só para consumo interno, perda, prêmio ou brinde”.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Exemplo de documento com data antiga</h3>
+        <h3>Exemplo de documento com data antiga <span class="feito">corrigido</span></h3>
         <p class="onde">Vendas ▸ Lançar · campo Documento</p>
         <p>O exemplo cinza é “fechamento-2026-08-26”. Parece um valor já preenchido, de agosto.</p>
-        <p class="faz">usar a data do dia no exemplo, ou um texto como “número do cupom ou do fechamento”.</p>
+        <p class="faz">feito: o exemplo é “número do cupom ou do fechamento”.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Contas a receber sem busca de pessoa</h3>
+        <h3>Contas a receber sem busca de pessoa <span class="feito">corrigido</span></h3>
         <p class="onde">Vendas ▸ Contas a receber · Em aberto</p>
         <p>A lista em aberto tem 214 pessoas na base de teste e só filtro de data. Para gerar o lote
           de uma pessoa é preciso rolar até ela.</p>
-        <p class="faz">campo de busca por nome acima da lista, como em Notas de entrada.</p>
+        <p class="faz">feito: campo Pessoa acima da lista, sem acento. Com a busca ativa, o lote sai só dos que ela mostra, e o botão diz isso.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Três avisos antes do número no CMV</h3>
+        <h3>Três avisos antes do número no CMV <span class="feito">corrigido</span></h3>
         <p class="onde">CMV · topo do painel</p>
         <p>Antes de ver o CMV, a tela mostra o aviso de período incompleto (com três linhas), o de
           teórico não confiável e o de grupos fora do CMV. O número que se veio ver fica na
           segunda dobra.</p>
-        <p class="faz">os quatro números primeiro, e os avisos num bloco só, recolhível, logo abaixo:
-          “3 coisas mudam este número”.</p>
+        <p class="faz">feito: uma linha só, acima dos números: “3 coisas mudam este número: …”, que abre para o detalhe. O aviso vermelho do CMV negativo continua aberto.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Período de 19 a 25/10 ainda aberto no ar</h3>
+        <h3>Período de 19 a 25/10 ainda aberto no ar <span class="feito parcial">em parte</span></h3>
         <p class="onde">No ar · CMV</p>
         <p>A semana passada não foi fechada. Enquanto ela estiver aberta, alguém pode lançar com
           data de trás e mudar o número que já foi apresentado.</p>
-        <p class="faz">fechar a semana. No sistema, lembrar no Início a partir do segundo dia útil
-          da semana seguinte.</p>
+        <p class="faz">feito: no sistema: o alerta sobe para “atenção” a partir do segundo dia e abre direto o período que falta. Fechar a semana no ar é com você.</p>
       </div></article>
       <article class="achado"><span class="g media">Média</span><div>
-        <h3>Rascunhos acumulados</h3>
+        <h3>Rascunhos acumulados <span class="feito parcial">em parte</span></h3>
         <p class="onde">No ar · Produtos</p>
         <p>252 rascunhos já em uso (em nota, venda ou estoque) e outros 797 que nunca foram usados.
           Os não usados poluem a busca e as listas de escolha.</p>
-        <p class="faz">um filtro “rascunho nunca usado” com arquivar em lote, depois de conferir a lista.</p>
+        <p class="faz">feito: filtro “Rascunho parado” em Produtos (sem nota aberta, venda em 30 dias nem saldo). O arquivar em lote ficou de fora: a limpeza no ar está com a equipe, pela tela.</p>
       </div></article>
       <article class="achado"><span class="g baixa">Baixa</span><div>
         <h3>“Média por dia” no modo Dia</h3>

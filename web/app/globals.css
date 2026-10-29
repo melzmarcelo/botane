@@ -401,6 +401,15 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     color: var(--color-erva);
     background: var(--color-erva-claro);
   }
+  /* As setas ‹ › que trocam o dia/recorte: 40×40 de área de toque (auditoria de
+     29/10/2026 — tinham ~20 px e no celular o dedo errava), o glifo do tamanho de antes. */
+  .seta-data {
+    justify-content: center;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    font-size: 18px;
+  }
   /* O que desfaz, apaga ou estorna se anuncia em vermelho ANTES do clique. */
   .link-acao-erro:hover:not(:disabled) {
     border-color: var(--color-erro);
@@ -604,6 +613,39 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     color: var(--color-erro);
   }
   .btn-perigo:hover { background: var(--color-erro-claro); }
+
+  /* 🔑 **O menu "Mais"** (`components/menu-mais.tsx`, auditoria de 29/10/2026): o que é
+     de vez em quando sai da fila de botões do topo. Os itens são os MESMOS botões,
+     achatados em linhas de menu. */
+  .menu-mais {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    display: flex;
+    flex-direction: column;
+    min-width: 230px;
+    padding: 6px;
+    border: 1px solid var(--color-linha);
+    border-radius: 12px;
+    background: var(--color-superficie);
+    box-shadow: 0 12px 32px rgba(20, 32, 26, 0.18);
+  }
+  /* ⚠️ O `z-index` só com o menu ABERTO: com ele, o menu vira um contexto de empilhamento, e a
+     janela que nasce de um item dele (Imprimir) ficava presa ali — atrás da barra do topo. */
+  .menu-mais:not(.invisible) { z-index: 30; }
+  .menu-mais > .btn,
+  .menu-mais > a {
+    justify-content: flex-start;
+    width: 100%;
+    min-height: 40px;
+    border-color: transparent;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 14px;
+    text-align: left;
+  }
+  .menu-mais > .btn:hover:not(:disabled),
+  .menu-mais > a:hover { background: var(--color-erva-claro); color: var(--color-erva); }
 
   /* 🔑 **Desabilitado ganhou COR PRÓPRIA, no lugar de opacidade** — e este era
      o pior número da paleta. `opacity: .55` sobre o primário levava o branco

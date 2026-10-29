@@ -1,10 +1,12 @@
 // Foto de celular (390) de verdade: página aberta JÁ no tamanho de celular. Só lê.
+// LARGURA=1280 tira a do computador.
 import puppeteer from "puppeteer-core";
 const WEB = "http://127.0.0.1:3100";
 const [saida, ...rotas] = process.argv.slice(2);
 const nav = await puppeteer.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: "new", args: ["--no-sandbox"] });
 const p = await nav.newPage();
-await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+const L = Number(process.env.LARGURA || 390);
+await p.setViewport({ width: L, height: L > 600 ? 900 : 844, isMobile: L <= 600, hasTouch: L <= 600, deviceScaleFactor: 1 });
 await p.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
 await new Promise((r) => setTimeout(r, 2500));
 await p.type('input[type="email"]', "admin@botane.com.br");

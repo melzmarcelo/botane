@@ -300,7 +300,9 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-tinta/45 p-4 sm:p-8"
+      // `visible`: a janela aberta de dentro do menu "Mais" fechado continua aparecendo
+      // (ver `components/menu-mais.tsx`).
+      className="visible fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-tinta/45 p-4 sm:p-8"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) aoFechar();
       }}

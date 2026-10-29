@@ -183,6 +183,10 @@ export default function PaginaPrecificacao() {
         </Aviso>
       )}
 
+      {/* ⚠️ **Sem configuração, só o convite** (auditoria de 29/10/2026): a faixa dizia
+          "não configurada" e logo abaixo vinham "abaixo da margem: 0 de 0" e uma coluna de
+          mínimo sugerido — números de uma conta que ainda não existe. */}
+      {dados.configurada && (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Ladrilho rotulo="Abaixo da margem" valor={`${dados.resumo.abaixo} de ${dados.resumo.com_conta}`}
                   sub="entre os que têm custo e preço" />
@@ -193,12 +197,13 @@ export default function PaginaPrecificacao() {
         <Ladrilho rotulo="Sem custo, sem sugestão" valor={String(dados.resumo.sem_custo)}
                   sub="falta ficha técnica ou custo de compra" />
       </div>
+      )}
 
       <Cartao
         titulo="O que rever primeiro"
         descricao="Primeiro o que está abaixo da margem, pelo que mais pesa no mês. Quem já está acima do mínimo aparece com a folga."
         acao={
-          podeAplicar ? (
+          podeAplicar && dados.configurada ? (
             <span className="flex flex-wrap items-center gap-3">
               {escolhidos.length > 0 && (
                 <span className="mono text-[13px] text-suave">no mês: +{reais(impactoEscolhido)}</span>
@@ -218,15 +223,15 @@ export default function PaginaPrecificacao() {
             <table className="tabela">
               <thead>
                 <tr>
-                  {podeAplicar && <th className="w-[40px]"><span className="sr-only">Aplicar</span></th>}
+                  {podeAplicar && dados.configurada && <th className="w-[40px]"><span className="sr-only">Aplicar</span></th>}
                   <th>Produto</th>
                   <th className="num">Custo direto</th>
                   <th className="num">Preço atual</th>
                   <th className="num">Lucro líquido</th>
-                  <th className="num">Mínimo sugerido</th>
-                  <th className="num">Diferença</th>
+                  {dados.configurada && <th className="num">Mínimo sugerido</th>}
+                  {dados.configurada && <th className="num">Diferença</th>}
                   <th className="num">Vendido</th>
-                  <th className="num">Impacto no mês</th>
+                  {dados.configurada && <th className="num">Impacto no mês</th>}
                 </tr>
               </thead>
               <tbody>
@@ -236,7 +241,7 @@ export default function PaginaPrecificacao() {
                     <tr key={i.id_produto}
                         className={`cursor-pointer ${aberto === i.id_produto ? "bg-erva-claro" : ""}`}
                         onClick={() => setAberto(aberto === i.id_produto ? null : i.id_produto)}>
-                      {podeAplicar && (
+                      {podeAplicar && dados.configurada && (
                         <td onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" className="h-4 w-4 cursor-pointer accent-erva"
                                  checked={marcados.has(i.id_produto)} disabled={!mexe(i)}
@@ -268,6 +273,7 @@ export default function PaginaPrecificacao() {
                         <span className="tabular-nums">{pct(i.lucro_pct)}</span>
                         <span className="block whitespace-nowrap"><Etiqueta cor={cor}>{rotulo}</Etiqueta></span>
                       </td>
+                      {dados.configurada && <>
                       <td className="num whitespace-nowrap font-semibold tabular-nums">{reais(i.sugerido)}</td>
                       <td className="num whitespace-nowrap tabular-nums">
                         {i.diferenca === null ? "—" : mexe(i) ? `+${reais(i.diferenca)}`
@@ -276,10 +282,13 @@ export default function PaginaPrecificacao() {
                           : Math.abs(i.diferenca) < 0.005 ? <span className="text-suave">no mínimo</span>
                             : <span className="text-suave">folga de {reais(-i.diferenca)}</span>}
                       </td>
+                      </>}
                       <td className="num tabular-nums">{qtd(i.vendido)}</td>
+                      {dados.configurada && (
                       <td className="num whitespace-nowrap font-semibold tabular-nums">
                         {i.impacto === null ? "—" : `+${reais(i.impacto)}`}
                       </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -287,10 +296,10 @@ export default function PaginaPrecificacao() {
             </table>
           </div>
         )}
-        <p className="mt-3 text-[13px] text-suave">
+        {dados.configurada && <p className="mt-3 text-[13px] text-suave">
           Impacto = se vender a mesma quantidade com o preço sugerido. Subir preço pode mudar a
           venda; o sistema não prevê isso. Clique num produto para ver a conta dele.
-        </p>
+        </p>}
       </Cartao>
 
       {/* ⚠️ A lista tem até 200 linhas e o detalhe nasce DEPOIS dela: sem rolar até

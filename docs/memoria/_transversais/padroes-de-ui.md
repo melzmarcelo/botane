@@ -5,6 +5,26 @@
 
 ## O que já existe
 
+- 🔑 **Menu "Mais" para o que é de vez em quando** (`components/menu-mais.tsx`, 1.1.151,
+  auditoria de 29/10/2026). Topo de tela = um principal, dois ou três secundários, os botões
+  condicionais (pendências) à vista, e o resto no `<MenuMais>`; os itens são os MESMOS botões da
+  casa (`.btn`, `BotaoExportar`, `Link`), achatados pelo CSS `.menu-mais`. Usado em Notas de
+  entrada, Vendas ▸ Documentos e Patrimônio.
+  ⚠️ **Fechado é `invisible`, não desmontado**: o item abre janela (Imprimir) cujo estado vive
+  nele; desmontar fecharia a janela no mesmo clique. Por isso o `Modal` leva `visible`.
+  ⚠️ **O `z-index` do menu só vale ABERTO** (`.menu-mais:not(.invisible)`): com ele sempre, o
+  menu era contexto de empilhamento e a janela do item ficava ATRÁS da barra do topo.
+  ⚠️ No teste, `main button[aria-haspopup="menu"]`: o menu do usuário no topo também é popup.
+  Cobertura: `scripts/verificar-auditoria-medias.mjs`.
+- 🔑 **Lista em colunas no computador, linha no celular** (Notas de entrada e Documentos, 1.1.151):
+  o `li` é `flex` e vira `sm:grid` com colunas FIXAS numa constante (`COLUNAS_NOTA`,
+  `COLUNAS_DOC`), mais um `li` de cabeçalho `rotulo hidden sm:grid`. ⚠️ Coluna `auto` não serve:
+  cada `li` é uma grade própria, e com `auto` as colunas desalinhavam de linha para linha.
+- 🔑 **`.seta-data`**: as setas ‹ › de trocar dia/recorte têm 40×40 de toque (eram ~20 px).
+- ⚠️ **`.campo` ganha de `w-[...]`** (largura 100% fora da camada de utilitários): para dar
+  largura a um campo use `max-w-[...]` com `min-w-[...]`. E um grupo de datas lado a lado num
+  `flex-wrap` encolhe ao mínimo e empilha: o grupo leva `sm:flex-nowrap`.
+
 - 🔑 **Item de grade leva `min-w-0`, sempre** (29/10/2026, auditoria das telas no celular).
   Grade (`grid`) e flex começam com `min-width: auto`: o filho não encolhe abaixo do próprio
   conteúdo. Com uma linha `truncate`, uma tabela dentro de `overflow-x-auto` ou barras

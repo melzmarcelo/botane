@@ -8,6 +8,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import ExplicaTela from "@/components/explica-tela";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
+import AbasDoPatrimonio from "../abas";
 import { api } from "@/lib/api";
 import type { Setor } from "@/lib/cadastros";
 import {
@@ -65,6 +66,8 @@ export default function PaginaConferencias() {
           no conserto, emprestado) ou <strong>dar baixa</strong>. Não mexe no estoque.
         </ExplicaTela>
       </header>
+
+      <AbasDoPatrimonio />
 
       {podeConferir && (
         <Cartao titulo="Abrir uma conferência"

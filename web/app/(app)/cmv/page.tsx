@@ -159,7 +159,11 @@ export default function PaginaCmv() {
       .get<Ciclo>("/cmv/periodos?quantos=12")
       .then((c) => {
         setCiclo(c);
-        const atual = c.periodos.find((p) => p.corrente) ?? c.periodos[0];
+        // `?periodo=AAAA-MM-DD` (o início) abre aquele período — é como o alerta "período
+        // ainda não fechado" leva direto à semana que falta fechar (29/10/2026).
+        const pedido = new URLSearchParams(window.location.search).get("periodo");
+        const atual = c.periodos.find((p) => p.inicio === pedido)
+          ?? c.periodos.find((p) => p.corrente) ?? c.periodos[0];
         if (atual) {
           setInicio(atual.inicio);
           // O período corrente ainda não acabou: mostrar até hoje, não até o
@@ -245,6 +249,12 @@ export default function PaginaCmv() {
   // O estoque final ficou maior que o inicial mais as compras — entrou mercadoria que não
   // passou por compra. O food cost dele não é um número: a tela diz "—" e explica.
   const cmvNegativo = !!a && a.cmv_real < 0;
+  /** O título de cada aviso que muda o número — a linha do bloco recolhido. */
+  const avisosDoNumero = [
+    pendencias.length > 0 && "o real está incompleto",
+    pobreDeFicha && "o teórico não é confiável",
+    (a?.tipos_fora_do_cmv?.length ?? 0) > 0 && "há grupo fora do CMV",
+  ].filter((x): x is string => !!x);
 
   return (
     <div className="flex flex-col gap-6">
@@ -287,7 +297,7 @@ export default function PaginaCmv() {
             {ciclo && ciclo.periodos.length > 0 && (
               <label>
                 <span className="rotulo-campo">Período</span>
-                <span className="mt-1.5 block w-[232px]">
+                <span className="mt-1.5 block w-[290px] max-w-full">
                   <select
                     className="campo"
                     value={ciclo.periodos.find((p) => p.inicio === inicio)?.inicio ?? ""}
@@ -376,33 +386,70 @@ export default function PaginaCmv() {
               R$ 235 mil de receita mostrava food cost de 1,38% porque 94 notas do
               período não tinham sido lançadas. É a mesma lista da janela de
               fechar, antes do número e não depois. */}
-          {pendencias.length > 0 && (
-            <div className="aviso aviso-info">
-              <p>
-                <b>O CMV real deste período ainda está incompleto.</b> Os pontos abaixo mudam o
-                número — e o food cost junto.
-              </p>
-              <ListaDePendencias itens={pendencias} />
-            </div>
-          )}
-          {pobreDeFicha && (
-            <Aviso tipo="info">
-              <b>O CMV teórico deste período não é confiável.</b> Só{" "}
-              {pct(a.cobertura_ficha_pct)} da receita tem ficha técnica —{" "}
-              <b className="mono">{a.itens_sem_custo}</b> itens vendidos não sabem o próprio
-              custo e entram na conta valendo zero
-              {a.receita_com_custo != null && (
-                <>
-                  {" "}
-                  ({reais(a.receita_com_custo)} dos {reais(a.receita)} vendidos)
-                </>
-              )}
-              . Por isso a variância aparece em {pct(a.variancia_pct)}: ela está medindo o
-              cadastro, não a cozinha.{" "}
-              <Link href="/vendas" className="underline">
-                ver os itens sem custo
-              </Link>
-            </Aviso>
+          {/* 🔑 **Os avisos que mudam o número, num bloco só** (auditoria de 29/10/2026): eram
+              três faixas amarelas antes dos ladrilhos e o CMV ficava na segunda dobra.
+              ⚠️ Continua ACIMA do número (decisão de 16/09: a confiança vem antes) — só que
+              numa linha que diz QUAIS são, e abre para o detalhe. O vermelho do CMV negativo
+              fica fora daqui, sempre aberto. */}
+          {avisosDoNumero.length > 0 && (
+            <details className="aviso aviso-info" id="cmv-avisos">
+              <summary className="cursor-pointer">
+                <b>
+                  {avisosDoNumero.length === 1
+                    ? "1 coisa muda este número"
+                    : `${avisosDoNumero.length} coisas mudam este número`}
+                  :
+                </b>{" "}
+                {avisosDoNumero.join(" · ")}
+              </summary>
+              <div className="mt-2 space-y-3">
+                {pendencias.length > 0 && (
+                  <div>
+                    <p>
+                      <b>O CMV real deste período ainda está incompleto.</b> Os pontos abaixo mudam o
+                      número — e o food cost junto.
+                    </p>
+                    <ListaDePendencias itens={pendencias} />
+                  </div>
+                )}
+                {pobreDeFicha && (
+                  <p>
+                    <b>O CMV teórico deste período não é confiável.</b> Só{" "}
+                    {pct(a.cobertura_ficha_pct)} da receita tem ficha técnica —{" "}
+                    <b className="mono">{a.itens_sem_custo}</b> itens vendidos não sabem o próprio
+                    custo e entram na conta valendo zero
+                    {a.receita_com_custo != null && (
+                      <>
+                        {" "}
+                        ({reais(a.receita_com_custo)} dos {reais(a.receita)} vendidos)
+                      </>
+                    )}
+                    . Por isso a variância aparece em {pct(a.variancia_pct)}: ela está medindo o
+                    cadastro, não a cozinha.{" "}
+                    <Link href="/vendas" className="underline">
+                      ver os itens sem custo
+                    </Link>
+                  </p>
+                )}
+                {/* ⚠️ O aviso vem ANTES da conta, não depois: quem compara o CMV
+                    deste mês com o do mês passado precisa saber que a régua mudou. */}
+                {(a.tipos_fora_do_cmv?.length ?? 0) > 0 && (
+                  <p>
+                    {(a.grupos ?? [])
+                      .filter((g) => !g.considerar_no_cmv)
+                      .map((g) => g.nome)
+                      .join(", ") || "Um grupo"}{" "}
+                    está <b>fora do CMV real</b>: o custo de{" "}
+                    {(a.tipos_fora_do_cmv ?? []).map(nomeTipo).join(", ").toLowerCase()} não entra na
+                    conta abaixo nem no food cost. Ele continua à vista, em linha própria — quem
+                    quiser somá-lo, soma.{" "}
+                    <Link href="/cadastros?aba=grupos-cmv" className="underline">
+                      mudar isso
+                    </Link>
+                  </p>
+                )}
+              </div>
+            </details>
           )}
 
           {cmvNegativo && (
@@ -477,25 +524,6 @@ export default function PaginaCmv() {
                 : `O estoque consumiu ${reais(Math.abs(a.variancia))} a menos que o teórico — costuma ser prato vendido sem ficha ou ficha exagerada.`}
             </Aviso>
           )}
-
-          {/* ⚠️ O aviso vem ANTES da conta, não depois: quem compara o CMV
-              deste mês com o do mês passado precisa saber que a régua mudou. */}
-          {(a.tipos_fora_do_cmv?.length ?? 0) > 0 && (
-            <Aviso tipo="info">
-              {(a.grupos ?? [])
-                .filter((g) => !g.considerar_no_cmv)
-                .map((g) => g.nome)
-                .join(", ") || "Um grupo"}{" "}
-              está <b>fora do CMV real</b>: o custo de{" "}
-              {(a.tipos_fora_do_cmv ?? []).map(nomeTipo).join(", ").toLowerCase()} não entra na
-              conta abaixo nem no food cost. Ele continua à vista, em linha própria — quem
-              quiser somá-lo, soma.{" "}
-              <Link href="/cadastros?aba=grupos-cmv" className="underline">
-                mudar isso
-              </Link>
-            </Aviso>
-          )}
-
 
           {/* 🔑 **Sete perguntas, não quatro listas** (16/09/2026, protótipo
               aprovado). A primeira é A CONTA — ela existia como tabela no meio
@@ -763,8 +791,8 @@ export default function PaginaCmv() {
           )}
 
           <Cartao
-            titulo="Períodos fechados"
-            descricao="Fechar congela o período: depois disso, lançar com data de trás exige permissão."
+            titulo="Fechamentos"
+            descricao="Fechar congela o período: depois disso, lançar com data de trás exige permissão. Os reabertos aparecem apagados — o número deles ainda pode mudar."
           >
             {!fechamentos.length ? (
               <Vazio>Nenhum período fechado ainda.</Vazio>
@@ -784,7 +812,9 @@ export default function PaginaCmv() {
                   </thead>
                   <tbody>
                     {fechamentos.map((f) => (
-                      <tr key={f.id}>
+                      // ⚠️ Reaberto vem apagado: o quadro se chamava "Períodos fechados" e, na
+                      // base de teste, toda linha dizia "reaberto" (auditoria de 29/10/2026).
+                      <tr key={f.id} className={f.status === "FECHADO" ? undefined : "opacity-60"}>
                         {/* ⚠️ O nome do período vem do servidor. Ele é o único
                             que sabe se "01/08" é o mês de agosto ou a semana que
                             começou nele — a coluna `ciclo` é quem responde, e
@@ -796,7 +826,7 @@ export default function PaginaCmv() {
                         <td className={`num ${f.variancia > 0 ? "text-erro" : "text-erva"}`}>
                           {reais(f.variancia)}
                         </td>
-                        <td className="num">{pct(f.food_cost_pct)}</td>
+                        <td className="num">{f.cmv_real < 0 ? "—" : pct(f.food_cost_pct)}</td>
                         <td>
                           <Etiqueta cor={f.status === "FECHADO" ? "erva" : "alerta"}>
                             {f.status.toLowerCase()}

@@ -386,7 +386,7 @@ export default function PaginaLancarVenda() {
           <Campo rotulo="Documento" dica="reimportar o mesmo não duplica">
             <input
               className="campo"
-              placeholder="fechamento-2026-08-26"
+              placeholder="número do cupom ou do fechamento"
               value={documento}
               onChange={(e) => setDocumento(e.target.value)}
             />
@@ -425,7 +425,7 @@ export default function PaginaLancarVenda() {
             ter um campo Observação". Substituiu a caixa "Considerar consumo interno",
             que virou a primeira opção. */}
         <div className="mt-4 grid gap-4 sm:grid-cols-3" id="motivo-do-documento">
-          <Campo rotulo="Motivo" dica="em branco, é venda">
+          <Campo rotulo="Motivo" dica="troque só para consumo interno, perda, prêmio ou brinde">
             <select
               id="venda-motivo-campo"
               className="campo"

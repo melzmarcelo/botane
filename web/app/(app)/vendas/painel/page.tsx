@@ -137,9 +137,9 @@ export default function PainelDeVendas() {
           ) : null}
 
           <div className="flex items-center gap-1">
-            <button type="button" className="link-acao px-2 text-[18px]" aria-label="recorte anterior"
+            <button type="button" className="link-acao seta-data" aria-label="recorte anterior"
                     disabled={!inicio || carregando} onClick={() => ir(andar(m, inicio, fim, -1))}>‹</button>
-            <button type="button" className="link-acao px-2 text-[18px]" aria-label="próximo recorte"
+            <button type="button" className="link-acao seta-data" aria-label="próximo recorte"
                     disabled={!inicio || carregando} onClick={() => ir(andar(m, inicio, fim, 1))}>›</button>
           </div>
 

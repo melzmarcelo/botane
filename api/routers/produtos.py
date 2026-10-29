@@ -232,7 +232,9 @@ def listar(
     # 🔑 **Só o que a operação já está tocando** (05/10/2026): em nota aberta,
     # vendido nos últimos 30 dias ou com saldo. É o recorte do alerta de
     # rascunhos — a mesma condição, de `services/produtos_em_uso.py`.
-    em_uso: bool = False,
+    # `false` é o avesso (29/10/2026, auditoria): o rascunho que ninguém está tocando,
+    # candidato a arquivar. Ausente = sem recorte.
+    em_uso: bool | None = None,
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
@@ -267,7 +269,7 @@ def listar(
                AND (%s::int IS NULL OR p.id <> %s)
                AND (NOT %s OR NOT EXISTS
                     (SELECT 1 FROM fichas_tecnicas f WHERE f.id_produto = p.id))
-               AND (NOT %s OR __EM_USO__)
+               AND (%s::boolean IS NULL OR __EM_USO__ = %s)
                AND (%s::varchar IS NULL
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     -- 🔑 Quem lança a venda digita o nome do PDV (22/10/2026).
@@ -285,8 +287,9 @@ def listar(
              status, status,
              controla_estoque, controla_estoque, excluir_id, excluir_id,
              sem_ficha,
-             # `em_uso` e as três vezes em que a condição pergunta pela loja.
-             em_uso, id_unidade, id_unidade, id_unidade,
+             # `em_uso`, as três vezes em que a condição pergunta pela loja, e de novo
+             # `em_uso` (o lado direito do `=`).
+             em_uso, id_unidade, id_unidade, id_unidade, em_uso,
              busca, busca, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )

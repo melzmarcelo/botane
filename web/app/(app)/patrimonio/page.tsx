@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import BotaoExportar from "@/components/exportar";
+import MenuMais from "@/components/menu-mais";
+import AbasDoPatrimonio from "./abas";
 import ExplicaTela from "@/components/explica-tela";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -30,7 +32,7 @@ import { useSessao } from "@/lib/sessao";
  */
 
 const SITUACAO_OPCOES: [string, string][] = [
-  ["", "Todos, menos os baixados"],
+  ["", "Sem os baixados"],
   ["PARADOS", "Em manutenção ou parados"],
   ...Object.entries(SITUACOES),
 ];
@@ -116,29 +118,26 @@ export default function PaginaPatrimonio() {
         </ExplicaTela>
       </header>
 
+      <AbasDoPatrimonio />
+
       <div className="flex flex-wrap gap-2">
         {podeCadastrar && (
-          <>
-            <Link href="/patrimonio/novo" className="btn btn-primario" id="patrimonio-novo">
-              Novo bem
-            </Link>
+          <Link href="/patrimonio/novo" className="btn btn-primario" id="patrimonio-novo">
+            Novo bem
+          </Link>
+        )}
+        <BotaoExportar relatorio="patrimonio" iniciais={iniciais} />
+        {/* Conferência e Valor viraram abas (auditoria de 29/10/2026); o de vez em quando
+            vai para o "Mais". */}
+        <MenuMais>
+          {podeCadastrar && (
             <Link href="/patrimonio/importar" className="btn btn-secundario" id="patrimonio-importar">
               Importar planilha
             </Link>
-          </>
-        )}
-        {/* Etapa 3 (140): a conferência pelas plaquetas. Quem só vê também entra — para
-            acompanhar a volta e baixar a folha. */}
-        <Link href="/patrimonio/conferencias" className="btn btn-secundario" id="patrimonio-conferencias">
-          Conferência
-        </Link>
-        {/* Etapa 4 (141): o valor e a depreciação. */}
-        <Link href="/patrimonio/valor" className="btn btn-secundario" id="patrimonio-valor">
-          Valor
-        </Link>
-        <BotaoExportar relatorio="patrimonio" iniciais={iniciais} />
-        <BotaoExportar relatorio="patrimonio-manutencoes" rotulo="Manutenções"
-                       iniciais={{ setores: iniciais.setores, busca_bem: iniciais.busca_bem }} />
+          )}
+          <BotaoExportar relatorio="patrimonio-manutencoes" rotulo="Manutenções"
+                         iniciais={{ setores: iniciais.setores, busca_bem: iniciais.busca_bem }} />
+        </MenuMais>
       </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
@@ -238,8 +237,9 @@ export default function PaginaPatrimonio() {
       )}
 
       <Cartao>
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <input className="campo" id="patrimonio-busca" placeholder="Equipamento, código, marca, série…"
+        {/* A busca ganha a linha inteira: em um quinto dela o exemplo saía cortado (auditoria de 29/10/2026). */}
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <input className="campo sm:col-span-2 lg:col-span-4" id="patrimonio-busca" placeholder="Equipamento, código, marca, série…"
                  value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar" />
           <select className="campo" id="patrimonio-setor" value={setor} aria-label="Setor"
                   onChange={(e) => setSetor(e.target.value)}>

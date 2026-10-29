@@ -6,6 +6,10 @@
 
 ## O que já existe
 
+- 🔑 **Sem configuração, só o convite** (1.1.151, auditoria de 29/10/2026): sem `configurada`,
+  somem os ladrilhos, as colunas Mínimo sugerido/Diferença/Impacto, as caixinhas e o Aplicar.
+  A faixa dizia "não configurada" e logo abaixo vinha "abaixo da margem: 0 de 0".
+
 - **Três telas, no grupo "Precificação" do menu** (05/10/2026, pedido do dono):
   `/precificacao` (analisar e aplicar), `/precos` (preço × custo de um produto no tempo — a
   memória dela está em [`custos.md`](custos.md)) e `/precificacao/configuracao`.

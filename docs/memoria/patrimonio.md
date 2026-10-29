@@ -5,6 +5,11 @@
 
 ## O que já existe
 
+- 🔑 **Abas Bens · Conferência · Valor** (`patrimonio/abas.tsx`, 1.1.151, auditoria de
+  29/10/2026): eram botões no meio de "Novo bem" e "Imprimir". Cada aba é uma página; os ids
+  `patrimonio-conferencias`/`patrimonio-valor` são os dos botões de antes (a bateria clica neles).
+  Importar planilha e o relatório Manutenções foram para o menu Mais.
+
 - 🔑 **O módulo** (1.1.143, migração `139_patrimonio.sql`, 27/10/2026). Pedido do dono: *"Agora
   que temos o tipo de produto Patrimônio, gostaria de um processo para inventariar o
   patrimônio"*, com a planilha `Inventario_Equipamentos_Botane.xlsx` (uma aba por setor; 27

@@ -83,6 +83,11 @@ export default function PaginaProdutos() {
       if (situacao === "RASCUNHO_EM_USO") {
         q.set("status", "RASCUNHO");
         q.set("em_uso", "true");
+      } else if (situacao === "RASCUNHO_SEM_USO") {
+        // O avesso (auditoria de 29/10/2026): sem nota aberta, sem venda em 30 dias e sem
+        // saldo — o rascunho parado, que só polui a busca.
+        q.set("status", "RASCUNHO");
+        q.set("em_uso", "false");
       } else if (situacao) q.set("status", situacao);
       const r = await api.listar<ProdutoResumo>(`/produtos?${q}`);
       setLista(r.itens);
@@ -301,6 +306,7 @@ export default function PaginaProdutos() {
               <option value="ATIVO">Aprovado</option>
               <option value="RASCUNHO">Rascunho</option>
               <option value="RASCUNHO_EM_USO">Rascunho em uso</option>
+              <option value="RASCUNHO_SEM_USO">Rascunho parado</option>
               {/* ⚠️ ARQUIVADO nao foi pedido, mas existe e e para onde vai o
                   cadastro absorvido numa fusao: sem ele, "Todas" mostraria uma
                   situacao que o filtro nao sabe nomear. */}

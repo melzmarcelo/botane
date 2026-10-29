@@ -7,6 +7,7 @@ import BotaoExportar from "@/components/exportar";
 import ExplicaTela from "@/components/explica-tela";
 import { Aviso, Campo, Carregando, Cartao, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
+import AbasDoPatrimonio from "../abas";
 import { api } from "@/lib/api";
 import type { Setor } from "@/lib/cadastros";
 import { hoje } from "@/lib/datas";
@@ -53,6 +54,8 @@ export default function PaginaValor() {
           conta; o baixado conta até a data da baixa. É só relatório: nada aqui vai para o CMV.
         </ExplicaTela>
       </header>
+
+      <AbasDoPatrimonio />
 
       <div className="flex flex-wrap items-end gap-3">
         <Campo rotulo="Na data de">

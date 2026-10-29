@@ -11,6 +11,7 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/ui";
 import CabecalhoTela from "@/components/cabecalho-tela";
 import BotaoExportar from "@/components/exportar";
+import MenuMais from "@/components/menu-mais";
 import { qtd } from "@/lib/numeros";
 import { CANAIS, dataBr, etiquetaDoMotivo, horaBr, MOTIVOS_VENDA, ORIGENS, Venda } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
@@ -39,6 +40,10 @@ type SemBaixa = {
   produtos: number;
   unidades: number;
 };
+
+/** As colunas da lista de documentos a partir do `sm` (documento, origem, itens, valor, etiquetas). */
+const COLUNAS_DOC =
+  "sm:grid sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_56px_130px_250px] sm:items-center sm:gap-4";
 
 export default function PaginaVendas() {
   const aviso = useAviso();
@@ -193,23 +198,6 @@ export default function PaginaVendas() {
                     <Link href="/vendas/por-pessoa" className="btn btn-secundario">
                       Consumo por pessoa
                     </Link>
-                    {/* 🔑 A fita do período, cupom a cupom, para conferir com o caixa
-                        (23/10/2026). Leva o dia escolhido na tela. */}
-                    {/* 🔑 Os documentos que não são venda, por motivo (26/10/2026): quadros,
-                        comparativo e impressão. Leva o período escolhido. */}
-                    <Link
-                      href={`/vendas/motivos${de ? `?modo=periodo&de=${de}&ate=${fimEfetivo}` : ""}`}
-                      className="btn btn-secundario" id="vendas-por-motivo"
-                    >
-                      Por motivo
-                    </Link>
-                    <BotaoExportar relatorio="vendas-documentos" rotulo="Lista de vendas"
-                                   iniciais={{
-                                     ...(de ? { inicio: de, fim: fimEfetivo } : {}),
-                                     ...(motivo === "VENDA" ? { motivo_venda: ["VENDA"] }
-                                       : motivo === "QUALQUER" ? { motivo_venda: Object.keys(MOTIVOS_VENDA) }
-                                       : motivo ? { motivo_venda: [motivo] } : {}),
-                                   }} />
                     {/* ⚠️ O gêmeo do "Buscar no Omie" de Compras. A busca precisa estar na
                         tela do assunto: quem abre Vendas para ver as vendas não vai
                         lembrar que ela mora em Integrações — e venda não buscada é receita
@@ -238,6 +226,26 @@ export default function PaginaVendas() {
                         Reconciliar {pendencias} pendente(s)
                       </button>
                     )}
+                    {/* O de vez em quando vai para o "Mais" (auditoria de 29/10/2026). */}
+                    <MenuMais>
+                      {/* 🔑 A fita do período, cupom a cupom, para conferir com o caixa
+                          (23/10/2026). Leva o dia escolhido na tela. */}
+                      {/* 🔑 Os documentos que não são venda, por motivo (26/10/2026): quadros,
+                          comparativo e impressão. Leva o período escolhido. */}
+                      <Link
+                        href={`/vendas/motivos${de ? `?modo=periodo&de=${de}&ate=${fimEfetivo}` : ""}`}
+                        className="btn btn-secundario" id="vendas-por-motivo"
+                      >
+                        Por motivo
+                      </Link>
+                      <BotaoExportar relatorio="vendas-documentos" rotulo="Lista de vendas"
+                                     iniciais={{
+                                       ...(de ? { inicio: de, fim: fimEfetivo } : {}),
+                                       ...(motivo === "VENDA" ? { motivo_venda: ["VENDA"] }
+                                         : motivo === "QUALQUER" ? { motivo_venda: Object.keys(MOTIVOS_VENDA) }
+                                         : motivo ? { motivo_venda: [motivo] } : {}),
+                                     }} />
+                    </MenuMais>
                   </div>
         }
       />
@@ -295,9 +303,9 @@ export default function PaginaVendas() {
           </select>
           {/* ⚠️ `flex-wrap` (auditoria de 29/10/2026): as duas datas lado a lado passavam da
               largura do celular (398 px numa tela de 390). */}
-          <span className="flex flex-wrap items-center gap-2">
+          <span className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
             <input
-              className="campo max-w-[170px]"
+              className="campo min-w-[150px] max-w-[170px]"
               type="date"
               aria-label="De"
               title="de (sozinho, recorta este dia)"
@@ -306,7 +314,7 @@ export default function PaginaVendas() {
             />
             <span className="text-suave">a</span>
             <input
-              className="campo max-w-[170px]"
+              className="campo min-w-[150px] max-w-[170px]"
               type="date"
               aria-label="Até"
               value={ate}
@@ -331,11 +339,20 @@ export default function PaginaVendas() {
               : "Nenhuma venda ainda. Lance uma, cole a planilha do PDV ou ligue a integração."}
           </Vazio>
         ) : (
+          // 🔑 **No computador, colunas** (auditoria de 29/10/2026), como em Notas de entrada:
+          // documento, origem, itens, valor à direita e as etiquetas na ponta.
           <ul className="flex flex-col gap-px bg-linha">
+            <li className={`${COLUNAS_DOC} rotulo hidden bg-superficie pb-2`} aria-hidden>
+              <span>Documento</span>
+              <span>Origem</span>
+              <span className="text-right">Itens</span>
+              <span className="text-right">Valor</span>
+              <span></span>
+            </li>
             {lista.map((v) => (
               <li
                 key={v.id}
-                className={`flex flex-wrap items-center justify-between gap-3 bg-superficie py-3 ${
+                className={`${COLUNAS_DOC} flex flex-wrap items-center justify-between gap-3 bg-superficie py-3 ${
                   v.cancelada ? "opacity-55" : ""
                 }`}
               >
@@ -345,13 +362,23 @@ export default function PaginaVendas() {
                     {horaBr(v.hora) && ` às ${horaBr(v.hora)}`} ·{" "}
                     {v.documento ?? `venda #${v.id}`}
                   </span>
-                  <span className="block text-[13px] text-suave">
+                  <span className="block text-[13px] text-suave sm:hidden">
                     {ORIGENS[v.origem] ?? v.origem.toLowerCase()}
                     {v.canal ? ` · ${CANAIS[v.canal] ?? v.canal.toLowerCase()}` : ""} ·{" "}
                     {v.itens} item(ns) · {reais(Number(v.valor_total))}
                   </span>
                 </Link>
-                <span className="flex items-center gap-2">
+                <span className="hidden min-w-0 truncate text-[13px] text-suave sm:block">
+                  {ORIGENS[v.origem] ?? v.origem.toLowerCase()}
+                  {v.canal ? ` · ${CANAIS[v.canal] ?? v.canal.toLowerCase()}` : ""}
+                </span>
+                <span className="hidden text-right text-[13px] tabular-nums text-suave sm:block">
+                  {v.itens}
+                </span>
+                <span className="mono hidden text-right font-semibold sm:block">
+                  {reais(Number(v.valor_total))}
+                </span>
+                <span className="flex items-center gap-2 sm:justify-end">
                   {v.sem_custo > 0 && (
                     <Etiqueta cor="alerta">{v.sem_custo} sem custo</Etiqueta>
                   )}

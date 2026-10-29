@@ -5,6 +5,11 @@
 
 ## O que já existe
 
+- 🔑 **Alertas: vencidos e a vencer em quadros separados** (1.1.151, auditoria de 29/10/2026):
+  "Vencidos — dar baixa" (só aparece se houver) e "Vencem nos próximos dias". O quadro único
+  abria com lotes vencidos há 292 dias por cima do que vence amanhã. A rota é a mesma
+  (`/alertas/vencimentos`); a divisão é na tela, por `dias_restantes`.
+
 - 🔑 **Patrimônio mora em [`patrimonio.md`](patrimonio.md)** (1.1.143, migração 139): os bens um
   por item, plaqueta, manutenção. Está no menu de Estoque, mas **não escreve no razão** — o
   produto do tipo Patrimônio continua sendo quantidade aqui.

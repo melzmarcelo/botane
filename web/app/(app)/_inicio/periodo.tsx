@@ -64,7 +64,9 @@ export default function PeriodoAteAgora({ d, periodo }: { d: Dinheiro; periodo: 
                   ? "sem número enquanto o CMV estiver negativo"
                   : fc === null
                   ? `sem vendas importadas ${periodo.termos.neste}`
-                  : `sobre ${reais(d.receita_mes)} de receita${meta !== null ? ` · meta ${pct(meta)}` : ""}`}>
+                  // Sem meta a régua não diz se está bom ou ruim: a legenda pede a meta (auditoria
+                  // de 29/10/2026 — no ar ela estava vazia).
+                  : `sobre ${reais(d.receita_mes)} de receita · ${meta !== null ? `meta ${pct(meta)}` : "sem meta: defina na loja"}`}>
           {fc !== null && !semConta && (
             <span className="relative mt-2 block h-1.5 rounded bg-superficie2" aria-hidden="true">
               <i className={`absolute inset-y-0 left-0 rounded ${acimaDaMeta ? "bg-alerta" : "bg-erva"}`}

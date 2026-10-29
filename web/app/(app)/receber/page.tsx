@@ -40,6 +40,7 @@ export default function PaginaContasAReceber() {
   const [aberta, setAberta] = useState<{ id: number; nome: string } | null>(null);
   // Muda a cada lote gerado, para a lista de lotes recarregar.
   const [versao, setVersao] = useState(0);
+  const [busca, setBusca] = useState("");
 
   const carregar = useCallback(async () => {
     setErro("");
@@ -54,9 +55,15 @@ export default function PaginaContasAReceber() {
     carregar();
   }, [carregar]);
 
-  const linhas = dados?.linhas ?? [];
-  // ⚠️ Sem ninguém marcado, o lote é de TODOS os da lista — o "gerar da quinzena".
-  const alvo = marcadas.size ? linhas.filter((l) => marcadas.has(l.id_pessoa)) : linhas;
+  // 🔑 **Busca por nome** (auditoria de 29/10/2026): com 214 pessoas em aberto, gerar o lote
+  // de uma só pedia rolar até ela. Filtra na tela, sem ir ao servidor.
+  const termo = semAcento(busca.trim());
+  const todas = dados?.linhas ?? [];
+  const linhas = termo ? todas.filter((l) => semAcento(l.pessoa).includes(termo)) : todas;
+  // ⚠️ Sem ninguém marcado, o lote é de TODOS os da lista — o "gerar da quinzena". Com a
+  // busca ativa, "a lista" é o que a busca mostra: quem procura um nome e clica não pode
+  // gerar o lote das outras 213 pessoas sem ver.
+  const alvo = marcadas.size ? todas.filter((l) => marcadas.has(l.id_pessoa)) : linhas;
   const totalAlvo = alvo.reduce((s, l) => s + Number(l.total), 0);
   // 🔑 A data de corte do lote é o "até" do filtro; sem ele, hoje.
   const corte = ate || hoje();
@@ -129,7 +136,7 @@ export default function PaginaContasAReceber() {
             {reais(dados?.total ?? 0)}
           </p>
           <p className="mt-1 text-[13px] text-suave">
-            {linhas.length} pessoa(s) com consumo ainda não cobrado
+            {todas.length} pessoa(s) com consumo ainda não cobrado
           </p>
         </Cartao>
         <Cartao titulo="Em cobrança">
@@ -149,7 +156,11 @@ export default function PaginaContasAReceber() {
         descricao="Marque as pessoas para gerar o lote só delas; sem marcar, o lote é de todas da lista."
       >
         <div className="flex flex-col gap-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Campo rotulo="Pessoa" dica="procura pelo nome nesta lista">
+              <input id="receber-busca" className="campo" type="search" value={busca}
+                placeholder="Nome da pessoa" onChange={(e) => setBusca(e.target.value)} />
+            </Campo>
             <Campo rotulo="Documentos de" dica="todas as datas, se em branco">
               <input id="receber-de" className="campo" type="date" value={de}
                 onChange={(e) => setDe(e.target.value)} />
@@ -166,7 +177,8 @@ export default function PaginaContasAReceber() {
                   disabled={!alvo.length || ocupado}
                   onClick={() => setConfirmando(true)}
                 >
-                  {marcadas.size ? `Gerar ${alvo.length} lote(s)` : "Gerar lotes de todos"}
+                  {marcadas.size ? `Gerar ${alvo.length} lote(s)`
+                    : termo ? `Gerar lotes dos ${alvo.length} da busca` : "Gerar lotes de todos"}
                 </button>
               </div>
             )}
@@ -176,8 +188,10 @@ export default function PaginaContasAReceber() {
             <Aviso tipo="erro">{erro}</Aviso>
           ) : !dados ? (
             <p className="text-suave">carregando…</p>
-          ) : !linhas.length ? (
+          ) : !todas.length ? (
             <Vazio>Ninguém com consumo em aberto neste recorte.</Vazio>
+          ) : !linhas.length ? (
+            <Vazio>Ninguém com esse nome na lista em aberto.</Vazio>
           ) : (
             <div className="grid-rolante">
               <table className="tabela" id="receber-em-aberto">
@@ -284,4 +298,9 @@ export default function PaginaContasAReceber() {
       )}
     </div>
   );
+}
+
+/** Minúsculas e sem acento, para "joão" achar "Joao". */
+function semAcento(t: string) {
+  return t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }

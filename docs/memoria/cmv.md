@@ -5,6 +5,19 @@
 
 ## O que já existe
 
+- 🔑 **Os avisos que mudam o número viraram UM bloco recolhível** (`#cmv-avisos`, 1.1.151,
+  auditoria de 29/10/2026): período incompleto, teórico não confiável e grupo fora do CMV eram
+  três faixas antes dos ladrilhos, e o CMV ia para a segunda dobra. Agora uma linha diz QUAIS
+  são ("3 coisas mudam este número: …") e abre para o detalhe. ⚠️ Continua ACIMA dos números
+  (decisão de 16/09: a confiança vem antes). O vermelho do CMV negativo fica fora, sempre aberto.
+- 🔑 **Sem meta de food cost, o Início pede a meta** ("sem meta: defina na loja", 1.1.151): no
+  ar ela estava vazia, e a régua sem marca não dizia se o número era bom.
+- 🔑 **"Fechamentos"** (era "Períodos fechados" e listava reabertos): reaberto vem apagado, e
+  food cost de período com CMV negativo é "—" ali também.
+- 🔑 **`/cmv?periodo=AAAA-MM-DD`** abre aquele período (o início). É para onde aponta o alerta
+  `cmv.mes_aberto`, que sobe de "quando puder" para ATENÇÃO a partir do 2º dia depois do fim
+  do período (no ar a semana de 19–25/10 seguia aberta na quarta seguinte).
+
 - 🔑 **CMV negativo é conta que não fecha, e a tela diz isso** (29/10/2026, auditoria: a semana
   de 26/10 no ar deu CMV real de −R$ 5.599 e food cost de −45%, mostrados como número comum).
   Negativo quer dizer estoque final maior que inicial + compras: entrou mercadoria que não passou

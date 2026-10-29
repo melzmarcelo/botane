@@ -122,7 +122,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         {dia ? (
           <div className="flex items-center gap-2">
-            <button type="button" className="link-acao px-1 text-[18px]" aria-label="dia anterior com venda"
+            <button type="button" className="link-acao seta-data" aria-label="dia anterior com venda"
                     disabled={!dia.anterior || indo} onClick={() => void ir(dia.anterior)}>‹</button>
             <h2 className="text-[15px] font-bold">
               Vendas do dia{" "}
@@ -130,7 +130,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
                 · {dia.data === hoje ? "hoje, " : ""}{diaDaSemana(dia.data)}, {porExtenso(dia.data)}
               </span>
             </h2>
-            <button type="button" className="link-acao px-1 text-[18px]" aria-label="próximo dia com venda"
+            <button type="button" className="link-acao seta-data" aria-label="próximo dia com venda"
                     disabled={!dia.proximo || indo} onClick={() => void ir(dia.proximo)}>›</button>
           </div>
         ) : (

@@ -49,6 +49,49 @@ type Minimo = {
 const CORES = { critico: "erro", atencao: "alerta", aviso: "suave" } as const;
 const ROTULOS = { critico: "agir hoje", atencao: "atenção", aviso: "quando puder" } as const;
 
+function TabelaDeLotes({ lotes }: { lotes: Vencimento[] }) {
+  return (
+    <div className="grid-rolante">
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Validade</th>
+            <th>Produto</th>
+            <th>Lote</th>
+            <th>Local</th>
+            <th className="num">Quantidade</th>
+            <th className="num">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lotes.map((v) => (
+            <tr key={v.id}>
+              <td className="mono whitespace-nowrap">
+                {new Date(v.validade + "T12:00:00").toLocaleDateString("pt-BR")}
+                <span className={`ml-2 ${v.dias_restantes < 0 ? "text-erro" : "text-suave"}`}>
+                  {v.dias_restantes < 0
+                    ? `venceu há ${-v.dias_restantes}d`
+                    : `em ${v.dias_restantes}d`}
+                </span>
+              </td>
+              <td>
+                <LinkProduto id={v.id_produto} className="font-semibold">{v.produto}</LinkProduto>
+                <span className="mono ml-2 text-[12px] text-suave">{v.codigo}</span>
+              </td>
+              <td className="mono text-[13px]">{v.lote ?? "—"}</td>
+              <td className="text-suave">{v.local}</td>
+              <td className="num">
+                {Number(v.quantidade)} {v.um_estoque ?? ""}
+              </td>
+              <td className="num">{reais(Number(v.valor))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function PaginaAlertas() {
   const aviso = useAviso();
   const [alertas, setAlertas] = useState<Alerta[] | null>(null);
@@ -76,6 +119,8 @@ export default function PaginaAlertas() {
   }, [carregar]);
 
   const criticos = alertas?.filter((a) => a.severidade === "critico").length ?? 0;
+  const vencidos = vencimentos.filter((v) => v.dias_restantes < 0);
+  const aVencer = vencimentos.filter((v) => v.dias_restantes >= 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -145,8 +190,25 @@ export default function PaginaAlertas() {
         </Cartao>
       )}
 
+      {/* 🔑 **Vencidos e a vencer em quadros separados** (auditoria de 29/10/2026): o quadro
+          único abria com lotes "vencidos há 292d", e quem procurava o que vence amanhã rolava
+          por cima do que já é perda. */}
+      {vencidos.length > 0 && (
+        <Cartao
+          titulo="Vencidos — dar baixa"
+          descricao="Já passaram da validade e continuam contando como estoque bom. Dê baixa como perda em Estoque."
+          acao={
+            <Link href="/estoque" className="link-acao">
+              ir ao estoque ›
+            </Link>
+          }
+        >
+          <TabelaDeLotes lotes={vencidos} />
+        </Cartao>
+      )}
+
       <Cartao
-        titulo="Vencendo"
+        titulo="Vencem nos próximos dias"
         descricao="Lotes com validade dentro da janela configurada nos parâmetros da loja."
         acao={
           vencimentos.length ? (
@@ -154,49 +216,10 @@ export default function PaginaAlertas() {
           ) : undefined
         }
       >
-        {!vencimentos.length ? (
+        {!aVencer.length ? (
           <Vazio>Nenhum lote com validade próxima.</Vazio>
         ) : (
-          <div className="grid-rolante">
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th>Validade</th>
-                  <th>Produto</th>
-                  <th>Lote</th>
-                  <th>Local</th>
-                  <th className="num">Quantidade</th>
-                  <th className="num">Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vencimentos.map((v) => (
-                  <tr key={v.id}>
-                    <td className="mono whitespace-nowrap">
-                      {new Date(v.validade + "T12:00:00").toLocaleDateString("pt-BR")}
-                      <span
-                        className={`ml-2 ${v.dias_restantes < 0 ? "text-erro" : "text-suave"}`}
-                      >
-                        {v.dias_restantes < 0
-                          ? `venceu há ${-v.dias_restantes}d`
-                          : `em ${v.dias_restantes}d`}
-                      </span>
-                    </td>
-                    <td>
-                      <LinkProduto id={v.id_produto} className="font-semibold">{v.produto}</LinkProduto>
-                      <span className="mono ml-2 text-[12px] text-suave">{v.codigo}</span>
-                    </td>
-                    <td className="mono text-[13px]">{v.lote ?? "—"}</td>
-                    <td className="text-suave">{v.local}</td>
-                    <td className="num">
-                      {Number(v.quantidade)} {v.um_estoque ?? ""}
-                    </td>
-                    <td className="num">{reais(Number(v.valor))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TabelaDeLotes lotes={aVencer} />
         )}
       </Cartao>
 
