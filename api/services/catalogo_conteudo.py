@@ -67,6 +67,41 @@ def _recusar_nome_repetido(cur, tabela: str, coluna_pai: str, id_pai: int,
         )
 
 
+def _preco_vigente(coluna_produto: str) -> str:
+    """O preço vigente pela cascata loja → casa (a do site e do feed). Pede `%(u)s`."""
+    return f"""(SELECT pr.preco_venda FROM produto_precos pr
+                 WHERE pr.id_produto = {coluna_produto} AND pr.vigente_ate IS NULL
+                   AND (pr.id_unidade = %(u)s OR pr.id_unidade IS NULL)
+                 ORDER BY pr.id_unidade NULLS LAST LIMIT 1)"""
+
+
+def opcoes_de_escolha(cur, id_unidade: int, itens: list[int]) -> dict[int, list[dict]]:
+    """As opções (produtos) de cada item de ESCOLHA, na ordem, com o preço vigente.
+
+    🔑 142: o rótulo é opcional — sem ele, a opção se chama pelo nome de vitrine do produto.
+    ⚠️ Volta TAMBÉM a opção inativa, marcada: o cadastro precisa vê-la para tirar; quem a
+    esconde do cliente é o feed e o site.
+    """
+    if not itens:
+        return {}
+    cur.execute(
+        f"""SELECT e.id_item, e.id, e.id_produto, e.rotulo, e.rotulo_en, e.rotulo_de, e.ordem,
+                   p.nome AS produto, coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS vitrine,
+                   p.nome_catalogo_en, p.nome_catalogo_de, p.ativo, p.foto_url,
+                   {_preco_vigente('p.id')} AS preco
+              FROM catalogo_item_escolhas e
+              JOIN produtos p ON p.id = e.id_produto
+             WHERE e.id_item = ANY(%(i)s)
+             ORDER BY e.ordem, e.id""",  # noqa: S608 - SQL fixo
+        {"u": id_unidade, "i": itens})
+    saida: dict[int, list[dict]] = {}
+    for r in cur.fetchall():
+        d = dict(r)
+        d["nome"] = (d["rotulo"] or "").strip() or d["vitrine"]
+        saida.setdefault(d.pop("id_item"), []).append(d)
+    return saida
+
+
 # ---------------------------------------------------------------------------
 # Ler o catálogo inteiro
 # ---------------------------------------------------------------------------
@@ -111,31 +146,43 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
     subs = [dict(r) for r in cur.fetchall()]
 
     cur.execute(
-        """SELECT i.id, i.id_categoria, i.id_subcategoria, i.id_produto, i.ordem,
+        f"""SELECT i.id, i.id_categoria, i.id_subcategoria, i.id_produto, i.ordem,
                   i.destaque, (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado,
                   CASE WHEN (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) THEN i.esgotado_ate END AS esgotado_ate,
-                  i.objetivo, i.margem_nivel,
-                  p.nome AS produto, p.codigo, p.ativo, p.foto_url,
-                  p.video_url IS NOT NULL AS tem_video, p.restricoes,
+                  i.objetivo, i.margem_nivel, i.tipo,
+                  -- 🔑 142: o item de ESCOLHA não tem produto — nome, descrição e foto
+                  -- são dele, e ele vale como ativo (quem sai de linha são as opções).
+                  coalesce(p.nome, i.nome) AS produto, p.codigo,
+                  coalesce(p.ativo, true) AS ativo, coalesce(i.foto_url, p.foto_url) AS foto_url,
+                  coalesce(p.video_url IS NOT NULL, false) AS tem_video,
+                  coalesce(p.restricoes, '{{}}') AS restricoes,
                   -- 🔑 O nome que o CLIENTE vai ler, para a tela de
                   -- configuração mostrar o que sai na vitrine — e não só o que
                   -- está no cadastro.
-                  nullif(btrim(p.nome_catalogo), '') AS nome_catalogo,
-                  p.informacao_adicional, p.um_estoque,
+                  CASE WHEN i.tipo = 'ESCOLHA' THEN i.nome
+                       ELSE nullif(btrim(p.nome_catalogo), '') END AS nome_catalogo,
+                  coalesce(i.descricao, p.informacao_adicional) AS informacao_adicional,
+                  p.um_estoque,
                   -- 🔑 O preço que o cliente vê, pela MESMA cascata do site e do
                   -- feed (loja → casa). A linha do editor mostra o prato como
                   -- ele sai, e preço errado ali é preço errado no cardápio.
-                  (SELECT pr.preco_venda FROM produto_precos pr
-                    WHERE pr.id_produto = p.id AND pr.vigente_ate IS NULL
-                      AND (pr.id_unidade = %s OR pr.id_unidade IS NULL)
-                    ORDER BY pr.id_unidade NULLS LAST LIMIT 1) AS preco
+                  -- O item de escolha mostra o MENOR das opções ("a partir de").
+                  CASE WHEN i.tipo = 'ESCOLHA' THEN
+                      (SELECT min({_preco_vigente('e.id_produto')}) FROM catalogo_item_escolhas e
+                         JOIN produtos ep ON ep.id = e.id_produto AND ep.ativo
+                        WHERE e.id_item = i.id)
+                  ELSE {_preco_vigente('p.id')} END AS preco
              FROM catalogo_itens i
-             JOIN produtos p ON p.id = i.id_produto
-            WHERE i.id_categoria = ANY(%s)
-            ORDER BY i.ordem, lower(p.nome)""",
-        (id_unidade, ids),
+             LEFT JOIN produtos p ON p.id = i.id_produto
+            WHERE i.id_categoria = ANY(%(cats)s)
+            ORDER BY i.ordem, lower(coalesce(p.nome, i.nome))""",  # noqa: S608 - SQL fixo
+        {"u": id_unidade, "cats": ids},
     )
     itens = [dict(r) for r in cur.fetchall()]
+    escolhas = opcoes_de_escolha(cur, id_unidade, [i["id"] for i in itens if i["tipo"] == "ESCOLHA"])
+    for i in itens:
+        if i["tipo"] == "ESCOLHA":
+            i["escolhas"] = escolhas.get(i["id"], [])
 
     por_sub: dict[int, list] = {}
     soltos: dict[int, list] = {}
@@ -361,6 +408,8 @@ def excluir_subcategoria(cur, id_unidade: int, id_sub: int) -> dict:
 _TABELA_DA_SECAO = {
     "categoria": ("catalogo_categorias", _categoria),
     "subcategoria": ("catalogo_subcategorias", _subcategoria),
+    # 142: o item de ESCOLHA tem foto própria (o produto tem a dele, no cadastro).
+    "item": ("catalogo_itens", lambda cur, u, i: _item_de_escolha(cur, u, i)),
 }
 
 
@@ -406,6 +455,132 @@ def remover_foto(cur, id_unidade: int, tipo: str, id_secao: int) -> dict:
 # Os produtos do cardápio
 # ---------------------------------------------------------------------------
 
+def _produto_vendavel(cur, id_produto: int) -> dict:
+    """O produto, se pode entrar no cardápio: ativo e vendido no PDV.
+
+    ⚠️ A mesma régua para o prato e para a opção do item de escolha (142): a opção é o
+    que vai no pedido, e a casa a lança no PDV.
+    """
+    cur.execute(
+        """SELECT id, nome, ativo, integrado_pdv, codigo_pdv
+             FROM produtos WHERE id = %s""",
+        (id_produto,),
+    )
+    produto = cur.fetchone()
+    if not produto:
+        raise HTTPException(status_code=404, detail="Produto não encontrado.")
+    if not produto["ativo"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f'"{produto["nome"]}" está inativo e não entra no cardápio.')
+    if not (produto["integrado_pdv"] or produto["codigo_pdv"]):
+        raise HTTPException(
+            status_code=409,
+            detail=(f'"{produto["nome"]}" não é vendido no PDV. O cardápio do site '
+                    "mostra só o que está no balcão."))
+    return dict(produto)
+
+
+def _lugar(cur, id_unidade: int, id_categoria: int, id_sub: int | None) -> dict:
+    """A categoria (desta loja, de catálogo PRODUTOS) e a subcategoria, se for dela."""
+    categoria = _categoria(cur, id_unidade, id_categoria)
+    if id_sub and _subcategoria(cur, id_unidade, id_sub)["id_categoria"] != id_categoria:
+        raise HTTPException(status_code=409, detail="Essa subcategoria é de outra categoria.")
+    return categoria
+
+
+def _fim_da_lista(cur, id_categoria: int, id_sub: int | None) -> int:
+    cur.execute(
+        """SELECT coalesce(max(ordem), 0) AS ultima FROM catalogo_itens
+            WHERE id_categoria = %s
+              AND ((%s::int IS NULL AND id_subcategoria IS NULL) OR id_subcategoria = %s)""",
+        (id_categoria, id_sub, id_sub),
+    )
+    return min(int(cur.fetchone()["ultima"]) + 10, 999)
+
+
+def _gravar_opcoes(cur, id_item: int, opcoes: list[dict]) -> None:
+    """A lista INTEIRA de opções do item de escolha, na ordem em que veio."""
+    if len(opcoes) < 2:
+        raise HTTPException(status_code=422,
+                            detail="Um item de escolha precisa de pelo menos duas opções.")
+    vistos: set[int] = set()
+    for o in opcoes:
+        if o["id_produto"] in vistos:
+            raise HTTPException(status_code=409, detail="O mesmo produto apareceu duas vezes.")
+        vistos.add(o["id_produto"])
+    cur.execute("SELECT id_produto FROM catalogo_item_escolhas WHERE id_item = %s", (id_item,))
+    ja = {r["id_produto"] for r in cur.fetchall()}
+    for o in opcoes:
+        # ⚠️ Só o produto NOVO passa pela régua: a opção que já estava e saiu de linha
+        # não trava a edição do resto (ela aparece marcada para a casa tirar).
+        if o["id_produto"] not in ja:
+            _produto_vendavel(cur, o["id_produto"])
+    cur.execute("DELETE FROM catalogo_item_escolhas WHERE id_item = %s", (id_item,))
+    for n, o in enumerate(opcoes):
+        cur.execute(
+            """INSERT INTO catalogo_item_escolhas (id_item, id_produto, rotulo, ordem)
+               VALUES (%s, %s, %s, %s)""",
+            (id_item, o["id_produto"], (o.get("rotulo") or "").strip()[:60] or None, (n + 1) * 10))
+
+
+def criar_escolha(cur, id_unidade: int, id_categoria: int, dados: dict) -> dict:
+    """Um item de ESCOLHA na seção (142): nome, descrição e as opções (produtos).
+
+    🔑 Pedido do dono (29/10/2026): "Chocolate Quente (este não é um produto): ao
+    selecionar, tem a escolha Preto ou Branco".
+    """
+    id_sub = dados.get("id_subcategoria")
+    _lugar(cur, id_unidade, id_categoria, id_sub)
+    nome = dados["nome"].strip()
+    cur.execute(
+        """INSERT INTO catalogo_itens (id_categoria, id_subcategoria, tipo, nome, descricao, ordem)
+           VALUES (%s, %s, 'ESCOLHA', %s, %s, %s) RETURNING id""",
+        (id_categoria, id_sub, nome, (dados.get("descricao") or "").strip() or None,
+         _fim_da_lista(cur, id_categoria, id_sub)),
+    )
+    id_item = cur.fetchone()["id"]
+    _gravar_opcoes(cur, id_item, dados["opcoes"])
+    return {"id": id_item, "nome": nome, "message": f'"{nome}" entrou no cardápio.'}
+
+
+def _item(cur, id_unidade: int, id_item: int) -> dict:
+    """O item, se for desta loja. Nome do produto ou o do item de escolha."""
+    cur.execute(
+        """SELECT i.id, i.tipo, i.id_produto, i.id_categoria, i.id_subcategoria, i.foto_url,
+                  i.nome AS nome_item, i.descricao, c.id_catalogo, coalesce(p.nome, i.nome) AS nome
+             FROM catalogo_itens i
+             LEFT JOIN produtos p ON p.id = i.id_produto
+             JOIN catalogo_categorias c ON c.id = i.id_categoria
+             JOIN catalogos k ON k.id = c.id_catalogo
+            WHERE i.id = %s AND k.id_unidade = %s""",
+        (id_item, id_unidade),
+    )
+    achado = cur.fetchone()
+    if not achado:
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    return dict(achado)
+
+
+def _item_de_escolha(cur, id_unidade: int, id_item: int) -> dict:
+    item = _item(cur, id_unidade, id_item)
+    if item["tipo"] != "ESCOLHA":
+        raise HTTPException(status_code=409,
+                            detail=f'"{item["nome"]}" é um produto; nome e foto se mudam no cadastro dele.')
+    return item
+
+
+def atualizar_escolha(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
+    """Nome, descrição e a lista de opções do item de escolha — a lista inteira."""
+    atual = _item_de_escolha(cur, id_unidade, id_item)
+    nome = dados["nome"].strip()
+    cur.execute("UPDATE catalogo_itens SET nome = %s, descricao = %s WHERE id = %s",
+                (nome, (dados.get("descricao") or "").strip() or None, id_item))
+    _gravar_opcoes(cur, id_item, dados["opcoes"])
+    return {"id": id_item, "antes": {"nome": atual["nome_item"], "descricao": atual["descricao"]},
+            "message": f'"{nome}" atualizado.'}
+
+
 def vincular(cur, id_unidade: int, id_categoria: int, dados: dict) -> dict:
     """Pendura um produto na categoria — ou na subcategoria dela.
 
@@ -424,23 +599,7 @@ def vincular(cur, id_unidade: int, id_categoria: int, dados: dict) -> dict:
                 status_code=409,
                 detail="Essa subcategoria é de outra categoria.")
 
-    cur.execute(
-        """SELECT id, nome, ativo, integrado_pdv, codigo_pdv
-             FROM produtos WHERE id = %s""",
-        (dados["id_produto"],),
-    )
-    produto = cur.fetchone()
-    if not produto:
-        raise HTTPException(status_code=404, detail="Produto não encontrado.")
-    if not produto["ativo"]:
-        raise HTTPException(
-            status_code=409,
-            detail=f'"{produto["nome"]}" está inativo e não entra no cardápio.')
-    if not (produto["integrado_pdv"] or produto["codigo_pdv"]):
-        raise HTTPException(
-            status_code=409,
-            detail=(f'"{produto["nome"]}" não é vendido no PDV. O cardápio do site '
-                    "mostra só o que está no balcão."))
+    produto = _produto_vendavel(cur, dados["id_produto"])
 
     cur.execute(
         """SELECT 1 FROM catalogo_itens
@@ -520,9 +679,9 @@ def mover(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
     índice único garantiria, mas não explicaria.
     """
     cur.execute(
-        """SELECT i.id, i.id_produto, i.id_categoria, i.id_subcategoria, c.id_catalogo, p.nome
+        """SELECT i.id, i.id_produto, i.id_categoria, i.id_subcategoria, c.id_catalogo, coalesce(p.nome, i.nome) AS nome
              FROM catalogo_itens i
-             JOIN produtos p ON p.id = i.id_produto
+             LEFT JOIN produtos p ON p.id = i.id_produto
              JOIN catalogo_categorias c ON c.id = i.id_categoria
              JOIN catalogos k ON k.id = c.id_catalogo
             WHERE i.id = %s AND k.id_unidade = %s""",
@@ -571,9 +730,9 @@ def mover(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
 
 def desvincular(cur, id_unidade: int, id_item: int) -> dict:
     cur.execute(
-        """SELECT i.id, p.nome
+        """SELECT i.id, coalesce(p.nome, i.nome) AS nome
              FROM catalogo_itens i
-             JOIN produtos p ON p.id = i.id_produto
+             LEFT JOIN produtos p ON p.id = i.id_produto
              JOIN catalogo_categorias c ON c.id = i.id_categoria
              JOIN catalogos k ON k.id = c.id_catalogo
             WHERE i.id = %s AND k.id_unidade = %s""",
@@ -582,7 +741,10 @@ def desvincular(cur, id_unidade: int, id_item: int) -> dict:
     achado = cur.fetchone()
     if not achado:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
-    cur.execute("DELETE FROM catalogo_itens WHERE id = %s", (id_item,))
+    cur.execute("DELETE FROM catalogo_itens WHERE id = %s RETURNING foto_url", (id_item,))
+    foto = cur.fetchone()["foto_url"]
+    if foto:  # a foto do item de escolha (142) sai junto
+        arquivos.remover(foto, cur)
     return {"message": f'"{achado["nome"]}" saiu do cardápio.'}
 
 
@@ -600,9 +762,9 @@ def marcar_item(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
     """
     cur.execute(
         """SELECT i.id, i.destaque, (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado,
-                  i.esgotado_ate, i.objetivo, i.margem_nivel, p.nome
+                  i.esgotado_ate, i.objetivo, i.margem_nivel, coalesce(p.nome, i.nome) AS nome
              FROM catalogo_itens i
-             JOIN produtos p ON p.id = i.id_produto
+             LEFT JOIN produtos p ON p.id = i.id_produto
              JOIN catalogo_categorias c ON c.id = i.id_categoria
              JOIN catalogos k ON k.id = c.id_catalogo
             WHERE i.id = %s AND k.id_unidade = %s""",

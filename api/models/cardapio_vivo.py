@@ -146,19 +146,25 @@ class OpcaoAdicional(BaseModel):
     preco: float | None = Field(None, ge=0)
     id_produto_ref: int | None = None
     ativo: bool = True
+    # 🔑 142: entra por R$ 0 — o item que já vem no preço (a embalagem da cesta).
+    incluso: bool = False
 
 
 class GrupoAdicional(BaseModel):
     nome: str = Field(min_length=1, max_length=80)
-    minimo: int = Field(0, ge=0, le=20)
-    maximo: int = Field(1, ge=1, le=20)
+    minimo: int = Field(0, ge=0, le=30)
+    maximo: int = Field(1, ge=1, le=30)
+    # 🔑 142: a mesma opção mais de uma vez ("2 geleias"); mínimo e máximo contam unidades.
+    permite_repetir: bool = False
     opcoes: list[OpcaoAdicional] = Field(min_length=1, max_length=40)
 
     @model_validator(mode="after")
     def _faixa(self):
         if self.minimo > self.maximo:
             raise ValueError("O mínimo de escolhas não pode passar do máximo.")
-        if self.minimo > len([o for o in self.opcoes if o.ativo]):
+        ativas = len([o for o in self.opcoes if o.ativo])
+        # Repetindo, uma opção ativa basta para qualquer mínimo.
+        if (self.minimo > ativas and not self.permite_repetir) or (self.minimo and not ativas):
             raise ValueError("O mínimo pede mais escolhas do que há opções ativas.")
         return self
 
@@ -168,7 +174,10 @@ class GrupoAdicional(BaseModel):
 class ItemDoPedidoDaMesa(BaseModel):
     item: int
     quantidade: int = Field(ge=1, le=50)
-    adicionais: list[int] = Field(default_factory=list, max_length=30)
+    # 🔑 142: o PRODUTO escolhido, quando o item é de escolha (Chocolate Quente → Branco).
+    escolha: int | None = None
+    # Id repetido = a mesma opção mais de uma vez, nos grupos que deixam repetir (142).
+    adicionais: list[int] = Field(default_factory=list, max_length=60)
     observacao: str | None = Field(None, max_length=200)
 
 

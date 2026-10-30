@@ -35,9 +35,10 @@ def _produto(cur, id_produto: int) -> dict:
 
 def _adicionais(cur, id_produto: int) -> list[dict]:
     cur.execute(
-        """SELECT g.id, g.nome, g.minimo, g.maximo,
+        """SELECT g.id, g.nome, g.minimo, g.maximo, g.permite_repetir,
                   coalesce(json_agg(json_build_object(
                       'id', o.id, 'nome', o.nome, 'preco', o.preco, 'ativo', o.ativo,
+                      'incluso', o.incluso,
                       'id_produto_ref', o.id_produto_ref, 'produto_ref', r.nome)
                       ORDER BY o.ordem, o.id) FILTER (WHERE o.id IS NOT NULL), '[]') AS opcoes
              FROM produto_adicionais_grupos g
@@ -156,20 +157,21 @@ def gravar_adicionais(id_produto: int, body: list[GrupoAdicional],
         cur.execute("DELETE FROM produto_adicionais_grupos WHERE id_produto = %s", (id_produto,))
         for ordem_g, g in enumerate(body):
             cur.execute(
-                """INSERT INTO produto_adicionais_grupos (id_produto, nome, minimo, maximo, ordem)
-                   VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-                (id_produto, g.nome.strip(), g.minimo, g.maximo, ordem_g))
+                """INSERT INTO produto_adicionais_grupos
+                       (id_produto, nome, minimo, maximo, ordem, permite_repetir)
+                   VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+                (id_produto, g.nome.strip(), g.minimo, g.maximo, ordem_g, g.permite_repetir))
             id_grupo = cur.fetchone()["id"]
             for ordem_o, o in enumerate(g.opcoes):
                 cur.execute(
                     """INSERT INTO produto_adicionais_opcoes
-                           (id_grupo, nome, preco, id_produto_ref, ordem, ativo)
-                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                           (id_grupo, nome, preco, id_produto_ref, ordem, ativo, incluso)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                     (id_grupo, o.nome.strip(),
                      # ⚠️ Com produto, o preço é o DELE (cascata da loja): um preço digitado
                      # aqui seria a segunda regra de preço que a casa evita.
                      None if o.id_produto_ref else o.preco,
-                     o.id_produto_ref, ordem_o, o.ativo))
+                     o.id_produto_ref, ordem_o, o.ativo, o.incluso))
         depois = _adicionais(cur, id_produto)
         auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "adicionais",
                             antes={"grupos": [g["nome"] for g in antes]},

@@ -30,7 +30,7 @@ import auditoria
 from database import get_cursor
 from models.catalogos import (
     CatalogoCreate, CatalogoResponse, CatalogoUpdate, CategoriaCreate, ItemCreate,
-    ItemLugar, ItemOrdem,
+    EscolhaCreate, ItemLugar, ItemOrdem,
     ORIGENS, SITUACOES, SubcategoriaCreate,
 )
 from models.cardapio_vivo import ExibicaoDaSecao, MarcasDoItem
@@ -404,6 +404,18 @@ def vincular_produto(id_categoria: int, body: ItemCreate,
         return posto
 
 
+@router.post("/categorias/{id_categoria}/escolhas", status_code=201)
+def criar_escolha(id_categoria: int, body: EscolhaCreate,
+                  ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Um item de ESCOLHA na seção (142): o cliente escolhe um dos produtos."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        posto = conteudo.criar_escolha(cur, id_unidade, id_categoria, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", posto["id"], "criar_escolha",
+                            depois=body.model_dump(), id_unidade=id_unidade)
+        return posto
+
+
 @router.put("/itens/ordem")
 def reordenar_itens(body: list[ItemOrdem], ctx: Contexto = Depends(_EDITAR)) -> dict:
     """A nova ordem de uma lista, inteira.
@@ -433,6 +445,43 @@ def mover_produto(id_item: int, body: ItemLugar, ctx: Contexto = Depends(_EDITAR
                                     "id_subcategoria": body.id_subcategoria},
                             id_unidade=id_unidade)
         return feito
+
+
+@router.put("/itens/{id_item}/escolha")
+def atualizar_escolha(id_item: int, body: EscolhaCreate,
+                      ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Nome, descrição e opções do item de escolha. ⚠️ Não muda de seção: isso é o mover."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        feito = conteudo.atualizar_escolha(cur, id_unidade, id_item, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", id_item, "atualizar_escolha",
+                            antes=feito.pop("antes"), depois=body.model_dump(),
+                            id_unidade=id_unidade)
+        return feito
+
+
+@router.post("/itens/{id_item}/foto")
+async def enviar_foto_do_item(id_item: int, arquivo: UploadFile = File(...),
+                              ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """A foto do item de ESCOLHA (142). O prato comum usa a foto do produto."""
+    dados, mime, extensao = await arquivos.ler_enviada(arquivo)
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        posta = conteudo.guardar_foto(cur, id_unidade, "item", id_item, dados, mime,
+                                      extensao, arquivo.filename)
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", id_item, "enviar_foto",
+                            depois={"foto_nome": arquivo.filename}, id_unidade=id_unidade)
+        return posta
+
+
+@router.delete("/itens/{id_item}/foto")
+def remover_foto_do_item(id_item: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        fora = conteudo.remover_foto(cur, id_unidade, "item", id_item)
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", id_item, "remover_foto",
+                            id_unidade=id_unidade)
+        return fora
 
 
 @router.delete("/itens/{id_item}")

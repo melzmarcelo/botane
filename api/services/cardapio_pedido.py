@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from services.custos import dec
 from services import cardapio_vivo as cv
 from services import fidelidade
+from services import item_do_pedido
 from services import pedidos as pedidos_servico
 from services import reserva_clientes as clientes
 from services import termo_consentimento as termo
@@ -29,27 +30,6 @@ ITENS_POR_PEDIDO = 40
 
 
 # ---------------------------------------------------------------- o pedido da mesa
-
-def _escolhas(item: dict, ids: list[int]) -> tuple[list[dict], Decimal]:
-    """Os adicionais escolhidos, conferidos contra os grupos do produto (mínimo e máximo)."""
-    por_id = {o["id"]: (g, o) for g in item["adicionais"] for o in g["opcoes"]}
-    escolhidos = []
-    for i in dict.fromkeys(ids):  # repetido conta uma vez
-        if i not in por_id:
-            raise HTTPException(status_code=409,
-                                detail=f"Uma opção de {item['nome']} mudou. Atualize o cardápio.")
-        escolhidos.append(por_id[i])
-    for g in item["adicionais"]:
-        n = sum(1 for gg, _o in escolhidos if gg["id"] == g["id"])
-        if n < g["minimo"] or n > g["maximo"]:
-            raise HTTPException(
-                status_code=422,
-                detail=f"{item['nome']}: em “{g['nome']}”, escolha "
-                       + (f"{g['minimo']}" if g["minimo"] == g["maximo"]
-                          else f"de {g['minimo']} a {g['maximo']}") + ".")
-    extras = sum((dec(o["preco"] or 0) for _g, o in escolhidos), Decimal(0))
-    return [{"id": o["id"], "nome": o["nome"], "preco": o["preco"]} for _g, o in escolhidos], extras
-
 
 def enviar(cur, mesa: dict, dados: dict, telefone: str | None) -> dict:
     """Grava o pedido que a mesa mandou. Devolve o resumo público.
@@ -93,14 +73,15 @@ def enviar(cur, mesa: dict, dados: dict, telefone: str | None) -> dict:
             raise HTTPException(status_code=409, detail=f"{item['nome']} esgotou.")
         if item["preco"] is None:
             raise HTTPException(status_code=409, detail=f"{item['nome']} está sem preço — peça ao garçom.")
-        escolhas, extras = _escolhas(item, [int(x) for x in i.get("adicionais") or []])
+        # 🔑 142: a escolha (item de escolha) e os adicionais seguem a regra única do site e
+        # da mesa, em `item_do_pedido`.
+        linha = item_do_pedido.resolver({**item, "id_produto": produto_do_item[item["id"]]},
+                                        i.get("escolha"), [int(x) for x in i.get("adicionais") or []])
         qtd = dec(i["quantidade"])
-        unitario = (dec(item["preco"]) + extras).quantize(_CENTAVO)
-        linhas.append({"id_produto": produto_do_item[item["id"]], "nome": item["nome"],
-                       "quantidade": qtd, "preco_unitario": unitario,
-                       "total": (qtd * unitario).quantize(_CENTAVO),
+        linhas.append({**linha, "quantidade": qtd,
+                       "total": (qtd * linha["preco_unitario"]).quantize(_CENTAVO),
                        "observacao": (i.get("observacao") or "").strip()[:200] or None,
-                       "adicionais": escolhas or None, "ordem": n})
+                       "ordem": n})
 
     cliente = clientes.conferir(cur, id_unidade, clientes.telefone_valido(telefone)) if telefone else None
     tot = pedidos_servico._totais(linhas, Decimal(0))

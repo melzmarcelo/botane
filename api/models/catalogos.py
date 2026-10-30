@@ -178,6 +178,26 @@ class ItemCreate(BaseModel):
     ordem: int = Field(default=0, ge=0, le=999)
 
 
+class OpcaoDaEscolha(BaseModel):
+    """Uma opção do item de escolha (142): um PRODUTO, com rótulo curto opcional."""
+
+    id_produto: int
+    rotulo: str | None = Field(default=None, max_length=60)
+
+
+class EscolhaCreate(BaseModel):
+    """Item de ESCOLHA (142): não é produto — o cliente escolhe UMA das opções.
+
+    🔑 Pedido do dono (29/10/2026): "Chocolate Quente → Preto ou Branco"; "Monte sua
+    cesta → Pequena, Média, Grande". A lista vai INTEIRA a cada gravação, na ordem.
+    """
+
+    nome: str = Field(min_length=1, max_length=120)
+    descricao: str | None = Field(default=None, max_length=2000)
+    id_subcategoria: int | None = None
+    opcoes: list[OpcaoDaEscolha] = Field(min_length=2, max_length=30)
+
+
 class ItemLugar(BaseModel):
     """Para onde o prato vai: outra seção do MESMO catálogo.
 

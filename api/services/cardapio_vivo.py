@@ -24,6 +24,7 @@ from fastapi import HTTPException
 from relogio import agora_da_casa
 from services import cardapio_anuncios as catalogo_anuncios
 from services import catalogo_cartoes
+from services import catalogo_conteudo
 from services import reservas as reservas_servico
 from services import traducao
 
@@ -414,19 +415,28 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
                    s.hora_ate AS s_ate, s.horario_especial AS s_especial,
                    -- 🔑 123: o esgotado com hora para voltar deixa de valer sozinho.
                    i.id AS id_item, i.destaque, (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado, i.midia_preferida, p.id AS id_produto,
-                   coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
-                   p.nome_catalogo_en AS produto_en, p.nome_catalogo_de AS produto_de,
-                   p.informacao_adicional, p.informacao_adicional_en AS informacao_en,
-                   p.informacao_adicional_de AS informacao_de,
-                   p.foto_url, p.video_url, p.video_capa_url, p.restricoes,
+                   -- 🔑 142: o item de ESCOLHA não tem produto — nome, descrição e foto são
+                   -- dele; o preço e os adicionais vêm das opções, logo abaixo.
+                   i.tipo,
+                   coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome, i.nome) AS produto,
+                   CASE WHEN i.tipo = 'ESCOLHA' THEN i.nome_en ELSE p.nome_catalogo_en END AS produto_en,
+                   CASE WHEN i.tipo = 'ESCOLHA' THEN i.nome_de ELSE p.nome_catalogo_de END AS produto_de,
+                   CASE WHEN i.tipo = 'ESCOLHA' THEN i.descricao ELSE p.informacao_adicional END
+                       AS informacao_adicional,
+                   CASE WHEN i.tipo = 'ESCOLHA' THEN i.descricao_en ELSE p.informacao_adicional_en END
+                       AS informacao_en,
+                   CASE WHEN i.tipo = 'ESCOLHA' THEN i.descricao_de ELSE p.informacao_adicional_de END
+                       AS informacao_de,
+                   coalesce(i.foto_url, p.foto_url) AS foto_url, p.video_url, p.video_capa_url,
+                   coalesce(p.restricoes, '{{}}') AS restricoes,
                    {_preco_sql('p')} AS preco
               FROM catalogo_itens i
               JOIN catalogo_categorias g ON g.id = i.id_categoria
               LEFT JOIN catalogo_subcategorias s ON s.id = i.id_subcategoria
-              JOIN produtos p ON p.id = i.id_produto
-             WHERE g.id_catalogo = %(c)s AND p.ativo
+              LEFT JOIN produtos p ON p.id = i.id_produto
+             WHERE g.id_catalogo = %(c)s AND (p.ativo OR i.tipo = 'ESCOLHA')
              ORDER BY g.ordem, lower(g.nome), s.ordem NULLS FIRST, lower(s.nome),
-                      i.ordem, lower(p.nome)""",  # noqa: S608 - o SQL do preço é fixo
+                      i.ordem, lower(coalesce(p.nome, i.nome))""",  # noqa: S608 - o SQL do preço é fixo
         {"c": id_catalogo, "u": id_unidade})
     linhas = [dict(r) for r in cur.fetchall()]
 
@@ -434,7 +444,13 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
         fonte = fonte or campo
         return traducao.escolher(l[campo], l.get(f"{fonte}_en"), l.get(f"{fonte}_de"), idioma)
 
-    produtos = sorted({l["id_produto"] for l in linhas})
+    # 🔑 142: as opções de cada item de escolha — só as ATIVAS, com o preço vigente. Item de
+    # escolha sem opção que se possa pedir não aparece (seria um cartão sem saída).
+    escolhas = {k: [o for o in v if o["ativo"]] for k, v in catalogo_conteudo.opcoes_de_escolha(
+        cur, id_unidade, [l["id_item"] for l in linhas if l["tipo"] == "ESCOLHA"]).items()}
+    linhas = [l for l in linhas if l["tipo"] != "ESCOLHA" or escolhas.get(l["id_item"])]
+    produtos = sorted({l["id_produto"] for l in linhas if l["id_produto"]}
+                      | {o["id_produto"] for v in escolhas.values() for o in v})
     adicionais = _adicionais(cur, id_unidade, produtos)
 
     categorias: list[dict] = []
@@ -484,16 +500,31 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
                      # 🔑 Diz DE ONDE veio a foto: o aviso "sem foto e sem vídeo" do
                      # cadastro olha o próprio item, não a foto emprestada da seção.
                      "herdada": bool(foto) and not l["foto_url"]}
+        opcoes = None
+        preco = float(l["preco"]) if l["preco"] is not None else None
+        if l["tipo"] == "ESCOLHA":
+            opcoes = [{"id_produto": o["id_produto"],
+                       "nome": traducao.escolher(o["rotulo"], o["rotulo_en"], o["rotulo_de"], idioma)
+                       if o["rotulo"] else traducao.escolher(o["vitrine"], o["nome_catalogo_en"],
+                                                             o["nome_catalogo_de"], idioma),
+                       "preco": float(o["preco"]) if o["preco"] is not None else None,
+                       "adicionais": adicionais.get(o["id_produto"], [])}
+                      for o in escolhas[l["id_item"]]]
+            # "A partir de": o menor preço das opções. Sem nenhum preço, sem preço.
+            precos = [o["preco"] for o in opcoes if o["preco"] is not None]
+            preco = min(precos) if precos else None
         itens.append({
             "id": l["id_item"], "id_categoria": l["id_categoria"],
             "id_subcategoria": l["id_subcategoria"],
             "nome": t(l, "produto"), "descricao": t(l, "informacao_adicional", "informacao"),
             # ⚠️ `float`: o JSON não fala decimal. Sem preço sai SEM preço, nunca zero.
-            "preco": float(l["preco"]) if l["preco"] is not None else None,
+            "preco": preco,
             "restricoes": list(l["restricoes"] or []),
             "destaque": l["destaque"], "esgotado": l["esgotado"],
             "fora_do_horario": fora, "midia": midia,
-            "adicionais": adicionais.get(l["id_produto"], []),
+            "adicionais": adicionais.get(l["id_produto"], []) if l["id_produto"] else [],
+            # 🔑 142: nulo = prato comum; lista = o cliente escolhe UMA antes de seguir.
+            "escolhas": opcoes,
         })
     return {"categorias": categorias, "itens": itens,
             "restricoes": [{"chave": k, "nome": v} for k, v in RESTRICOES.items()]}
@@ -505,8 +536,10 @@ def _adicionais(cur, id_unidade: int, produtos: list[int]) -> dict[int, list[dic
         return {}
     cur.execute(
         f"""SELECT g.id_produto, g.id AS id_grupo, g.nome AS grupo, g.minimo, g.maximo,
-                   o.id, o.nome, o.id_produto_ref,
-                   CASE WHEN o.id_produto_ref IS NOT NULL THEN {_preco_sql('r')}
+                   g.permite_repetir, o.id, o.nome, o.id_produto_ref,
+                   -- 🔑 142: "incluso" entra por R$ 0 mesmo apontando para um produto.
+                   CASE WHEN o.incluso THEN 0
+                        WHEN o.id_produto_ref IS NOT NULL THEN {_preco_sql('r')}
                         ELSE o.preco END AS preco
               FROM produto_adicionais_grupos g
               JOIN produto_adicionais_opcoes o ON o.id_grupo = g.id AND o.ativo
@@ -520,7 +553,7 @@ def _adicionais(cur, id_unidade: int, produtos: list[int]) -> dict[int, list[dic
         g = grupos.get(r["id_grupo"])
         if g is None:
             g = {"id": r["id_grupo"], "nome": r["grupo"], "minimo": r["minimo"],
-                 "maximo": r["maximo"], "opcoes": []}
+                 "maximo": r["maximo"], "permite_repetir": r["permite_repetir"], "opcoes": []}
             grupos[r["id_grupo"]] = g
             saida.setdefault(r["id_produto"], []).append(g)
         g["opcoes"].append({"id": r["id"], "nome": r["nome"],

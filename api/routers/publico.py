@@ -423,8 +423,8 @@ def catalogos(id_unidade: int, idioma: str | None = _IDIOMA) -> list[dict]:
                       (SELECT count(*)
                          FROM catalogo_itens i
                          JOIN catalogo_categorias g ON g.id = i.id_categoria
-                         JOIN produtos p ON p.id = i.id_produto
-                        WHERE g.id_catalogo = c.id AND p.ativo) AS itens,
+                         LEFT JOIN produtos p ON p.id = i.id_produto
+                        WHERE g.id_catalogo = c.id AND (p.ativo OR i.tipo = 'ESCOLHA')) AS itens,
                       -- 🔑 **É um Cardápio Vivo desta loja?** (pedido do dono, 14/10/2026:
                       -- o site abre o feed, e não a tela antiga de seções). Desde a 117 pode
                       -- haver vários: vem o nome no link e se é o principal.
@@ -561,9 +561,14 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
                   s.nome_en AS subcategoria_en, s.nome_de AS subcategoria_de,
                   s.descricao_en AS subcategoria_descricao_en,
                   s.descricao_de AS subcategoria_descricao_de,
-                  p.nome_catalogo_en AS produto_en, p.nome_catalogo_de AS produto_de,
-                  p.informacao_adicional_en AS informacao_en,
-                  p.informacao_adicional_de AS informacao_de,
+                  -- 🔑 142: o item de ESCOLHA traz nome, descrição e foto dele.
+                  CASE WHEN i.tipo = 'ESCOLHA' THEN i.nome_en ELSE p.nome_catalogo_en END AS produto_en,
+                  CASE WHEN i.tipo = 'ESCOLHA' THEN i.nome_de ELSE p.nome_catalogo_de END AS produto_de,
+                  CASE WHEN i.tipo = 'ESCOLHA' THEN i.descricao_en ELSE p.informacao_adicional_en END
+                      AS informacao_en,
+                  CASE WHEN i.tipo = 'ESCOLHA' THEN i.descricao_de ELSE p.informacao_adicional_de END
+                      AS informacao_de,
+                  i.tipo, p.id AS id_produto,
                   g.ordem AS categoria_ordem,
                   s.id AS id_subcategoria, s.nome AS subcategoria,
                   s.descricao AS subcategoria_descricao,
@@ -574,9 +579,10 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
                   -- cardápio do cliente não é lugar de gritar. Nulo cai no
                   -- nome de sempre — a casa só escreve o segundo quando o
                   -- primeiro não serve.
-                  coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
-                  p.foto_url AS produto_foto,
-                  p.informacao_adicional,
+                  coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome, i.nome) AS produto,
+                  coalesce(i.foto_url, p.foto_url) AS produto_foto,
+                  CASE WHEN i.tipo = 'ESCOLHA' THEN i.descricao ELSE p.informacao_adicional END
+                      AS informacao_adicional,
                   -- 🔑 O preço da LOJA primeiro, o da casa depois: é a
                   -- cascata de `services/precos.py`, e uma segunda regra
                   -- aqui faria o site cobrar diferente do balcão.
@@ -587,14 +593,19 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
              FROM catalogo_itens i
              JOIN catalogo_categorias g ON g.id = i.id_categoria
              LEFT JOIN catalogo_subcategorias s ON s.id = i.id_subcategoria
-             JOIN produtos p ON p.id = i.id_produto
-            WHERE g.id_catalogo = %(c)s AND p.ativo
+             LEFT JOIN produtos p ON p.id = i.id_produto
+            WHERE g.id_catalogo = %(c)s AND (p.ativo OR i.tipo = 'ESCOLHA')
             ORDER BY g.ordem, lower(g.nome),
                      s.ordem NULLS FIRST, lower(s.nome),
-                     i.ordem, lower(p.nome)""",
+                     i.ordem, lower(coalesce(p.nome, i.nome))""",
         {"c": id_catalogo, "u": id_unidade},
     )
     linhas = [dict(r) for r in cur.fetchall()]
+    # 🔑 142: adicionais de cada produto e as opções do item de escolha — as MESMAS que o
+    # envio confere (`pedidos._com_opcoes`), para o site não oferecer o que o servidor recusa.
+    opcoes = {l["id_item"]: {"tipo": l["tipo"], "id_produto": l["id_produto"]} for l in linhas}
+    pedidos_servico._com_opcoes(cur, id_unidade, opcoes)
+    linhas = [l for l in linhas if l["tipo"] != "ESCOLHA" or opcoes[l["id_item"]]["escolhas"]]
     # 🔑 O idioma do site (103): cada texto no idioma pedido, e o português onde faltar.
     if idioma in ("en", "de"):
         for l in linhas:
@@ -628,7 +639,16 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
             # ⚠️ `float` e não `Decimal`: o JSON não fala decimal, e deixar o
             # FastAPI resolver mandaria string para a tela.
             "preco": float(l["preco"]) if l["preco"] is not None else None,
+            "adicionais": opcoes[l["id_item"]]["adicionais"],
+            # 🔑 142: nulo = prato comum; lista = o cliente escolhe UMA (o produto que vai).
+            "escolhas": None,
         }
+        escolhas = opcoes[l["id_item"]]["escolhas"]
+        if escolhas is not None:
+            item["escolhas"] = [{**o, "preco": float(o["preco"]) if o["preco"] is not None else None}
+                                for o in escolhas]
+            precos = [o["preco"] for o in item["escolhas"] if o["preco"] is not None]
+            item["preco"] = min(precos) if precos else None  # "a partir de"
         if l["id_subcategoria"] is None:
             cat["itens"].append(item)
             continue

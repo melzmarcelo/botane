@@ -25,6 +25,7 @@ from fastapi import HTTPException
 
 from config import FUSO_DA_CASA
 from services.custos import dec
+from services import item_do_pedido
 
 ORIGEM_PRODUTOS = "PRODUTOS"
 MODOS = {"RETIRADA": "Retirar na loja", "ENTREGA": "Entrega",
@@ -189,16 +190,40 @@ def config_publica(cur, id_unidade: int, id_catalogo: int) -> dict | None:
 def _itens_do_catalogo(cur, id_unidade: int, id_catalogo: int, ids: list[int] | None = None) -> dict:
     """Os itens do catálogo, com o produto e o preço vigente — por id do item."""
     cur.execute(
-        f"""SELECT i.id AS id_item, p.id AS id_produto, {_NOME} AS nome, p.ativo,
-                   {_PRECO} AS preco
+        f"""SELECT i.id AS id_item, i.tipo, p.id AS id_produto, coalesce({_NOME}, i.nome) AS nome,
+                   -- 142: o item de ESCOLHA vale como ativo e não tem preço próprio — o preço
+                   -- é o da opção escolhida (`item_do_pedido.resolver`).
+                   coalesce(p.ativo, true) AS ativo, {_PRECO} AS preco
               FROM catalogo_itens i
               JOIN catalogo_categorias g ON g.id = i.id_categoria
-              JOIN produtos p ON p.id = i.id_produto
+              LEFT JOIN produtos p ON p.id = i.id_produto
              WHERE g.id_catalogo = %(c)s
                AND (%(ids)s::int[] IS NULL OR i.id = ANY(%(ids)s::int[]))""",
         {"c": id_catalogo, "u": id_unidade, "ids": ids},
     )
     return {r["id_item"]: dict(r) for r in cur.fetchall()}
+
+
+def _com_opcoes(cur, id_unidade: int, catalogo: dict) -> None:
+    """Pendura em cada item os adicionais do produto e, no item de escolha, as opções (142).
+
+    ⚠️ Só as opções ATIVAS: a que saiu de linha não pode ser pedida, mesmo que o site
+    aberto há uma hora ainda a mostre.
+    """
+    from services import cardapio_vivo as cv  # import tardio: o feed importa este módulo
+    from services import catalogo_conteudo
+    escolhas = catalogo_conteudo.opcoes_de_escolha(
+        cur, id_unidade, [k for k, c in catalogo.items() if c["tipo"] == "ESCOLHA"])
+    produtos = {c["id_produto"] for c in catalogo.values() if c["id_produto"]} | {
+        o["id_produto"] for v in escolhas.values() for o in v}
+    adicionais = cv._adicionais(cur, id_unidade, sorted(produtos))
+    for k, c in catalogo.items():
+        c["adicionais"] = adicionais.get(c["id_produto"], []) if c["id_produto"] else []
+        c["escolhas"] = None
+        if c["tipo"] == "ESCOLHA":
+            c["escolhas"] = [{"id_produto": o["id_produto"], "nome": o["nome"],
+                              "preco": o["preco"], "adicionais": adicionais.get(o["id_produto"], [])}
+                             for o in escolhas.get(k, []) if o["ativo"]]
 
 
 def catalogo_para_troca(cur, id_unidade: int, id_pedido: int) -> list[dict]:
@@ -253,18 +278,18 @@ def enviar(cur, id_unidade: int, id_catalogo: int, cliente: dict, dados: dict) -
 
     ids = [int(i["id_item"]) for i in dados["itens"]]
     catalogo = _itens_do_catalogo(cur, id_unidade, id_catalogo, ids)
+    _com_opcoes(cur, id_unidade, catalogo)
     linhas = []
     for n, i in enumerate(dados["itens"]):
         c = catalogo.get(int(i["id_item"]))
         if not c or not c["ativo"]:
             raise HTTPException(status_code=409,
                                 detail="Um item do carrinho saiu do cardápio. Atualize a página.")
-        if c["preco"] is None:
-            raise HTTPException(status_code=409, detail=f"{c['nome']} está sem preço e não pode ser pedido.")
+        # 🔑 142: a escolha e os adicionais, pela MESMA regra da mesa (`item_do_pedido`).
+        linha = item_do_pedido.resolver(c, i.get("escolha"), [int(x) for x in i.get("adicionais") or []])
         qtd = dec(i["quantidade"])
-        linhas.append({"id_produto": c["id_produto"], "nome": c["nome"], "quantidade": qtd,
-                       "preco_unitario": dec(c["preco"]),
-                       "total": (qtd * dec(c["preco"])).quantize(_CENTAVO),
+        linhas.append({**linha, "quantidade": qtd,
+                       "total": (qtd * linha["preco_unitario"]).quantize(_CENTAVO),
                        "observacao": (i.get("observacao") or "").strip() or None, "ordem": n})
     taxa = dec(cfg["taxa_entrega"]) if modo == "ENTREGA" else Decimal(0)
     tot = _totais(linhas, taxa)
@@ -301,7 +326,7 @@ def _gravar_itens(cur, id_pedido: int, linhas: list[dict]) -> None:
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (id_pedido, l["id_produto"], l["nome"], l["quantidade"], l["preco_unitario"],
              l["total"], l.get("observacao"), l.get("ordem", 0),
-             # Os adicionais congelados (115) — só os pedidos da mesa os têm.
+             # Os adicionais congelados (115; no site desde a 142).
              json.dumps(l["adicionais"], default=str) if l.get("adicionais") else None),
         )
 
