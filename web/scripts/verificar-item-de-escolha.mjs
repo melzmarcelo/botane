@@ -111,6 +111,40 @@ try {
     && /a partir de\s*R\$\s*14,00/.test(document.body.innerText));
   checar("a linha do cardápio diz 'item de escolha: Preto, Branco' e 'a partir de R$ 14,00'", linha);
 
+  console.log("\n1b. os itens para montar, no próprio catálogo (30/10/2026)");
+  const LACO = await produto("CESTA LACO", 5);
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => b.getAttribute("aria-label") === "abrir Monte sua cesta")?.click());
+  await p.waitForSelector("#itens-para-montar", { timeout: 10000 }).catch(() => {});
+  checar("a gaveta da cesta tem 'Itens para montar'", !!(await p.$("#itens-para-montar")));
+  await p.evaluate(() => [...document.querySelectorAll("#itens-para-montar summary")]
+    .find((s) => s.textContent.includes("Média"))?.click());
+  await p.waitForSelector(`[data-montar="${MEDIA}"] input[aria-label="máximo"]`, { timeout: 8000 }).catch(() => {});
+  const regra = await p.evaluate((id) => {
+    const caixa = document.querySelector(`[data-montar="${id}"]`);
+    return caixa && { min: caixa.querySelector('input[aria-label="mínimo"]')?.value,
+                      max: caixa.querySelector('input[aria-label="máximo"]')?.value,
+                      repete: caixa.querySelector('input[aria-label="pode repetir"]')?.checked,
+                      texto: caixa.innerText };
+  }, MEDIA);
+  checar("a Média mostra a regra gravada: 2 a 3, pode repetir, Geleia e Pão",
+    regra?.min === "2" && regra?.max === "3" && regra?.repete && /Geleia/.test(regra.texto) && /Pão/.test(regra.texto), regra);
+  await p.evaluate((id) => [...document.querySelectorAll(`[data-montar="${id}"] button`)]
+    .find((b) => b.textContent.trim() === "+ itens")?.click(), MEDIA);
+  await p.waitForSelector("#itens-busca", { timeout: 5000 }).catch(() => {});
+  await p.type("#itens-busca", `CESTA LACO ${MARCA}`);
+  await p.waitForFunction((n) => !!document.querySelector(`input[aria-label="${n}"]`), { timeout: 8000 }, `CESTA LACO ${MARCA}`).catch(() => {});
+  await p.click(`input[aria-label="CESTA LACO ${MARCA}"]`).catch(() => {});
+  await p.click("#itens-por").catch(() => {});
+  await p.evaluate((id) => [...document.querySelectorAll(`[data-montar="${id}"] button`)]
+    .find((b) => b.textContent.startsWith("Gravar itens"))?.click(), MEDIA);
+  await esperar(800);
+  const { dados: depois } = await api("GET", `/produtos/${MEDIA}/cardapio`, undefined, token);
+  checar("'+ itens' marca pela busca e 'Gravar' grava na embalagem (o laço entrou, ligado ao produto)",
+    depois?.adicionais?.[0]?.opcoes?.some((o) => o.id_produto_ref === LACO), depois?.adicionais);
+  await p.keyboard.press("Escape");
+  await esperar(300);
+
   console.log("\n2. o feed (sem mesa: seleção)");
   await p.setViewport({ width: 420, height: 900 });
   await p.goto(`${WEB}/c/1?cardapio=${SLUG}`, { waitUntil: "networkidle2" });

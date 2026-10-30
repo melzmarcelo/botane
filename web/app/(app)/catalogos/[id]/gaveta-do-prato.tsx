@@ -210,7 +210,7 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
           </div>
         </section>
 
-        {escolha && <SecaoDaEscolha key={i.id} item={i} podeEditar={podeEditar} aoMudar={aoMudar} />}
+        {escolha && <SecaoDaEscolha key={i.id} item={i} podeEditar={podeEditar} podeProduto={podeProduto} aoMudar={aoMudar} />}
 
         {/* ---------------------------------------------- o prato ------- */}
         {!escolha && (

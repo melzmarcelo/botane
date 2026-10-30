@@ -20,6 +20,7 @@ import { Campo, Modal } from "@/components/ui";
 import { urlArquivo } from "@/lib/api";
 import * as cat from "@/lib/catalogos";
 import { reais } from "@/lib/numeros";
+import ItensParaMontar from "./itens-para-montar";
 
 /** Uma opção na tela: o produto e o rótulo que o cliente lê. */
 export type OpcaoNaTela = {
@@ -173,9 +174,9 @@ export function JanelaEscolha({ idCategoria, idSubcategoria, onde, aoFechar, aoC
   );
 }
 
-/** Na gaveta do item: foto, nome, descrição e as opções. */
-export function SecaoDaEscolha({ item: i, podeEditar, aoMudar }: {
-  item: cat.ItemDoCatalogo; podeEditar: boolean; aoMudar: () => Promise<void>;
+/** Na gaveta do item: foto, nome, descrição, as opções e os itens para montar de cada uma. */
+export function SecaoDaEscolha({ item: i, podeEditar, podeProduto, aoMudar }: {
+  item: cat.ItemDoCatalogo; podeEditar: boolean; podeProduto: boolean; aoMudar: () => Promise<void>;
 }) {
   const aviso = useAviso();
   const doServidor = (): OpcaoNaTela[] => (i.escolhas ?? []).map((o) => ({
@@ -235,8 +236,8 @@ export function SecaoDaEscolha({ item: i, podeEditar, aoMudar }: {
     <section className="flex flex-col gap-3 border-t border-linha pt-5">
       <h3 className="rotulo">O item de escolha</h3>
       <p className="text-[13px] text-suave">
-        Não é um produto: o cliente toca nele e escolhe uma opção. Os adicionais de cada opção (os itens
-        da cesta, com mínimo e máximo) ficam no cadastro do produto dela, aba Catálogo.
+        Não é um produto: o cliente toca nele e escolhe uma opção. Se a opção se monta (a cesta), a
+        lista do que pode ir nela fica em “Itens para montar”, logo abaixo.
       </p>
       <div className="flex items-center gap-3">
         <span className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-linha bg-superficie2">
@@ -272,16 +273,6 @@ export function SecaoDaEscolha({ item: i, podeEditar, aoMudar }: {
       <div>
         <span className="rotulo">Opções</span>
         <div className="mt-1.5"><EditorDeOpcoes opcoes={opcoes} aoMudar={setOpcoes} podeEditar={podeEditar} /></div>
-        {opcoes.length > 0 && (
-          <p className="mt-2 text-[12.5px] text-suave">
-            Adicionais de uma opção:{" "}
-            {opcoes.map((o, n) => (
-              <span key={o.id_produto}>{n > 0 && " · "}
-                <Link href={`/produtos/${o.id_produto}`} className="link-registro">{o.rotulo.trim() || o.produto}</Link>
-              </span>
-            ))}
-          </p>
-        )}
       </div>
       {podeEditar && (
         <div className="flex justify-end">
@@ -289,6 +280,34 @@ export function SecaoDaEscolha({ item: i, podeEditar, aoMudar }: {
                   disabled={gravando || !mudou || !nome.trim() || opcoes.length < 2} onClick={() => void gravar()}>
             {gravando ? "Salvando…" : "Salvar item"}
           </button>
+        </div>
+      )}
+
+      {/* 🔑 30/10/2026 (pedido do dono): a regra de cada opção — mínimo, máximo e o que pode ir
+          nela — aqui, no catálogo. São as opções GRAVADAS: a que acabou de entrar aparece depois
+          de "Salvar item". */}
+      {(i.escolhas ?? []).length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-linha pt-4" id="itens-para-montar">
+          <h4 className="rotulo">Itens para montar</h4>
+          <p className="text-[12.5px] text-suave">
+            Para a opção que se monta (Cesta P, M, G): o mínimo e o máximo de itens e quais produtos podem
+            ir. Opção sem lista é só escolher e adicionar (o Chocolate Branco).
+            {!podeProduto && " Para mudar, é preciso a permissão de produtos."}
+            {" "}Vale em todo cardápio em que a opção estiver.
+          </p>
+          {(i.escolhas ?? []).map((o) => (
+            <details key={o.id_produto} className="rounded-md border border-linha px-3 py-2">
+              <summary className="cursor-pointer text-[14px] font-medium">
+                {o.nome} <span className="font-normal text-suave">· {o.produto}</span>{" "}
+                <Link href={`/produtos/${o.id_produto}`} className="link-registro text-[12.5px] font-normal">cadastro</Link>
+              </summary>
+              <div className="mt-3">
+                <ItensParaMontar opcao={{ id_produto: o.id_produto, nome: o.nome }} podeEditar={podeProduto}
+                                 outras={(i.escolhas ?? []).filter((x) => x.id_produto !== o.id_produto)
+                                   .map((x) => ({ id_produto: x.id_produto, nome: x.nome }))} />
+              </div>
+            </details>
+          ))}
         </div>
       )}
     </section>

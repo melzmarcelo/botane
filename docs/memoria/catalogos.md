@@ -982,6 +982,13 @@ e os itens em linhas (a cesta NÃO é KIT — kit tem composição fixa).
   repetir", "incluso" e "copiar de outro produto" (as três cestas usam a mesma lista). Feed:
   `detalhe.tsx` com "Escolha uma opção" e contador − n +. Site: a janela `#montar`, e o
   carrinho por CHAVE (`item:escolha:ids`; o prato comum continua com a chave = id do item).
+- 🔑 **Itens para montar no catálogo (1.1.154, 30/10/2026)** — o dono não conseguiu montar a
+  cesta: a lista ficava na aba Catálogo de CADA embalagem, e o "ligar a produto" era uma janelinha
+  de texto (`prompt`) que pegava o PRIMEIRO nome parecido. Agora a gaveta do item de escolha tem
+  "Itens para montar" (`catalogos/[id]/itens-para-montar.tsx`): por opção GRAVADA, mínimo, máximo,
+  pode repetir, "+ itens" com busca e marcação múltipla (liga ao produto, preço dele), incluso e
+  "usar a mesma lista de". ⚠️ É o MESMO dado (`PUT /produtos/{id}/adicionais`, `cadastros.produtos`)
+  — vale em todo cardápio da embalagem; sem a permissão de produtos, só se vê.
 - ⚠️ Python com `${...}` e crases em heredoc pelo Bash quebrou duas vezes nesta entrega:
   script de edição em ARQUIVO, ou Edit.
 - Cobertura: `smoke_item_de_escolha.py` (40) e `web/scripts/verificar-item-de-escolha.mjs` (19,
