@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buscarFeed, enderecoDoSite, imagem, previaFeed, type AnuncioFeed, type Feed, type Idioma, type ItemFeed as Item } from "@/lib/cardapio-vivo";
 import Chamados from "./chamados";
-import Detalhe from "./detalhe";
+import Detalhe, { type OpcaoEscolhida } from "./detalhe";
 import { useFavoritos } from "./favoritos";
 import Hub from "./hub";
 import { Medidor, medicaoRecusada, recusarMedicao, sessaoParaTestes } from "./eventos";
@@ -20,7 +20,7 @@ import CartaoFeed from "./cartao-feed";
 import ItemFeed from "./item-feed";
 import SeletorDeIdioma, { idiomaDaAba, lembrarIdioma } from "./seletor-idioma";
 import { PULOU_MS, montarSequencia, type ReacaoAoAnuncio } from "./sequencia";
-import { useSelecao, type EscolhaAdicional } from "./selecao";
+import { idsDosAdicionais, useSelecao, type EscolhaAdicional } from "./selecao";
 import TelaPedido from "./tela-pedido";
 import TelaSelecao from "./tela-selecao";
 import { idiomaDoNavegador, nomeRestricao, textos } from "./textos";
@@ -258,8 +258,11 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     medidor.current?.registrar(ficou ? "favoritou" : "desfavoritou", { item: item.id, midia: item.midia.tipo });
   };
 
-  const adicionar = (item: Item, quantidade: number, adicionais: EscolhaAdicional[]) => {
-    selecao.adicionar({ id_item: item.id, nome: item.nome, preco: item.preco, quantidade, adicionais });
+  const adicionar = (item: Item, quantidade: number, adicionais: EscolhaAdicional[], escolha?: OpcaoEscolhida) => {
+    // 🔑 142: no item de escolha, a linha é a OPÇÃO — nome "Chocolate Quente · Branco" e o preço dela.
+    selecao.adicionar({ id_item: item.id, escolha: escolha?.id_produto ?? null,
+                        nome: escolha ? `${item.nome} · ${escolha.nome}` : item.nome,
+                        preco: escolha ? escolha.preco : item.preco, quantidade, adicionais });
     medidor.current?.registrar("adicionou", { item: item.id, midia: item.midia.tipo });
     setAberto(null);
   };
@@ -267,28 +270,34 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
   const abrirDetalhe = (item: Item) => {
     medidor.current?.registrar("abriu_detalhe", { item: item.id, midia: item.midia.tipo });
     // A personalização (114) é abrir as escolhas de um prato que TEM adicionais.
-    if (item.adicionais.length) medidor.current?.registrar("abriu_personalizacao", { item: item.id, midia: item.midia.tipo });
+    if (item.adicionais.length || item.escolhas) medidor.current?.registrar("abriu_personalizacao", { item: item.id, midia: item.midia.tipo });
     setAberto(item);
   };
 
   /**
    * 🔑 **A encomenda do catering** (15/10/2026): a seleção vira o carrinho do SITE, que já sabe
    * retirada/entrega, quando, pagamento e identificação — o site e o feed estão no mesmo
-   * endereço, então a aba é a mesma. ⚠️ O pedido do site não tem adicionais: as escolhas vão
-   * na observação do item, e a casa confere o preço delas ao confirmar.
+   * endereço, então a aba é a mesma.
+   * 🔑 142: o pedido do site passou a levar a ESCOLHA e os ADICIONAIS (antes iam como texto na
+   * observação). Cada combinação é uma linha do carrinho, com a chave que o site usa:
+   * prato comum = o id do item; montado = item:escolha:ids dos adicionais.
    */
   function encomendar() {
     if (!feed) return;
-    type ItemCarrinho = { id: number; nome: string; preco: number | null; quantidade: number; observacao: string };
+    type ItemCarrinho = {
+      chave: string; id: number; escolha: number | null; adicionais: EscolhaAdicional[];
+      nome: string; preco: number | null; quantidade: number; observacao: string;
+    };
     const itens: Record<string, ItemCarrinho> = {};
     for (const l of selecao.linhas) {
-      const atual = itens[l.id_item] ?? { id: l.id_item, nome: l.nome, preco: l.preco, quantidade: 0, observacao: "" };
+      const ids = idsDosAdicionais(l.adicionais).sort((a, b) => a - b);
+      const k = !l.escolha && !ids.length ? String(l.id_item) : `${l.id_item}:${l.escolha ?? ""}:${ids.join(",")}`;
+      const unitario = l.preco === null ? null
+        : l.preco + l.adicionais.reduce((s, a) => s + (a.preco ?? 0) * (a.quantidade ?? 1), 0);
+      const atual = itens[k] ?? { chave: k, id: l.id_item, escolha: l.escolha ?? null, adicionais: l.adicionais,
+                                  nome: l.nome, preco: unitario, quantidade: 0, observacao: "" };
       atual.quantidade += l.quantidade;
-      if (l.adicionais.length) {
-        atual.observacao = [atual.observacao, `${l.quantidade}× ${l.adicionais.map((a) => a.nome).join(", ")}`]
-          .filter(Boolean).join("; ").slice(0, 200);
-      }
-      itens[l.id_item] = atual;
+      itens[k] = atual;
     }
     try {
       sessionStorage.setItem("botane.carrinho", JSON.stringify({
@@ -512,7 +521,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
       {aberto && (
         <Detalhe item={aberto} t={t} idioma={idioma} aoFechar={() => setAberto(null)}
                  aoEscolher={() => medidor.current?.registrar("escolheu_opcao", { item: aberto.id, midia: aberto.midia.tipo })}
-                 aoAdicionar={feed.selecao ? (q, ad) => adicionar(aberto, q, ad) : undefined} />
+                 aoAdicionar={feed.selecao ? (q, ad, esc) => adicionar(aberto, q, ad, esc) : undefined} />
       )}
       {verFavoritos && (
         <div className="fixed inset-0 z-40 flex flex-col bg-[var(--cv-fundo)] text-[var(--cv-tinta)]" role="dialog"

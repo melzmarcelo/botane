@@ -99,6 +99,25 @@ export default function CardapioVivoDoProduto({ idProduto, podeEditar }: Props) 
     }
   }
 
+  /** 142: as três cestas usam a mesma lista — copia os grupos de outro produto (sem gravar). */
+  async function copiarDeOutro() {
+    const busca = prompt("Copiar os adicionais de qual produto?");
+    if (!busca?.trim()) return;
+    try {
+      const achados = await api.get<{ id: number; nome: string }[]>(
+        `/catalogos/produtos-disponiveis?busca=${encodeURIComponent(busca.trim())}`);
+      const outro = achados.find((p) => p.id !== idProduto);
+      if (!outro) { aviso.erro("Nenhum outro produto ativo do PDV com esse nome."); return; }
+      const d = await ProdutoCardapioService.obter(outro.id);
+      if (!d.adicionais.length) { aviso.erro(`${outro.nome} não tem adicionais.`); return; }
+      setGrupos((gs) => [...gs, ...d.adicionais.map(({ id: _g, ...g }) => ({
+        ...g, opcoes: g.opcoes.map(({ id: _o, ...o }) => o) }))]);
+      aviso.sucesso(`Copiados ${d.adicionais.length} grupo(s) de ${outro.nome}. Confira e grave.`);
+    } catch (e) {
+      falhou(e, "Falha ao copiar os adicionais.");
+    }
+  }
+
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!dados) return null;
   const v = dados.video;
@@ -152,7 +171,8 @@ export default function CardapioVivoDoProduto({ idProduto, podeEditar }: Props) 
           <h3 className="text-[14px] font-bold">Adicionais e opções</h3>
           <p className="text-[13px] text-suave">
             Grupos com mínimo e máximo de escolhas (ex.: “Ponto da carne”, escolha 1). A opção ligada a um
-            produto usa o preço dele na loja.
+            produto usa o preço dele na loja; marcada “incluso”, entra por R$ 0. Com “pode repetir”, a
+            mesma opção vale mais de uma vez (2 geleias na cesta) e o mínimo e o máximo contam unidades.
           </p>
           {grupos.map((g, n) => (
             <div key={n} className="mt-3 rounded-lg border border-linha p-3">
@@ -163,6 +183,12 @@ export default function CardapioVivoDoProduto({ idProduto, podeEditar }: Props) 
                            value={g.minimo} onChange={(e) => mudarGrupo(n, { minimo: Number(e.target.value) })} />
                 máx <input className="campo mono !w-16" type="number" min={1} disabled={!podeEditar}
                            value={g.maximo} onChange={(e) => mudarGrupo(n, { maximo: Number(e.target.value) })} />
+                <label className="flex items-center gap-1.5 text-[13px]">
+                  <input type="checkbox" disabled={!podeEditar} checked={!!g.permite_repetir}
+                         aria-label="pode repetir a mesma opção"
+                         onChange={(e) => mudarGrupo(n, { permite_repetir: e.target.checked })} />
+                  pode repetir
+                </label>
                 {podeEditar && <button type="button" className="link-acao link-acao-erro"
                                        onClick={() => setGrupos((gs) => gs.filter((_, i) => i !== n))}>tirar grupo</button>}
               </div>
@@ -170,13 +196,21 @@ export default function CardapioVivoDoProduto({ idProduto, podeEditar }: Props) 
                 <div key={k} className="mt-2 flex flex-wrap items-center gap-2 pl-3 text-[14px]">
                   <input className="campo !w-auto flex-1" placeholder="Opção" disabled={!podeEditar}
                          value={o.nome} onChange={(e) => mudarOpcao(n, k, { nome: e.target.value })} />
-                  {o.id_produto_ref ? (
+                  {o.incluso ? (
+                    <span className="text-[13px] text-suave">incluso (R$ 0)</span>
+                  ) : o.id_produto_ref ? (
                     <span className="text-[13px] text-suave">preço de {o.produto_ref}</span>
                   ) : (
                     <input className="campo mono !w-24" type="number" min={0} step="0.01" placeholder="+ R$"
                            disabled={!podeEditar} value={o.preco ?? ""}
                            onChange={(e) => mudarOpcao(n, k, { preco: e.target.value === "" ? null : Number(e.target.value) })} />
                   )}
+                  <label className="flex items-center gap-1.5 text-[13px]">
+                    <input type="checkbox" disabled={!podeEditar} checked={!!o.incluso}
+                           aria-label="incluso no preço"
+                           onChange={(e) => mudarOpcao(n, k, { incluso: e.target.checked })} />
+                    incluso
+                  </label>
                   {podeEditar && (
                     <>
                       <button type="button" className="link-acao text-[13px]" onClick={() => void apontarProduto(n, k)}>
@@ -197,13 +231,16 @@ export default function CardapioVivoDoProduto({ idProduto, podeEditar }: Props) 
             </div>
           ))}
           {podeEditar && (
-            <div className="mt-3 flex justify-between">
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
               <button type="button" className="link-acao"
                       onClick={() => setGrupos((gs) => [...gs, { nome: "", minimo: 0, maximo: 1,
                                                                opcoes: [{ nome: "", preco: null, id_produto_ref: null, ativo: true }] }])}>
                 + grupo de adicionais
               </button>
-              <button type="button" className="btn btn-secundario" onClick={() => void gravarAdicionais()}>
+              <button type="button" className="link-acao" onClick={() => void copiarDeOutro()}>
+                copiar de outro produto
+              </button>
+              <button type="button" className="btn btn-secundario ml-auto" onClick={() => void gravarAdicionais()}>
                 Gravar adicionais
               </button>
             </div>

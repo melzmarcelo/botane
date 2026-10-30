@@ -23,6 +23,7 @@ import { CardapioVivoService } from "@/lib/cardapio-vivo";
 import * as cat from "@/lib/catalogos";
 import { reais } from "@/lib/numeros";
 import { MARGENS, OBJETIVOS } from "./cardapio-vivo";
+import { SecaoDaEscolha } from "./escolha";
 import VideoERestricoes from "./video-e-restricoes";
 
 /** Uma lista do cardápio para onde o prato pode ir. */
@@ -51,6 +52,8 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
   const mudouTexto = nome.trim() !== (i.nome_catalogo ?? "") || descricao.trim() !== (i.informacao_adicional ?? "");
 
   const [volta, setVolta] = useState<"AMANHA" | "MANUAL">("AMANHA");
+  // 🔑 142: o item de ESCOLHA não tem produto — a parte "O prato" vira a das opções.
+  const escolha = i.tipo === "ESCOLHA";
 
   async function marcar(marcas: Parameters<typeof CardapioVivoService.marcarItem>[1]) {
     try {
@@ -128,12 +131,12 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
   return (
     <Gaveta
       titulo={i.nome_catalogo || i.produto}
-      descricao={
+      descricao={escolha ? <>Item de escolha · {i.escolhas?.length ?? 0} opções</> : (
         <>
           {i.codigo} · {i.produto} ·{" "}
           <Link href={`/produtos/${i.id_produto}`} className="link-registro">cadastro completo</Link>
         </>
-      }
+      )}
       aoFechar={aoFechar}
     >
       <div className="flex flex-col gap-6">
@@ -207,7 +210,10 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
           </div>
         </section>
 
+        {escolha && <SecaoDaEscolha key={i.id} item={i} podeEditar={podeEditar} aoMudar={aoMudar} />}
+
         {/* ---------------------------------------------- o prato ------- */}
+        {!escolha && (
         <section className="flex flex-col gap-3 border-t border-linha pt-5">
           <h3 className="rotulo">O prato</h3>
           <p className="text-[13px] text-suave">
@@ -266,13 +272,17 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
             <Link href={`/produtos/${i.id_produto}`} className="link-registro">cadastro do produto</Link>, aba Catálogo.
           </p>
         </section>
+        )}
 
         {podeEditar && (
           <section className="border-t border-linha pt-5">
             <button type="button" className="link-acao link-acao-erro" onClick={() => void tirarDoCardapio()}>
               Tirar deste cardápio
             </button>
-            <p className="mt-1 text-[13px] text-suave">O produto continua cadastrado; sai só desta lista.</p>
+            <p className="mt-1 text-[13px] text-suave">
+              {escolha ? "O item e as opções dele saem; os produtos das opções continuam cadastrados."
+                : "O produto continua cadastrado; sai só desta lista."}
+            </p>
           </section>
         )}
       </div>

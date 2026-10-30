@@ -699,6 +699,10 @@ def pdf(cur, id_unidade: int, id_pedido: int) -> bytes:
     for i in p["itens"]:
         q = f"{i['quantidade']:g}".replace(".", ",")
         linha(f"{q} x {i['nome']}", "Helvetica-Bold", 12, 6)
+        # 🔑 142: os adicionais na folha da cozinha — é o que se monta (os itens da cesta).
+        if i.get("adicionais"):
+            linha("     " + " · ".join((f"{a['quantidade']}x " if (a.get("quantidade") or 1) > 1 else "")
+                                      + a["nome"] for a in i["adicionais"]), "Helvetica", 10, 6)
         if i["observacao"]:
             linha(f"     obs.: {i['observacao']}", "Helvetica-Oblique", 10, 6)
     y -= 3 * mm

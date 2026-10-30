@@ -111,8 +111,8 @@ export default function DetalheDoPedido() {
                 {p.itens.map((i) => (
                   <tr key={i.id}>
                     <td>{i.nome}
-                      {/* Os adicionais escolhidos na mesa (Cardápio Vivo, 115), já somados no preço. */}
-                      {i.adicionais?.length ? <span className="block text-[12.5px] text-suave">{i.adicionais.map((a) => a.nome).join(" · ")}</span> : null}
+                      {/* Os adicionais (mesa desde a 115, site desde a 142), já somados no preço; "2×" quando repete. */}
+                      {i.adicionais?.length ? <span className="block text-[12.5px] text-suave">{i.adicionais.map((a) => ((a.quantidade ?? 1) > 1 ? `${a.quantidade}× ${a.nome}` : a.nome)).join(" · ")}</span> : null}
                       {i.observacao && <span className="block text-[12.5px] text-suave">obs.: {i.observacao}</span>}</td>
                     <td className="num">{i.quantidade.toLocaleString("pt-BR")}</td>
                     <td className="num">{reais(i.preco_unitario)}</td>

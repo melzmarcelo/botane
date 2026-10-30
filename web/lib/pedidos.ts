@@ -62,7 +62,7 @@ export type ItemDoPedido = {
   total: number;
   observacao: string | null;
   /** Os adicionais escolhidos na mesa, congelados no envio (115). */
-  adicionais?: { nome: string; preco: number | null }[] | null;
+  adicionais?: { nome: string; preco: number | null; quantidade?: number }[] | null;
 };
 
 export type PedidoCompleto = Omit<PedidoResumo, "itens"> & {

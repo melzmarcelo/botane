@@ -58,12 +58,16 @@ export default function LinhaDoPrato({ item: i, primeiro, ultimo, podeEditar, ao
           {/* ⚠️ O nome do cadastro em cinza: quem veio procurar o produto
               reconhece por ele, mas o cardápio mostra o de vitrine. */}
           <span className="block truncate text-[12.5px] text-suave">
-            {i.nome_catalogo ? `${i.produto} · ` : ""}{i.codigo}
+            {i.tipo === "ESCOLHA"
+              ? `item de escolha: ${(i.escolhas ?? []).map((o) => o.nome).join(", ")}`
+              : <>{i.nome_catalogo ? `${i.produto} · ` : ""}{i.codigo}</>}
             {i.esgotado && <span className="font-semibold text-erro"> · esgotado{i.esgotado_ate ? " (volta sozinho)" : ""}</span>}
             {faltas.length > 0 && <span className="text-alerta"> · ⚠ {faltas.join(", ")}</span>}
           </span>
         </span>
-        <span className="mono shrink-0 text-[13.5px]">{i.preco !== null ? reais(i.preco) : ""}</span>
+        <span className="mono shrink-0 text-[13.5px]">
+          {i.preco !== null ? `${i.tipo === "ESCOLHA" ? "a partir de " : ""}${reais(i.preco)}` : ""}
+        </span>
       </button>
       {/* 🔑 **Subir e descer, não arrastar** — no toque o arrasto disputa com a
           rolagem. ⚠️ O primeiro não sobe e o último não desce: botão que não faz

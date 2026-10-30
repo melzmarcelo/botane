@@ -29,6 +29,8 @@ const T = {
     escolha: (min: number, max: number) =>
       min === max ? `Escolha ${min}` : min > 0 ? `Escolha de ${min} a ${max}` : `Até ${max}`,
     obrigatorio: "obrigatório",
+    escolhaUma: "Escolha uma opção",
+    aPartirDe: "a partir de",
     quantidade: "Quantidade",
     destaque: "Destaque",
     foraDoHorario: "fora do horário",
@@ -108,6 +110,8 @@ const T = {
     escolha: (min: number, max: number) =>
       min === max ? `Choose ${min}` : min > 0 ? `Choose ${min} to ${max}` : `Up to ${max}`,
     obrigatorio: "required",
+    escolhaUma: "Choose one",
+    aPartirDe: "from",
     quantidade: "Quantity",
     destaque: "Featured",
     foraDoHorario: "not available now",
@@ -186,6 +190,8 @@ const T = {
     escolha: (min: number, max: number) =>
       min === max ? `Wählen Sie ${min}` : min > 0 ? `Wählen Sie ${min} bis ${max}` : `Bis zu ${max}`,
     obrigatorio: "Pflicht",
+    escolhaUma: "Bitte wählen",
+    aPartirDe: "ab",
     quantidade: "Menge",
     destaque: "Empfehlung",
     foraDoHorario: "derzeit nicht verfügbar",

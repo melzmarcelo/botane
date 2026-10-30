@@ -144,10 +144,20 @@ export const enderecoDoArquivo = (url: string) => `${BASE_API}${url}`;
  *  a página de configuração ou o envio de PDF. */
 export const ORIGEM_PRODUTOS = "PRODUTOS";
 
+/** 142: uma opção do item de escolha — é um PRODUTO, e é ele que vai no pedido. */
+export type OpcaoDoItem = {
+  id: number; id_produto: number; produto: string; vitrine: string;
+  /** O que o cliente lê ("Branco"). Nulo = o nome de vitrine do produto. */
+  rotulo: string | null; nome: string; ativo: boolean; preco: number | null;
+};
+
 export type ItemDoCatalogo = {
   id: number;
   id_categoria: number;
   id_subcategoria: number | null;
+  /** 142: PRODUTO (o prato de sempre) ou ESCOLHA (não é produto; o cliente escolhe uma opção). */
+  tipo: "PRODUTO" | "ESCOLHA";
+  /** ⚠️ No item de ESCOLHA é ZERO na tela (o servidor manda nulo): não há produto. */
   id_produto: number;
   produto: string;
   /** 🔑 O nome que o CLIENTE lê, quando a casa escreveu um. Nulo = o de cima. */
@@ -171,8 +181,11 @@ export type ItemDoCatalogo = {
   /** Fase 2 (115): o objetivo de negócio e o ajuste manual do nível de margem. */
   objetivo: string | null;
   margem_nivel: string | null;
-  /** O preço que o cliente vê (loja → casa). Nulo = sem preço, nunca zero. */
+  /** O preço que o cliente vê (loja → casa). Nulo = sem preço, nunca zero.
+   *  No item de escolha, o MENOR das opções ("a partir de"). */
   preco: number | null;
+  /** 142: as opções, só no item de escolha. */
+  escolhas?: OpcaoDoItem[];
 };
 
 export type Secao = {
@@ -213,8 +226,18 @@ export type ProdutoDisponivel = {
   informacao_adicional: string | null;
 };
 
-export const conteudo = (id: number) =>
-  api.get<Conteudo>(`/catalogos/${id}/conteudo`);
+/** ⚠️ O item de escolha vem com `id_produto` nulo; a tela o trata como 0 (não há produto). */
+export const conteudo = async (id: number) => {
+  const c = await api.get<Conteudo>(`/catalogos/${id}/conteudo`);
+  const arrumar = (i: ItemDoCatalogo) => ({ ...i, id_produto: i.id_produto ?? 0 });
+  return {
+    ...c,
+    categorias: c.categorias.map((k) => ({
+      ...k, itens: k.itens.map(arrumar),
+      subcategorias: k.subcategorias.map((s) => ({ ...s, itens: s.itens.map(arrumar) })),
+    })),
+  };
+};
 
 /** ⚠️ **Só ativos e vendidos no PDV** — quem filtra é o servidor. */
 export const produtosDisponiveis = (busca: string) =>
@@ -266,6 +289,27 @@ export const vincularProduto = (
 ) => api.post<{ id: number; produto: string; message: string }>(
   `/catalogos/categorias/${idCategoria}/itens`, corpo,
 );
+
+/** 142: o item de ESCOLHA — nome, descrição e as opções (a lista INTEIRA, na ordem). */
+export type GravarEscolha = {
+  nome: string; descricao: string | null; id_subcategoria?: number | null;
+  opcoes: { id_produto: number; rotulo: string | null }[];
+};
+
+export const criarEscolha = (idCategoria: number, corpo: GravarEscolha) =>
+  api.post<{ id: number; nome: string; message: string }>(`/catalogos/categorias/${idCategoria}/escolhas`, corpo);
+
+export const atualizarEscolha = (idItem: number, corpo: GravarEscolha) =>
+  api.put<{ message: string }>(`/catalogos/itens/${idItem}/escolha`, corpo);
+
+export const enviarFotoDoItem = (idItem: number, arquivo: File) => {
+  const corpo = new FormData();
+  corpo.append("arquivo", arquivo);
+  return api.upload<{ foto_url: string }>(`/catalogos/itens/${idItem}/foto`, corpo);
+};
+
+export const removerFotoDoItem = (idItem: number) =>
+  api.delete<{ foto_url: null }>(`/catalogos/itens/${idItem}/foto`);
 
 /** 🔑 Mover não é tirar e pôr: o item leva destaque, esgotado, objetivo e margem. */
 export const moverItem = (id: number, lugar: { id_categoria: number; id_subcategoria: number | null }) =>

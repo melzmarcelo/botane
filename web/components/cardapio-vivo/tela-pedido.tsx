@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MesaService, type PedidoPublico } from "@/lib/cardapio-vivo";
 import Identificacao, { telefoneGuardado } from "./identificacao";
-import { precoDaLinha, type LinhaSelecao } from "./selecao";
+import { idsDosAdicionais, nomeDosAdicionais, precoDaLinha, type LinhaSelecao } from "./selecao";
 import { moeda, type Textos } from "./textos";
 
 type Props = {
@@ -63,7 +63,8 @@ export default function TelaPedido({ linhas, total, algumSemPreco, mesa, token, 
     setErro(null);
     const r = await MesaService.enviarPedido(token, {
       sessao: sessao(), chave, observacao: observacao.trim() || null, telefone,
-      itens: linhas.map((l) => ({ item: l.id_item, quantidade: l.quantidade, adicionais: l.adicionais.map((a) => a.id) })),
+      itens: linhas.map((l) => ({ item: l.id_item, quantidade: l.quantidade, escolha: l.escolha ?? null,
+                                  adicionais: idsDosAdicionais(l.adicionais) })),
     });
     setEnviando(false);
     if (!r.ok) {
@@ -99,7 +100,7 @@ export default function TelaPedido({ linhas, total, algumSemPreco, mesa, token, 
                   <li key={l.chave} className="flex items-start justify-between gap-3 py-3">
                     <div>
                       <p className="font-semibold"><span className="mr-1 tabular-nums">{l.quantidade}×</span>{l.nome}</p>
-                      {l.adicionais.length > 0 && <p className="text-sm opacity-75">{l.adicionais.map((a) => a.nome).join(" · ")}</p>}
+                      {l.adicionais.length > 0 && <p className="text-sm opacity-75">{nomeDosAdicionais(l.adicionais)}</p>}
                       <button type="button" onClick={() => aoRemover(l)} className="text-sm underline opacity-60">{t.remover}</button>
                     </div>
                     <span className="shrink-0 tabular-nums">{preco !== null ? moeda(preco) : t.semPreco}</span>

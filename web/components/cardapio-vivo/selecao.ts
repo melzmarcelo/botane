@@ -9,28 +9,41 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export type EscolhaAdicional = { id: number; nome: string; preco: number | null };
+/** `quantidade` (142): a mesma opção mais de uma vez, nos grupos que deixam ("2× Geleia"). */
+export type EscolhaAdicional = { id: number; nome: string; preco: number | null; quantidade?: number };
 
 export type LinhaSelecao = {
   chave: string;
   id_item: number;
+  /** 142: o PRODUTO escolhido no item de escolha (Chocolate Quente → Branco). */
+  escolha?: number | null;
   nome: string;
   preco: number | null;
   quantidade: number;
   adicionais: EscolhaAdicional[];
 };
 
+const vezes = (a: EscolhaAdicional) => a.quantidade ?? 1;
+
+/** "2× Geleia · Pão" — como a linha mostra os adicionais. */
+export const nomeDosAdicionais = (adicionais: EscolhaAdicional[]) =>
+  adicionais.map((a) => (vezes(a) > 1 ? `${vezes(a)}× ${a.nome}` : a.nome)).join(" · ");
+
+/** Os ids como o servidor os quer: a opção repetida aparece uma vez por unidade. */
+export const idsDosAdicionais = (adicionais: EscolhaAdicional[]) =>
+  adicionais.flatMap((a) => Array<number>(vezes(a)).fill(a.id));
+
 const VALIDADE_MS = 6 * 60 * 60 * 1000;
 
 const chaveDoArmazem = (loja: number, mesa: string | null) => `cardapio.selecao.${loja}.${mesa ?? "loja"}`;
 
 /** Mesmo item com as mesmas escolhas soma na linha; escolhas diferentes são outra linha. */
-export const chaveDaLinha = (idItem: number, adicionais: EscolhaAdicional[]) =>
-  `${idItem}:${adicionais.map((a) => a.id).sort((a, b) => a - b).join(",")}`;
+export const chaveDaLinha = (idItem: number, adicionais: EscolhaAdicional[], escolha?: number | null) =>
+  `${idItem}:${escolha ?? ""}:${idsDosAdicionais(adicionais).sort((a, b) => a - b).join(",")}`;
 
 export function precoDaLinha(l: LinhaSelecao): number | null {
   if (l.preco === null) return null;
-  const extras = l.adicionais.reduce((s, a) => s + (a.preco ?? 0), 0);
+  const extras = l.adicionais.reduce((s, a) => s + (a.preco ?? 0) * vezes(a), 0);
   return (l.preco + extras) * l.quantidade;
 }
 
@@ -58,7 +71,7 @@ export function useSelecao(loja: number, mesa: string | null) {
   }, [chave]);
 
   const adicionar = useCallback((l: Omit<LinhaSelecao, "chave">) => {
-    const k = chaveDaLinha(l.id_item, l.adicionais);
+    const k = chaveDaLinha(l.id_item, l.adicionais, l.escolha);
     const existente = linhas.find((x) => x.chave === k);
     gravar(existente
       ? linhas.map((x) => (x.chave === k ? { ...x, quantidade: x.quantidade + l.quantidade } : x))

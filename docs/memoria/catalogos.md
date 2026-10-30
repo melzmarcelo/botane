@@ -940,3 +940,39 @@ determinado período"* — o "Catering" de teste e a medição de teste só saí
   `medicao-do-periodo.tsx`, no fim do Cardápio Vivo.
 - Cobertura: `smoke_catalogos` (+8), `smoke_cardapio_vivo` 11b (+7) e `verificar.mjs` 11z (+5).
 
+
+## Item de escolha e adicionais que repetem (migração 142, 1.1.153, 30/10/2026)
+
+🔑 **Pedido do dono (29/10/2026):** "Monte sua cesta" (escolhe a embalagem, depois os itens de
+um mínimo a um máximo, somando) e "Chocolate Quente (este não é um produto) → Preto ou Branco".
+Estudo e as quatro decisões em [`docs/item-de-escolha-estudo.md`](../item-de-escolha-estudo.md):
+item repete, embalagem + soma (opção "incluso" a R$ 0), site E mesa, e o PDV lança a embalagem
+e os itens em linhas (a cesta NÃO é KIT — kit tem composição fixa).
+
+- **`catalogo_itens.tipo`** `PRODUTO`|`ESCOLHA`; o de escolha tem `id_produto` NULO e nome,
+  descrição, foto e traduções próprios (CHECK `ck_catalogo_item_tipo`). As opções em
+  **`catalogo_item_escolhas`** (`id_item`, `id_produto`, `rotulo`, `ordem`) — cada uma um produto,
+  e é ELE que vai no pedido (`pedido_itens.id_produto`), com o nome "Item · Opção".
+- ⚠️ **As consultas com `JOIN produtos ON p.id = i.id_produto` deixam o item de escolha de fora
+  SOZINHAS** — de propósito para A/B, atenção, anúncios, cartões e o resumo da lista
+  (`pratos` conta produtos). Quem o quer usa `LEFT JOIN` e `coalesce(p.nome, i.nome)`: o
+  cadastro (`catalogo_conteudo.montar`), o feed (`cardapio_vivo.feed`), o site
+  (`publico._montar_cardapio`) e o pedido. Mexer numa consulta dessas é decidir se ele entra.
+- 🔑 **Regra ÚNICA da linha do pedido** em `services/item_do_pedido.py` (`resolver`), usada pela
+  mesa (`cardapio_pedido.enviar`) e pelo site (`pedidos.enviar` + `_com_opcoes`). Antes os
+  adicionais existiam só na mesa e o site os mandava como texto na observação.
+- **Adicionais**: `produto_adicionais_grupos.permite_repetir` (id repetido = quantidade; mínimo
+  e máximo contam UNIDADES) e `produto_adicionais_opcoes.incluso` (R$ 0). Congelados com
+  `quantidade` em `pedido_itens.adicionais`; a folha do pedido (PDF) passou a imprimi-los —
+  não imprimia nem os da mesa.
+- Preço do item de escolha no cardápio = o MENOR das opções ativas ("a partir de"). Opção
+  inativa some do feed/site e não pode ser pedida; o cadastro a mostra marcada. Sem opção
+  ativa, o item some.
+- Tela: `catalogos/[id]/escolha.tsx` (janela de criar + parte da gaveta); no produto, "pode
+  repetir", "incluso" e "copiar de outro produto" (as três cestas usam a mesma lista). Feed:
+  `detalhe.tsx` com "Escolha uma opção" e contador − n +. Site: a janela `#montar`, e o
+  carrinho por CHAVE (`item:escolha:ids`; o prato comum continua com a chave = id do item).
+- ⚠️ Python com `${...}` e crases em heredoc pelo Bash quebrou duas vezes nesta entrega:
+  script de edição em ARQUIVO, ou Edit.
+- Cobertura: `smoke_item_de_escolha.py` (40) e `web/scripts/verificar-item-de-escolha.mjs` (19,
+  na bateria do navegador).

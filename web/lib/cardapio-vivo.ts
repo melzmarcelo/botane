@@ -15,6 +15,13 @@ export type Midia =
 export type OpcaoAdicional = { id: number; nome: string; preco: number | null };
 export type GrupoAdicionalFeed = {
   id: number; nome: string; minimo: number; maximo: number; opcoes: OpcaoAdicional[];
+  /** 142: a mesma opção mais de uma vez ("2 geleias"); mínimo e máximo contam unidades. */
+  permite_repetir?: boolean;
+};
+
+/** 142: uma opção do item de escolha — é um PRODUTO, e é ele que vai no pedido. */
+export type OpcaoDeEscolha = {
+  id_produto: number; nome: string; preco: number | null; adicionais: GrupoAdicionalFeed[];
 };
 
 export type ItemFeed = {
@@ -30,6 +37,8 @@ export type ItemFeed = {
   fora_do_horario: boolean;
   midia: Midia;
   adicionais: GrupoAdicionalFeed[];
+  /** 142: nulo = prato comum; lista = o cliente escolhe UMA antes de seguir. */
+  escolhas?: OpcaoDeEscolha[] | null;
 };
 
 export type SecaoFeed = {
@@ -275,8 +284,12 @@ export type ExibicaoSecao = {
 
 export type GrupoAdicionalCadastro = {
   id?: number; nome: string; minimo: number; maximo: number;
+  /** 142: o mesmo item mais de uma vez. */
+  permite_repetir?: boolean;
   opcoes: { id?: number; nome: string; preco: number | null; id_produto_ref: number | null;
-            produto_ref?: string | null; ativo: boolean }[];
+            produto_ref?: string | null; ativo: boolean;
+            /** 142: entra por R$ 0 (já vem no preço do produto). */
+            incluso?: boolean }[];
 };
 
 export type CardapioDoProduto = {
@@ -315,7 +328,7 @@ export type PedidoPublico = {
   total: number;
   criado_em: string;
   itens: { nome: string; quantidade: number; total: number; observacao: string | null;
-           adicionais: { nome: string; preco: number | null }[] | null }[];
+           adicionais: { nome: string; preco: number | null; quantidade?: number }[] | null }[];
   repetido?: boolean;
 };
 
@@ -353,7 +366,8 @@ async function publico<T>(metodo: string, caminho: string, corpo?: unknown): Pro
 export const MesaService = {
   enviarPedido: (token: string, corpo: {
     sessao: string; chave: string; observacao?: string | null; telefone?: string | null;
-    itens: { item: number; quantidade: number; adicionais: number[]; observacao?: string | null }[];
+    itens: { item: number; quantidade: number; adicionais: number[]; escolha?: number | null;
+             observacao?: string | null }[];
   }) => publico<PedidoPublico>("POST", `/publico/cardapio/mesa/${encodeURIComponent(token)}/pedido`, corpo),
   pedidos: (token: string, sessao: string) =>
     publico<PedidoPublico[]>("GET", `/publico/cardapio/mesa/${encodeURIComponent(token)}/pedidos?sessao=${sessao}`),

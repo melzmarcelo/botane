@@ -25,6 +25,7 @@ import { AberturaDoCardapio, NOME_DO_PERIODO, PratosECartoes, atencaoDaAbertura,
 import JanelaCartao, { type AbrindoCartao } from "./janela-cartao";
 import GavetaDoPrato, { type Lugar } from "./gaveta-do-prato";
 import JanelaPratos from "./janela-pratos";
+import { JanelaEscolha } from "./escolha";
 import JanelaSecao, { type Editando } from "./janela-secao";
 import LinhaDoPrato, { faltasDo } from "./linha-do-prato";
 import { BotaoSecao, PainelFaltas, faltasDoCartao, totalTraduzir, type FaltaTraduzir } from "./painel-faltas";
@@ -42,6 +43,8 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
   const [sel, setSel] = useState<Selecao | null>(null);
   const [editando, setEditando] = useState<Editando | null>(null);
   const [pondo, setPondo] = useState(false);
+  /** 142: a janela de criar um item de escolha. */
+  const [criandoEscolha, setCriandoEscolha] = useState(false);
   const [gaveta, setGaveta] = useState<number | null>(null);
   /** 🔑 "Só o que falta": os pratos sem foto, descrição ou preço, de todas as
    *  seções, para arrumar em sequência — quem conserta um vê ele sair da lista. */
@@ -99,7 +102,8 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
   const comFaltas = useMemo(
     () => lugares.map((l) => ({ ...l, itens: l.itens.filter((i) => faltasDo(i).length) })).filter((l) => l.itens.length),
     [lugares]);
-  const pratosComFalta = new Set(comFaltas.flatMap((l) => l.itens.map((i) => i.id_produto))).size;
+  const pratosComFalta = new Set(comFaltas.flatMap((l) => l.itens.map((i) =>
+    (i.tipo === "ESCOLHA" ? `e${i.id}` : i.id_produto)))).size;
 
   /** Onde mora cada lista, pelo id — para dizer onde está o cartão. */
   const cartoesComFalta = useMemo(() => cartoes.map((c) => ({
@@ -347,6 +351,11 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
                                                           id_subcategoria: a.sub?.id ?? null, onde })}>
                   + cartão
                 </button>
+                {/* 🔑 142: "Chocolate Quente → Preto ou Branco"; "Monte sua cesta". */}
+                <button type="button" className="btn btn-secundario" id="nova-escolha"
+                        onClick={() => setCriandoEscolha(true)}>
+                  + item de escolha
+                </button>
                 <button type="button" className="btn btn-primario" onClick={() => setPondo(true)}>+ pratos</button>
               </span>
             )}
@@ -376,6 +385,11 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
         <JanelaPratos idCategoria={a.categoria.id} idSubcategoria={a.sub?.id ?? null} onde={onde}
                       jaEstao={new Set(itens.map((i) => i.id_produto))}
                       aoFechar={() => setPondo(false)} aoPor={recarregar} />
+      )}
+      {criandoEscolha && (
+        <JanelaEscolha idCategoria={a.categoria.id} idSubcategoria={a.sub?.id ?? null} onde={onde}
+                       aoFechar={() => setCriandoEscolha(false)}
+                       aoCriar={async (id) => { await recarregar(); setGaveta(id); }} />
       )}
       {abrindoCartao && (
         <JanelaCartao idCatalogo={idCatalogo} abrindo={abrindoCartao} podeEditar={podeEditar}

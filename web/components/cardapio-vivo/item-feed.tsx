@@ -136,14 +136,14 @@ export default function ItemFeed({ item, indice, posicao, ativo, perto, economia
         )}
         <div className="pointer-events-auto mt-4 flex items-center justify-between gap-3">
           <span className="cv-mono text-xl font-medium">
-            {item.preco !== null ? moeda(item.preco) : ""}
+            {item.preco !== null ? `${item.escolhas ? `${t.aPartirDe} ` : ""}${moeda(item.preco)}` : ""}
           </span>
           {item.esgotado ? (
             <span className="rounded-full bg-white/20 px-4 py-2.5 text-sm font-semibold backdrop-blur">{t.esgotado}</span>
           ) : aoAdicionar && (
             <button
               type="button"
-              onClick={item.adicionais.length ? aoAbrir : aoAdicionar}
+              onClick={item.adicionais.length || item.escolhas ? aoAbrir : aoAdicionar}
               className="rounded-full bg-[var(--cv-fundo)] px-4 py-2.5 text-sm font-semibold text-[var(--cv-tinta)] shadow-lg active:scale-95"
             >
               {selecionados > 0 ? `✓ ${t.adicionado} (${selecionados})` : `+ ${t.adicionarSelecao}`}

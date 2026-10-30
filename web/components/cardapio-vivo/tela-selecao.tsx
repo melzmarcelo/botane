@@ -7,7 +7,7 @@
  * pedido pelo site, a seleção vira o carrinho do site (`aoEncomendar`).
  */
 
-import { precoDaLinha, type LinhaSelecao } from "./selecao";
+import { nomeDosAdicionais, precoDaLinha, type LinhaSelecao } from "./selecao";
 import { moeda, type Textos } from "./textos";
 
 type Props = {
@@ -51,7 +51,7 @@ export default function TelaSelecao({ linhas, total, algumSemPreco, mesa, t, aoR
                       <span className="mr-2 tabular-nums">{l.quantidade}×</span>{l.nome}
                     </p>
                     {l.adicionais.length > 0 && (
-                      <p className="mt-0.5 text-sm opacity-75">{l.adicionais.map((a) => a.nome).join(" · ")}</p>
+                      <p className="mt-0.5 text-sm opacity-75">{nomeDosAdicionais(l.adicionais)}</p>
                     )}
                     <button type="button" onClick={() => aoRemover(l)} className="mt-1 text-sm underline opacity-60">
                       {t.remover}

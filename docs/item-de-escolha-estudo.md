@@ -1,4 +1,4 @@
-# Item de escolha no catálogo — estudo (29/10/2026)
+# Item de escolha no catálogo — estudo (29/10/2026) · ENTREGUE na 1.1.153
 
 🔑 **Pedido do dono (29/10/2026):** *"no catálogo, gostaria de colocar um 'item' configurável.
 Por exemplo, Monte sua cesta. Aí teremos 3 produtos Cesta, que é embalagem: Pequena, Média,

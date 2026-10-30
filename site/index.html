@@ -323,6 +323,19 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
   background: var(--erva); border: 0; color: #F4F0E5; font: 600 18px/1 Karla, sans-serif;
 }
 .contador b { min-width: 28px; text-align: center; font: 600 16px/1 "DM Mono", monospace; }
+/* 🔑 142: montar o item (escolha uma opção; adicionais com mínimo e máximo). */
+.montar fieldset { border: 0; margin: 0 0 14px; padding: 0; }
+.montar legend { display: flex; justify-content: space-between; width: 100%; gap: 8px;
+  font-weight: 600; font-size: 14.5px; color: var(--tinta); margin-bottom: 6px; }
+.montar legend small { font-weight: 400; color: var(--tinta-suave); }
+.montar .opcao { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 9px 0; border-top: 1px solid var(--linha); font-size: 14.5px; color: var(--tinta); }
+.montar .opcao label { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; }
+.montar .opcao input { width: 20px; height: 20px; margin: 0; accent-color: var(--erva); }
+.montar .opcao small { color: var(--tinta-suave); font-family: "DM Mono", monospace; }
+.montar .contador button { width: 34px; height: 34px; font-size: 16px; }
+.montar .contador button:disabled { opacity: .35; cursor: default; }
+.linha-carrinho .extras { color: var(--tinta-suave); font-size: 13px; }
 /* 🔑 A barra do carrinho fica FIXA no pé: é o caminho de volta do cardápio para o pedido,
    e rolar até o fim de uma seção longa para achá-la é onde o pedido se perde. */
 .barra-carrinho {
@@ -730,6 +743,15 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 </div>
 <button class="barra-carrinho" id="barra-carrinho" type="button" hidden></button>
 
+<dialog class="termo montar" id="montar" aria-labelledby="t-montar">
+  <h3 id="t-montar"></h3>
+  <div class="corpo-termo" id="corpo-montar"></div>
+  <div class="pe-termo">
+    <button class="item" type="button" id="fechar-montar">Fechar</button>
+    <button class="item destaque" type="button" id="por-montar"></button>
+  </div>
+</dialog>
+
 <dialog class="termo" id="termo" aria-labelledby="t-termo">
   <h3 id="t-termo">Termo de consentimento</h3>
   <div class="corpo-termo" id="texto-termo"><p>Carregando…</p></div>
@@ -963,6 +985,15 @@ const TRADUCOES = {
 
   // ---- pedido
   "Adicionar": ["Add", "Hinzufügen"],
+  // 142: o item montado (escolha uma opção; adicionais com mínimo e máximo)
+  "Escolher": ["Choose", "Auswählen"],
+  "Adicionar outro ({n} no pedido)": ["Add another ({n} in order)", "Noch eins ({n} bestellt)"],
+  "a partir de": ["from", "ab"],
+  "Escolha uma opção": ["Choose one", "Bitte wählen"],
+  "obrigatório": ["required", "Pflicht"],
+  "Escolha {n}": ["Choose {n}", "Wählen Sie {n}"],
+  "Escolha de {a} a {b}": ["Choose {a} to {b}", "Wählen Sie {a} bis {b}"],
+  "Até {n}": ["Up to {n}", "Bis zu {n}"],
   "tirar um": ["remove one", "eins weniger"],
   "pôr mais um": ["add one more", "eins mehr"],
   "Ver pedido ›": ["View order ›", "Bestellung ansehen ›"],
@@ -1597,7 +1628,7 @@ function desenharPrato(item) {
     <div class="linha1">
       <span class="nome">${esc(item.nome)}</span>
       ${item.preco !== null && item.preco !== undefined
-        ? `<span class="preco">${dinheiro(item.preco)}</span>` : ""}
+        ? `<span class="preco">${item.escolhas ? t("a partir de") + " " : ""}${dinheiro(item.preco)}</span>` : ""}
     </div>
     ${item.descricao ? `<p class="desc">${esc(item.descricao)}</p>` : ""}
     ${item.foto ? `<div class="foto"><img src="${API}${esc(item.foto)}"
@@ -1607,7 +1638,7 @@ function desenharPrato(item) {
   if (podePedir() && item.preco !== null && item.preco !== undefined && item.id) {
     const caixa = document.createElement("div");
     caixa.className = "pedir";
-    caixa.dataset.item = item.id;
+    caixa.dataset.chave = String(item.id);
     el.appendChild(caixa);
     desenharControle(caixa, item);
   }
@@ -1686,7 +1717,10 @@ function abrirSecao(indice) {
  * é o servidor. O total desta tela é PRÉVIA.
  */
 const CARRINHO = "botane.carrinho";
-/** { id_catalogo, chave, itens: { [idItem]: {id, nome, preco, quantidade, observacao} } } */
+/** { id_catalogo, chave, itens: { [chaveDaLinha]: {chave, id, escolha, adicionais, nome, preco, quantidade,
+ *   observacao} } }
+ * 🔑 142: a linha é o item + a escolha + os adicionais. Prato comum tem a chave = o id do item
+ * (o carrinho de antes continua valendo); o montado tem uma linha por combinação. */
 let carrinho = null;
 let pedidoModo = null;
 let pedidoPagamento = null;
@@ -1719,27 +1753,50 @@ function carrinhoAtual() {
   return carrinho;
 }
 
-function quantidadeDe(idItem) {
-  return carrinho && aberto && carrinho.id_catalogo === aberto.id && carrinho.itens[idItem]
-    ? carrinho.itens[idItem].quantidade : 0;
+const chaveDe = (x) => x.chave || String(x.id);
+/** O item precisa ser MONTADO antes de ir ao pedido (142): escolha ou adicionais. */
+const montavel = (item) => !!(item.escolhas || (item.adicionais && item.adicionais.length));
+const vezes = (a) => a.quantidade || 1;
+/** "2× Geleia · Pão" */
+const nomeDosAdicionais = (ads) => (ads || []).map((a) => (vezes(a) > 1 ? `${vezes(a)}× ` : "") + a.nome).join(" · ");
+
+function quantidadeDe(chave) {
+  return carrinho && aberto && carrinho.id_catalogo === aberto.id && carrinho.itens[chave]
+    ? carrinho.itens[chave].quantidade : 0;
+}
+
+/** Quantas unidades de um item montável há no carrinho, somando as combinações. */
+function quantidadeDoItem(idItem) {
+  if (!carrinho || !aberto || carrinho.id_catalogo !== aberto.id) return 0;
+  return Object.values(carrinho.itens).filter((i) => i.id === idItem).reduce((s, i) => s + i.quantidade, 0);
 }
 
 function mudarQuantidade(item, passo) {
   const c = carrinhoAtual();
   if (!c) return;
-  const atual = c.itens[item.id] || { id: item.id, nome: item.nome, preco: item.preco, quantidade: 0, observacao: "" };
+  const k = chaveDe(item);
+  const atual = c.itens[k] || { chave: k, id: item.id, escolha: item.escolha || null,
+    adicionais: item.adicionais_escolhidos || [], nome: item.nome, preco: item.preco, quantidade: 0, observacao: "" };
   atual.quantidade = Math.max(0, atual.quantidade + passo);
-  if (atual.quantidade) c.itens[item.id] = atual; else delete c.itens[item.id];
+  if (atual.quantidade) c.itens[k] = atual; else delete c.itens[k];
   // ⚠️ Mudou o carrinho, muda a chave: é OUTRO pedido, e não pode ser confundido com um
   // envio anterior que o servidor já gravou.
   c.chave = chaveNova();
   guardarCarrinho();
-  document.querySelectorAll(`.pedir[data-item="${item.id}"]`).forEach((cx) => desenharControle(cx, item));
+  document.querySelectorAll(`.pedir[data-chave="${k}"]`).forEach((cx) => desenharControle(cx, item));
   atualizarBarra();
 }
 
 function desenharControle(caixa, item) {
-  const n = quantidadeDe(item.id);
+  if (montavel(item) && !item.chave) {
+    // 🔑 142: o item montável sempre abre a janela — cada combinação é uma linha no pedido.
+    const n = quantidadeDoItem(item.id);
+    caixa.innerHTML = `<button type="button" class="adicionar">${
+      n ? t("Adicionar outro ({n} no pedido)", { n }) : t(item.escolhas ? "Escolher" : "Adicionar")}</button>`;
+    caixa.querySelector("button").addEventListener("click", () => abrirMontar(item));
+    return;
+  }
+  const n = quantidadeDe(chaveDe(item));
   caixa.innerHTML = n
     ? `<span class="contador"><button type="button" aria-label="tirar um">−</button><b>${n}</b>
        <button type="button" aria-label="pôr mais um">+</button></span>`
@@ -1793,8 +1850,10 @@ function abrirCarrinho() {
   itens.forEach((i) => {
     const linha = document.createElement("div");
     linha.className = "linha-carrinho";
-    linha.innerHTML = `<div class="topo"><span>${esc(i.nome)}<br><small>R$ ${dinheiro(i.preco)}</small></span>
-        <span class="pedir" data-item="${i.id}"></span></div>
+    const extras = nomeDosAdicionais(i.adicionais);
+    linha.innerHTML = `<div class="topo"><span>${esc(i.nome)}${extras ? `<br><span class="extras">${esc(extras)}</span>` : ""}
+        <br><small>R$ ${dinheiro(i.preco)}</small></span>
+        <span class="pedir" data-chave="${esc(chaveDe(i))}"></span></div>
       <input type="text" maxlength="200" placeholder="Observação deste item (ex.: sem cebola)" value="${esc(i.observacao || "")}">`;
     const cx = linha.querySelector(".pedir");
     desenharControle(cx, i);
@@ -1875,6 +1934,96 @@ function abrirCarrinhoTotais() {
   $("#enviar-pedido").disabled = !total || falta;
 }
 
+/**
+ * 🔑 142 — montar o item: "escolha uma opção" (Chocolate Quente → Branco; Monte sua cesta →
+ * Média) e os adicionais da opção, com mínimo e máximo; grupo que repete ganha − n +.
+ * ⚠️ O preço daqui é PRÉVIA: o servidor confere a escolha, os limites e o valor.
+ */
+let montando = null;
+function abrirMontar(item) {
+  montando = { item, opcao: item.escolhas ? null : undefined, marcados: {} };
+  $("#t-montar").textContent = item.nome;
+  desenharMontar();
+  $("#montar").showModal();
+}
+
+function desenharMontar() {
+  const { item } = montando;
+  const opcao = item.escolhas ? item.escolhas.find((o) => o.id_produto === montando.opcao) : null;
+  const grupos = item.escolhas ? (opcao ? opcao.adicionais : []) : item.adicionais;
+  const base = item.escolhas ? (opcao ? opcao.preco : null) : item.preco;
+  const marcados = montando.marcados;
+  let html = item.descricao ? `<p>${esc(item.descricao)}</p>` : "";
+  if (item.escolhas) {
+    html += `<fieldset><legend>${esc(t("Escolha uma opção"))}<small>${esc(t("obrigatório"))}</small></legend>${
+      item.escolhas.map((o) => `<div class="opcao"><label><input type="radio" name="montar-opcao" data-opcao="${o.id_produto}"
+        ${montando.opcao === o.id_produto ? "checked" : ""}> ${esc(o.nome)}</label>
+        <small>${o.preco !== null ? "R$ " + dinheiro(o.preco) : ""}</small></div>`).join("")}</fieldset>`;
+  }
+  grupos.forEach((g) => {
+    const ja = marcados[g.id] || [];
+    const faixa = g.minimo === g.maximo ? t("Escolha {n}", { n: g.minimo })
+      : g.minimo > 0 ? t("Escolha de {a} a {b}", { a: g.minimo, b: g.maximo }) : t("Até {n}", { n: g.maximo });
+    html += `<fieldset><legend>${esc(g.nome)}<small>${esc(faixa)}</small></legend>${g.opcoes.map((o) => {
+      const n = ja.filter((x) => x === o.id).length;
+      const preco = o.preco ? `+ R$ ${dinheiro(o.preco)}` : "";
+      if (g.permite_repetir) {
+        return `<div class="opcao"><span>${esc(o.nome)} <small>${preco}</small></span>
+          <span class="contador"><button type="button" data-g="${g.id}" data-o="${o.id}" data-passo="-1"
+            aria-label="${esc(t("tirar um"))}" ${n ? "" : "disabled"}>−</button><b>${n}</b>
+          <button type="button" data-g="${g.id}" data-o="${o.id}" data-passo="1" aria-label="${esc(t("pôr mais um"))}"
+            ${ja.length >= g.maximo ? "disabled" : ""}>+</button></span></div>`;
+      }
+      return `<div class="opcao"><label><input type="${g.maximo === 1 ? "radio" : "checkbox"}" name="montar-g${g.id}"
+        data-g="${g.id}" data-o="${o.id}" data-max="${g.maximo}" ${n ? "checked" : ""}> ${esc(o.nome)}</label>
+        <small>${preco}</small></div>`;
+    }).join("")}</fieldset>`;
+  });
+  $("#corpo-montar").innerHTML = html;
+
+  const escolhidos = grupos.flatMap((g) => g.opcoes
+    .map((o) => ({ id: o.id, nome: o.nome, preco: o.preco, quantidade: (marcados[g.id] || []).filter((x) => x === o.id).length }))
+    .filter((a) => a.quantidade > 0));
+  const falta = (item.escolhas && !opcao) || grupos.some((g) => (marcados[g.id] || []).length < g.minimo);
+  const unitario = base === null || base === undefined ? null
+    : base + escolhidos.reduce((s, a) => s + (a.preco || 0) * a.quantidade, 0);
+  const botao = $("#por-montar");
+  botao.disabled = !!falta || unitario === null;
+  botao.textContent = t("Adicionar") + (unitario !== null ? ` · R$ ${dinheiro(unitario)}` : "");
+  botao.onclick = () => {
+    const ids = escolhidos.flatMap((a) => Array(a.quantidade).fill(a.id)).sort((a, b) => a - b);
+    const linha = {
+      chave: `${item.id}:${opcao ? opcao.id_produto : ""}:${ids.join(",")}`, id: item.id,
+      escolha: opcao ? opcao.id_produto : null, adicionais_escolhidos: escolhidos,
+      nome: opcao ? `${item.nome} · ${opcao.nome}` : item.nome, preco: unitario,
+    };
+    mudarQuantidade(linha, 1);
+    $("#montar").close();
+    document.querySelectorAll(`.pedir[data-chave="${item.id}"]`).forEach((cx) => desenharControle(cx, item));
+  };
+
+  $("#corpo-montar").querySelectorAll("input[data-opcao]").forEach((r) => r.addEventListener("change", () => {
+    montando.opcao = Number(r.dataset.opcao);
+    montando.marcados = {};
+    desenharMontar();
+  }));
+  $("#corpo-montar").querySelectorAll("input[data-g]").forEach((cx) => cx.addEventListener("change", () => {
+    const g = Number(cx.dataset.g), o = Number(cx.dataset.o), max = Number(cx.dataset.max);
+    let ja = (marcados[g] || []).filter((x) => x !== o);
+    if (cx.checked) ja = max === 1 ? [o] : (ja.length >= max ? ja : [...ja, o]);
+    marcados[g] = ja;
+    desenharMontar();
+  }));
+  $("#corpo-montar").querySelectorAll("button[data-passo]").forEach((b) => b.addEventListener("click", () => {
+    const g = Number(b.dataset.g), o = Number(b.dataset.o);
+    const ja = [...(marcados[g] || [])];
+    if (Number(b.dataset.passo) > 0) ja.push(o);
+    else { const n = ja.lastIndexOf(o); if (n >= 0) ja.splice(n, 1); }
+    marcados[g] = ja;
+    desenharMontar();
+  }));
+}
+
 async function enviarPedido() {
   if (!carrinho || !Object.keys(carrinho.itens).length) return abrirCarrinho();
   // Quem ainda não se identificou passa pelo telefone e volta direto para o envio.
@@ -1899,7 +2048,10 @@ async function enviarPedido() {
       endereco: pedidoModo === "ENTREGA" ? endereco : null, para_quando: para,
       forma_pagamento: pedidoPagamento, observacao: $("#obs-pedido").value.trim() || null,
       itens: Object.values(carrinho.itens).map((i) => ({
-        id_item: i.id, quantidade: i.quantidade, observacao: i.observacao || null })),
+        id_item: i.id, quantidade: i.quantidade, observacao: i.observacao || null,
+        // 🔑 142: o produto escolhido e os adicionais (a opção repetida vai uma vez por unidade).
+        escolha: i.escolha || null,
+        adicionais: (i.adicionais || []).flatMap((a) => Array(vezes(a)).fill(a.id)) })),
     });
   } catch (e) {
     $("#enviar-pedido").disabled = false;
@@ -1957,7 +2109,8 @@ async function mostrarMeusPedidos() {
     el.innerHTML = `<span class="situacao">${esc(t("Nº {numero} · {situacao}",
       { numero: p.numero, situacao: t(SITUACAO_DO_PEDIDO[p.situacao] || p.situacao) }))}</span>
       <span>${esc(t(p.modo_rotulo))} · ${esc(quando)} · R$ ${dinheiro(p.total)}</span>
-      <small>${p.itens.map((i) => `${i.quantidade}× ${esc(i.nome)}`).join(", ")}</small>
+      <small>${p.itens.map((i) => `${i.quantidade}× ${esc(i.nome)}${
+        i.adicionais && i.adicionais.length ? ` (${esc(nomeDosAdicionais(i.adicionais))})` : ""}`).join(", ")}</small>
       ${p.alterado ? `<small>A casa ajustou os itens deste pedido.</small>` : ""}
       ${p.motivo ? `<small>${esc(t("Motivo: {motivo}", { motivo: p.motivo }))}</small>` : ""}`;
     if (p.situacao === "NOVO") {
@@ -2571,6 +2724,8 @@ $("#ver-termo").addEventListener("click", (e) => {
   abrirTermo();
 });
 $("#fechar-termo").addEventListener("click", () => $("#termo").close());
+$("#fechar-montar").addEventListener("click", () => $("#montar").close());
+$("#montar").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $("#concordar-termo").addEventListener("click", () => {
   $("#aceite-termo").checked = true;
   $("#aceite-fidelidade").checked = true;
