@@ -10,6 +10,7 @@ import { Aviso, Carregando, Cartao, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
 import ExplicaTela from "@/components/explica-tela";
 
+import { plural } from "@/lib/numeros";
 /**
  * A fila de de-para: o que foi vendido e não achou produto no cadastro.
  *
@@ -96,7 +97,7 @@ export default function PaginaSemVinculo() {
       </header>
 
       <Cartao
-        titulo={fila ? `${fila.length} item(ns) na fila` : "Fila"}
+        titulo={fila ? `${plural(fila.length, "item", "itens")} na fila` : "Fila"}
         descricao={
           fila?.length
             ? `${reais(receita)} de receita sem custo do outro lado.`

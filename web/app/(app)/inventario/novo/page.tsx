@@ -11,6 +11,7 @@ import FiltroMultiplo from "@/components/filtro-multiplo";
 import Voltar from "@/components/voltar";
 import ExplicaTela from "@/components/explica-tela";
 
+import { concorda, plural } from "@/lib/numeros";
 /**
  * Montar uma contagem.
  *
@@ -352,7 +353,7 @@ export default function PaginaNovaContagem() {
 
             {previa.ja_em_contagem_total > 0 && (
               <Aviso tipo="erro">
-                {previa.ja_em_contagem_total} item(ns) já estão numa contagem aberta —{" "}
+                {plural(previa.ja_em_contagem_total, "item", "itens")} já {concorda(previa.ja_em_contagem_total, "está", "estão")} numa contagem aberta —{" "}
                 {previa.ja_em_contagem
                   .slice(0, 3)
                   .map((c) => `${c.produto} em ${c.local} (#${c.inventario})`)

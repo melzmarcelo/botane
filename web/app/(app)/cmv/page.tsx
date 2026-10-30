@@ -18,7 +18,7 @@ import MemoriaDeCalculo from "./memoria";
 import ConferenciaDoFechamentoLista, { ListaDePendencias } from "./conferencia";
 import { conferirPeriodo, type PendenciaDoFechamento } from "@/lib/cmv";
 
-import { pct, qtd } from "@/lib/numeros";
+import { pct, plural, qtd } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
 type Apuracao = {
   inicio: string;
@@ -676,7 +676,7 @@ export default function PaginaCmv() {
             </div>
             <p className="mt-3 text-[13px] text-suave">
               {a.vendas} venda(s) no período
-              {a.itens_sem_custo > 0 && ` · ${a.itens_sem_custo} item(ns) vendido(s) sem custo conhecido`}
+              {a.itens_sem_custo > 0 && ` · ${plural(a.itens_sem_custo, "item vendido", "itens vendidos")} sem custo conhecido`}
             </p>
           </Cartao>
           )}

@@ -18,7 +18,7 @@ import { reais } from "@/lib/cadastros";
 import { CampoMoeda, Cartao } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
-import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
+import { moedaParaNumero, numeroParaMoeda, plural } from "@/lib/numeros";
 
 // 🔑 Pelo nome curto, o mesmo do PDV — e é ele que a linha grava (22/10/2026).
 const PRODUTOS = fonteProdutos("", { nomeCurto: true });
@@ -143,7 +143,7 @@ export default function AcrescentarItens({ idVenda, data, aoAcrescentar }: {
       <div className="mt-4 flex gap-2">
         <button type="button" id="venda-acrescentar-gravar" className="btn btn-primario"
                 aria-busy={ocupado} disabled={ocupado || !prontas.length} onClick={() => void gravar()}>
-          {ocupado ? "Acrescentando…" : `Acrescentar ${prontas.length || ""} item(ns)`}
+          {ocupado ? "Acrescentando…" : (prontas.length ? `Acrescentar ${plural(prontas.length, "item", "itens")}` : "Acrescentar itens")}
         </button>
         <button type="button" className="btn btn-secundario" onClick={() => setAberto(false)}>Cancelar</button>
       </div>

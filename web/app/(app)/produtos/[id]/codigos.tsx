@@ -11,6 +11,7 @@ import {
 } from "@/lib/produto-codigos";
 import DescricaoDoCodigo from "./descricao-codigo";
 
+import { concorda } from "@/lib/numeros";
 /**
  * Os códigos de fora que caem neste produto — e quanto cada um vale.
  *
@@ -296,7 +297,7 @@ export default function CodigosDoProduto({
             {soltando.previa.itens_de_nota_abertos > 0 && (
               <>
                 {" "}
-                Há <b>{soltando.previa.itens_de_nota_abertos}</b> item(ns) de nota ainda não
+                Há <b>{soltando.previa.itens_de_nota_abertos}</b> {concorda(soltando.previa.itens_de_nota_abertos, "item", "itens")} de nota ainda não
                 lançada ligados a este produto — confira se algum era deste código.
               </>
             )}

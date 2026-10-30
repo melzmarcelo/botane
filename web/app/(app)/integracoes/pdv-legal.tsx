@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 
+import { plural } from "@/lib/numeros";
 /**
  * PDV Legal — a credencial, o teste de conexão e a busca das vendas.
  *
@@ -176,7 +177,7 @@ export default function PdvLegal() {
       }>("/pdv/cardapio");
       aviso.sucesso(
         r.sem_custo > 0
-          ? `${r.message}. ${r.sem_custo} item(ns) ainda sem custo — falta a ficha técnica.`
+          ? `${r.message}. ${plural(r.sem_custo, "item", "itens")} ainda sem custo — falta a ficha técnica.`
           : r.message,
         (r.ean_de_outro ?? 0) > 0
           ? { texto: "ver possíveis duplicados", ao: () => router.push("/produtos/duplicados") }

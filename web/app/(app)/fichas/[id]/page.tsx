@@ -15,7 +15,7 @@ import Voltar from "@/components/voltar";
 import DuplicarFicha from "./duplicar";
 import ModosDeRendimento, { LinhaModo } from "./rendimentos";
 
-import { custo, qtd } from "@/lib/numeros";
+import { custo, plural, qtd } from "@/lib/numeros";
 type Item = {
   id_insumo: number | null;
   id_subficha: number | null;
@@ -1241,13 +1241,13 @@ export default function EditorFicha() {
             ))}
             {completo === false && (
               <p className="bg-superficie px-4 pb-4 text-[13px] text-alerta sm:col-span-3">
-                {semCusto} item(ns) sem preço conhecido — o total acima é parcial.
+                {plural(semCusto, "item", "itens")} sem preço conhecido — o total acima é parcial.
                 O preço vem da última compra registrada no fornecedor.
               </p>
             )}
             {provisorios > 0 && (
               <p className="bg-superficie px-4 pb-4 text-[13px] text-alerta sm:col-span-3">
-                {provisorios} item(ns) com custo provisório, previsto pela ficha de um
+                {plural(provisorios, "item", "itens")} com custo provisório, previsto pela ficha de um
                 produto que ainda não foi produzido — o total muda quando ele for feito.
               </p>
             )}

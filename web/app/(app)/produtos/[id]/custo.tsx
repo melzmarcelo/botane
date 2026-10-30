@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { custo, numeroParaCusto, qtd, textoParaNumero } from "@/lib/numeros";
+import { concorda, custo, numeroParaCusto, plural, qtd, textoParaNumero } from "@/lib/numeros";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, CampoCusto, Carregando, Etiqueta, Modal, Vazio } from "@/components/ui";
 
@@ -235,7 +235,7 @@ export default function CustoDoProduto({
             não o que a receita prevê.
             {!c.provisorio.completo && (
               <span className="mt-1 block">
-                ⚠️ {c.provisorio.itens_sem_custo} item(ns) da ficha estão{" "}
+                ⚠️ {plural(c.provisorio.itens_sem_custo, "item", "itens")} da ficha {concorda(c.provisorio.itens_sem_custo, "está", "estão")}{" "}
                 <b>sem preço conhecido</b>, então este número está por baixo.
               </span>
             )}

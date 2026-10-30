@@ -9,7 +9,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteFornecedores, fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 import { Campo, CampoCusto, CampoMoeda, Cartao } from "@/components/ui";
 
-import { custo } from "@/lib/numeros";
+import { custo, plural } from "@/lib/numeros";
 import {
   numeroParaCusto,
   numeroParaMoeda,
@@ -593,7 +593,7 @@ export default function NotaManual({
       </div>
 
       <p className="mt-4 text-[14px]">
-        {preenchidas.length} item(ns) · produtos {reais(totalProdutos)} · total da nota{" "}
+        {plural(preenchidas.length, "item", "itens")} · produtos {reais(totalProdutos)} · total da nota{" "}
         <b className="mono">{reais(total)}</b>
         <span className="text-suave">
           {" "}

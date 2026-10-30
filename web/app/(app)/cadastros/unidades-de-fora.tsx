@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Etiqueta, Vazio } from "@/components/ui";
 import { UnidadeMedida } from "@/lib/cadastros";
 
+import { plural } from "@/lib/numeros";
 /**
  * As unidades que chegaram nas notas e o sistema não sabe ler.
  *
@@ -136,7 +137,7 @@ export default function UnidadesDeFora({
                   <td>
                     <span className="mono font-semibold">{p.apelido}</span>
                     <span className="block text-[12.5px] text-suave">
-                      {p.itens} item(ns) em {p.notas} nota(s)
+                      {plural(p.itens, "item", "itens")} em {plural(p.notas, "nota", "notas")}
                     </span>
                   </td>
                   {/* ⚠️ O exemplo é a informação que DECIDE: "BJ" em

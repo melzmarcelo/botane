@@ -12,6 +12,7 @@ import { useSessao } from "@/lib/sessao";
 
 import { JanelaDeCupom } from "../[id]/janelas";
 
+import { plural } from "@/lib/numeros";
 /**
  * Pedidos ▸ Painel: a tela que o balcão deixa aberta.
  *
@@ -37,6 +38,15 @@ function bip() {
   }
 }
 
+/** "há 12 min", "há 2 h 05 min", "há 3 dias" (v1.2.0: o painel mostrava "há 771 min"). */
+function decorrido(minutos: number): string {
+  const m = Math.max(0, minutos);
+  if (m < 60) return `${m} min`;
+  if (m < 24 * 60) return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+  const d = Math.floor(m / (24 * 60));
+  return d === 1 ? "1 dia" : `${d} dias`;
+}
+
 function Cartaozinho({ p, agora, children }: { p: PedidoResumo; agora: number; children?: React.ReactNode }) {
   const minutos = Math.round((agora - new Date(p.criado_em).getTime()) / 60000);
   return (
@@ -47,8 +57,8 @@ function Cartaozinho({ p, agora, children }: { p: PedidoResumo; agora: number; c
       </div>
       <span className="text-[12.5px] text-suave">
         {p.modo === "MESA" ? `${p.modo_rotulo}${p.salao ? ` · ${p.salao}` : ""}` : `${p.modo_rotulo} · ${quando(p.para_quando)}`}
-        {" · "}{p.itens} item(ns)
-        {p.situacao === "NOVO" && <> · há <b className={minutos >= 15 ? "text-[var(--color-alerta)]" : ""}>{minutos} min</b></>}
+        {" · "}{plural(p.itens, "item", "itens")}
+        {p.situacao === "NOVO" && <> · há <b className={minutos >= 15 ? "text-[var(--color-alerta)]" : ""}>{decorrido(minutos)}</b></>}
       </span>
       {children}
     </div>
@@ -150,7 +160,7 @@ export default function PainelDePedidos() {
           {dados.chamados.map((c) => (
             <div key={c.id} className="cartao flex items-center gap-3 border-[var(--color-alerta)] px-3 py-2">
               <span className="font-semibold">{c.tipo === "CONTA" ? "💳 Conta" : "🔔 Garçom"} · Mesa {c.mesa}</span>
-              <span className="text-[12.5px] text-suave">{c.salao} · há {Math.max(0, Math.round((agora - new Date(c.criado_em).getTime()) / 60000))} min</span>
+              <span className="text-[12.5px] text-suave">{c.salao} · há {decorrido(Math.round((agora - new Date(c.criado_em).getTime()) / 60000))}</span>
               {operar && <button className="link-acao text-[13px]" onClick={() => void atender(c)}>atendido</button>}
             </div>
           ))}

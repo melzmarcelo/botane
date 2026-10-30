@@ -12,7 +12,7 @@ import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/compo
 import IncluirProduto from "./incluir-produto";
 import Voltar from "@/components/voltar";
 
-import { qtd } from "@/lib/numeros";
+import { concorda, qtd } from "@/lib/numeros";
 /**
  * A contagem — tela própria, feita para o celular na mão de quem conta.
  *
@@ -565,7 +565,7 @@ export default function PaginaContagem() {
           <p>
             Fechar a contagem de <b>{inv.local}</b>, com{" "}
             <b className="mono">{inv.contados}</b> de{" "}
-            <b className="mono">{inv.total_itens}</b> item(ns) contado(s)?
+            <b className="mono">{inv.total_itens}</b> {concorda(inv.total_itens, "item contado", "itens contados")}?
           </p>
           {faltam > 0 && (
             <p className="mt-2 text-[13.5px] text-alerta">

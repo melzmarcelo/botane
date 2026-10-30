@@ -19,7 +19,7 @@ import {
 } from "../tipos";
 import Voltar from "@/components/voltar";
 
-import { custo } from "@/lib/numeros";
+import { concorda, custo, plural } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
 import AcrescentarItens from "./acrescentar-itens";
 import AlterarCabecalho from "./alterar-cabecalho";
@@ -153,7 +153,7 @@ export default function PaginaVenda() {
           lê o número primeiro já formou a impressão errada. */}
       {parcial && (
         <Aviso tipo="info">
-          {venda.itens_sem_custo} de {venda.itens.length} item(ns) sem custo: o produto não tem
+          {venda.itens_sem_custo} de {plural(venda.itens.length, "item", "itens")} sem custo: o produto não tem
           ficha técnica. O custo e a margem abaixo são <b>parciais</b> — não são o resultado
           desta venda.
         </Aviso>
@@ -165,7 +165,7 @@ export default function PaginaVenda() {
           em rascunho seria indistinguível do de uma aprovada. */}
       {venda.itens_ficha_rascunho > 0 && (
         <Aviso tipo="info">
-          {venda.itens_ficha_rascunho} item(ns) com custo vindo de{" "}
+          {plural(venda.itens_ficha_rascunho, "item", "itens")} com custo vindo de{" "}
           <b>ficha técnica em rascunho</b>: a receita ainda não foi homologada, e este
           custo pode mudar quando ela for. O valor abaixo é o que se sabia no momento da
           venda — ele fica congelado, mesmo depois da homologação.
@@ -173,7 +173,7 @@ export default function PaginaVenda() {
       )}
       {venda.itens_sem_vinculo > 0 && (
         <Aviso tipo="info">
-          {venda.itens_sem_vinculo} item(ns) não acharam produto no cadastro.{" "}
+          {plural(venda.itens_sem_vinculo, "item", "itens")} não {concorda(venda.itens_sem_vinculo, "achou", "acharam")} produto no cadastro.{" "}
           <Link href="/vendas/sem-vinculo" className="underline">
             resolver o de-para
           </Link>
@@ -220,7 +220,7 @@ export default function PaginaVenda() {
         </Cartao>
       </div>
 
-      <Cartao titulo={`${venda.itens.length} item(ns)`}>
+      <Cartao titulo={plural(venda.itens.length, "item", "itens")}>
         <div className="grid-rolante">
           <table className="tabela">
             <thead>

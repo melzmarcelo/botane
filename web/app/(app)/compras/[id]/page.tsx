@@ -22,7 +22,7 @@ import { CORES, rotuloStatus, dataBr, ItemNota, NotaDetalhe, ORIGENS } from "../
 import ConversaoDoItem from "./conversao-do-item";
 import Voltar from "@/components/voltar";
 
-import { custo, pct } from "@/lib/numeros";
+import { custo, pct, plural } from "@/lib/numeros";
 /**
  * Uma nota de entrada, inteira, numa página só.
  *
@@ -173,7 +173,7 @@ export default function PaginaNota() {
         {},
       );
       aviso.sucesso(
-        `${r.itens_lancados} item(ns) no estoque, ${reais(Number(r.valor))} — o custo médio de ` +
+        `${plural(r.itens_lancados, "item", "itens")} no estoque, ${reais(Number(r.valor))} — o custo médio de ` +
           "cada insumo foi recalculado.",
       );
       await carregar();
@@ -340,7 +340,7 @@ export default function PaginaNota() {
 
       {!!pendentes.length && (
         <Aviso tipo="info">
-          {pendentes.length} item(ns) sem produto vinculado. A nota não entra no estoque enquanto
+          {plural(pendentes.length, "item", "itens")} sem produto vinculado. A nota não entra no estoque enquanto
           isso — importar errado é pior que não importar. Se os produtos já foram cadastrados
           depois desta nota,{" "}
           <button className="link-acao" onClick={reconciliar}>
@@ -393,7 +393,7 @@ export default function PaginaNota() {
       <Cartao
         titulo="Itens"
         descricao="O que veio na nota, para onde vai e por quanto entra no estoque."
-        acao={<Etiqueta>{nota.itens.length} item(ns)</Etiqueta>}
+        acao={<Etiqueta>{plural(nota.itens.length, "item", "itens")}</Etiqueta>}
       >
         {!nota.itens.length ? (
           <Vazio>Esta nota não tem item nenhum.</Vazio>

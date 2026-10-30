@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
-import { custo, qtd } from "@/lib/numeros";
+import { custo, plural, qtd } from "@/lib/numeros";
 import {
   Aviso,
   Carregando,
@@ -304,7 +304,7 @@ export default function PaginaOrdemProducao() {
         acao={
           p.itens_faltando > 0 ? (
             <Etiqueta cor="alerta">
-              {p.itens_faltando} item(ns) faltando
+              {plural(p.itens_faltando, "item", "itens")} faltando
             </Etiqueta>
           ) : (
             <Etiqueta cor="erva">tem tudo</Etiqueta>
