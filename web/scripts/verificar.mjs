@@ -10748,7 +10748,8 @@ try {
   const abasCat = await p.evaluate(() =>
     [...document.querySelectorAll('[role="tab"]')].map((b) => [b.textContent.trim(), b.getAttribute("aria-selected")]));
   checar("o catálogo abre em abas, com o Cardápio primeiro e escolhido",
-    JSON.stringify(abasCat.map((x) => x[0])) === JSON.stringify(["Cardápio", "Publicação", "Pedidos", "Idiomas"])
+    // 30/10/2026: + Pré-visualização (o que vai ao ar, com pedido de teste).
+    JSON.stringify(abasCat.map((x) => x[0])) === JSON.stringify(["Cardápio", "Publicação", "Pedidos", "Idiomas", "Pré-visualização"])
       && abasCat[0]?.[1] === "true", abasCat);
   checar("e a configuração de pedidos NÃO fica em cima do cardápio",
     !(await esperarTexto(p, "Pedidos pelo site", 1500)));
