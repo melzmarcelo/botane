@@ -148,6 +148,18 @@ function Resultado({ r, ocupado, aoImportar }: {
       </div>
       {!r.aplicado && (
         <div className="px-5 pb-4">
+          {/* ⚠️ Os selos em aberto são FOTO: um arquivo de selos INCOMPLETO retiraria os selos
+              dos clientes que ficaram de fora. Aconteceu com um arquivo de teste (30/10/2026). */}
+          {!!r.selos?.retirados && (
+            <div className="mb-3" id="leadsfood-alerta-selos">
+              <Aviso tipo="erro">
+                {plural(r.selos.retirados, "visita importada antes vai", "visitas importadas antes vão")} sair
+                dos cartões porque não {r.selos.retirados === 1 ? "está" : "estão"} no arquivo de selos
+                novo. Está certo se o cartão fechou no LeadsFood. Se o arquivo veio incompleto (só
+                alguns clientes), não importe: tire de novo a lista inteira de Check-ins.
+              </Aviso>
+            </div>
+          )}
           <button type="button" className="btn btn-primario" id="leadsfood-aplicar"
                   disabled={ocupado} aria-busy={ocupado} onClick={aoImportar}>
             Importar

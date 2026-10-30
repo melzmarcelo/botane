@@ -170,7 +170,8 @@ checar("e o cadastro dele recua para o primeiro contato (lá)", site["criado_em"
 
 rs = sql("""SELECT data, hora, pessoas, status, id_cliente, objetivo, observacao_cliente,
                    observacao_interna, origem FROM reservas
-             WHERE id_unidade = %s AND importado_de = 'LEADSFOOD' ORDER BY data, hora""", (U,))
+             WHERE id_unidade = %s AND importado_de = 'LEADSFOOD' AND telefone LIKE '00900003%%'
+             ORDER BY data, hora""", (U,))
 checar("4 reservas", len(rs) == 4, len(rs))
 st_ = {(str(x["data"]), str(x["hora"])[:5]): x for x in rs}
 checar("Compareceu → ENCERRADA, Não compareceu → NAO_COMPARECEU, Confirmado → CONFIRMADA, "
@@ -188,6 +189,11 @@ checar("três check-ins no mesmo dia viram UMA visita de 3 selos", len(selos) ==
        and selos[0]["selos"] == 3 and selos[0]["parte"] == 0 and selos[1]["selos"] == 1, selos)
 checar("com o motivo 'Importado do LeadsFood'", selos[0]["motivo"] == "Importado do LeadsFood")
 checar("quem só aparece nos selos ganha cadastro mínimo", cliente(F["dani"]) is not None)
+_st, lista = chamar("GET", f"/reservas/clientes?busca={F['ana']}&limite=5&offset=0", token=token)
+checar("a lista de Clientes traz origem, etiquetas e a marca de importado",
+       _st == 200 and lista and lista[0]["origem"] == "Conversão"
+       and lista[0]["etiquetas"] == ["Cardápio - Link bio", "Whatsapp"]
+       and lista[0]["importado_de"] == "LEADSFOOD", (_st, lista))
 
 pr = sql("""SELECT p.vence_em, p.usado_em, p.vale_de, p.codigo, c.telefone FROM fidelidade_premios p
              JOIN reserva_clientes c ON c.id = p.id_cliente
@@ -212,7 +218,8 @@ checar("nenhum cliente, reserva ou prêmio novo", p["clientes"]["novos"] == 0
 checar("as reservas iguais e os selos 'já importados'", p["reservas"]["iguais"] == 4
        and p["selos"]["ja_tinham"] == 3 and p["selos"]["dias"] == 0, (p["reservas"], p["selos"]))
 checar("o banco continua com 4 reservas", len(sql(
-    "SELECT 1 FROM reservas WHERE id_unidade = %s AND importado_de = 'LEADSFOOD'", (U,))) == 4)
+    "SELECT 1 FROM reservas WHERE id_unidade = %s AND importado_de = 'LEADSFOOD'"
+    " AND telefone LIKE '00900003%%'", (U,))) == 4)
 
 print("\n4. arquivos mais novos")
 novas_r = RESERVAS.replace(f"{br(d3)} 13:00,,Confirmado", f"{br(d3)} 13:00,,Compareceu")

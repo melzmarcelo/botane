@@ -112,6 +112,11 @@ export type Cliente = {
   /** Visitas no cartão de fidelidade atual (091) e prêmios já ganhos. */
   no_cartao: number;
   premios: number;
+  /** De onde veio (no LeadsFood: Conversão, Fidelidade, Reservas…) e as etiquetas (145). */
+  origem: string | null;
+  etiquetas: string[];
+  /** "LEADSFOOD" quando veio da importação. */
+  importado_de: string | null;
 };
 
 /** `parametros` vem de `usePaginacao` (limite, offset e o pedido de total). */

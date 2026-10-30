@@ -1399,8 +1399,16 @@ grandes" do BI de reservas do LeadsFood. Reservas ▸ **Painel** (`reservas/pain
   CONFIRMADA, Pendente → PENDENTE, Cancelado… → CANCELADA. Origem `SITE`; a mesa de lá vai na
   nota interna. Celular: só dígitos, sem o 55; fora de 10/11 dígitos é recusado com o nome (os
   10 recusados de 30/10 são estrangeiros ou com dígito a mais).
-- A 145 também deu ao cadastro `email`, `uf`, `origem` e `etiquetas` (text[]) — ainda não
-  aparecem na tela de Clientes (itens 3 e 4 de `docs/leadsfood-analise.md`).
+- A 145 também deu ao cadastro `email`, `uf`, `origem` e `etiquetas` (text[]). **Origem e
+  etiquetas aparecem no grid de Clientes** (pedido do dono, 30/10, 1.1.161): origem vazia sem
+  importação = "Site" (o cadastro só nasce pelo nosso site); importado mostra "do LeadsFood"
+  embaixo; etiquetas como `Etiqueta`. A tela de Clientes não tem relatório — nada a acompanhar.
+- ⚠️ **Um arquivo de selos INCOMPLETO apaga selos reais** (a foto retira todo selo importado
+  que não está nele). Aconteceu em 30/10 na base local: o roteiro de navegador gravou um arquivo
+  de teste de um cliente só e levou os 253 selos reais (reimportados em seguida). Agora o
+  roteiro grava SEM o arquivo de selos, e a prévia mostra um alerta (`#leadsfood-alerta-selos`)
+  quando alguma visita importada vai sair. Teste que grava selos tem de devolver a loja
+  (`preservar_reserva`), como a suíte de API faz.
 - ⚠️ `api.upload` (front) passou a mandar o `X-Unidade`: sem ele, toda importação (esta e a do
   Patrimônio) caía na primeira loja do usuário, não na do seletor.
 - **Base local, 30/10:** a importação real entrou (3.607 clientes, 184 reservas, 253 selos em

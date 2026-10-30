@@ -92,7 +92,18 @@ try {
     (await p.evaluate(() => document.querySelector("#leadsfood-recusados")?.innerText ?? "")).includes("Roteiro Fora"));
   checar("e a prévia não gravou nada", (await quantos()) === 0);
 
-  console.log("\n3. importar");
+  console.log("\n3. importar (SEM o arquivo de selos)");
+  // ⚠️ Os selos em aberto são FOTO: gravar este arquivo de um cliente só retiraria os selos
+  // importados de VERDADE na base (aconteceu na primeira rodada, 30/10/2026). Os selos ficam
+  // na prévia, acima; quem prova a gravação deles é a suíte de API, que devolve a loja.
+  await p.reload({ waitUntil: "networkidle2" });
+  await p.waitForSelector("#leadsfood-contatos", { timeout: 30000 }).catch(() => {});
+  for (const k of ["contatos", "reservas", "premios"]) await (await p.$(`#leadsfood-${k}`)).uploadFile(join(PASTA, `${k}.csv`));
+  await esperar(300);
+  await p.click("#leadsfood-previa");
+  await p.waitForSelector("#leadsfood-aplicar", { timeout: 30000 }).catch(() => {});
+  checar("sem o arquivo de selos, o resumo nem fala de selos", !(await p.evaluate(() =>
+    document.querySelector("#leadsfood-resumo")?.innerText ?? "")).includes("Selos"));
   await p.click("#leadsfood-aplicar");
   await p.waitForFunction(() => document.querySelector("main")?.innerText.includes("Importado"), { timeout: 30000 }).catch(() => {});
   checar("a tela diz Importado", (await texto(p)).includes("Importado"));
@@ -102,6 +113,17 @@ try {
   await esperar(500);
   t = await texto(p);
   checar("a prévia de novo: nada novo (não duplica)", t.includes("0 novos") && t.includes("já importada, igual"), t.slice(0, 600));
+
+  console.log("\n3b. origem e etiquetas na tela de Clientes");
+  await p.goto(`${WEB}/reservas/clientes?busca=Roteiro%20Alfa`, { waitUntil: "networkidle2" });
+  await p.waitForFunction(() => document.querySelector("main tbody")?.innerText.includes("Roteiro Alfa"), { timeout: 30000 }).catch(() => {});
+  const cab = await p.evaluate(() => [...document.querySelectorAll("main thead th")].map((th) => th.textContent.trim()));
+  checar("o grid tem as colunas Origem e Etiquetas", cab.includes("Origem") && cab.includes("Etiquetas"), cab);
+  const linha = await p.evaluate(() => [...document.querySelectorAll("main tbody tr")].find((tr) => tr.innerText.includes("Roteiro Alfa"))?.innerText ?? "");
+  checar("a linha mostra a origem, 'do LeadsFood' e a etiqueta",
+    linha.includes("Conversão") && linha.includes("do LeadsFood") && linha.includes("Whatsapp"), linha);
+  await p.goto(`${WEB}/reservas/clientes/importar`, { waitUntil: "networkidle2" });
+  await p.waitForSelector("#leadsfood-contatos", { timeout: 30000 }).catch(() => {});
 
   console.log("\n4. o arquivo no campo errado");
   await (await p.$("#leadsfood-contatos")).uploadFile(join(PASTA, "reservas.csv"));

@@ -347,6 +347,8 @@ def consulta_da_lista(busca: str | None) -> tuple[str, list]:
     sql = f"""
         SELECT c.id, c.nome, c.telefone, c.genero, c.cidade, c.nascimento,
                c.criado_em, c.termo_aceito_em, c.termo_versao,
+               -- De onde veio e as etiquetas (145, trazidas do LeadsFood).
+               c.origem, c.etiquetas, c.importado_de,
                coalesce(u.apelido, u.nome) AS loja,
                coalesce(r.reservas, 0) AS reservas,
                coalesce(r.canceladas, 0) AS canceladas,

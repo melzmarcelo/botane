@@ -110,6 +110,8 @@ export default function ClientesDoPortal() {
                   <th className="min-w-[200px]">Nome</th>
                   <th className="w-[140px]">Telefone</th>
                   <th className="min-w-[120px]">Cidade</th>
+                  <th className="w-[120px]">Origem</th>
+                  <th className="min-w-[180px]">Etiquetas</th>
                   <th className="w-[120px]">Gênero</th>
                   <th className="num w-[110px]">Nascimento</th>
                   <th className="num w-[90px]">Reservas</th>
@@ -123,8 +125,24 @@ export default function ClientesDoPortal() {
                 {lista.map((c) => (
                   <tr key={c.id}>
                     <td className="font-medium">{c.nome}</td>
-                    <td className="mono">{telefone(c.telefone)}</td>
+                    <td className="mono whitespace-nowrap">{telefone(c.telefone)}</td>
                     <td>{c.cidade || "—"}</td>
+                    <td>
+                      {/* Sem origem e sem importação = cadastro feito no nosso site. */}
+                      {c.origem || (c.importado_de ? "—" : "Site")}
+                      {c.importado_de && (
+                        <span className="block text-[12px] text-suave">do LeadsFood</span>
+                      )}
+                    </td>
+                    <td>
+                      {c.etiquetas?.length ? (
+                        <span className="flex flex-wrap gap-1">
+                          {c.etiquetas.map((e) => <Etiqueta key={e}>{e}</Etiqueta>)}
+                        </span>
+                      ) : (
+                        <span className="text-suave">—</span>
+                      )}
+                    </td>
                     <td>{c.genero ? GENERO[c.genero] ?? c.genero : "—"}</td>
                     <td className="num mono">{data(c.nascimento)}</td>
                     <td className="num mono">
