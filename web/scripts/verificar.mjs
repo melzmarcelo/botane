@@ -4676,7 +4676,9 @@ try {
     /recibo\/evento da nota/i.test(textoRecusa), textoRecusa.slice(0, 200));
 
   // Agora a digitação: a compra do mercado, que não tem XML nenhum.
-  const { dados: produtosNota } = await api("GET", "/produtos", null, token);
+  // ⚠️ Filtra NA API (30/10/2026): a primeira página chegou a ser toda de produtos de teste
+  // sem estoque, e o roteiro estourava aqui sem nada ter quebrado (como o smoke_ciclos).
+  const { dados: produtosNota } = await api("GET", "/produtos?ativo=true&controla_estoque=true&limite=200", null, token);
   // ⚠️ Precisa ter unidade: a checagem logo abaixo afirma que a linha vem
   // preenchida com a unidade do estoque. O catálogo do Omie cria rascunhos SEM
   // unidade de propósito, e pegar "o primeiro que controla estoque" caía num
