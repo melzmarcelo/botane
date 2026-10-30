@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import ExplicaTela from "@/components/explica-tela";
@@ -7,6 +8,7 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { listarClientes, type Cliente } from "@/lib/reservas";
+import { useSessao } from "@/lib/sessao";
 
 /**
  * Os clientes cadastrados pelo site — o grid do Portal de Clientes.
@@ -36,6 +38,7 @@ function telefone(t: string) {
 const data = (iso: string | null) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—");
 
 export default function ClientesDoPortal() {
+  const { pode } = useSessao();
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [lista, setLista] = useState<Cliente[] | null>(null);
   const [erro, setErro] = useState("");
@@ -63,13 +66,21 @@ export default function ClientesDoPortal() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <p className="rotulo">Portal de Clientes</p>
-        <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Clientes</h1>
-        <ExplicaTela>
-          Quem se cadastrou pelo site para reservar ou abrir um cardápio. O cadastro vale para
-          todas as lojas: o telefone é único.
-        </ExplicaTela>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="rotulo">Portal de Clientes</p>
+          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Clientes</h1>
+          <ExplicaTela>
+            Quem se cadastrou pelo site para reservar ou abrir um cardápio, e quem veio do
+            LeadsFood. O cadastro vale para todas as lojas: o telefone é único.
+          </ExplicaTela>
+        </div>
+        {/* 🔑 A importação do LeadsFood (30/10/2026) — só para quem configura as reservas. */}
+        {pode("reservas.configurar") && (
+          <Link href="/reservas/clientes/importar" className="btn btn-secundario" id="ir-importar-leadsfood">
+            Importar do LeadsFood
+          </Link>
+        )}
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

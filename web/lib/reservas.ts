@@ -189,3 +189,24 @@ export type PainelReservas = {
 
 export const verPainelReservas = (meses: number, grupoPessoas = 6) =>
   api.get<PainelReservas>(`/reservas/painel?meses=${meses}&grupo_pessoas=${grupoPessoas}`);
+
+// ── Importação do LeadsFood (30/10/2026) ─────────────────────────────────────
+
+export type ArquivoLeadsfood = "contatos" | "reservas" | "selos" | "premios";
+
+export type ResultadoLeadsfood = {
+  clientes: { novos: number; completados: number; iguais: number };
+  reservas?: { novas: number; atualizadas: number; iguais: number };
+  selos?: { clientes: number; selos: number; dias: number; ja_tinham: number; retirados: number; conflitos: number };
+  premios?: { novos: number; atualizados: number; iguais: number; abertos: number };
+  recusados: { arquivo: ArquivoLeadsfood; linha: number; nome: string | null; motivo: string }[];
+  linhas: Partial<Record<ArquivoLeadsfood, number>>;
+  aplicado: boolean;
+};
+
+/** Qualquer combinação dos quatro arquivos. `simular` (o padrão do servidor) não grava nada. */
+export function importarLeadsfood(arquivos: Partial<Record<ArquivoLeadsfood, File>>, simular: boolean) {
+  const f = new FormData();
+  for (const [k, v] of Object.entries(arquivos)) if (v) f.append(k, v);
+  return api.upload<ResultadoLeadsfood>(`/reservas/importar-leadsfood?simular=${simular}`, f);
+}

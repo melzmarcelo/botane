@@ -1369,3 +1369,47 @@ grandes" do BI de reservas do LeadsFood. Reservas ▸ **Painel** (`reservas/pain
 - Cobertura: `smoke_painel_reservas.py` (21, por DIFERENÇA antes/depois do cenário) e
   `verificar-painel-reservas.mjs` (18, na bateria), com `cenario_plano.py painel` (um ano de
   reservas determinístico).
+
+## Importação do LeadsFood (migração 145, 30/10/2026)
+🔑 **Pedido do dono:** *"siga para a importação do LeadsFood"*. Portal de Clientes ▸ Clientes ▸
+**Importar do LeadsFood** (`reservas/clientes/importar/`), `POST /reservas/importar-leadsfood`
+(multipart, `simular=true` padrão, `reservas.configurar`), regra em
+`services/importacao_leadsfood.py`.
+- Quatro CSVs, qualquer combinação: **contatos**, **reservas**, **selos em aberto** e **prêmios**.
+  O serviço reconhece o arquivo pelas colunas e recusa o que veio no campo errado.
+- ⚠️ **Como tirar os arquivos do LeadsFood** (descoberto na extração de 30/10):
+  - Reservas que passaram ficam ARQUIVADAS lá: exportar com o filtro de status removido E
+    "Registros excluídos → Exibir" — senão o arquivo sai vazio (a lista mostra só as futuras).
+  - Check-in NÃO tem exportação. 672 check-ins = 672 selos (um por check-in); os de cartão
+    completado ficam arquivados. Os NÃO arquivados (253) são os cartões em aberto: o arquivo
+    de selos é a lista da tela (sem filtro de status, sem arquivados, "por página: todos"),
+    gravada em CSV `nome,celular,pin,campanha,status,criado_em`.
+  - Prêmios: tirar o filtro "Não utilizado" (41 no total). O CSV não traz quando o prêmio nasceu
+    nem o PIN: `vale_de` volta a validade da casa a partir do vencimento; o código é novo.
+  - O LeadsFood reaplica o filtro padrão de cada tela ao abrir de novo — tirar não estraga nada.
+- 🔑 **Pode repetir até virar a chave.** Cliente pelo telefone (o daqui só ganha campo vazio e
+  o `criado_em` recua para o primeiro contato); reserva por loja+telefone+dia+hora e prêmio por
+  cliente+vencimento (índices parciais da 145, só sobre `importado_de`); a repetida atualiza o
+  status, e o prêmio só ANDA para usado. ⚠️ **Selos em aberto são FOTO**: o selo importado que não
+  está no arquivo novo sai (o cartão fechou lá). Visita marcada AQUI no mesmo dia vale, e a de
+  lá vira "conflito" (não entra). Vários check-ins no mesmo dia = UMA visita com `selos` = N.
+- 🔑 **A prévia é a importação desfeita** (`SAVEPOINT` + `ROLLBACK TO`): o número da tela sai do
+  mesmo código que grava.
+- Status: Compareceu → ENCERRADA, Não compareceu → NAO_COMPARECEU, Confirmado/Notificado →
+  CONFIRMADA, Pendente → PENDENTE, Cancelado… → CANCELADA. Origem `SITE`; a mesa de lá vai na
+  nota interna. Celular: só dígitos, sem o 55; fora de 10/11 dígitos é recusado com o nome (os
+  10 recusados de 30/10 são estrangeiros ou com dígito a mais).
+- A 145 também deu ao cadastro `email`, `uf`, `origem` e `etiquetas` (text[]) — ainda não
+  aparecem na tela de Clientes (itens 3 e 4 de `docs/leadsfood-analise.md`).
+- ⚠️ `api.upload` (front) passou a mandar o `X-Unidade`: sem ele, toda importação (esta e a do
+  Patrimônio) caía na primeira loja do usuário, não na do seletor.
+- **Base local, 30/10:** a importação real entrou (3.607 clientes, 184 reservas, 253 selos em
+  200 visitas, 41 prêmios). Painel conferido contra o BI deles: 165 válidas × 170, 39 × 38
+  no-shows, 58 × 57 grupos — a diferença são as 16 pendentes que eles contam.
+  ⚠️ "Pessoas que vieram" dá mais que o "548" deles: aqui CONFIRMADA no passado conta como veio
+  (19 reservas que a casa não marcou lá). O Plano de ação também difere (89 adormecidos × 126):
+  o deles mede "sumiu" pelas visitas da fidelidade junto com as reservas.
+- 📁 Os arquivos da extração ficam em `api/arquivos/leadsfood/` (fora do git — dado pessoal).
+  Levar ao ar = subir os mesmos quatro na tela, no sistema online (ou exportações mais novas).
+- Cobertura: `smoke_importacao_leadsfood.py` (35) e `verificar-importacao-leadsfood.mjs` (11, na
+  bateria), com CSVs sintéticos (telefones `00900003…`/`00900004…`).

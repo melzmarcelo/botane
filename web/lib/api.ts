@@ -305,7 +305,12 @@ export const api = {
     const enviar = async () =>
       fetch(BASE + caminho, {
         method: "POST",
-        headers: { Authorization: `Bearer ${lerSessao(CHAVE_ACCESS)}` },
+        // ⚠️ A loja do seletor vai junto (30/10/2026): sem ela, o servidor caía na primeira
+        // loja do usuário — a importação do Patrimônio e a do LeadsFood gravariam na errada.
+        headers: {
+          Authorization: `Bearer ${lerSessao(CHAVE_ACCESS)}`,
+          ...(unidadeAtual() ? { "X-Unidade": unidadeAtual()! } : {}),
+        },
         body: corpo,
       });
 

@@ -3,6 +3,7 @@
     python tests/cenario_plano.py montar <id_unidade>     → imprime o JSON do cenário
     python tests/cenario_plano.py painel <id_unidade>     → um ano de reservas, para o painel
     python tests/cenario_plano.py limpar <id_unidade>
+    python tests/cenario_plano.py limpar-importacao <id_unidade>   → o que o roteiro importou
 
 Reservas no PASSADO, gravadas direto no banco: a rota de reservar recusa data passada, e o
 plano só existe sobre o passado. ⚠️ Tudo do cenário usa telefones com DDD 00 (prefixo
@@ -23,10 +24,11 @@ FONES = {"vip": PREFIXO + "001", "org": PREFIXO + "002", "dorm": PREFIXO + "003"
          "parou": PREFIXO + "004"}
 
 
-def limpar(cur, u: int) -> None:
+def limpar(cur, u: int, prefixo: str = PREFIXO) -> None:
     cur.execute("DELETE FROM reservas WHERE id_unidade = %s AND telefone LIKE %s",
-                (u, PREFIXO + "%"))
-    cur.execute("DELETE FROM reserva_clientes WHERE telefone LIKE %s", (PREFIXO + "%",))
+                (u, prefixo + "%"))
+    # Selos e prêmios penduram no cliente com ON DELETE CASCADE.
+    cur.execute("DELETE FROM reserva_clientes WHERE telefone LIKE %s", (prefixo + "%",))
 
 
 def montar(cur, u: int) -> dict:
@@ -89,6 +91,10 @@ if __name__ == "__main__":
             print(json.dumps(montar(c, unidade)))
         elif acao == "painel":
             print(json.dumps(montar_painel(c, unidade)))
+        elif acao == "limpar-importacao":
+            # O roteiro da importação do LeadsFood (verificar-importacao-leadsfood.mjs).
+            limpar(c, unidade, "00900004")
+            print("{}")
         else:
             limpar(c, unidade)
             print("{}")

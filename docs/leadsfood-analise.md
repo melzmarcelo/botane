@@ -35,7 +35,7 @@ desligados.
 
 ## O que eles têm e nós não — por valor
 
-### 1. Importar a base antes de trocar (pré-requisito)
+### 1. Importar a base antes de trocar (pré-requisito) ✅ tela pronta e testada na base local em 30/10/2026 — falta rodar no ar
 Trocar de sistema sem trazer os 127 cartões **zera o selo de quem está no meio da cartela** — o
 cliente percebe no primeiro check-in. Trazer: contatos (telefone, nome, nascimento, gênero,
 cidade, origem, data de cadastro), cartões com selos em aberto e os prêmios ainda não usados.

@@ -18,7 +18,7 @@ os bloqueios do dia. Falta a reserva pelo site do cliente; o estudo está em
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 
 import auditoria
 from database import get_cursor
@@ -28,6 +28,7 @@ from models.reservas import (
     MesaCreate, MesasEmLote, MesaUpdate, MudarStatus, PlantaDoSalao, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
+from services import importacao_leadsfood as importacao
 from services import reserva_clientes as clientes
 from services import reservas as servico
 from services import reservas_agenda as agenda
@@ -325,6 +326,45 @@ def ver_painel(meses: int = Query(12, ge=1, le=36),
     """
     with get_cursor() as cur:
         return painel_reservas.painel(cur, _unidade(cur, ctx), meses, grupo_pessoas)
+
+
+@router.post("/importar-leadsfood")
+async def importar_leadsfood(
+    contatos: UploadFile | None = File(None),
+    reservas: UploadFile | None = File(None),
+    selos: UploadFile | None = File(None),
+    premios: UploadFile | None = File(None),
+    simular: bool = True,
+    ctx: Contexto = Depends(_CONFIGURAR),
+) -> dict:
+    """Contatos, reservas, selos em aberto e prêmios do LeadsFood — qualquer combinação.
+
+    🔑 **Pedido do dono (30/10/2026):** *"siga para a importação do LeadsFood"*. A regra (e por
+    que pode repetir) está em `services/importacao_leadsfood.py`.
+    ⚠️ **`simular=true` é o padrão**: a prévia diz o que entra, o que muda e o que é recusado,
+    antes de qualquer escrita — como a importação do Patrimônio. Os bytes são lidos ANTES de
+    pedir a conexão. ⚠️ `reservas.configurar`: mexe em cadastro, agenda e fidelidade de uma vez.
+    """
+    arquivos: dict[str, list[dict]] = {}
+    for nome, arq in (("contatos", contatos), ("reservas", reservas), ("selos", selos),
+                      ("premios", premios)):
+        if arq is None or not arq.filename:
+            continue
+        try:
+            arquivos[nome] = importacao.ler(await arq.read(importacao.MAXIMO_BYTES + 1), nome)
+        except importacao.ArquivoInvalido as e:
+            raise HTTPException(status_code=400, detail=f"{arq.filename}: {e}") from e
+    if not arquivos:
+        raise HTTPException(status_code=400, detail="Escolha pelo menos um arquivo.")
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = importacao.aplicar(cur, id_unidade, arquivos, simular=simular)
+        if not simular:
+            auditoria.registrar(cur, ctx.id_usuario, "importacao", id_unidade, "leadsfood",
+                                depois={k: v for k, v in r.items() if k != "recusados"}
+                                | {"recusados": len(r["recusados"])},
+                                id_unidade=id_unidade)
+    return r
 
 
 @router.get("/agenda")
