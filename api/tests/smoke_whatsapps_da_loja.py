@@ -77,11 +77,12 @@ def _devolver():
     with get_cursor() as cur:
         cur.execute("DELETE FROM catalogos WHERE nome LIKE %s", (f"%{MARCA}%",))
         cur.execute("DELETE FROM unidade_whatsapps WHERE id_unidade = %s", (U,))
+        # ⚠️ TODAS as colunas: desde a 146 a linha guarda a conexão com a Meta (token cifrado,
+        # token de verificação do webhook) — devolver só rótulo e número a apagava.
         for n in _numeros:
-            cur.execute(
-                """INSERT INTO unidade_whatsapps (id, id_unidade, rotulo, numero, principal, ordem, criado_em)
-                   VALUES (%(id)s, %(id_unidade)s, %(rotulo)s, %(numero)s, %(principal)s, %(ordem)s,
-                           %(criado_em)s)""", n)
+            colunas = list(n)
+            cur.execute(f"""INSERT INTO unidade_whatsapps ({', '.join(colunas)})
+                            VALUES ({', '.join(['%s'] * len(colunas))})""", list(n.values()))
         cur.execute("UPDATE unidades SET whatsapp = %s WHERE id = %s", (_espelho, U))
         for c in _dos_catalogos:
             cur.execute("UPDATE catalogos SET id_whatsapp = %s WHERE id = %s",

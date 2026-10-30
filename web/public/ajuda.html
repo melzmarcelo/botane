@@ -2772,9 +2772,9 @@
         portas para a mesma configuração seriam duas versões da mesma verdade.
       </p>
       <p>
-        O cadastro da loja também guarda o que é dela diante do cliente: os
-        <strong>WhatsApps de contato</strong> e a aba <strong>WhatsApp</strong>, com a conexão com a Meta e os
-        avisos automáticos — ver <a href="#whatsapp">WhatsApp</a>.
+        A loja também guarda o que é dela diante do cliente: na aba <strong>WhatsApp</strong>, os
+        números, a conexão de cada um com a Meta e os avisos automáticos — ver
+        <a href="#whatsapp">WhatsApp</a>.
       </p>
       <p>
         A loja pode ter <strong>mais de um WhatsApp</strong> (Atendimento, Encomendas, Eventos…). O da
@@ -3790,11 +3790,23 @@
       </p>
 
       <p>
-        Em <strong>Administração ▸ Lojas ▸ a loja ▸ aba WhatsApp</strong>. A loja faz a validação
-        do número com a Meta e informa ali o que a Meta dá: a identificação do número, o token
-        permanente e a chave secreta do app. A mesma aba mostra o endereço e o token que se
-        colam na Meta (o <em>webhook</em>) e traz o passo a passo.
+        Em <strong>Administração ▸ Lojas ▸ a loja ▸ aba WhatsApp</strong>. Ali ficam os
+        <strong>números</strong> da loja, e <strong>cada número</strong> pode ter a sua conexão com a
+        Meta: a loja faz a validação do número lá e informa o que a Meta dá — a identificação do
+        número, o token permanente e a chave secreta do app. Os números que estão no mesmo app da
+        Meta podem <strong>usar a conta do principal</strong>, sem digitar o token de novo. Cada
+        número mostra o endereço e o token que se colam na Meta (o <em>webhook</em>), e a aba traz o
+        passo a passo. Número sem conexão serve só para o cliente chamar.
       </p>
+      <div class="regra">
+        <p class="rotulo">Por qual número sai cada aviso</p>
+        <p>
+          Cada aviso escolhe o número (<em>Sai pelo número</em>); sem escolha, sai pelo principal.
+          O pedido do site confirmado sai pelo número do catálogo do pedido. Se o número escolhido
+          estiver sem conexão, o aviso sai pelo principal. A resposta do cliente volta pelo mesmo
+          número que enviou.
+        </p>
+      </div>
       <div class="regra">
         <p class="rotulo">Modo simulado primeiro</p>
         <p>

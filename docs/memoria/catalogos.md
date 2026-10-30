@@ -1045,7 +1045,7 @@ Estudo em [`docs/whatsapp-numeros-estudo.md`](../whatsapp-numeros-estudo.md).
 - Site: `.contato-catalogo` no topo das telas cardápio e seção ("Fale conosco"); o "Combinar o
   pagamento pelo WhatsApp" usa o número do catálogo (`linkZapDoCatalogo`). Feed: `#cv-contato` no
   topo. Mensagem em português (quem lê é a casa): "Olá! Vim pelo cardápio X." (+ " Estou na mesa Y.").
-- ⚠️ A conexão com a Meta (099, aba WhatsApp) continua UMA por loja — números de contato não enviam
-  aviso.
+- Desde a 146 (1.1.162) cada número tem a sua conexão com a Meta, e o "pedido confirmado" sai pelo
+  número do catálogo quando ele está conectado — ver [`reservas.md`](reservas.md).
 - Cobertura: `smoke_whatsapps_da_loja.py` (24) e `verificar-whatsapps.mjs` (8). `limpar_dados`:
   `unidade_whatsapps` em PRESERVADAS (e `catalogo_item_escolhas`, que faltava desde a 142, em OPERACAO).

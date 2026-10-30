@@ -1,4 +1,4 @@
-"""Mensagens por WhatsApp — a API oficial da Meta (Cloud API), configurada por LOJA.
+"""Mensagens por WhatsApp — a API oficial da Meta (Cloud API), configurada por NÚMERO da loja.
 
 🔑 **Pedido do dono (28/09/2026):** *"envio de mensagens via WhatsApp para clientes, como
 reservas, confirmação de reserva, prêmios e outros assuntos, de forma configurável; e a
@@ -9,7 +9,8 @@ Estudo em `docs/whatsapp-estudo.md`.
 
 Como funciona:
 1. Um fato acontece (reserva confirmada, prêmio ganho…) → `enfileirar` grava a mensagem em
-   `whatsapp_mensagens`, se o aviso estiver ligado NAQUELA loja.
+   `whatsapp_mensagens`, se o aviso estiver ligado NAQUELA loja, com o número por onde sai
+   (`_por_onde`: o do pedido → o do aviso → o principal, o primeiro conectado — 146).
 2. O laço (`laco`) acorda a cada 30 s e envia o que venceu — o lembrete nasce agendado para
    X horas antes da reserva.
 3. A Meta chama o webhook: entregue / lida / falhou, e os BOTÕES do lembrete ("Confirmo",
@@ -129,35 +130,40 @@ PALAVRAS_DE_SAIDA = {"PARAR", "SAIR", "STOP", "CANCELAR MENSAGENS"}
 
 
 # ---------------------------------------------------------------- configuração
-def _integracao(cur, id_unidade: int) -> dict | None:
-    cur.execute(
-        """SELECT ativa, modo, config, credenciais, ultimo_status, ultima_mensagem
-             FROM integracoes WHERE id_unidade = %s AND servico = 'whatsapp'""",
-        (id_unidade,),
-    )
+# 🔑 **A conexão é de cada NÚMERO** (146, pedido do dono, 30/10/2026): cada número da loja
+# (`unidade_whatsapps`) pode ter a dele — ou nenhuma, e aí só serve para o cliente chamar.
+_CAMPOS = """id, id_unidade, rotulo, numero, principal, conectado, modo, phone_number_id,
+             waba_id, api_versao, verify_token, credenciais, conta_do_principal,
+             ultimo_status, ultima_mensagem"""
+
+
+def _conexoes(cur, id_unidade: int) -> list[dict]:
+    """Os números da loja com a conexão de cada um, o principal primeiro.
+
+    `cred` é o que o envio usa: o do próprio número, ou o do principal quando o número está
+    marcado "usar a conta do principal". `cred_propria` é só o dele (o "configurado" da tela).
+    """
+    cur.execute(f"""SELECT {_CAMPOS} FROM unidade_whatsapps WHERE id_unidade = %s
+                     ORDER BY principal DESC, ordem, id""", (id_unidade,))
+    linhas = [dict(r) for r in cur.fetchall()]
+    for x in linhas:
+        bruto = x.pop("credenciais")
+        x["cred_propria"] = segredos.decifrar(bruto) if bruto else {}
+    principal = next((x for x in linhas if x["principal"]), None)
+    for x in linhas:
+        usa = x["conta_do_principal"] and principal and principal["id"] != x["id"]
+        x["cred"] = principal["cred_propria"] if usa else x["cred_propria"]
+    return linhas
+
+
+def _conexao(cur, id_whatsapp: int | None) -> dict | None:
+    if not id_whatsapp:
+        return None
+    cur.execute("SELECT id_unidade FROM unidade_whatsapps WHERE id = %s", (id_whatsapp,))
     linha = cur.fetchone()
     if not linha:
         return None
-    r = dict(linha)
-    r["config"] = r["config"] or {}
-    r["cred"] = segredos.decifrar(r.pop("credenciais")) if r.get("credenciais") else {}
-    return r
-
-
-def _garantir(cur, id_unidade: int) -> dict:
-    """A linha da integração nasce na primeira visita, desligada e em modo simulado."""
-    atual = _integracao(cur, id_unidade)
-    if atual:
-        return atual
-    cur.execute(
-        """INSERT INTO integracoes (id_unidade, servico, ativa, modo, config)
-           VALUES (%s, 'whatsapp', false, 'simulado', %s)
-           ON CONFLICT (id_unidade, servico) DO NOTHING""",
-        (id_unidade, json.dumps({"api_versao": API_VERSAO_PADRAO,
-                                 # O token de verificação do webhook: a loja o cola na Meta.
-                                 "verify_token": secrets.token_urlsafe(18)})),
-    )
-    return _integracao(cur, id_unidade)
+    return next((x for x in _conexoes(cur, linha["id_unidade"]) if x["id"] == id_whatsapp), None)
 
 
 def _avisos(cur, id_unidade: int) -> dict[str, dict]:
@@ -171,69 +177,135 @@ def _avisos(cur, id_unidade: int) -> dict[str, dict]:
             "modelo": g.get("modelo") or e["modelo"], "idioma": g.get("idioma") or "pt_BR",
             "antecedencia": g.get("antecedencia") if g.get("antecedencia") is not None
             else e.get("antecedencia"),
+            "id_whatsapp": g.get("id_whatsapp"),
         }
     return saida
 
 
+def _por_onde(cur, id_unidade: int, evento: str, id_whatsapp: int | None = None) -> dict | None:
+    """O número conectado por onde a mensagem sai.
+
+    A ordem: o pedido explícito (o número do catálogo do pedido; o número que recebeu a
+    resposta do cliente) → o número escolhido no aviso → o principal. ⚠️ O primeiro que estiver
+    CONECTADO ganha: número desligado não segura o aviso, ele sai pelo seguinte. Nenhum
+    conectado: não sai.
+    """
+    conexoes = {c["id"]: c for c in _conexoes(cur, id_unidade)}
+    candidatos = [id_whatsapp]
+    if evento in EVENTOS:
+        candidatos.append(_avisos(cur, id_unidade)[evento]["id_whatsapp"])
+    candidatos.append(next((c["id"] for c in conexoes.values() if c["principal"]), None))
+    for i in candidatos:
+        c = conexoes.get(i)
+        if c and c["conectado"]:
+            return c
+    return None
+
+
+def _garantir_verify_token(cur, conexoes: list[dict]) -> None:
+    """O token de verificação do webhook nasce na primeira visita: a loja o cola na Meta."""
+    for c in conexoes:
+        if not c["verify_token"]:
+            c["verify_token"] = secrets.token_urlsafe(18)
+            cur.execute("UPDATE unidade_whatsapps SET verify_token = %s WHERE id = %s",
+                        (c["verify_token"], c["id"]))
+
+
 def configuracao(cur, id_unidade: int, url_publica: str) -> dict:
     """A aba WhatsApp da loja. ⚠️ O token e o segredo NUNCA voltam — só "configurado"."""
-    integ = _garantir(cur, id_unidade)
-    cfg = integ["config"]
+    conexoes = _conexoes(cur, id_unidade)
+    _garantir_verify_token(cur, conexoes)
     avisos = _avisos(cur, id_unidade)
     return {
-        "ativa": integ["ativa"],
-        "modo": integ["modo"],
-        "phone_number_id": cfg.get("phone_number_id"),
-        "waba_id": cfg.get("waba_id"),
-        "numero": cfg.get("numero"),
-        "api_versao": cfg.get("api_versao") or API_VERSAO_PADRAO,
-        "verify_token": cfg.get("verify_token"),
         "webhook_url": f"{url_publica}/publico/whatsapp/webhook",
-        "token_configurado": bool(integ["cred"].get("token")),
-        "segredo_configurado": bool(integ["cred"].get("app_secret")),
-        "ultimo_status": integ.get("ultimo_status"),
-        "ultima_mensagem": integ.get("ultima_mensagem"),
+        "numeros": [{
+            "id": c["id"], "rotulo": c["rotulo"], "numero": c["numero"],
+            "principal": c["principal"], "conectado": c["conectado"], "modo": c["modo"],
+            "phone_number_id": c["phone_number_id"], "waba_id": c["waba_id"],
+            "api_versao": c["api_versao"] or API_VERSAO_PADRAO,
+            "verify_token": c["verify_token"], "conta_do_principal": c["conta_do_principal"],
+            "token_configurado": bool(c["cred_propria"].get("token")),
+            "segredo_configurado": bool(c["cred_propria"].get("app_secret")),
+            "ultimo_status": c["ultimo_status"], "ultima_mensagem": c["ultima_mensagem"],
+        } for c in conexoes],
         "avisos": [{**EVENTOS[ev], **avisos[ev]} for ev in EVENTOS],
     }
 
 
 def salvar(cur, id_unidade: int, body) -> None:
-    """Grava a conexão e os avisos. ⚠️ Token/segredo em branco = mantém o que já está."""
-    integ = _garantir(cur, id_unidade)
-    cfg = dict(integ["config"])
-    for campo in ("phone_number_id", "waba_id", "numero", "api_versao"):
-        valor = getattr(body, campo)
-        cfg[campo] = (valor or "").strip() or None
-    cfg["api_versao"] = cfg["api_versao"] or API_VERSAO_PADRAO
-    cred = dict(integ["cred"])
-    if (body.token or "").strip():
-        cred["token"] = body.token.strip()
-    if (body.app_secret or "").strip():
-        cred["app_secret"] = body.app_secret.strip()
-    real = body.modo == "real"
-    if real and not (cred.get("token") and cfg.get("phone_number_id")):
-        raise HTTPException(
-            status_code=400,
-            detail="Para enviar de verdade, informe o identificador do número e o token da Meta.")
-    cur.execute(
-        """UPDATE integracoes SET ativa = %s, modo = %s, config = %s, credenciais = %s,
-                                  atualizado_em = now()
-            WHERE id_unidade = %s AND servico = 'whatsapp'""",
-        (body.ativa, body.modo, json.dumps(cfg), segredos.cifrar(cred) if cred else None,
-         id_unidade),
-    )
+    """Grava os números (com a conexão de cada um) e os avisos.
+
+    ⚠️ Token/segredo em branco = mantém o que já está. `body.numeros` ausente = não mexe neles.
+    """
+    from services import whatsapps_da_loja
+
+    chaves: dict[str, int] = {}
+    if body.numeros is not None:
+        antes = {c["id"]: c for c in _conexoes(cur, id_unidade)}
+        ids = whatsapps_da_loja.gravar_com_ids(
+            cur, id_unidade, [n.model_dump() for n in body.numeros])
+        pnids: dict[str, int] = {}
+        for n, id_w in zip(body.numeros, ids):
+            if id_w is None:
+                continue
+            chaves[str(id_w)] = id_w
+            if n.chave:
+                chaves[n.chave] = id_w
+            pnid = (n.phone_number_id or "").strip() or None
+            if pnid:
+                if pnid in pnids:
+                    raise HTTPException(status_code=422, detail=(
+                        f"O identificador {pnid} da Meta está em dois números: cada número tem o dele."))
+                pnids[pnid] = id_w
+                cur.execute("""SELECT 1 FROM unidade_whatsapps
+                                WHERE phone_number_id = %s AND id_unidade <> %s""",
+                            (pnid, id_unidade))
+                if cur.fetchone():
+                    raise HTTPException(status_code=422, detail=(
+                        f"O identificador {pnid} da Meta já é de um número de outra loja."))
+            cred = dict((antes.get(id_w) or {}).get("cred_propria") or {})
+            if (n.token or "").strip():
+                cred["token"] = n.token.strip()
+            if (n.app_secret or "").strip():
+                cred["app_secret"] = n.app_secret.strip()
+            # ⚠️ O identificador sai agora e volta no fim: o índice único não aceita o mesmo
+            # em dois números nem por um instante (a casa pode ter trocado entre eles).
+            cur.execute(
+                """UPDATE unidade_whatsapps
+                      SET phone_number_id = NULL, conectado = %s, modo = %s, waba_id = %s,
+                          api_versao = %s, credenciais = %s, conta_do_principal = %s
+                    WHERE id = %s""",
+                (n.conectado, n.modo, (n.waba_id or "").strip() or None,
+                 (n.api_versao or "").strip() or None, segredos.cifrar(cred) if cred else None,
+                 n.conta_do_principal, id_w),
+            )
+        for pnid, id_w in pnids.items():
+            cur.execute("UPDATE unidade_whatsapps SET phone_number_id = %s WHERE id = %s",
+                        (pnid, id_w))
+        # O envio de verdade precisa do identificador e de um token (o dele ou o do principal).
+        conexoes = _conexoes(cur, id_unidade)
+        _garantir_verify_token(cur, conexoes)
+        for c in conexoes:
+            if c["conectado"] and c["modo"] == "real" and not (
+                    c["cred"].get("token") and c["phone_number_id"]):
+                raise HTTPException(status_code=400, detail=(
+                    f"Para enviar de verdade pelo {c['rotulo']} ({c['numero']}), informe o "
+                    "identificador do número e o token da Meta."))
+    else:
+        chaves = {str(c["id"]): c["id"] for c in _conexoes(cur, id_unidade)}
     for a in body.avisos:
         if a.evento not in EVENTOS:
             raise HTTPException(status_code=400, detail=f"Aviso desconhecido: {a.evento}.")
         cur.execute(
-            """INSERT INTO whatsapp_avisos (id_unidade, evento, ativo, modelo, idioma, antecedencia)
-               VALUES (%s, %s, %s, %s, %s, %s)
+            """INSERT INTO whatsapp_avisos (id_unidade, evento, ativo, modelo, idioma, antecedencia,
+                                            id_whatsapp)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (id_unidade, evento) DO UPDATE
                    SET ativo = EXCLUDED.ativo, modelo = EXCLUDED.modelo,
                        idioma = EXCLUDED.idioma, antecedencia = EXCLUDED.antecedencia,
-                       atualizado_em = now()""",
+                       id_whatsapp = EXCLUDED.id_whatsapp, atualizado_em = now()""",
             (id_unidade, a.evento, a.ativo, (a.modelo or "").strip() or None,
-             (a.idioma or "pt_BR").strip(), a.antecedencia),
+             (a.idioma or "pt_BR").strip(), a.antecedencia, chaves.get(a.whatsapp or "")),
         )
 
 
@@ -264,16 +336,18 @@ def _casa(cur, id_unidade: int) -> str:
 def enfileirar(cur, id_unidade: int, evento: str, chave: str, telefone: str | None,
                variaveis: list, *, nome: str | None = None, id_reserva: int | None = None,
                id_cliente: int | None = None, agendada_para: datetime | None = None,
-               ignorar_aviso: bool = False, id_pedido: int | None = None) -> bool:
-    """Põe a mensagem na fila — se a loja usa WhatsApp e o aviso está ligado.
+               ignorar_aviso: bool = False, id_pedido: int | None = None,
+               id_whatsapp: int | None = None) -> bool:
+    """Põe a mensagem na fila — se a loja tem número conectado e o aviso está ligado.
 
     ⚠️ **A mesma mensagem não entra duas vezes** (índice único em evento + chave): o
     disparo pode ser chamado de novo sem medo.
+    🔑 O número por onde sai é decidido AQUI e gravado na mensagem (`_por_onde`).
     """
-    integ = _integracao(cur, id_unidade)
-    if not integ or not integ["ativa"]:
-        return False
     if not ignorar_aviso and not _avisos(cur, id_unidade)[evento]["ativo"]:
+        return False
+    numero = _por_onde(cur, id_unidade, evento, id_whatsapp)
+    if not numero:
         return False
     fone = telefone_internacional(telefone)
     if not fone:
@@ -282,11 +356,12 @@ def enfileirar(cur, id_unidade: int, evento: str, chave: str, telefone: str | No
     cur.execute(
         """INSERT INTO whatsapp_mensagens (id_unidade, evento, chave, id_reserva, id_cliente,
                                            telefone, nome, variaveis, texto, agendada_para,
-                                           id_pedido)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, coalesce(%s, now()), %s)
+                                           id_pedido, id_whatsapp)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, coalesce(%s, now()), %s, %s)
            ON CONFLICT (id_unidade, evento, chave) DO NOTHING RETURNING id""",
         (id_unidade, evento, chave, id_reserva, id_cliente, fone, nome, json.dumps(vs),
-         _montar(evento, vs) if evento != RESPOSTA else vs[0], agendada_para, id_pedido),
+         _montar(evento, vs) if evento != RESPOSTA else vs[0], agendada_para, id_pedido,
+         numero["id"]),
     )
     return cur.fetchone() is not None
 
@@ -354,8 +429,10 @@ def premio_ganho(cur, id_unidade: int, id_cliente: int, premio: dict) -> None:
 def pedido_confirmado(cur, id_unidade: int, id_pedido: int) -> None:
     """O "pedido confirmado", já com o total final (a casa pode ter trocado produtos)."""
     cur.execute(
-        """SELECT numero, nome, telefone, modo, para_quando, total, id_cliente
-             FROM pedidos WHERE id = %s AND id_unidade = %s""", (id_pedido, id_unidade))
+        """SELECT p.numero, p.nome, p.telefone, p.modo, p.para_quando, p.total, p.id_cliente,
+                  c.id_whatsapp
+             FROM pedidos p LEFT JOIN catalogos c ON c.id = p.id_catalogo
+            WHERE p.id = %s AND p.id_unidade = %s""", (id_pedido, id_unidade))
     p = cur.fetchone()
     if not p:
         return
@@ -366,7 +443,9 @@ def pedido_confirmado(cur, id_unidade: int, id_pedido: int) -> None:
     enfileirar(cur, id_unidade, "PEDIDO_CONFIRMADO", f"pedido:{id_pedido}", p["telefone"],
                [p["nome"].split(" ")[0], p["numero"], _casa(cur, id_unidade), modo,
                 quando.strftime("%d/%m às %H:%M"), f"{p['total']:.2f}".replace(".", ",")],
-               nome=p["nome"], id_cliente=p["id_cliente"], id_pedido=id_pedido)
+               nome=p["nome"], id_cliente=p["id_cliente"], id_pedido=id_pedido,
+               # 🔑 146: sai pelo número do catálogo de onde veio o pedido, se conectado.
+               id_whatsapp=p["id_whatsapp"])
 
 
 def varrer(cur) -> int:
@@ -375,8 +454,9 @@ def varrer(cur) -> int:
     n = 0
     cur.execute(
         """SELECT a.id_unidade, a.evento, a.antecedencia FROM whatsapp_avisos a
-             JOIN integracoes i ON i.id_unidade = a.id_unidade AND i.servico = 'whatsapp'
-            WHERE a.ativo AND i.ativa AND a.evento IN ('PREMIO_VENCENDO', 'ANIVERSARIO')""")
+            WHERE a.ativo AND a.evento IN ('PREMIO_VENCENDO', 'ANIVERSARIO')
+              AND EXISTS (SELECT 1 FROM unidade_whatsapps w
+                           WHERE w.id_unidade = a.id_unidade AND w.conectado)""")
     for a in [dict(x) for x in cur.fetchall()]:
         casa = _casa(cur, a["id_unidade"])
         if a["evento"] == "PREMIO_VENCENDO":
@@ -429,19 +509,19 @@ def _payload(msg: dict, aviso: dict | None) -> dict:
 
 
 def _enviar_um(cur, msg: dict) -> None:
-    integ = _integracao(cur, msg["id_unidade"])
-    if not integ or not integ["ativa"]:
+    integ = _conexao(cur, msg.get("id_whatsapp"))
+    if not integ or not integ["conectado"]:
         cur.execute("""UPDATE whatsapp_mensagens SET status = 'CANCELADA', atualizada_em = now(),
-                              erro = 'WhatsApp desligado na loja.' WHERE id = %s""", (msg["id"],))
+                              erro = 'O número foi desligado ou removido.' WHERE id = %s""",
+                    (msg["id"],))
         return
     if integ["modo"] != "real":
         cur.execute("""UPDATE whatsapp_mensagens SET status = 'SIMULADA', enviada_em = now(),
                               atualizada_em = now() WHERE id = %s""", (msg["id"],))
         return
     aviso = None if msg["evento"] == RESPOSTA else _avisos(cur, msg["id_unidade"])[msg["evento"]]
-    cfg = integ["config"]
-    url = (f"https://graph.facebook.com/{cfg.get('api_versao') or API_VERSAO_PADRAO}/"
-           f"{cfg.get('phone_number_id')}/messages")
+    url = (f"https://graph.facebook.com/{integ['api_versao'] or API_VERSAO_PADRAO}/"
+           f"{integ['phone_number_id']}/messages")
     try:
         r = httpx.post(url, json=_payload(msg, aviso), timeout=15,
                        headers={"Authorization": f"Bearer {integ['cred'].get('token')}"})
@@ -452,8 +532,8 @@ def _enviar_um(cur, msg: dict) -> None:
         cur.execute("""UPDATE whatsapp_mensagens SET status = 'ENVIADA', enviada_em = now(),
                               id_meta = %s, erro = NULL, atualizada_em = now() WHERE id = %s""",
                     (wamid, msg["id"]))
-        cur.execute("""UPDATE integracoes SET ultimo_status = 'ok', ultima_mensagem = NULL
-                        WHERE id_unidade = %s AND servico = 'whatsapp'""", (msg["id_unidade"],))
+        cur.execute("""UPDATE unidade_whatsapps SET ultimo_status = 'ok', ultima_mensagem = NULL
+                        WHERE id = %s""", (integ["id"],))
     except Exception as e:  # noqa: BLE001
         tentativas = int(msg["tentativas"]) + 1
         falhou = tentativas >= TENTATIVAS_MAXIMAS
@@ -465,16 +545,15 @@ def _enviar_um(cur, msg: dict) -> None:
                 WHERE id = %s""",
             (tentativas, str(e)[:500], falhou, msg["id"]),
         )
-        cur.execute("""UPDATE integracoes SET ultimo_status = 'erro', ultima_mensagem = %s
-                        WHERE id_unidade = %s AND servico = 'whatsapp'""",
-                    (str(e)[:500], msg["id_unidade"]))
+        cur.execute("""UPDATE unidade_whatsapps SET ultimo_status = 'erro', ultima_mensagem = %s
+                        WHERE id = %s""", (str(e)[:500], integ["id"]))
 
 
 def processar_fila(limite: int = 20) -> int:
     """Envia o que venceu. ⚠️ `SKIP LOCKED`: dois processos nunca pegam a mesma mensagem."""
     with get_cursor() as cur:
         cur.execute(
-            """SELECT id, id_unidade, evento, telefone, variaveis, texto, tentativas
+            """SELECT id, id_unidade, evento, telefone, variaveis, texto, tentativas, id_whatsapp
                  FROM whatsapp_mensagens
                 WHERE status = 'FILA' AND agendada_para <= now()
                 ORDER BY agendada_para, id LIMIT %s FOR UPDATE SKIP LOCKED""",
@@ -523,18 +602,18 @@ def verificar_webhook(cur, token: str | None) -> bool:
     """A Meta confere o webhook com o token que a loja colou lá."""
     if not token:
         return False
-    cur.execute("""SELECT 1 FROM integracoes WHERE servico = 'whatsapp'
-                    AND config->>'verify_token' = %s""", (token,))
+    cur.execute("SELECT 1 FROM unidade_whatsapps WHERE verify_token = %s", (token,))
     return cur.fetchone() is not None
 
 
 def _loja_do_numero(cur, phone_number_id: str | None) -> tuple[int, dict] | None:
-    cur.execute("""SELECT id_unidade FROM integracoes WHERE servico = 'whatsapp'
-                    AND config->>'phone_number_id' = %s""", (str(phone_number_id or ""),))
+    """O número (e a loja dele) pelo identificador que a Meta manda no webhook."""
+    cur.execute("SELECT id, id_unidade FROM unidade_whatsapps WHERE phone_number_id = %s",
+                (str(phone_number_id or ""),))
     linha = cur.fetchone()
     if not linha:
         return None
-    return linha["id_unidade"], _integracao(cur, linha["id_unidade"])
+    return linha["id_unidade"], _conexao(cur, linha["id"])
 
 
 def assinatura_valida(corpo: bytes, assinatura: str | None, app_secret: str | None) -> bool:
@@ -585,11 +664,11 @@ def receber(cur, corpo: bytes, assinatura: str | None) -> dict:
                                 (novo, erro, m["id"]))
                     feito["estados"] += 1
             for msg in valor.get("messages") or []:
-                feito["respostas"] += _resposta(cur, id_unidade, msg)
+                feito["respostas"] += _resposta(cur, id_unidade, msg, integ["id"])
     return feito
 
 
-def _resposta(cur, id_unidade: int, msg: dict) -> int:
+def _resposta(cur, id_unidade: int, msg: dict, id_whatsapp: int) -> int:
     payload = None
     if msg.get("type") == "button":
         payload = (msg.get("button") or {}).get("payload")
@@ -639,6 +718,8 @@ def _resposta(cur, id_unidade: int, msg: dict) -> int:
         return 1
     # A resposta é TEXTO LIVRE: o toque do cliente abriu a janela de 24 h.
     enfileirar(cur, id_unidade, RESPOSTA, f"{m['id']}:{acao}", m["telefone"], [texto],
-               nome=m["nome"], id_reserva=reserva["id"], ignorar_aviso=True)
+               nome=m["nome"], id_reserva=reserva["id"], ignorar_aviso=True,
+               # A resposta volta pelo número que o cliente tocou: é a conversa dele.
+               id_whatsapp=id_whatsapp)
     return 1
 

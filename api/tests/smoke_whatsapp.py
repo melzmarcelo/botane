@@ -1,7 +1,10 @@
-"""WhatsApp por loja: a fila, os avisos, o modo simulado e o webhook da Meta (migração 099).
+"""WhatsApp por loja: a fila, os avisos, o modo simulado e o webhook da Meta (migração 099),
+com a conexão por NÚMERO da loja (146).
 
 🔑 **Pedido do dono (28/09/2026):** mensagens configuráveis por loja (reserva, confirmação,
 prêmio…) e a confirmação de presença pelo WhatsApp, recebendo o botão que o cliente tocou.
+🔑 **E (30/10/2026):** cada número da loja com a configuração completa — enviar e receber os
+retornos —, e cada aviso dizendo por qual número sai.
 
 Tudo em MODO SIMULADO: nenhuma mensagem sai para a Meta. O webhook é exercitado com o corpo
 que a Meta manda, assinado (e não assinado) com o segredo do app.
@@ -70,17 +73,23 @@ _st, eu, _h = chamar("GET", "/auth/me", token=token)
 UNIDADE = (eu.get("unidades") or [{}])[0].get("id")
 devolver_a_reserva = preservar_reserva(UNIDADE)
 marca = str(time.time_ns() // 100)[-6:]
-PNID = f"PNID{marca}"
+PNID = f"PNID{marca}"        # o número A, principal
+PNID_B = f"PNIDB{marca}"     # o número B, na conta do principal
 SEGREDO = f"segredo-{marca}"
+FONE_A = f"(99) 9{marca[:4]}-{marca[2:6]}"
+FONE_B = f"(99) 8{marca[:4]}-{marca[2:6]}"
 
-# A integração e os avisos da loja: fotografados e devolvidos no fim.
+# Os números da loja (com a conexão de cada um) e os avisos: fotografados e devolvidos no fim,
+# com os MESMOS ids — é o que catálogos, avisos e mensagens guardam.
 with get_cursor() as cur:
-    cur.execute("SELECT * FROM integracoes WHERE id_unidade = %s AND servico = 'whatsapp'",
-                (UNIDADE,))
-    INTEG_ANTES = cur.fetchone()
-    INTEG_ANTES = dict(INTEG_ANTES) if INTEG_ANTES else None
+    cur.execute("SELECT * FROM unidade_whatsapps WHERE id_unidade = %s", (UNIDADE,))
+    NUMEROS_ANTES = [dict(x) for x in cur.fetchall()]
+    cur.execute("SELECT whatsapp FROM unidades WHERE id = %s", (UNIDADE,))
+    ESPELHO_ANTES = cur.fetchone()["whatsapp"]
     cur.execute("SELECT * FROM whatsapp_avisos WHERE id_unidade = %s", (UNIDADE,))
     AVISOS_ANTES = [dict(x) for x in cur.fetchall()]
+    cur.execute("SELECT id, id_whatsapp FROM catalogos WHERE id_whatsapp IS NOT NULL")
+    CATALOGOS_ANTES = [dict(x) for x in cur.fetchall()]
 
 
 def _devolver():
@@ -88,17 +97,26 @@ def _devolver():
         cur.execute("DELETE FROM whatsapp_mensagens WHERE id_unidade = %s AND criada_em >= %s",
                     (UNIDADE, INICIO))
         cur.execute("DELETE FROM whatsapp_avisos WHERE id_unidade = %s", (UNIDADE,))
+        ids = [n["id"] for n in NUMEROS_ANTES]
+        cur.execute("DELETE FROM unidade_whatsapps WHERE id_unidade = %s AND NOT (id = ANY(%s))",
+                    (UNIDADE, ids))
+        cur.execute("""UPDATE unidade_whatsapps SET principal = false, phone_number_id = NULL
+                        WHERE id_unidade = %s""", (UNIDADE,))
+        for n in NUMEROS_ANTES:
+            colunas = list(n)
+            cur.execute(
+                f"""INSERT INTO unidade_whatsapps ({', '.join(colunas)})
+                    VALUES ({', '.join(['%s'] * len(colunas))})
+                    ON CONFLICT (id) DO UPDATE SET
+                    {', '.join(f"{c} = EXCLUDED.{c}" for c in colunas if c != 'id')}""",
+                list(n.values()))
+        cur.execute("UPDATE unidades SET whatsapp = %s WHERE id = %s", (ESPELHO_ANTES, UNIDADE))
         for a in AVISOS_ANTES:
             cur.execute(f"INSERT INTO whatsapp_avisos ({', '.join(a)}) VALUES "
                         f"({', '.join(['%s'] * len(a))})", list(a.values()))
-        cur.execute("DELETE FROM integracoes WHERE id_unidade = %s AND servico = 'whatsapp'",
-                    (UNIDADE,))
-        if INTEG_ANTES:
-            i = {k: v for k, v in INTEG_ANTES.items() if k != "id"}
-            cur.execute(f"INSERT INTO integracoes ({', '.join(i)}) VALUES "
-                        f"({', '.join(['%s'] * len(i))})",
-                        [json.dumps(v) if k == "config" and v is not None else v
-                         for k, v in i.items()])
+        for c in CATALOGOS_ANTES:
+            cur.execute("UPDATE catalogos SET id_whatsapp = %s WHERE id = %s",
+                        (c["id_whatsapp"], c["id"]))
 
 
 with get_cursor() as cur:
@@ -134,9 +152,9 @@ def webhook(corpo: dict, assinar=True):
     return chamar("POST", "/publico/whatsapp/webhook", bruto, cabecalhos=cab)
 
 
-def botao(payload, fone="5547999300009"):
+def botao(payload, fone="5547999300009", pnid=None):
     return {"entry": [{"changes": [{"value": {
-        "metadata": {"phone_number_id": PNID},
+        "metadata": {"phone_number_id": pnid or PNID},
         "messages": [{"from": fone, "type": "button",
                       "button": {"payload": payload, "text": "x"}}]}}]}]}
 
@@ -170,17 +188,43 @@ def reservar(hora, nome="Wanda Teste", fone="47999300009"):
     return st, r
 
 
-print("\n1. a configuração da loja")
+print("\n1. a configuração da loja: os números e a conexão de cada um")
 st, c, _h = chamar("GET", f"/unidades/{UNIDADE}/whatsapp", token=token)
-checar("nasce desligada, em modo simulado, com o token de verificação do webhook",
-       st == 200 and c.get("modo") == "simulado" and c.get("verify_token"), (st, c))
-checar("com os 7 avisos e o texto pronto de cada modelo",
+checar("cada número da loja tem o seu token de verificação do webhook",
+       st == 200 and all(n.get("verify_token") for n in c.get("numeros") or []), (st, c))
+checar("com os 8 avisos e o texto pronto de cada modelo",
        len(c.get("avisos") or []) == 8 and all("{{1}}" in a["texto"] for a in c["avisos"]),
        len(c.get("avisos") or []))
-VERIFY = c.get("verify_token")
-base = {"ativa": True, "modo": "real", "phone_number_id": PNID, "numero": "(47) 99910-5033",
-        "api_versao": "v21.0", "token": "", "app_secret": "", "avisos": []}
-st, r, _h = chamar("PUT", f"/unidades/{UNIDADE}/whatsapp", base, token)
+# Os números que já eram da loja ficam (desconectados e sem o ★); A e B entram.
+OUTROS = [{"id": n["id"], "rotulo": n["rotulo"], "numero": n["numero"], "principal": False,
+           "conectado": False, "modo": "simulado"} for n in c.get("numeros") or []]
+
+
+def numeros(conectado=True, modo="simulado", token_a="", segredo="", conectado_b=False,
+            modo_b="simulado", com_b=True):
+    """O corpo de `numeros`: A (principal) e B (na conta do principal), com os ids gravados."""
+    atuais = {n["numero"]: n["id"] for n in
+              chamar("GET", f"/unidades/{UNIDADE}/whatsapp", token=token)[1]["numeros"]}
+    lista = [{"id": atuais.get(FONE_A), "chave": "A", "rotulo": "Atendimento", "numero": FONE_A,
+              "principal": True, "conectado": conectado, "modo": modo, "phone_number_id": PNID,
+              "api_versao": "v21.0", "token": token_a, "app_secret": segredo}]
+    if com_b:
+        lista.append({"id": atuais.get(FONE_B), "chave": "B", "rotulo": "Encomendas",
+                      "numero": FONE_B, "conectado": conectado_b, "modo": modo_b,
+                      "phone_number_id": PNID_B, "conta_do_principal": True})
+    return lista + [dict(o) for o in OUTROS]
+
+
+def gravar(avisos_=None, **kw):
+    return chamar("PUT", f"/unidades/{UNIDADE}/whatsapp",
+                  {"numeros": numeros(**kw), "avisos": avisos_ or []}, token)
+
+
+def numero(c_, fone):
+    return next((n for n in c_.get("numeros") or [] if n["numero"] == fone), {})
+
+
+st, r, _h = gravar(modo="real")
 checar("enviar de verdade sem token é recusado", st == 400, (st, r))
 avisos = [{"evento": e, "ativo": e in ("RESERVA_CONFIRMADA", "RESERVA_LEMBRETE",
                                         "RESERVA_CANCELADA", "PREMIO_GANHO"),
@@ -188,16 +232,24 @@ avisos = [{"evento": e, "ativo": e in ("RESERVA_CONFIRMADA", "RESERVA_LEMBRETE",
            "antecedencia": 3 if e == "RESERVA_LEMBRETE" else None}
           for e in ("RESERVA_RECEBIDA", "RESERVA_CONFIRMADA", "RESERVA_LEMBRETE",
                     "RESERVA_CANCELADA", "PREMIO_GANHO", "PREMIO_VENCENDO", "ANIVERSARIO")]
-st, c, _h = chamar("PUT", f"/unidades/{UNIDADE}/whatsapp",
-                   {**base, "modo": "simulado", "token": f"tok-{marca}",
-                    "app_secret": SEGREDO, "avisos": avisos}, token)
-checar("liga em modo simulado, com token e segredo guardados",
-       st == 200 and c.get("token_configurado") and c.get("segredo_configurado"), (st, c))
+st, c, _h = gravar(avisos, token_a=f"tok-{marca}", segredo=SEGREDO)
+A = numero(c, FONE_A)
+B = numero(c, FONE_B)
+checar("liga o A em modo simulado, com token e segredo guardados (e ele é o principal)",
+       st == 200 and A.get("conectado") and A.get("principal") and A.get("token_configurado")
+       and A.get("segredo_configurado"), (st, c))
 checar("e o token NÃO volta na resposta", f"tok-{marca}" not in json.dumps(c)
        and SEGREDO not in json.dumps(c))
-st, c, _h = chamar("PUT", f"/unidades/{UNIDADE}/whatsapp", {**base, "modo": "simulado",
-                                                           "avisos": avisos}, token)
-checar("salvar de novo com o token em branco MANTÉM o token", c.get("token_configurado"), c)
+checar("o B nasce com o seu token de verificação, na conta do principal",
+       B.get("verify_token") and B.get("conta_do_principal") and not B.get("token_configurado"), B)
+st, c, _h = gravar(avisos)
+checar("salvar de novo com o token em branco MANTÉM o token",
+       numero(c, FONE_A).get("token_configurado"), c)
+st, c, _h = gravar(avisos, conectado_b=True, modo_b="real")
+checar("o B pode enviar de verdade com o token do principal (sem digitar de novo)",
+       st == 200 and numero(c, FONE_B).get("modo") == "real", (st, c))
+gravar(avisos)
+VERIFY = A.get("verify_token")
 
 print("\n2. a reserva confirmada: aviso na hora e lembrete agendado")
 st, res = reservar("19:00")
@@ -302,8 +354,7 @@ checar("e o lembrete sai da fila",
 
 print("\n8. aviso desligado, PARAR e o teste pela tela")
 avisos_off = [dict(a, ativo=False) if a["evento"] == "RESERVA_CONFIRMADA" else a for a in avisos]
-chamar("PUT", f"/unidades/{UNIDADE}/whatsapp", {**base, "modo": "simulado", "avisos": avisos_off},
-       token)
+gravar(avisos_off)
 st, res4 = reservar("14:00", nome="Eva Desligado", fone="47999300006")
 checar("com o aviso desligado, nada entra na fila", not msgs("RESERVA_CONFIRMADA", res4.get("id")))
 with get_cursor() as cur:
@@ -326,18 +377,16 @@ st, hist, cab = chamar("GET", f"/unidades/{UNIDADE}/whatsapp/mensagens?limite=5"
 checar("o histórico lista, paginado, com o teste SIMULADA no topo",
        st == 200 and hist and hist[0]["status"] == "SIMULADA"
        and {k.lower(): v for k, v in cab.items()}.get("x-total"), (st, hist[:1], cab))
-chamar("PUT", f"/unidades/{UNIDADE}/whatsapp", {**base, "ativa": False, "modo": "simulado",
-                                               "avisos": avisos}, token)
+gravar(avisos, conectado=False)
 st, res5 = reservar("15:00", nome="Fabio Fora", fone="47999300004")
-checar("com o WhatsApp desligado na loja, nada entra na fila", not msgs(id_reserva=res5.get("id")))
+checar("com nenhum número conectado, nada entra na fila", not msgs(id_reserva=res5.get("id")))
 
 print("\n8b. o envio de verdade (com a Meta simulada dentro do teste)")
 # ⚠️ Sem conta na Meta: troca o `httpx.post` do serviço por um falso, que devolve o que a
 # Meta devolveria — e guarda o pedido, para conferir o que o Botané MANDARIA.
 from services import whatsapp as wa  # noqa: E402
 
-chamar("PUT", f"/unidades/{UNIDADE}/whatsapp", {**base, "ativa": True, "modo": "real",
-                                               "token": f"tok-{marca}", "avisos": avisos}, token)
+gravar(avisos, modo="real", token_a=f"tok-{marca}")
 pedidos = []
 
 
@@ -400,8 +449,71 @@ checar("a Meta recusou: volta para a fila com o motivo, para tentar de novo",
        falha["status"] == "FILA" and falha["tentativas"] == 1
        and "Template name" in (falha["erro"] or ""), falha)
 st, c, _h = chamar("GET", f"/unidades/{UNIDADE}/whatsapp", token=token)
-checar("e a tela da loja mostra o último erro", "Template name" in (c.get("ultima_mensagem") or ""),
-       c.get("ultima_mensagem"))
+checar("e a tela da loja mostra o último erro, no número que falhou",
+       "Template name" in (numero(c, FONE_A).get("ultima_mensagem") or ""), numero(c, FONE_A))
+
+print("\n8c. vários números: cada aviso sai pelo seu, e a resposta volta pelo mesmo")
+A_ID, B_ID = numero(c, FONE_A)["id"], numero(c, FONE_B)["id"]
+avisos_b = [dict(a, whatsapp="B") if a["evento"] == "RESERVA_LEMBRETE" else a for a in avisos]
+st, c, _h = gravar(avisos_b, conectado_b=True)
+lemb_aviso = next(a for a in c.get("avisos", []) if a["evento"] == "RESERVA_LEMBRETE")
+checar("o aviso aponta para o B pela chave dele (mesmo número ainda sem id na tela)",
+       st == 200 and lemb_aviso.get("id_whatsapp") == B_ID, (st, lemb_aviso))
+st, res6 = reservar("18:00", nome="Helena Dois", fone="47999300001")
+ID_R6 = res6.get("id")
+
+
+def numero_da_msg(evento, id_reserva):
+    with get_cursor() as cur:
+        cur.execute("""SELECT id, id_whatsapp FROM whatsapp_mensagens WHERE evento = %s
+                        AND id_reserva = %s ORDER BY id DESC LIMIT 1""", (evento, id_reserva))
+        return dict(cur.fetchone() or {})
+
+
+checar("a confirmação sai pelo principal (A)",
+       numero_da_msg("RESERVA_CONFIRMADA", ID_R6).get("id_whatsapp") == A_ID)
+lemb6 = numero_da_msg("RESERVA_LEMBRETE", ID_R6)
+checar("e o lembrete pelo número escolhido (B)", lemb6.get("id_whatsapp") == B_ID, lemb6)
+st, r, _h = webhook(botao(f"CONFIRMAR:{lemb6.get('id')}", fone="5547999300001", pnid=PNID_B))
+checar("o \"Confirmo\" chega pelo B, assinado com o segredo do principal (mesmo app)",
+       st == 200 and r.get("respostas") == 1, (st, r))
+checar("e o agradecimento volta pelo B", numero_da_msg("RESPOSTA", ID_R6).get("id_whatsapp") == B_ID,
+       numero_da_msg("RESPOSTA", ID_R6))
+st, r, _h = chamar("GET", f"/publico/whatsapp/webhook?hub.mode=subscribe&hub.verify_token="
+                          f"{numero(c, FONE_B)['verify_token']}&hub.challenge=777", cru=True)
+checar("a Meta confere o webhook com o token de verificação do B", st == 200 and r == "777", (st, r))
+
+pedidos.clear()
+wa.httpx.post = _meta_ok
+try:
+    gravar(avisos_b, modo="real", conectado_b=True, modo_b="real")
+    with get_cursor() as cur:
+        wa.enfileirar(cur, UNIDADE, "PEDIDO_CONFIRMADO", f"pedido-b:{marca}", "47999300003",
+                      ["Ivo", "12", "Casa", "para retirar", "01/01 às 12:00", "10,00"],
+                      ignorar_aviso=True, id_whatsapp=B_ID)
+    processar()
+finally:
+    wa.httpx.post = original
+p_b = next((x for x in pedidos if (x.get("json") or {}).get("template", {}).get("name")
+            == "pedido_confirmado"), {})
+checar("o número pedido (o do catálogo) envia de verdade: Graph API do B, token do principal",
+       p_b.get("url", "").endswith(f"/{PNID_B}/messages")
+       and p_b.get("headers", {}).get("Authorization") == f"Bearer tok-{marca}", p_b.get("url"))
+
+gravar(avisos_b, conectado_b=False)
+st, res7 = reservar("17:00", nome="Ines Desliga", fone="47999300011")
+checar("B desconectado: o lembrete escolhido para ele sai pelo principal",
+       numero_da_msg("RESERVA_LEMBRETE", res7.get("id")).get("id_whatsapp") == A_ID)
+st, r, _h = chamar("PUT", f"/unidades/{UNIDADE}/whatsapp", {"numeros": [
+    dict(n, phone_number_id=PNID) for n in numeros()], "avisos": avisos_b}, token)
+checar("o mesmo identificador da Meta em dois números: recusa", st == 422, (st, r))
+st, c, _h = gravar(avisos_b, com_b=False)
+lemb_aviso = next(a for a in c.get("avisos", []) if a["evento"] == "RESERVA_LEMBRETE")
+checar("removido o B, o aviso volta ao principal", st == 200 and lemb_aviso.get("id_whatsapp") is None,
+       (st, lemb_aviso))
+with get_cursor() as cur:
+    cur.execute("SELECT whatsapp FROM unidades WHERE id = %s", (UNIDADE,))
+    checar("e o cadastro da loja espelha o principal (A)", cur.fetchone()["whatsapp"] == FONE_A)
 
 print("\n9. limpeza")
 _devolver()

@@ -84,6 +84,9 @@ export default function HistoricoDoWhatsapp({ idLoja, versao }: { idLoja: number
                   </td>
                   <td>
                     {m.aviso}
+                    {m.whatsapp_rotulo && (
+                      <span className="block text-[12px] text-suave">pelo {m.whatsapp_rotulo} · {m.whatsapp_numero}</span>
+                    )}
                     {m.texto && <span className="block max-w-[420px] text-[12px] text-suave">{m.texto}</span>}
                   </td>
                   <td>

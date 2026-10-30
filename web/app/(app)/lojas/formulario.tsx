@@ -5,7 +5,6 @@ import { FormEvent, useEffect, useState } from "react";
 import { Campo, Cartao } from "@/components/ui";
 import { mascaraCnpj } from "@/lib/cadastros";
 
-import WhatsappsDaLoja, { type NumeroZap } from "./whatsapps";
 
 /**
  * O cadastro de uma loja — o mesmo formulário para criar e para corrigir.
@@ -36,8 +35,6 @@ export type LojaForm = {
   cidade: string;
   uf: string;
   telefone: string;
-  /** 143: vários WhatsApps, um principal (o campo único virou espelho do principal). */
-  whatsapps: NumeroZap[];
   email: string;
   mesas: string;
   /** Os botões do Hub do Cardápio Vivo (114). */
@@ -61,7 +58,6 @@ export const LOJA_VAZIA: LojaForm = {
   cidade: "",
   uf: "",
   telefone: "",
-  whatsapps: [],
   email: "",
   mesas: "",
   google_avaliacao_url: "",
@@ -87,10 +83,6 @@ export function corpoDaLoja(f: LojaForm) {
     cidade: texto(f.cidade),
     uf: texto(f.uf)?.toUpperCase() ?? null,
     telefone: texto(f.telefone),
-    // 🔑 A lista inteira; o servidor espelha o principal em `unidades.whatsapp`.
-    whatsapps: f.whatsapps
-      .filter((n) => n.numero.trim())
-      .map((n) => ({ id: n.id, rotulo: n.rotulo.trim() || null, numero: n.numero.trim(), principal: n.principal })),
     email: texto(f.email),
     mesas: f.mesas.trim() ? Number(f.mesas) : null,
     google_avaliacao_url: texto(f.google_avaliacao_url),
@@ -318,13 +310,13 @@ export default function FormularioLoja({
         </div>
       </Cartao>
 
-      {/* 🔑 **Os WhatsApps da loja** (143, pedido do dono, 30/10/2026: "poder configurar mais
-          de um, e tornar um o principal da loja"). */}
-      <Cartao titulo="WhatsApp"
-              descricao="Os números que o cliente pode chamar. O ★ principal é o “Entre em contato” do site; cada catálogo pode escolher outro.">
-        <WhatsappsDaLoja lista={valor.whatsapps} podeEditar={podeEditar}
-                         aoTrocar={(l) => aoTrocar({ ...valor, whatsapps: l })} />
-      </Cartao>
+      {/* 🔑 **Os WhatsApps da loja** (143) moraram aqui até a 146: com a conexão de cada número
+          com a Meta, a lista foi para a aba WhatsApp — um lugar só (pedido do dono, 30/10/2026).
+          ⚠️ O cadastro NÃO manda mais `whatsapps`: gravar a loja não mexe nos números. */}
+      <p className="text-[13px] text-suave" id="whatsapps-na-aba">
+        Os números de WhatsApp da loja, e a conexão de cada um com a Meta, ficam na aba{" "}
+        <b>WhatsApp</b> (numa loja nova, depois de criá-la).
+      </p>
 
       {/* 🔑 Cardápio Vivo (114): o que os botões do Hub da mesa mostram. Ligar cada botão é
           em Portal de Clientes ▸ Catálogos ▸ Cardápio Vivo. */}

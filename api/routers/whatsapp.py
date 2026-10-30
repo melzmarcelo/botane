@@ -1,4 +1,5 @@
-"""WhatsApp — a aba da loja (configuração, avisos, teste, histórico) e o webhook da Meta.
+"""WhatsApp — a aba da loja (números e a conexão de cada um, avisos, teste, histórico) e o
+webhook da Meta.
 
 🔑 **Pedido do dono (28/09/2026):** *"tudo configurável, numa aba nova dentro da loja: a loja
 faz toda a validação com a Meta e só informa como vamos usar."* A regra está em
@@ -46,13 +47,17 @@ def salvar(id_unidade: int, body: ConfigWhatsapp, ctx: Contexto = Depends(_ADMIN
         _loja(cur, ctx, id_unidade)
         servico.salvar(cur, id_unidade, body)
         # ⚠️ Nada de segredo na auditoria: só se foi trocado.
-        auditoria.registrar(cur, ctx.id_usuario, "whatsapp", id_unidade, "configurar",
-                            depois={"ativa": body.ativa, "modo": body.modo,
-                                    "phone_number_id": body.phone_number_id,
-                                    "token_trocado": bool((body.token or "").strip()),
-                                    "segredo_trocado": bool((body.app_secret or "").strip()),
-                                    "avisos": {a.evento: a.ativo for a in body.avisos}},
-                            id_unidade=id_unidade)
+        auditoria.registrar(
+            cur, ctx.id_usuario, "whatsapp", id_unidade, "configurar",
+            depois={"numeros": None if body.numeros is None else [
+                        {"numero": n.numero, "conectado": n.conectado, "modo": n.modo,
+                         "phone_number_id": n.phone_number_id,
+                         "conta_do_principal": n.conta_do_principal,
+                         "token_trocado": bool((n.token or "").strip()),
+                         "segredo_trocado": bool((n.app_secret or "").strip())}
+                        for n in body.numeros],
+                    "avisos": {a.evento: a.ativo for a in body.avisos}},
+            id_unidade=id_unidade)
         return servico.configuracao(cur, id_unidade, API_URL_PUBLICA) | {
             "message": "WhatsApp da loja gravado."}
 
@@ -61,8 +66,8 @@ def salvar(id_unidade: int, body: ConfigWhatsapp, ctx: Contexto = Depends(_ADMIN
 def testar(id_unidade: int, body: TesteWhatsapp, ctx: Contexto = Depends(_ADMIN)) -> dict:
     """Uma mensagem de exemplo do aviso escolhido, para o número informado.
 
-    ⚠️ Sai pela FILA como qualquer outra — é o que prova o caminho inteiro. Precisa do
-    WhatsApp ligado na loja; o aviso em si não precisa estar ligado.
+    ⚠️ Sai pela FILA como qualquer outra — é o que prova o caminho inteiro, pelo número que o
+    aviso usaria (146). Precisa de um número conectado; o aviso em si não precisa estar ligado.
     """
     if body.evento not in servico.EVENTOS:
         raise HTTPException(status_code=400, detail="Aviso desconhecido.")
@@ -77,7 +82,7 @@ def testar(id_unidade: int, body: TesteWhatsapp, ctx: Contexto = Depends(_ADMIN)
         if not ok:
             raise HTTPException(
                 status_code=400,
-                detail="Não entrou na fila: ligue o WhatsApp na loja e confira o telefone (com DDD).")
+                detail="Não entrou na fila: conecte um número da loja e confira o telefone (com DDD).")
     enviados = servico.processar_fila()
     return {"message": "Mensagem de teste enviada para a fila"
                        + (" e processada — veja o histórico." if enviados else ".")}
@@ -93,11 +98,14 @@ def mensagens(id_unidade: int, resposta: Response,
         _loja(cur, ctx, id_unidade)
         linhas = pagina(
             cur,
-            """SELECT id, evento, telefone, nome, texto, status, agendada_para, enviada_em,
-                      erro, tentativas, resposta, respondida_em, criada_em, id_reserva
-                 FROM whatsapp_mensagens
-                WHERE id_unidade = %s AND (%s::text IS NULL OR status = %s)
-                ORDER BY criada_em DESC, id DESC""",
+            """SELECT m.id, m.evento, m.telefone, m.nome, m.texto, m.status, m.agendada_para,
+                      m.enviada_em, m.erro, m.tentativas, m.resposta, m.respondida_em,
+                      m.criada_em, m.id_reserva, m.id_whatsapp,
+                      w.rotulo AS whatsapp_rotulo, w.numero AS whatsapp_numero
+                 FROM whatsapp_mensagens m
+                 LEFT JOIN unidade_whatsapps w ON w.id = m.id_whatsapp
+                WHERE m.id_unidade = %s AND (%s::text IS NULL OR m.status = %s)
+                ORDER BY m.criada_em DESC, m.id DESC""",
             (id_unidade, status, status), limite=limite, offset=offset, resposta=resposta)
     for x in linhas:
         for campo in ("agendada_para", "enviada_em", "respondida_em", "criada_em"):

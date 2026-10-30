@@ -1271,7 +1271,8 @@ informa como vamos usar — fica configurável para outros clientes."* Estudo:
   conexão, avisos, histórico). `admin.unidades`. Rotas `routers/whatsapp.py`
   (`/unidades/{id}/whatsapp`, `/teste`, `/mensagens`) e o webhook público
   `/publico/whatsapp/webhook` (registrado ANTES do `publico`).
-- **Credenciais na `integracoes`** (`servico = 'whatsapp'`, por loja, cifradas como Omie/PDV):
+- ⚠️ **Desde a 146 a conexão é por NÚMERO** (`unidade_whatsapps`) — ver a seção da 146 abaixo.
+- **Credenciais na `integracoes`** (até a 146) (`servico = 'whatsapp'`, por loja, cifradas como Omie/PDV):
   token permanente e App secret. ⚠️ Nunca voltam na resposta ("configurado"), nem na
   auditoria; campo em branco no salvar MANTÉM o que está. `config` guarda phone_number_id,
   waba_id, número, versão da API e o `verify_token` (gerado na 1ª visita).
@@ -1303,6 +1304,38 @@ informa como vamos usar — fica configurável para outros clientes."* Estudo:
 - Tabelas: `whatsapp_mensagens` em `OPERACAO`, `whatsapp_avisos` em `PRESERVADAS`.
 - Cobertura: `smoke_whatsapp.py` (43).
 - ⏳ Falta: a loja fazer a parte dela na Meta (passo a passo na própria aba) e o 1º envio real.
+
+## A conexão com a Meta por NÚMERO da loja (migração 146, 1.1.162, 30/10/2026)
+🔑 **Pedido do dono:** *"foi realizado o cadastro somente do número; teria que criar uma
+configuração completa como tem na aba WhatsApp da loja, onde permite enviar mensagem
+automaticamente e receber os devidos retornos."* Desfaz a decisão 2 da 143 (conexão única por loja).
+- **A conexão mora em `unidade_whatsapps`** (colunas `conectado`, `modo`, `phone_number_id` —
+  índice único parcial —, `waba_id`, `api_versao`, `verify_token`, `credenciais` cifradas,
+  `conta_do_principal`, `ultimo_status/ultima_mensagem`). ⚠️ **A `integracoes` com
+  `servico = 'whatsapp'` deixou de ser lida**; a 146 copiou a de cada loja para o número de mesmos
+  dígitos (senão o principal), com o MESMO `verify_token` — nada a refazer na Meta — e marcou as
+  mensagens antigas com esse número.
+- 🔑 **`conta_do_principal`**: o número usa o token e o segredo do principal (o caso comum: os números
+  da loja no mesmo app da Meta). `_conexoes` resolve `cred` (o que o envio e a assinatura usam) e
+  `cred_propria` (o "configurado" da tela).
+- 🔑 **Por onde sai — `_por_onde`**: o número pedido explicitamente (o do CATÁLOGO do pedido, em
+  `pedido_confirmado`; o que RECEBEU a resposta do cliente) → o do aviso (`whatsapp_avisos.id_whatsapp`,
+  nulo = principal) → o principal. ⚠️ **O primeiro CONECTADO ganha**: número desligado não segura
+  o aviso. Nenhum conectado: nada entra na fila. A mensagem grava `id_whatsapp`, e o envio usa a
+  conexão DELA (desligada depois → CANCELADA "O número foi desligado ou removido").
+- **Webhook**: o GET aceita o `verify_token` de qualquer número; o POST acha o número pelo
+  `phone_number_id` e confere a assinatura com o segredo dele (ou o do principal). A resposta ao
+  botão sai pelo mesmo número. ⚠️ O webhook é do APP na Meta: números no mesmo app usam um só.
+- **Tela**: a lista saiu do cadastro da loja (que agora só aponta para a aba, `#whatsapps-na-aba`, e
+  NÃO manda mais `whatsapps` ao gravar) e mora na aba WhatsApp: `numeros.tsx` (cartão por número,
+  ★, "Conexão com a Meta" em `conexao.tsx`), avisos com "Sai pelo número" (`data-aviso-numero`).
+  O PUT leva `numeros` (com `chave`: "novo-N" antes do id, é por ela que o aviso aponta para número
+  recém-criado) e `avisos[].whatsapp`; `numeros` ausente = só os avisos. Token/segredo em branco mantém.
+- ⚠️ **Teste que fotografa `unidade_whatsapps` tem de devolver TODAS as colunas**: o
+  `smoke_whatsapps_da_loja` regravava só rótulo e número e apagou o `verify_token` da loja 1 na
+  base local (corrigido).
+- ⚠️ Os modelos de mensagem são da conta (WABA): número em outra conta precisa dos modelos lá.
+- Cobertura: `smoke_whatsapp.py` (56, com a seção 8c de vários números) e `verificar-whatsapps.mjs` (13).
 
 ## Reservas e Fidelidade visíveis no site (migração 144, 1.1.157, 30/10/2026)
 🔑 **Pedido do dono:** *"nas configurações das reservas, criar uma opção se as reservas vão estar

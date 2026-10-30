@@ -11,6 +11,8 @@ import { testarWhatsapp, type GravarWhatsapp, type WhatsappDaLoja } from "@/lib/
  *
  * 🔑 O texto de cada aviso vem pronto para a loja cadastrar o modelo na Meta: {{n}} são as
  * variáveis, na ordem mostrada. Mensagem que a casa inicia é SEMPRE um modelo aprovado.
+ * 🔑 146: cada aviso escolhe o número por onde sai (o principal, se nada for escolhido ou se o
+ * escolhido estiver sem conexão). O teste sai pelo número GRAVADO — salve antes de testar.
  */
 const NOME_VARIAVEL: Record<string, string> = {
   nome: "primeiro nome", casa: "nome da casa", data: "data", hora: "hora", pessoas: "pessoas",
@@ -36,7 +38,7 @@ export default function AvisosDoWhatsapp({
   const [fone, setFone] = useState("");
   const [testando, setTestando] = useState<string | null>(null);
 
-  const mudar = (evento: string, campo: "ativo" | "modelo" | "idioma" | "antecedencia", v: unknown) =>
+  const mudar = (evento: string, campo: "ativo" | "modelo" | "idioma" | "antecedencia" | "whatsapp", v: unknown) =>
     aoMudar({
       ...form,
       avisos: form.avisos.map((a) => (a.evento === evento ? { ...a, [campo]: v } : a)),
@@ -90,7 +92,20 @@ export default function AvisosDoWhatsapp({
                   {testando === a.evento ? "enviando…" : "enviar teste"}
                 </button>
               </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_110px_150px]">
+              <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_110px_150px]">
+                {/* 🔑 146: por qual número sai. Desconectado, o aviso vai pelo principal. */}
+                <Campo rotulo="Sai pelo número">
+                  <select className="campo" disabled={!podeEditar} value={f.whatsapp ?? ""}
+                          data-aviso-numero={a.evento}
+                          onChange={(e) => mudar(a.evento, "whatsapp", e.target.value || null)}>
+                    <option value="">o principal da loja</option>
+                    {form.numeros.filter((n) => n.numero.trim()).map((n) => (
+                      <option key={n.chave} value={n.chave}>
+                        {n.rotulo || "WhatsApp"} · {n.numero}{n.conectado ? "" : " (sem conexão)"}
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
                 <Campo rotulo="Nome do modelo na Meta">
                   <input className="campo mono" disabled={!podeEditar} value={f.modelo}
                          onChange={(e) => mudar(a.evento, "modelo", e.target.value)} />

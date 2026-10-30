@@ -1,8 +1,9 @@
 """Os números de WhatsApp da loja (migração 143): vários, um principal.
 
 🔑 **Pedido do dono (30/10/2026):** *"no cadastro de whatsapp nas lojas, poder configurar mais de
-um, e tornar um o principal da loja."* São números para o CLIENTE chamar (wa.me); a conexão com a
-Meta, que envia os avisos, é outra coisa e continua uma por loja.
+um, e tornar um o principal da loja."* Aqui mora a LISTA (rótulo, número, principal). A conexão
+de cada número com a Meta (146) é gravada por `services/whatsapp.py`, na aba WhatsApp da loja;
+gravar a lista por aqui não mexe nela.
 
 🔑 **`unidades.whatsapp` é o espelho do principal**, mantido AQUI: tudo que já lia o campo (o
 "Entre em contato" do site, o termo LGPD) recebe o principal sem mudar uma linha.
@@ -52,21 +53,35 @@ def listar_varias(cur, ids: list[int]) -> dict[int, list[dict]]:
 def gravar(cur, id_unidade: int, numeros: list[dict]) -> list[dict]:
     """Troca a lista da loja pela que veio, mantendo o id de quem já existia.
 
-    ⚠️ O id importa: é ele que o catálogo guarda. Linha que sumiu da lista é apagada, e o
-    catálogo que a usava volta ao principal (FK `ON DELETE SET NULL`).
+    ⚠️ O id importa: é ele que o catálogo (e o aviso, e a mensagem) guarda. Linha que sumiu da
+    lista é apagada, e quem a usava volta ao principal (FK `ON DELETE SET NULL`).
     🔑 Lista com números e nenhum principal: o primeiro vira principal — loja com WhatsApp
     precisa de um que responda pelo "Entre em contato".
     """
+    gravar_com_ids(cur, id_unidade, numeros)
+    return listar(cur, id_unidade)
+
+
+def gravar_com_ids(cur, id_unidade: int, numeros: list[dict]) -> list[int | None]:
+    """Como `gravar`, devolvendo o id de cada linha recebida, NA ORDEM em que veio (None para a
+    linha vazia, que é descartada)."""
     limpos = []
-    for i, n in enumerate(numeros):
+    posicoes: list[int | None] = []
+    for n in numeros:
         numero = (n.get("numero") or "").strip()
         if not numero:
+            if (n.get("phone_number_id") or "").strip():
+                raise HTTPException(status_code=422,
+                                    detail="Um número conectado à Meta está sem o número: informe-o.")
+            posicoes.append(None)
             continue
         if len(re.sub(r"\D", "", numero)) < 10:
             raise HTTPException(status_code=422,
                                 detail=f"O WhatsApp “{numero}” está incompleto: use DDD e número.")
+        posicoes.append(len(limpos))
         limpos.append({"id": n.get("id"), "rotulo": (n.get("rotulo") or "").strip() or "WhatsApp",
-                       "numero": numero, "principal": bool(n.get("principal")), "ordem": i})
+                       "numero": numero, "principal": bool(n.get("principal")),
+                       "ordem": len(limpos)})
     if sum(1 for n in limpos if n["principal"]) > 1:
         raise HTTPException(status_code=422, detail="Só um WhatsApp pode ser o principal da loja.")
     vistos = set()
@@ -95,12 +110,13 @@ def gravar(cur, id_unidade: int, numeros: list[dict]) -> list[dict]:
         else:
             cur.execute(
                 """INSERT INTO unidade_whatsapps (id_unidade, rotulo, numero, principal, ordem)
-                   VALUES (%s, %s, %s, %s, %s)""",
+                   VALUES (%s, %s, %s, %s, %s) RETURNING id""",
                 (id_unidade, n["rotulo"], n["numero"], n["principal"], n["ordem"]),
             )
+            n["id"] = cur.fetchone()["id"]
     principal = next((n["numero"] for n in limpos if n["principal"]), None)
     cur.execute("UPDATE unidades SET whatsapp = %s WHERE id = %s", (principal, id_unidade))
-    return listar(cur, id_unidade)
+    return [None if p is None else limpos[p]["id"] for p in posicoes]
 
 
 def do_catalogo_valido(cur, id_catalogo: int, id_whatsapp: int | None) -> None:

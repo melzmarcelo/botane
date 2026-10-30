@@ -826,5 +826,6 @@ uma prateleira — e o conector só sabia LER as duas coisas.
 ## Vários WhatsApps por loja (migração 143, 1.1.156, 30/10/2026)
 A loja tem uma LISTA de WhatsApps (`unidade_whatsapps`), um principal (★); `unidades.whatsapp`
 virou espelho do principal, mantido por `services/whatsapps_da_loja.gravar` — não gravar à mão.
-Cartão "WhatsApp" no cadastro (`lojas/whatsapps.tsx`). O uso pelo catálogo (número escolhido e
+Desde a 146 (1.1.162) a lista mora na aba WhatsApp da loja (`lojas/[id]/whatsapp/numeros.tsx`), com a
+conexão de cada número com a Meta (ver `reservas.md`); o cadastro só aponta para lá e não grava números. O uso pelo catálogo (número escolhido e
 botão de contato) está em [`catalogos.md`](catalogos.md#vários-whatsapps-por-loja-o-número-do-catálogo-e-o-entre-em-contato-migração-143-11156-30102026).

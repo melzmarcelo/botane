@@ -168,7 +168,6 @@ export default function PaginaLoja() {
             cidade: achada.cidade ?? "",
             uf: achada.uf ?? "",
             telefone: achada.telefone ?? "",
-            whatsapps: (achada.whatsapps ?? []).map((w) => ({ ...w })),
             email: achada.email ?? "",
             mesas: achada.mesas === null || achada.mesas === undefined ? "" : String(achada.mesas),
             google_avaliacao_url: achada.google_avaliacao_url ?? "",

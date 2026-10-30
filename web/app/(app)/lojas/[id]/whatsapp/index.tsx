@@ -12,18 +12,36 @@ import {
 } from "@/lib/whatsapp";
 
 import AvisosDoWhatsapp from "./avisos";
-import ConexaoDoWhatsapp from "./conexao";
 import HistoricoDoWhatsapp from "./historico";
+import NumerosDoWhatsapp from "./numeros";
 
 /**
- * A aba WhatsApp da loja: conexão com a Meta, avisos, teste e histórico.
+ * A aba WhatsApp da loja: os números (cada um com a sua conexão com a Meta), avisos, teste e
+ * histórico.
  *
  * 🔑 **Pedido do dono (28/09/2026):** *"API da Meta direto, com o número atual … tudo
  * configurável, numa aba nova dentro da loja: a loja faz toda a validação com a Meta e só
  * informa como vamos usar — fica configurável para outros clientes."*
- * ⚠️ **Modo simulado** até a loja dizer "real": as mensagens vão só para o histórico. É o
+ * 🔑 **146 (30/10/2026):** a conexão passou a ser de cada número, e cada aviso diz por qual
+ * número sai. A lista de números, que estava no cadastro da loja, mora aqui.
+ * ⚠️ **Modo simulado** até o número dizer "real": as mensagens vão só para o histórico. É o
  * que deixa montar e testar tudo antes de a conta na Meta ficar pronta.
  */
+function paraForm(d: WhatsappDaLoja): GravarWhatsapp {
+  return {
+    numeros: d.numeros.map((n) => ({
+      id: n.id, chave: String(n.id), rotulo: n.rotulo, numero: n.numero, principal: n.principal,
+      conectado: n.conectado, modo: n.modo, phone_number_id: n.phone_number_id ?? "",
+      waba_id: n.waba_id ?? "", api_versao: n.api_versao, token: "", app_secret: "",
+      conta_do_principal: n.conta_do_principal,
+    })),
+    avisos: d.avisos.map((a) => ({
+      evento: a.evento, ativo: a.ativo, modelo: a.modelo, idioma: a.idioma,
+      antecedencia: a.antecedencia, whatsapp: a.id_whatsapp ? String(a.id_whatsapp) : null,
+    })),
+  };
+}
+
 export default function WhatsappDaLojaAba({
   idLoja,
   podeEditar,
@@ -40,14 +58,7 @@ export default function WhatsappDaLojaAba({
 
   function montar(d: WhatsappDaLoja) {
     setDados(d);
-    setForm({
-      ativa: d.ativa, modo: d.modo, phone_number_id: d.phone_number_id, waba_id: d.waba_id,
-      numero: d.numero, api_versao: d.api_versao, token: "", app_secret: "",
-      avisos: d.avisos.map((a) => ({
-        evento: a.evento, ativo: a.ativo, modelo: a.modelo, idioma: a.idioma,
-        antecedencia: a.antecedencia,
-      })),
-    });
+    setForm(paraForm(d));
   }
 
   useEffect(() => {
@@ -60,7 +71,13 @@ export default function WhatsappDaLojaAba({
     if (!form) return;
     setOcupado(true);
     try {
-      const r = await gravarWhatsapp(idLoja, form);
+      const chaves = new Set(form.numeros.map((n) => n.chave));
+      const r = await gravarWhatsapp(idLoja, {
+        // Linha em branco (nem número, nem conexão) não vai.
+        numeros: form.numeros.filter((n) => n.numero.trim() || n.phone_number_id.trim()),
+        // Aviso apontando para um número removido volta ao principal.
+        avisos: form.avisos.map((a) => ({ ...a, whatsapp: a.whatsapp && chaves.has(a.whatsapp) ? a.whatsapp : null })),
+      });
       montar(r);
       setVersao((v) => v + 1);
       aviso.sucesso(r.message);
@@ -76,7 +93,8 @@ export default function WhatsappDaLojaAba({
 
   return (
     <div className="flex flex-col gap-6">
-      <ConexaoDoWhatsapp dados={dados} form={form} aoMudar={setForm} podeEditar={podeEditar} />
+      <NumerosDoWhatsapp lista={form.numeros} gravados={dados.numeros} webhookUrl={dados.webhook_url}
+                         podeEditar={podeEditar} aoTrocar={(numeros) => setForm({ ...form, numeros })} />
       <AvisosDoWhatsapp
         dados={dados}
         form={form}
