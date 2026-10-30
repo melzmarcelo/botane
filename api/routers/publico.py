@@ -27,7 +27,7 @@ reserva não aparece aqui — nem o catálogo dela, que é do site de reservas.
 
 from datetime import date, datetime, time, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from database import get_cursor
 from relogio import agora_da_casa
@@ -98,6 +98,30 @@ def marca_da_casa() -> dict:
     """
     with get_cursor() as cur:
         return marca.publica(cur)
+
+
+@router.get("/marca/logo")
+def logo_da_casa() -> Response:
+    """A logo da casa num endereço FIXO — a imagem da prévia do link do site.
+
+    🔑 **v1.2.0 (análise de 30/10/2026):** quem compartilha o site no WhatsApp ou no
+    Instagram via só o endereço cru. A prévia (`og:image`) é lida por um robô que não roda
+    JavaScript e precisa de um endereço absoluto que não mude — e o arquivo da logo muda de
+    nome a cada envio (sufixo aleatório). Aqui o endereço fica, e o conteúdo acompanha.
+    ⚠️ Cache CURTO (uma hora): a casa troca a logo e a prévia acompanha no mesmo dia.
+    """
+    import arquivos
+
+    with get_cursor() as cur:
+        url = (marca.publica(cur) or {}).get("logo_url")
+    achado = arquivos.ler(url) if url else None
+    if not achado:
+        raise HTTPException(status_code=404, detail="A casa ainda não tem logo.")
+    conteudo, tipo = achado
+    if tipo == arquivos.PDF_TIPO:
+        raise HTTPException(status_code=404, detail="A casa ainda não tem logo.")
+    return Response(content=conteudo, media_type=tipo, headers={
+        "Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/lojas")

@@ -19,11 +19,25 @@ type Linha = {
   email: string | null;
 };
 
+/** Um valor do antes/depois numa linha. ⚠️ v1.2.0: lista e objeto saíam como
+ * "[object Object]" (a auditoria do WhatsApp grava a lista de números). Lista vira
+ * "N itens"; objeto, o JSON curto — o detalhe completo continua no "ver tudo". */
+function curto(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (Array.isArray(v)) return v.every((x) => typeof x !== "object" || x === null)
+    ? v.join(", ") || "—" : `${v.length} ${v.length === 1 ? "item" : "itens"}`;
+  if (typeof v === "object") {
+    const j = JSON.stringify(v);
+    return j.length > 60 ? j.slice(0, 57) + "…" : j;
+  }
+  return String(v);
+}
+
 function resumo(d: Record<string, unknown> | null) {
   if (!d) return "—";
   const partes = Object.entries(d)
     .slice(0, 4)
-    .map(([k, v]) => `${k}: ${v === null ? "—" : String(v)}`);
+    .map(([k, v]) => `${k}: ${curto(v)}`);
   return partes.join(" · ") || "—";
 }
 

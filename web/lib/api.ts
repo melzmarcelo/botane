@@ -235,7 +235,11 @@ async function renovar(): Promise<boolean> {
       const refresh = lerSessao(CHAVE_REFRESH);
       if (!refresh) return false;
       const r = await bruto("POST", "/auth/refresh", { refresh_token: refresh });
-      if (!r.ok) return false;
+      // 🔴 v1.2.0: só 401/403 dizem que a sessão acabou. Um 500/503 na renovação (o banco
+      // com a conexão caída, a API no meio do deploy) respondia `false`, o `pedir` lia como
+      // sessão recusada e apagava tudo — a pessoa saía da conta por um soluço do servidor.
+      if (r.status === 401 || r.status === 403) return false;
+      if (!r.ok) throw new ErroApi(r.status, "O sistema não respondeu agora. Tente de novo em instantes.");
       // ⚠️ Sem dizer o modo: a renovação MANTÉM onde a sessão já estava. Dizer
       // aqui mudaria a escolha da pessoa pelas costas.
       guardarSessao(await r.json());

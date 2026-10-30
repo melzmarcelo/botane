@@ -6,6 +6,17 @@
 <title>Botané Deli e Café</title>
 <meta name="description" content="Reserve uma mesa, veja os cardápios e fale com a gente.">
 <meta name="theme-color" content="#3C4A3E">
+<!-- 🔑 A prévia do link (v1.2.0): quem compartilha o site no WhatsApp ou no Instagram vê o nome,
+     a frase e a logo da casa, não o endereço cru. O robô que monta a prévia NÃO roda
+     JavaScript: estas linhas valem como estão, e a imagem precisa de endereço absoluto e fixo
+     (`/publico/marca/logo` acompanha a logo de Administração ▸ Empresa). -->
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Botané Deli e Café">
+<meta property="og:title" content="Botané Deli e Café">
+<meta property="og:description" content="Reserve uma mesa, veja os cardápios e fale com a gente.">
+<meta property="og:image" content="https://sistema.botanedeliecafe.com.br/api/publico/marca/logo">
+<meta name="twitter:card" content="summary">
 <!-- 🔑 **O ícone da aba é a LOGO CADASTRADA**, trocada em tempo de execução por
      `pintarOIcone()` — a mesma que vira o medalhão. Estava faltando, e o que a
      aba mostrava era o ícone branco de página sem identidade nenhuma, ao lado
@@ -1014,7 +1025,7 @@ const TRADUCOES = {
   "Precisando mudar alguma coisa,": ["If you need to change anything,", "Wenn Sie etwas ändern möchten,"],
   "Se preferir adiantar,": ["If you'd like to speed things up,", "Wenn es schneller gehen soll,"],
   "fale com a gente": ["talk to us", "schreiben Sie uns"],
-  "Esta é a primeira versão.": ["This is the first version.", "Dies ist die erste Version."],
+  "A reserva é confirmada pelo WhatsApp.": ["Bookings are confirmed on WhatsApp.", "Reservierungen werden per WhatsApp bestätigt."],
   "O site mostra os horários que a casa tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.":
     ["The site shows our free times — to confirm the table, we finalise it on WhatsApp.",
      "Die Seite zeigt unsere freien Zeiten — bestätigt wird der Tisch per WhatsApp."],
@@ -3223,7 +3234,9 @@ function carregarLoja() {
     const rodape = $("#rodape-reserva");
     rodape.hidden = reservaOnline.aceita;
     if (!reservaOnline.aceita) {
-      rodape.innerHTML = `⚠️ <b>${t("Esta é a primeira versão.")}</b> ${t("O site mostra os horários "
+      // v1.2.0: "Esta é a primeira versão" falava do SISTEMA, não da casa — o cliente lia
+      // como site inacabado. O que ele precisa saber é como a mesa se confirma.
+      rodape.innerHTML = `⚠️ <b>${t("A reserva é confirmada pelo WhatsApp.")}</b> ${t("O site mostra os horários "
         + "que a casa tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.")}`;
     }
   });

@@ -60,7 +60,7 @@ function Marca({
 }
 
 function Casca({ children }: { children: React.ReactNode }) {
-  const { eu, carregando, pode, unidade } = useSessao();
+  const { eu, carregando, semConexao, recarregar, pode, unidade } = useSessao();
   const caminho = usePathname();
   const [aberto, setAberto] = useState(false);
   // Quais grupos do menu estão abertos. Fica no navegador porque é preferência
@@ -133,6 +133,7 @@ function Casca({ children }: { children: React.ReactNode }) {
       </main>
     );
   }
+  if (!eu && semConexao) return <SemConexao motivo={semConexao} tentar={recarregar} />;
   if (!eu) return null;
 
   const loja = eu.unidades[0];
@@ -475,5 +476,35 @@ function MenuLateral({
         ),
       )}
     </nav>
+  );
+}
+
+
+/**
+ * O sistema não respondeu ao abrir — e a sessão continua (v1.2.0).
+ *
+ * ⚠️ Tenta de novo sozinho a cada 5 s: no deploy a API volta em um ou dois minutos, e no
+ * celular o sinal volta sem ninguém tocar em nada. O botão é para quem não quer esperar.
+ */
+function SemConexao({ motivo, tentar }: { motivo: string; tentar: () => Promise<void> }) {
+  const [tentando, setTentando] = useState(false);
+  useEffect(() => {
+    const t = setInterval(() => void tentar(), 5000);
+    return () => clearInterval(t);
+  }, [tentar]);
+  return (
+    <main className="flex min-h-screen items-center justify-center p-6" id="sem-conexao">
+      <div className="max-w-[420px] text-center">
+        <h1 className="text-[20px] font-semibold">Sem conexão com o sistema agora</h1>
+        <p className="mt-2 text-[14px] text-suave">
+          Sua sessão continua aberta — assim que a conexão voltar, a tela abre sozinha.
+        </p>
+        <p className="mt-1 text-[12.5px] text-suave">{motivo}</p>
+        <button className="btn btn-primario mt-5" disabled={tentando} aria-busy={tentando}
+                onClick={async () => { setTentando(true); try { await tentar(); } finally { setTentando(false); } }}>
+          {tentando ? "…" : "Tentar de novo"}
+        </button>
+      </div>
+    </main>
   );
 }

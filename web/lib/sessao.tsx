@@ -2,12 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Eu, limparSessao, temSessao, unidadeAtual } from "./api";
+import { api, ErroApi, Eu, limparSessao, temSessao, unidadeAtual } from "./api";
 import { definirCasasQtd } from "./numeros";
 
 type Estado = {
   eu: Eu | null;
   carregando: boolean;
+  /** O `/auth/me` não respondeu por falta de rede ou de servidor — a sessão CONTINUA. */
+  semConexao: string | null;
   /**
    * A loja em que se está — a MESMA regra do servidor (`seguranca.unidade_atual`).
    *
@@ -27,6 +29,7 @@ type Estado = {
 const Ctx = createContext<Estado>({
   eu: null,
   carregando: true,
+  semConexao: null,
   unidade: 0,
   pode: () => false,
   recarregar: async () => {},
@@ -36,6 +39,7 @@ const Ctx = createContext<Estado>({
 export function ProvedorSessao({ children }: { children: React.ReactNode }) {
   const [eu, setEu] = useState<Eu | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [semConexao, setSemConexao] = useState<string | null>(null);
   const router = useRouter();
 
   const recarregar = useCallback(async () => {
@@ -52,11 +56,22 @@ export function ProvedorSessao({ children }: { children: React.ReactNode }) {
       // preferência depois faria a primeira pintura sair com o padrão e a loja
       // que pediu outra coisa veria o número mudar sozinho.
       definirCasasQtd(resposta.casas_decimais_qtd);
+      setSemConexao(null);
       setEu(resposta);
-    } catch {
-      limparSessao();
-      setEu(null);
-      router.replace("/login");
+    } catch (e) {
+      // 🔴 **Só sai da conta quem o SERVIDOR recusou** (v1.2.0, achado na análise de
+      // 30/10/2026). Antes, QUALQUER erro aqui apagava a sessão: celular sem sinal, o app
+      // aberto offline, a API trocando de contêiner no deploy, o banco com a conexão caída
+      // (aconteceu no ar em 26/10) ou uma navegação que cortava o pedido no meio — e a pessoa
+      // tinha de digitar a senha de novo sem ter feito nada. 401 (o `pedir` já tentou
+      // renovar) e 403 (usuário inativo) encerram; o resto é "sem conexão", e a sessão fica.
+      if (e instanceof ErroApi && (e.status === 401 || e.status === 403)) {
+        limparSessao();
+        setEu(null);
+        router.replace("/login");
+      } else {
+        setSemConexao(e instanceof ErroApi ? e.message : "Sem rede, ou o servidor não respondeu.");
+      }
     } finally {
       setCarregando(false);
     }
@@ -91,7 +106,7 @@ export function ProvedorSessao({ children }: { children: React.ReactNode }) {
   }, [eu]);
 
   return (
-    <Ctx.Provider value={{ eu, carregando, unidade, pode, recarregar, sair }}>
+    <Ctx.Provider value={{ eu, carregando, semConexao, unidade, pode, recarregar, sair }}>
       {children}
     </Ctx.Provider>
   );

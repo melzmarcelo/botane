@@ -235,3 +235,19 @@
   `web/scripts/verificar.mjs` (461, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
+
+## v1.2.0 — análise geral (30/10/2026)
+Relatório inteiro em [`docs/analise-v1.2.0.md`](../../analise-v1.2.0.md).
+- 🔑 **Pool que troca a conexão morta** (`database.py`): keepalive de TCP, `SELECT 1` na conexão
+  parada há mais de `TESTAR_APOS` (30 s), a quebrada sai do pool (`putconn(close=True)`) e o
+  rollback dela não levanta por cima do erro original. Nasceu do `/saude` em 500 no ar
+  ("SSL SYSCALL error: EOF detected", 26/10).
+- 🔴 **Dependência com falha conhecida é ponto de não retorno também**: o Next 16.3.8 tinha
+  execução remota de código sem login, e ninguém olhava. `npm audit --omit=dev` (web) e
+  `PYTHONUTF8=1 python -m pip_audit -r requirements.txt` (api) antes de promover. Next 16.4.3,
+  Pillow 13.0.0.
+- 🔴 **Sem conexão NÃO é sair da conta** (`lib/sessao.tsx`, `lib/api.ts`): só 401/403 do servidor
+  apagam a sessão. Antes, qualquer falha do `/auth/me` ao abrir (rede, deploy, banco) e qualquer
+  500/503 na renovação deslogavam. Tela `#sem-conexao` tenta sozinha a cada 5 s.
+  `verificar-sessao-sem-conexao.mjs`. ⚠️ Foi a varredura de telas que achou: trocar `isMobile` no
+  puppeteer recarrega a página no meio da navegação, o `/auth/me` era cortado e a sessão sumia.

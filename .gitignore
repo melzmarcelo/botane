@@ -64,3 +64,5 @@ api/tests/_foto_reserva_*.json
 
 # Registro das baterias que o promover.ps1 confere
 api/.bateria*.txt
+web/scripts/_capturas/
+web/scripts/_capturas*.log

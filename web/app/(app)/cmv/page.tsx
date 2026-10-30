@@ -459,6 +459,17 @@ export default function PaginaCmv() {
               passou por compra: nota não lançada, contagem a mais no inventário, ajuste de
               entrada ou o estoque inicial faltando. O food cost fica sem número até isso ser
               acertado.{" "}
+              {/* 🔑 v1.2.0 (análise de 30/10/2026): o aviso diz QUAL causa pesa, com o número.
+                  No ar, a semana de 26/10 deu −R$ 5,3 mil porque um inventário achou +R$ 6,7 mil:
+                  a conta está certa (devolve o consumo contado a mais antes), só não se explicava. */}
+              {a.ajustes > 0 && a.ajustes >= -a.cmv_real && (
+                <>
+                  Aqui a causa é a contagem: <b>{reais(a.ajustes)} entraram por ajuste de
+                  inventário</b> neste período — a contagem achou mais do que o sistema tinha (saídas
+                  antigas lançadas sem a entrada correspondente). O número devolve o consumo que os
+                  períodos anteriores contaram a mais.{" "}
+                </>
+              )}
               <button type="button" className="underline" onClick={() => setAba("memoria")}>
                 abrir a memória de cálculo
               </button>
