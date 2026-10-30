@@ -993,3 +993,28 @@ e os itens em linhas (a cesta NÃO é KIT — kit tem composição fixa).
   script de edição em ARQUIVO, ou Edit.
 - Cobertura: `smoke_item_de_escolha.py` (40) e `web/scripts/verificar-item-de-escolha.mjs` (19,
   na bateria do navegador).
+
+## Catálogo simples com abertura e cartões, e a aba Pré-visualização (1.1.155, 30/10/2026)
+
+🔑 **Pedido do dono (30/10/2026)**, estudo e decisões em
+[`docs/catalogo-simples-estudo.md`](../catalogo-simples-estudo.md): o catálogo que NÃO é Cardápio
+Vivo ganha abertura (imagem + mensagem) e cartões, sem vídeo; o que é só do Vivo some do editor; e
+uma aba Pré-visualização com as funcionalidades de teste.
+- **Site**: `_montar_cardapio` traz `cartoes` (`catalogo_cartoes.do_site`: os MESMOS cartões do
+  feed, sem vídeo — o de vídeo mostra a CAPA; vazio não vai), `destaque` e `esgotado` por item e o
+  `id` das seções (é por ele que o cartão se encaixa; não é id de produto). A abertura
+  (`id_categoria` nulo) é a `.capa-abertura` no topo; o cartão entra antes do `antes_do_item` ou
+  no fim da lista (`desenharLista`, a regra do feed). Esgotado fica marcado e sem "pedir".
+- ⚠️ **O pedido do site passou a recusar o esgotado** (`pedidos.montar_linhas`, 409 "esgotou") —
+  antes o esgotado só valia no feed. Decisão do dono: "não deveria ser pedido em lugar nenhum".
+- **Editor** (`vivo={capa.cardapio_vivo}` descendo da página): fora do Vivo somem o período da
+  atenção, a linha "No Cardápio Vivo:", a abertura/vídeo/horário da seção (`janela-secao`), o
+  "Pôr vídeo" do cartão, objetivo/margem e vídeo/restrições da gaveta. O DADO não some: virando
+  Vivo, volta tudo.
+- **Pré-visualização** (`aba-previa.tsx`): Vivo → `/c/previa/{id}` (já existia); simples →
+  `/portal?previa={id}` no iframe. O site em modo prévia (`PREVIA`) lê `GET /catalogos/{id}/previa-site`
+  (login + `X-Unidade` do localStorage — mesmo endereço; qualquer situação) e o "Enviar" chama
+  `POST /catalogos/{id}/pedido-teste` (`pedidos.testar`: as MESMAS `montar_linhas`, sem gravar).
+  Carrinho próprio (`botane.carrinho.previa`) e faixa "Pré-visualização" no topo.
+- Cobertura: `smoke_catalogo_previa.py` (17) e `web/scripts/verificar-catalogo-previa.mjs` (11, na
+  bateria do navegador).

@@ -1,4 +1,4 @@
-# Catálogo simples com abertura e cartões, e a aba Pré-visualização — estudo (30/10/2026)
+# Catálogo simples com abertura e cartões, e a aba Pré-visualização — estudo (30/10/2026) · ENTREGUE na 1.1.155
 
 🔑 **Pedido do dono (30/10/2026):** *"quando o catálogo é somente um catálogo, eu gostaria de ter
 uma imagem e mensagem de abertura assim como adicionar cartões, mas sem vídeo; isto seria

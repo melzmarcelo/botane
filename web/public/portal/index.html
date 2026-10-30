@@ -289,6 +289,29 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
   aspect-ratio: 16 / 10; background: var(--superficie-2);
 }
 .prato .foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 🔑 30/10/2026: destaque, esgotado, a capa de abertura e os cartões entre os pratos. */
+.prato .estrela { color: var(--erva); margin-right: 4px; }
+.prato .esgotado { display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--linha); color: var(--tinta-suave); font-size: 12.5px; }
+.capa-abertura { position: relative; border-radius: var(--raio); overflow: hidden;
+  background: var(--superficie-2); border: 1px solid var(--linha); }
+.capa-abertura img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; display: block; }
+.capa-abertura .texto { padding: 14px 16px; }
+.capa-abertura.com-foto .texto { position: absolute; inset: auto 0 0 0; color: #F4F0E5;
+  background: linear-gradient(transparent, rgba(20, 24, 18, .78)); padding-top: 40px; }
+.capa-abertura h3, .cartao-site h4 { margin: 0; font: 400 21px/1.2 var(--serif); }
+.capa-abertura p, .cartao-site p { margin: 6px 0 0; font-size: 14px; white-space: pre-line; }
+.cartao-site { margin: 12px 0; padding: 14px 16px; border-radius: var(--raio);
+  background: var(--superficie-2); border: 1px solid var(--linha); }
+.cartao-site img { width: calc(100% + 32px); margin: -14px -16px 12px; aspect-ratio: 16 / 9;
+  object-fit: cover; display: block; border-radius: var(--raio) var(--raio) 0 0; }
+.cartao-site h4 { font-size: 18px; }
+.cartao-site p { color: var(--tinta-suave); }
+.cartao-site .ver-prato { margin-top: 10px; background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--erva); font: 600 14px/1 Karla, sans-serif; text-decoration: underline; }
+/* A faixa da pré-visualização: nada daqui vai ao ar. */
+.faixa-previa { position: sticky; top: 0; z-index: 30; padding: 8px 14px; text-align: center;
+  background: #8A5A1E; color: #FFF7E8; font: 600 13px/1.3 Karla, sans-serif; }
 .pe-cardapio {
   margin-top: 18px; font: 400 12px/1.5 "DM Mono", monospace;
   color: var(--tinta-suave); text-align: center;
@@ -789,6 +812,11 @@ const WEB = LOCAL && location.port !== "3100" ? "http://127.0.0.1:3100" : locati
    (pedido do dono, 24/09/2026). O `<html data-loja>` ficou como reserva: é a
    loja usada se a lista de casas não responder. */
 let LOJA = document.documentElement.dataset.loja || "1";
+/* 🔑 **Pré-visualização** (30/10/2026, pedido do dono: "uma aba pré-visualização onde podemos ver
+   como este será exibido online, com as funcionalidades de teste"). `?previa={catálogo}` abre o
+   catálogo em QUALQUER situação, pela rota de dentro (com o login do sistema, que mora no
+   mesmo endereço: `/portal`), e o "enviar" vira um TESTE que o servidor confere e não grava. */
+const PREVIA = Number(new URLSearchParams(location.search).get("previa")) || null;
 /** A pessoa escolheu a casa nesta aba (ou só há uma, e não houve o que escolher). */
 let lojaEscolhida = false;
 /** As casas que recebem pelo site, para o seletor e o "trocar de loja". */
@@ -987,6 +1015,10 @@ const TRADUCOES = {
   "Adicionar": ["Add", "Hinzufügen"],
   // 142: o item montado (escolha uma opção; adicionais com mínimo e máximo)
   "Escolher": ["Choose", "Auswählen"],
+  "Esgotado": ["Sold out", "Ausverkauft"],
+  "Destaque": ["Featured", "Empfehlung"],
+  "Ver o prato": ["See the dish", "Zum Gericht"],
+  "Teste — nada foi gravado": ["Test — nothing was saved", "Test — nichts gespeichert"],
   "Adicionar outro ({n} no pedido)": ["Add another ({n} in order)", "Noch eins ({n} bestellt)"],
   "a partir de": ["from", "ab"],
   "Escolha uma opção": ["Choose one", "Bitte wählen"],
@@ -1598,6 +1630,14 @@ async function mostrarCardapio(nome, buscar) {
     return;
   }
   caixa.innerHTML = "";
+  // 🔑 30/10/2026: a ABERTURA (cartão sem seção) é a capa no topo, antes das seções.
+  (cardapio.cartoes || []).filter((k) => k.id_categoria === null).forEach((k) => {
+    const capa = document.createElement("div");
+    capa.className = "capa-abertura" + (k.foto ? " com-foto" : "");
+    capa.innerHTML = `${k.foto ? `<img src="${API}${esc(k.foto)}" alt="" loading="lazy">` : ""}
+      <div class="texto">${k.titulo ? `<h3>${esc(k.titulo)}</h3>` : ""}${k.texto ? `<p>${esc(k.texto)}</p>` : ""}</div>`;
+    caixa.appendChild(capa);
+  });
   cardapio.categorias.forEach((c, i) => {
     const bloco = document.createElement("div");
     bloco.className = "secao";
@@ -1624,9 +1664,10 @@ async function mostrarCardapio(nome, buscar) {
 function desenharPrato(item) {
   const el = document.createElement("div");
   el.className = "prato";
+  el.dataset.item = item.id;
   el.innerHTML = `
     <div class="linha1">
-      <span class="nome">${esc(item.nome)}</span>
+      <span class="nome">${item.destaque ? `<span class="estrela" title="${esc(t("Destaque"))}">★</span>` : ""}${esc(item.nome)}</span>
       ${item.preco !== null && item.preco !== undefined
         ? `<span class="preco">${item.escolhas ? t("a partir de") + " " : ""}${dinheiro(item.preco)}</span>` : ""}
     </div>
@@ -1635,6 +1676,11 @@ function desenharPrato(item) {
        alt="${esc(item.nome)}" loading="lazy"></div>` : ""}`;
   // 🔑 O carrinho só existe no cardápio que ACEITA pedido, e só para item com preço: sem
   // preço não há o que somar, e o servidor recusaria de qualquer jeito.
+  // 🔑 30/10/2026: esgotado continua no cardápio, marcado, e sem o botão de pedir.
+  if (item.esgotado) {
+    el.insertAdjacentHTML("beforeend", `<span class="esgotado">${esc(t("Esgotado"))}</span>`);
+    return el;
+  }
   if (podePedir() && item.preco !== null && item.preco !== undefined && item.id) {
     const caixa = document.createElement("div");
     caixa.className = "pedir";
@@ -1643,6 +1689,34 @@ function desenharPrato(item) {
     desenharControle(caixa, item);
   }
   return el;
+}
+
+/**
+ * Os pratos de uma lista e os CARTÕES dela (30/10/2026): cada cartão entra antes do prato que a
+ * casa escolheu; sem prato (ou o prato não está mais aqui), no fim — a mesma regra do feed.
+ */
+function desenharLista(caixa, itens, idCategoria, idSubcategoria) {
+  const cartoes = (cardapio.cartoes || []).filter((k) => k.id_categoria === idCategoria
+    && (k.id_subcategoria ?? null) === idSubcategoria);
+  const aqui = new Set(itens.map((i) => i.id));
+  const desenharCartao = (k) => {
+    const el = document.createElement("div");
+    el.className = "cartao-site";
+    el.innerHTML = `${k.foto ? `<img src="${API}${esc(k.foto)}" alt="" loading="lazy">` : ""}
+      ${k.titulo ? `<h4>${esc(k.titulo)}</h4>` : ""}${k.texto ? `<p>${esc(k.texto)}</p>` : ""}
+      ${k.id_item_link ? `<button type="button" class="ver-prato">${esc(t("Ver o prato"))} ›</button>` : ""}`;
+    const b = el.querySelector(".ver-prato");
+    if (b) b.addEventListener("click", () => {
+      const alvo = document.querySelector(`.prato[data-item="${k.id_item_link}"]`);
+      if (alvo) alvo.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    caixa.appendChild(el);
+  };
+  itens.forEach((i) => {
+    cartoes.filter((k) => k.antes_do_item === i.id).forEach(desenharCartao);
+    caixa.appendChild(desenharPrato(i));
+  });
+  cartoes.filter((k) => !k.antes_do_item || !aqui.has(k.antes_do_item)).forEach(desenharCartao);
 }
 
 function abrirSecao(indice) {
@@ -1682,7 +1756,7 @@ function abrirSecao(indice) {
   pratos.innerHTML = "";
   // 🔑 **Os itens soltos vêm ANTES das subcategorias**: eles são da categoria
   // inteira, e mostrá-los depois faria parecer que pertencem à última parte.
-  c.itens.forEach((i) => pratos.appendChild(desenharPrato(i)));
+  desenharLista(pratos, c.itens, c.id, null);
   c.subcategorias.forEach((sc, i) => {
     const grupo = document.createElement("div");
     grupo.className = "grupo";
@@ -1692,7 +1766,7 @@ function abrirSecao(indice) {
           ? `<img src="${API}${esc(sc.foto)}" alt="" loading="lazy">` : ""}</span>
         <span>${esc(sc.nome)}</span>
       </div>`;
-    sc.itens.forEach((it) => grupo.appendChild(desenharPrato(it)));
+    desenharLista(grupo, sc.itens, c.id, sc.id);
     pratos.appendChild(grupo);
   });
 
@@ -1716,7 +1790,8 @@ function abrirSecao(indice) {
  * ⚠️ **Nenhum preço sai daqui**: o site manda o item e a quantidade, e quem calcula o valor
  * é o servidor. O total desta tela é PRÉVIA.
  */
-const CARRINHO = "botane.carrinho";
+// ⚠️ Na prévia o carrinho é OUTRO: o de teste não pode virar o carrinho de verdade da aba.
+const CARRINHO = PREVIA ? "botane.carrinho.previa" : "botane.carrinho";
 /** { id_catalogo, chave, itens: { [chaveDaLinha]: {chave, id, escolha, adicionais, nome, preco, quantidade,
  *   observacao} } }
  * 🔑 142: a linha é o item + a escolha + os adicionais. Prato comum tem a chave = o id do item
@@ -2024,8 +2099,37 @@ function desenharMontar() {
   }));
 }
 
+/** Na prévia, "Enviar" é um TESTE: o servidor confere e responde o total, sem gravar. */
+async function enviarTeste() {
+  $("#enviar-pedido").disabled = true;
+  let r;
+  try {
+    r = await doSistema("POST", `/catalogos/${PREVIA}/pedido-teste`, {
+      modo: pedidoModo,
+      itens: Object.values(carrinho.itens).map((i) => ({
+        id_item: i.id, quantidade: i.quantidade, observacao: i.observacao || null, escolha: i.escolha || null,
+        adicionais: (i.adicionais || []).flatMap((a) => Array(vezes(a)).fill(a.id)) })),
+    });
+  } catch (e) {
+    $("#enviar-pedido").disabled = false;
+    return avisar("#aviso-pedido", e.mensagem || "O teste não passou.");
+  }
+  $("#enviar-pedido").disabled = false;
+  $("#t-pedido-pronto").textContent = "Teste do pedido";
+  $("#recibo-pedido").innerHTML = `<span>${esc(t("Teste — nada foi gravado"))}</span>
+    ${r.itens.map((i) => `<span>${i.quantidade}× ${esc(i.nome)}${i.adicionais && i.adicionais.length
+      ? ` (${esc(nomeDosAdicionais(i.adicionais))})` : ""} · R$ ${dinheiro(i.total)}</span>`).join("")}
+    <b>R$ ${dinheiro(r.total)}</b>`;
+  avisar("#aviso-pedido-pronto", r.abaixo_do_minimo
+    ? `O pedido mínimo é R$ ${dinheiro(r.pedido_minimo)}: o envio de verdade seria recusado.`
+    : r.message, false);
+  $("#zap-pedido").innerHTML = "";
+  ir("pedido-pronto");
+}
+
 async function enviarPedido() {
   if (!carrinho || !Object.keys(carrinho.itens).length) return abrirCarrinho();
+  if (PREVIA) return enviarTeste();
   // Quem ainda não se identificou passa pelo telefone e volta direto para o envio.
   if (!eu.identificado) return identificarPara("pedido");
   let para = null;
@@ -3087,7 +3191,45 @@ function carregarLoja() {
  * para `#cardapio` pelo endereço SEM carregar cardápio nenhum — o F5 mostrava a
  * tela vazia do HTML, ou a da categoria com o título "Categoria".
  */
+/** A rota de DENTRO do sistema, com o login guardado neste endereço (só na prévia). */
+async function doSistema(metodo, rota, corpo) {
+  let token = null, unidade = null;
+  try {
+    token = localStorage.getItem("botane.access");
+    unidade = localStorage.getItem("botane.unidade");
+  } catch { /* sem armazenamento */ }
+  const r = await fetch(`${API}${rota}`, {
+    method: metodo,
+    // A loja escolhida no sistema (`X-Unidade`), como as telas de dentro mandam.
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}),
+               ...(unidade ? { "X-Unidade": unidade } : {}) },
+    body: corpo === undefined ? undefined : JSON.stringify(corpo),
+  });
+  const dados = await r.json().catch(() => null);
+  if (!r.ok) {
+    const e = new Error(String(r.status));
+    e.mensagem = (dados && typeof dados.detail === "string" && dados.detail)
+      || (r.status === 401 ? "Entre no sistema para ver a pré-visualização." : "");
+    throw e;
+  }
+  return dados;
+}
+
+async function abrirPrevia() {
+  aberto = { id: PREVIA, secao: null };
+  const faixa = document.createElement("div");
+  faixa.className = "faixa-previa";
+  faixa.textContent = "Pré-visualização — pedidos aqui são só teste e nada é gravado.";
+  document.body.prepend(faixa);
+  await mostrarCardapio("Pré-visualização", async () => {
+    const r = await doSistema("GET", `/catalogos/${PREVIA}/previa-site${noIdioma()}`);
+    $("#t-cardapio").textContent = r.nome;
+    return r;
+  });
+}
+
 async function restaurarTela() {
+  if (PREVIA) return abrirPrevia();
   if (eu.identificado) destravarCatalogos();
   const tela = (location.hash || "").slice(1);
   if (tela === "cardapio" || tela === "secao") {

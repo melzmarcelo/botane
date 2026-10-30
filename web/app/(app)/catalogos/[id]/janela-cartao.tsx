@@ -34,6 +34,8 @@ type Props = {
   /** Todos os pratos do cardápio — o "Ver o prato" pode levar a qualquer um. */
   todosOsPratos: cat.ItemDoCatalogo[];
   podeEditar: boolean;
+  /** 30/10/2026: no catálogo simples o cartão vai ao site, e SEM vídeo. */
+  vivo?: boolean;
   /** De quando é a atenção mostrada ("últimos 30 dias"…), o que a aba escolheu. */
   periodo: string;
   aoFechar: () => void;
@@ -42,7 +44,7 @@ type Props = {
 
 const nomeDo = (i: cat.ItemDoCatalogo) => i.nome_catalogo || i.produto;
 
-export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todosOsPratos, podeEditar, periodo, aoFechar, aoMudar }: Props) {
+export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todosOsPratos, podeEditar, vivo = true, periodo, aoFechar, aoMudar }: Props) {
   const aviso = useAviso();
   const [atual, setAtual] = useState<Cartao | null>(abrindo.cartao);
   const [titulo, setTitulo] = useState(atual?.titulo ?? "");
@@ -129,8 +131,8 @@ export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todos
   const capa = atual?.video_capa_url ?? atual?.foto_url ?? null;
   return (
     <Modal
-      titulo={atual ? "Cartão do Cardápio Vivo" : abertura ? "Nova abertura do cardápio" : "Novo cartão"}
-      descricao={`${abrindo.onde}. Só no Cardápio Vivo — sem preço e sem botão de adicionar.`}
+      titulo={atual ? (vivo ? "Cartão do Cardápio Vivo" : "Cartão") : abertura ? "Nova abertura do cardápio" : "Novo cartão"}
+      descricao={`${abrindo.onde}. ${vivo ? "No Cardápio Vivo" : "No site"} — sem preço e sem botão de adicionar.`}
       aoFechar={aoFechar}
       largura="620px"
       rodape={
@@ -177,12 +179,12 @@ export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todos
         </Campo>
         <label className="flex items-center gap-2 text-[14px]">
           <input type="checkbox" checked={ativo} disabled={!podeEditar} onChange={(e) => setAtivo(e.target.checked)} />
-          Ligado — aparece no Cardápio Vivo
+          Ligado — aparece {vivo ? "no Cardápio Vivo" : "no site"}
         </label>
 
         {atual ? (
           <div>
-            <span className="rotulo-campo">Foto ou vídeo</span>
+            <span className="rotulo-campo">{vivo ? "Foto ou vídeo" : "Imagem"}</span>
             <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[13.5px]">
               <span className="flex h-16 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-linha bg-superficie2">
                 {capa
@@ -203,16 +205,19 @@ export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todos
                   <button type="button" className="btn btn-secundario" disabled={!!enviando} onClick={() => foto.current?.click()}>
                     {enviando === "foto" ? "Enviando…" : "Pôr foto"}
                   </button>
-                  <button type="button" className="btn btn-secundario" disabled={!!enviando} onClick={() => video.current?.click()}>
+                  {vivo && <button type="button" className="btn btn-secundario" disabled={!!enviando} onClick={() => video.current?.click()}>
                     {enviando === "video" ? "Convertendo…" : "Pôr vídeo"}
-                  </button>
+                  </button>}
                   {(atual.foto_url || atual.video_url) && (
                     <button type="button" className="link-acao link-acao-erro" onClick={() => void tirarMidia()}>tirar</button>
                   )}
                 </span>
               )}
             </div>
-            <p className="mt-1 text-[12.5px] text-suave">Vídeo de até 15 s, sem som. A foto troca o vídeo, e o vídeo a foto.</p>
+            <p className="mt-1 text-[12.5px] text-suave">
+              {vivo ? "Vídeo de até 15 s, sem som. A foto troca o vídeo, e o vídeo a foto."
+                : "Vídeo é do Cardápio Vivo: no site, um cartão com vídeo mostra a capa dele."}
+            </p>
             {(atual.vistas ?? 0) > 0 && (
               <p className="mt-3 text-[13px]">
                 Nos {periodo}: visto <b>{atual.vistas}×</b>, <b>{atual.segundos ?? 0} s</b> em média
@@ -221,7 +226,7 @@ export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todos
             )}
           </div>
         ) : (
-          <p className="text-[13px] text-suave">A foto ou o vídeo entram depois de criar o cartão.</p>
+          <p className="text-[13px] text-suave">{vivo ? "A foto ou o vídeo entram" : "A imagem entra"} depois de criar o cartão.</p>
         )}
 
         {/* 🔑 A correção da tradução (16/10/2026, pedido do dono): o Claude traduz ao gravar, e

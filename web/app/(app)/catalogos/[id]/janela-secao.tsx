@@ -33,6 +33,8 @@ export type Editando = {
 };
 
 type Props = {
+  /** 30/10/2026: fora do Cardápio Vivo, a abertura da seção, o vídeo e o horário somem. */
+  vivo?: boolean;
   editando: Editando;
   podeEditar: boolean;
   aoFechar: () => void;
@@ -42,7 +44,7 @@ type Props = {
   aoExcluir: () => Promise<void>;
 };
 
-export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalvar, aoMudar, aoExcluir }: Props) {
+export default function JanelaSecao({ editando: e, podeEditar, vivo = true, aoFechar, aoSalvar, aoMudar, aoExcluir }: Props) {
   const aviso = useAviso();
   const nomeTipo = e.tipo === "categoria" ? "categoria" : "subcategoria";
   const [nome, setNome] = useState(e.secao?.nome ?? "");
@@ -218,6 +220,7 @@ export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalva
               </p>
             </div>
 
+            {vivo && <>
             <label className="flex items-start gap-2 text-[14px]">
               <input type="checkbox" className="mt-1" id="secao-abertura" checked={abertura} disabled={!podeEditar}
                      onChange={(ev) => setAbertura(ev.target.checked)} />
@@ -256,6 +259,7 @@ export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalva
 
             <ExibicaoDaSecao key={`${s.dias}${s.hora_de}${s.hora_ate}${s.horario_especial}`}
                              tipo={e.tipo} secao={s} podeEditar={podeEditar} aoMudar={aoMudar} />
+            </>}
 
             {podeEditar && (
               <p className="text-[13.5px]">

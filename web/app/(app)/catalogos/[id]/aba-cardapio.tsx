@@ -32,8 +32,11 @@ import { BotaoSecao, PainelFaltas, faltasDoCartao, totalTraduzir, type FaltaTrad
 
 type Selecao = { tipo: cat.TipoDeSecao; id: number };
 
-export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
+export default function AbaCardapio({ idCatalogo, podeEditar, vivo = true, aoIdiomas }: {
   idCatalogo: number; podeEditar: boolean; aoIdiomas?: () => void;
+  /** 🔑 30/10/2026: é Cardápio Vivo? Senão, o que é só do feed (vídeo, horário, atenção,
+   *  objetivo/margem) some do editor — pedido do dono. */
+  vivo?: boolean;
 }) {
   const aviso = useAviso();
   const { pode } = useSessao();
@@ -234,7 +237,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
 
   return (
     <div className="flex flex-col gap-4">
-    <AberturaDoCardapio cartoes={cartoes} podeEditar={podeEditar}
+    <AberturaDoCardapio cartoes={cartoes} podeEditar={podeEditar} vivo={vivo}
                         dias={diasAtencao} aoDias={setDiasAtencao} resumido={listaCartoes?.resumido}
                         aoNovo={() => setAbrindoCartao({ cartao: null, id_categoria: null, id_subcategoria: null, onde: "Antes do primeiro prato" })}
                         aoAbrir={(c) => setAbrindoCartao({ cartao: c, id_categoria: null, id_subcategoria: null, onde: "Antes do primeiro prato" })} />
@@ -288,7 +291,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
             {a.sub && <p className="rotulo">{a.categoria.nome}</p>}
             <h2 className="text-[18px] font-bold tracking-tight">{secao.nome}</h2>
             {secao.descricao && <p className="mt-0.5 text-[13.5px] text-suave">{secao.descricao}</p>}
-            <p className="mt-1 text-[12.5px] text-suave">
+            {vivo && <p className="mt-1 text-[12.5px] text-suave">
               No Cardápio Vivo: <span className="text-tinta">{resumoDaExibicao(secao)}</span>
               {secao.video_url ? " · abre com vídeo" : secao.foto_url ? " · abre com a foto" : " · sem foto, sem abertura"}
               {(() => {
@@ -296,7 +299,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
                 const t = atencaoDaAbertura(listaCartoes?.aberturas, a.categoria.id, a.sub?.id ?? null);
                 return t && <span data-abertura-atencao> · {t} nos {NOME_DO_PERIODO[diasAtencao]}</span>;
               })()}
-            </p>
+            </p>}
           </div>
           <span className="flex flex-wrap items-center gap-1.5">
             {podeEditar && (
@@ -376,7 +379,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
       )}
 
       {editandoAgora && (
-        <JanelaSecao editando={editandoAgora} podeEditar={podeEditar} aoFechar={() => setEditando(null)}
+        <JanelaSecao editando={editandoAgora} podeEditar={podeEditar} vivo={vivo} aoFechar={() => setEditando(null)}
                      aoSalvar={async (id) => { await recarregar(); setSel({ tipo: editandoAgora.tipo, id }); }}
                      aoMudar={recarregar}
                      aoExcluir={async () => { setSel(null); await recarregar(); }} />
@@ -392,7 +395,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
                        aoCriar={async (id) => { await recarregar(); setGaveta(id); }} />
       )}
       {abrindoCartao && (
-        <JanelaCartao idCatalogo={idCatalogo} abrindo={abrindoCartao} podeEditar={podeEditar}
+        <JanelaCartao idCatalogo={idCatalogo} abrindo={abrindoCartao} podeEditar={podeEditar} vivo={vivo}
                       pratosDaLista={abrindoCartao.id_categoria === null ? []
                         : lugares.find((l) => l.id_categoria === abrindoCartao.id_categoria
                             && l.id_subcategoria === abrindoCartao.id_subcategoria)?.itens ?? []}
@@ -405,7 +408,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
       )}
       {naGaveta && (
         <GavetaDoPrato key={naGaveta.item.id} item={naGaveta.item} onde={naGaveta.onde} lugares={lugares}
-                       podeEditar={podeEditar} podeProduto={podeProduto}
+                       podeEditar={podeEditar} podeProduto={podeProduto} vivo={vivo}
                        aoMudar={recarregar} aoFechar={() => setGaveta(null)} />
       )}
     </div>

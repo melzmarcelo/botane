@@ -11,6 +11,7 @@ import * as cat from "@/lib/catalogos";
 import AbaArquivo from "./aba-arquivo";
 import AbaCardapio from "./aba-cardapio";
 import AbaPublicacao from "./aba-publicacao";
+import AbaPrevia from "./aba-previa";
 import PedidosDoCatalogo from "./pedidos";
 import { TraducoesDoCatalogo } from "./traducoes-do-catalogo";
 
@@ -35,6 +36,8 @@ const ABAS = [
   { v: "publicacao", r: "Publicação" },
   { v: "pedidos", r: "Pedidos" },
   { v: "idiomas", r: "Idiomas" },
+  // 🔑 30/10/2026 (pedido do dono): o que vai ao ar, com pedido de teste.
+  { v: "previa", r: "Pré-visualização" },
 ];
 /** ⚠️ O catálogo de PDF não tem seções, pedidos nem tradução: só o arquivo e a capa. */
 const ABAS_PDF = [
@@ -130,10 +133,13 @@ export default function EditorDoCatalogo() {
         <PedidosDoCatalogo idCatalogo={idCatalogo} podeEditar={podeEditar} />
       ) : aba === "idiomas" ? (
         <TraducoesDoCatalogo idCatalogo={idCatalogo} podeEditar={podeEditar} />
+      ) : aba === "previa" ? (
+        <AbaPrevia capa={capa} />
       ) : aba === "arquivo" ? (
         <AbaArquivo capa={capa} podeEditar={podeEditar} aoMudar={recarregarCapa} />
       ) : (
-        <AbaCardapio idCatalogo={idCatalogo} podeEditar={podeEditar} aoIdiomas={() => setAba("idiomas")} />
+        <AbaCardapio idCatalogo={idCatalogo} podeEditar={podeEditar} vivo={capa.cardapio_vivo}
+                     aoIdiomas={() => setAba("idiomas")} />
       )}
     </div>
   );

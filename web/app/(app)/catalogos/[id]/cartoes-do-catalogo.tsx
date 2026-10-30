@@ -112,34 +112,37 @@ function PratoComCartoes({ antes, aoAbrirCartao, children }: { antes: Cartao[]; 
 }
 
 /** A abertura do cardápio: os cartões que vêm antes do primeiro prato, acima das seções. */
-export function AberturaDoCardapio({ cartoes, podeEditar, aoNovo, aoAbrir, dias, aoDias, resumido }: {
+export function AberturaDoCardapio({ cartoes, podeEditar, vivo = true, aoNovo, aoAbrir, dias, aoDias, resumido }: {
   cartoes: Cartao[]; podeEditar: boolean; aoNovo: () => void; aoAbrir: (c: Cartao) => void;
   dias: PeriodoDaAtencao; aoDias: (d: PeriodoDaAtencao) => void; resumido?: ListaDeCartoes["resumido"];
+  /** 30/10/2026: no catálogo simples a abertura vai ao SITE (capa no topo), sem vídeo nem atenção. */
+  vivo?: boolean;
 }) {
   const abertura = cartoes.filter((c) => c.id_categoria === null);
   return (
     <section className="cartao px-5 py-4" aria-label="abertura do cardápio">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-bold">Abertura no Cardápio Vivo</h2>
+          <h2 className="text-[15px] font-bold">{vivo ? "Abertura no Cardápio Vivo" : "Abertura"}</h2>
           <p className="text-[13px] text-suave">
-            Um vídeo, uma foto ou um texto que apresenta o cardápio, antes do primeiro prato. As seções com foto
-            ou vídeo já abrem sozinhas com o nome e a descrição delas. Só no Cardápio Vivo — o site e o PDF não mostram.
+            {vivo
+              ? "Um vídeo, uma foto ou um texto que apresenta o cardápio, antes do primeiro prato. As seções com foto ou vídeo já abrem sozinhas com o nome e a descrição delas."
+              : "Uma imagem e uma mensagem que apresentam o cardápio: no site, aparecem como capa no topo, antes das seções. Os cartões entre os pratos também aparecem no site. Vídeo é do Cardápio Vivo (ligue em Publicação)."}
           </p>
         </div>
         <span className="flex flex-wrap items-center gap-2">
-          {/* 🔑 1.1.111: de quando é a atenção que os cartões e as seções mostram. */}
-          <label className="flex items-center gap-1.5 text-[13px] text-suave">
+          {/* 🔑 1.1.111: de quando é a atenção que os cartões e as seções mostram (só no Vivo). */}
+          {vivo && <label className="flex items-center gap-1.5 text-[13px] text-suave">
             Atenção dos
             <select id="cartoes-periodo" className="campo py-1 text-[13px]" value={dias}
                     onChange={(e) => aoDias(Number(e.target.value) as PeriodoDaAtencao)}>
               {([30, 90, 365] as const).map((d) => <option key={d} value={d}>{NOME_DO_PERIODO[d]}</option>)}
             </select>
-          </label>
+          </label>}
           {podeEditar && <button type="button" className="btn btn-secundario" onClick={aoNovo}>+ abertura</button>}
         </span>
       </div>
-      {resumido && <p id="cartoes-resumido" className="mt-2 text-[12.5px] text-suave">{resumido.aviso}</p>}
+      {vivo && resumido && <p id="cartoes-resumido" className="mt-2 text-[12.5px] text-suave">{resumido.aviso}</p>}
       {abertura.length > 0 && (
         <ul className="mt-3 flex flex-col gap-px bg-linha">
           {abertura.map((c) => <LinhaDoCartao key={c.id} cartao={c} aoAbrir={() => aoAbrir(c)} />)}

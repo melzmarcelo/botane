@@ -37,11 +37,13 @@ type Props = {
   onde: string;
   podeEditar: boolean;
   podeProduto: boolean;
+  /** 30/10/2026: fora do Cardápio Vivo, objetivo, margem, vídeo e restrições somem. */
+  vivo?: boolean;
   aoMudar: () => Promise<void>;
   aoFechar: () => void;
 };
 
-export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, podeProduto, aoMudar, aoFechar }: Props) {
+export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, podeProduto, vivo = true, aoMudar, aoFechar }: Props) {
   const aviso = useAviso();
   const falhou = (e: unknown, padrao: string) => aviso.erro(e instanceof Error ? e.message : padrao);
   const [nome, setNome] = useState(i.nome_catalogo ?? "");
@@ -193,8 +195,8 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
               </select>
             )}
           </div>
-          {/* 🔑 Fase 2 (115): o painel Atenção × Vendas usa os dois para priorizar. */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* 🔑 Fase 2 (115): o painel Atenção × Vendas usa os dois para priorizar (só no Vivo). */}
+          {vivo && <div className="grid gap-3 sm:grid-cols-2">
             <Campo rotulo="Objetivo">
               <select className="campo" aria-label="Objetivo de negócio" disabled={!podeEditar}
                       value={i.objetivo ?? ""} onChange={(e) => void marcar({ objetivo: e.target.value })}>
@@ -207,7 +209,7 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
                 {MARGENS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
               </select>
             </Campo>
-          </div>
+          </div>}
         </section>
 
         {escolha && <SecaoDaEscolha key={i.id} item={i} podeEditar={podeEditar} podeProduto={podeProduto} aoMudar={aoMudar} />}
@@ -266,7 +268,7 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
             </div>
           )}
 
-          {podeProduto && <VideoERestricoes idProduto={i.id_produto} aoMudar={aoMudar} />}
+          {podeProduto && vivo && <VideoERestricoes idProduto={i.id_produto} aoMudar={aoMudar} />}
           <p className="text-[13px] text-suave">
             Adicionais e opções (ponto da carne, acompanhamentos) ficam no{" "}
             <Link href={`/produtos/${i.id_produto}`} className="link-registro">cadastro do produto</Link>, aba Catálogo.
