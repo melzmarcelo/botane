@@ -94,6 +94,10 @@ try {
   checar("a lista escolhida vai para a URL", p.url().includes("lista=organizadores"), p.url());
   await p.evaluate(() => [...document.querySelectorAll("main button")].find((b) => b.textContent.includes("adormecidos para convidar"))?.click());
   await esperar(500);
+  // ⚠️ "Sumiu há mais tempo": o cenário sumiu há 400 dias e, com a base que já tem clientes
+  // de verdade (a importação do LeadsFood, 30/10/2026), na ordem padrão ele cai na ÚLTIMA página.
+  await p.select("main select", "mais");
+  await esperar(500);
   ls = await linhas(p);
   checar("o adormecido aparece", !!linhaDe(ls, "Dora Roteiro"));
   const parou = linhaDe(ls, "Paula Roteiro");
