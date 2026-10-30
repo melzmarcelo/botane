@@ -1438,6 +1438,9 @@ async function carregarCasa() {
   $("#rodape").textContent =
     [casa.endereco, casa.cidade && `${casa.cidade}/${casa.uf}`].filter(Boolean).join(" · ");
 
+  // 🔑 **Reservas visíveis no site** (migração 144, pedido do dono, 30/10/2026): desmarcado
+  // em Reservas ▸ Configurações, o botão some. ⚠️ Só o botão: a agenda do balcão continua.
+  $("#ir-reservar").hidden = casa.reservas_no_site === false;
   montarContato();
   montarPortaDeFidelidade();
   montarPortaDeContato();
@@ -1446,7 +1449,9 @@ async function carregarCasa() {
 /* 🔑 **A fidelidade fica logo ACIMA do contato** (pedido do dono, 24/09/2026). Só
    aparece com o programa ligado nesta loja — a API manda `fidelidade` nulo senão. */
 function montarPortaDeFidelidade() {
-  if (!casa.fidelidade) return;
+  // 🔑 144: "Mostrar Fidelidade no site" desmarcado esconde o item. ⚠️ O QR da mesa continua
+  // abrindo a fidelidade (o check-in) — esconder não é desligar o programa.
+  if (!casa.fidelidade || casa.fidelidade_no_site === false) return;
   const b = document.createElement("button");
   b.className = "item";
   b.id = "ir-fidelidade";
@@ -3310,6 +3315,8 @@ async function restaurarTela() {
     return ir("inicio");
   }
   if (tela === "reserva" || tela === "quem") {
+    // 144: com as reservas fora do site, um F5 numa tela antiga volta ao início.
+    if (casa && casa.reservas_no_site === false) return ir("inicio");
     if (!reservaOnline.aceita) return abrirReserva();
     destino = "reserva";
     if (eu.identificado) return seguirIdentificado();

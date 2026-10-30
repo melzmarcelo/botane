@@ -186,7 +186,20 @@ def casa(id_unidade: int) -> dict:
             # ⚠️ Sem o token — ele é da MESA, e vem só pelo QR.
             "fidelidade": (fidelidade.regras(fidelidade.config(cur))
                            if fidelidade.ligada(cur, id_unidade) else None),
+            # 🔑 **O que o site MOSTRA** (migração 144, pedido do dono, 30/10/2026): sem a
+            # marca, o site não desenha o botão. ⚠️ Esconder não desliga: o QR da mesa
+            # (check-in) continua abrindo a fidelidade, e a agenda do balcão continua.
+            **_botoes_do_site(cur, id_unidade),
         }
+
+
+def _botoes_do_site(cur, id_unidade: int) -> dict:
+    cur.execute(
+        """SELECT reservas_no_site, fidelidade_no_site FROM reserva_config
+            WHERE id_unidade = %s""", (id_unidade,))
+    r = cur.fetchone()
+    return {"reservas_no_site": bool(r["reservas_no_site"]) if r else True,
+            "fidelidade_no_site": bool(r["fidelidade_no_site"]) if r else True}
 
 
 def _marca_da_casa(cur, id_unidade: int, logo_da_empresa: str | None) -> dict:

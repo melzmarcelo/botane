@@ -57,6 +57,9 @@ type Config = {
   cadastro_completo: boolean;
   /** A loja participa da fidelidade (migração 091). */
   fidelidade_ligada: boolean;
+  /** 🔑 144: o site mostra o botão de reservar / o item Fidelidade. Esconder não desliga. */
+  reservas_no_site: boolean;
+  fidelidade_no_site: boolean;
   /** 🔑 As mensagens que o site do cliente abre no WhatsApp (migração 081).
    *  Nulas = usa o padrão da casa. */
   whatsapp_texto: string | null;
@@ -160,6 +163,8 @@ export default function ConfiguracoesDeReservas() {
         antecedencia_max_dias: Number(cfg.antecedencia_max_dias),
         cadastro_completo: cfg.cadastro_completo,
         fidelidade_ligada: cfg.fidelidade_ligada,
+        reservas_no_site: cfg.reservas_no_site,
+        fidelidade_no_site: cfg.fidelidade_no_site,
         whatsapp_texto: cfg.whatsapp_texto,
         whatsapp_texto_reserva: cfg.whatsapp_texto_reserva,
         horarios: cfg.horarios,
@@ -412,6 +417,26 @@ export default function ConfiguracoesDeReservas() {
             </select>
           </Campo>
 
+          {/* 🔑 **Pedido do dono (30/10/2026):** "criar uma opção se as reservas vão estar
+              visíveis no site … caso desmarcado, não aparecerá o botão desta ação". */}
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-1"
+              id="reservas-no-site"
+              disabled={somenteLeitura}
+              checked={cfg.reservas_no_site}
+              onChange={(e) => mudar("reservas_no_site", e.target.checked)}
+            />
+            <span className="text-[14px]">
+              Mostrar Reservas no site
+              <span className="block text-[13px] text-suave">
+                Desmarcado, o site não mostra o botão “Reserve sua Mesa”. As reservas continuam na
+                agenda do balcão.
+              </span>
+            </span>
+          </label>
+
           <label className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -470,6 +495,24 @@ export default function ConfiguracoesDeReservas() {
                 Ligado, o site mostra o item Fidelidade (visitas e quanto falta para o prêmio) e
                 o QR code da mesa passa a valer nesta loja. As regras do cartão ficam em
                 Fidelidade → Configuração.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-1"
+              id="fidelidade-no-site"
+              disabled={somenteLeitura || !cfg.fidelidade_ligada}
+              checked={cfg.fidelidade_ligada && cfg.fidelidade_no_site}
+              onChange={(e) => mudar("fidelidade_no_site", e.target.checked)}
+            />
+            <span className="text-[14px]">
+              Mostrar Fidelidade no site
+              <span className="block text-[13px] text-suave">
+                Desmarcado, o site não mostra o item Fidelidade. O QR code da mesa continua contando
+                as visitas. Só vale com “Utiliza Fidelidade” ligado.
               </span>
             </span>
           </label>

@@ -1303,3 +1303,19 @@ informa como vamos usar — fica configurável para outros clientes."* Estudo:
 - Tabelas: `whatsapp_mensagens` em `OPERACAO`, `whatsapp_avisos` em `PRESERVADAS`.
 - Cobertura: `smoke_whatsapp.py` (43).
 - ⏳ Falta: a loja fazer a parte dela na Meta (passo a passo na própria aba) e o 1º envio real.
+
+## Reservas e Fidelidade visíveis no site (migração 144, 1.1.157, 30/10/2026)
+🔑 **Pedido do dono:** *"nas configurações das reservas, criar uma opção se as reservas vão estar
+visíveis no site. Fazer isto também para a Fidelidade. Caso desmarcado, não aparecerá o botão
+desta ação."*
+- `reserva_config.reservas_no_site` e `fidelidade_no_site`, **padrão true** (o site no ar não muda).
+  No modelo `ConfiguracaoReservas` com padrão true: cliente antigo que não manda as marcas deixa
+  as duas visíveis.
+- `/publico/{u}/casa` devolve as duas (`_botoes_do_site`). O site esconde `#ir-reservar` e não
+  monta `#ir-fidelidade`; F5 numa tela de reserva com as reservas fora do site volta ao início.
+- ⚠️ **Esconder não é desligar.** `casa.fidelidade` continua vindo (o QR da mesa abre o check-in e
+  conta a visita) e as rotas de reserva continuam respondendo — é só o botão. Quem desliga de
+  verdade é "Utiliza Fidelidade" e "Aceitar reserva pelo site".
+- Tela: Reservas ▸ Configurações, as duas caixas (`#reservas-no-site`, `#fidelidade-no-site`; a
+  da fidelidade só vale com "Utiliza Fidelidade").
+- Cobertura: `smoke_portal_no_site.py` (10) e `verificar-portal-no-site.mjs` (5).

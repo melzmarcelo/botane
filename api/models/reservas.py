@@ -291,6 +291,10 @@ class ConfiguracaoReservas(BaseModel):
     # 24/09/2026: *"na configuração do Portal do Cliente criar a flag se utiliza
     # Fidelidade"*). Ligada, o site mostra o cartão e o QR da mesa vale aqui.
     fidelidade_ligada: bool = False
+    # 🔑 **Visíveis no site** (migração 144, pedido do dono, 30/10/2026): desmarcado, o site não
+    # mostra o botão. ⚠️ Esconder não desliga: a agenda e o QR da mesa continuam valendo.
+    reservas_no_site: bool = True
+    fidelidade_no_site: bool = True
     # 🔑 **O texto da mensagem de WhatsApp, da CASA** (migração 081, pedido do
     # dono, 21/09/2026: *"em configurações da reserva, colocar o texto padrão
     # configurável para o whatsapp"*). Estava escrito no site, e texto de
