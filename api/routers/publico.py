@@ -35,6 +35,7 @@ from seguranca import ip_do_cliente
 from models.catalogos import ORIGEM_PRODUTOS
 from models.reservas import CancelamentoDoSite, ClienteDoSite, IdentificacaoDoSite, ReservaCreate, ReservaDoSite, TelefoneDoSite
 from services import reserva_clientes as clientes
+from services import catalogo_cartoes
 from services import traducao
 from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
@@ -574,6 +575,9 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
                   s.descricao AS subcategoria_descricao,
                   s.foto_url AS subcategoria_foto, s.ordem AS subcategoria_ordem,
                   i.id AS id_item, i.ordem AS item_ordem,
+                  -- 🔑 30/10/2026: destaque e esgotado valem também no site (decisão do dono).
+                  i.destaque,
+                  (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado,
                   -- 🔑 **O nome de vitrine ganha do nome do cadastro**
                   -- (migração 085): o cadastro normaliza em CAIXA ALTA, e o
                   -- cardápio do cliente não é lugar de gritar. Nulo cai no
@@ -624,7 +628,9 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
     for l in linhas:
         cat = por_categoria.get(l["id_categoria"])
         if cat is None:
-            cat = {"nome": l["categoria"], "descricao": l["categoria_descricao"],
+            # `id` da seção (30/10/2026): é por ele que o site encaixa os cartões. Não é id de
+            # produto — a regra "nada de id de produto" continua valendo.
+            cat = {"id": l["id_categoria"], "nome": l["categoria"], "descricao": l["categoria_descricao"],
                    "foto": l["categoria_foto"], "subcategorias": [], "itens": []}
             por_categoria[l["id_categoria"]] = cat
             categorias.append(cat)
@@ -640,6 +646,7 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
             # FastAPI resolver mandaria string para a tela.
             "preco": float(l["preco"]) if l["preco"] is not None else None,
             "adicionais": opcoes[l["id_item"]]["adicionais"],
+            "destaque": l["destaque"], "esgotado": l["esgotado"],
             # 🔑 142: nulo = prato comum; lista = o cliente escolhe UMA (o produto que vai).
             "escolhas": None,
         }
@@ -656,7 +663,7 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
             continue
         sub = por_subcategoria.get(l["id_subcategoria"])
         if sub is None:
-            sub = {"nome": l["subcategoria"],
+            sub = {"id": l["id_subcategoria"], "nome": l["subcategoria"],
                    "descricao": l["subcategoria_descricao"],
                    "foto": l["subcategoria_foto"], "itens": []}
             por_subcategoria[l["id_subcategoria"]] = sub
@@ -664,6 +671,8 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
         sub["itens"].append(item)
 
     return {"nome": nome, "categorias": categorias,
+            # 🔑 30/10/2026: a abertura (cartão sem seção) e os cartões entre os pratos, sem vídeo.
+            "cartoes": catalogo_cartoes.do_site(cur, id_catalogo, idioma),
             # 🔑 Nulo quando o catálogo não aceita pedido: o site só desenha o carrinho se vier.
             "pedidos": pedidos_servico.config_publica(cur, id_unidade, id_catalogo)}
 

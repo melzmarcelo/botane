@@ -61,6 +61,12 @@ class PedidoDoSite(BaseModel):
         return (v or "").strip() or None
 
 
+class PedidoDeTeste(BaseModel):
+    """O carrinho da PRÉ-VISUALIZAÇÃO (30/10/2026): o servidor confere e não grava."""
+    itens: list[ItemDoCarrinho] = Field(min_length=1, max_length=60)
+    modo: Modo | None = None
+
+
 class PedidoDoCliente(BaseModel):
     """ "Meus pedidos" e o cancelar pelo site: telefone (e nome, se vier) no corpo."""
     telefone: str = Field(max_length=30)

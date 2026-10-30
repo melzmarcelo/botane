@@ -278,6 +278,27 @@ def remover_video_secao(cur, id_unidade: int, tipo: str, id_secao: int) -> dict:
 # O que o feed recebe
 # ---------------------------------------------------------------------------
 
+def do_site(cur, id_catalogo: int, idioma: str | None) -> list[dict]:
+    """Os cartões no SITE (catálogo simples): foto, título e texto — SEM vídeo.
+
+    🔑 Pedido do dono (30/10/2026): *"quando o catálogo é somente um catálogo, eu gostaria de ter
+    uma imagem e mensagem de abertura assim como adicionar cartões, mas sem vídeo"*. São os
+    MESMOS cartões do feed; o vídeo é do Cardápio Vivo. Cartão com vídeo mostra a CAPA dele
+    como foto; o que só tinha o vídeo (sem capa, sem texto) não aparece.
+    `id_categoria` nulo = a abertura do cardápio (a capa no topo do site).
+    """
+    saida = []
+    for c in do_feed(cur, id_catalogo, idioma):
+        m = c["midia"]
+        foto = m.get("foto") if m["tipo"] == "FOTO" else m.get("capa") if m["tipo"] == "VIDEO" else None
+        if not (foto or (c["titulo"] or "").strip() or (c["texto"] or "").strip()):
+            continue
+        saida.append({"id": c["id"], "id_categoria": c["id_categoria"], "id_subcategoria": c["id_subcategoria"],
+                      "antes_do_item": c["antes_do_item"], "id_item_link": c["id_item_link"],
+                      "titulo": c["titulo"], "texto": c["texto"], "foto": foto})
+    return saida
+
+
 def do_feed(cur, id_catalogo: int, idioma: str | None) -> list[dict]:
     """Os cartões ATIVOS e com conteúdo, traduzidos e com a mídia resolvida.
 

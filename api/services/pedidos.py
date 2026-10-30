@@ -193,7 +193,8 @@ def _itens_do_catalogo(cur, id_unidade: int, id_catalogo: int, ids: list[int] | 
         f"""SELECT i.id AS id_item, i.tipo, p.id AS id_produto, coalesce({_NOME}, i.nome) AS nome,
                    -- 142: o item de ESCOLHA vale como ativo e não tem preço próprio — o preço
                    -- é o da opção escolhida (`item_do_pedido.resolver`).
-                   coalesce(p.ativo, true) AS ativo, {_PRECO} AS preco
+                   coalesce(p.ativo, true) AS ativo, {_PRECO} AS preco,
+                   (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado
               FROM catalogo_itens i
               JOIN catalogo_categorias g ON g.id = i.id_categoria
               LEFT JOIN produtos p ON p.id = i.id_produto
@@ -257,6 +258,57 @@ def _proximo_numero(cur, id_unidade: int) -> int:
     return cur.fetchone()["n"]
 
 
+def montar_linhas(cur, id_unidade: int, id_catalogo: int, itens: list[dict]) -> list[dict]:
+    """As linhas do pedido a partir do carrinho — preço, escolha e adicionais do SERVIDOR.
+
+    ⚠️ Uma função só para o envio de verdade e para o TESTE da pré-visualização (30/10/2026):
+    o teste que confere por outra conta deixaria de pegar justamente o que o envio recusa.
+    """
+    ids = [int(i["id_item"]) for i in itens]
+    catalogo = _itens_do_catalogo(cur, id_unidade, id_catalogo, ids)
+    _com_opcoes(cur, id_unidade, catalogo)
+    linhas = []
+    for n, i in enumerate(itens):
+        c = catalogo.get(int(i["id_item"]))
+        if not c or not c["ativo"]:
+            raise HTTPException(status_code=409,
+                                detail="Um item do carrinho saiu do cardápio. Atualize a página.")
+        # 🔑 30/10/2026: o esgotado vale no site também (decisão do dono).
+        if c["esgotado"]:
+            raise HTTPException(status_code=409, detail=f"{c['nome']} esgotou.")
+        # 🔑 142: a escolha e os adicionais, pela MESMA regra da mesa (`item_do_pedido`).
+        linha = item_do_pedido.resolver(c, i.get("escolha"), [int(x) for x in i.get("adicionais") or []])
+        qtd = dec(i["quantidade"])
+        linhas.append({**linha, "quantidade": qtd,
+                       "total": (qtd * linha["preco_unitario"]).quantize(_CENTAVO),
+                       "observacao": (i.get("observacao") or "").strip() or None, "ordem": n})
+    return linhas
+
+
+def testar(cur, id_unidade: int, id_catalogo: int, dados: dict) -> dict:
+    """O pedido de TESTE da pré-visualização: confere tudo e NÃO grava.
+
+    🔑 Pedido do dono (30/10/2026): *"uma aba pré-visualização ... com as funcionalidades de
+    teste"*. Mesmas linhas do envio (`montar_linhas`) e a mesma taxa e mínimo; sem cliente,
+    sem número, sem chave — nada entra no painel.
+    """
+    cfg = config(cur, id_catalogo)
+    linhas = montar_linhas(cur, id_unidade, id_catalogo, dados["itens"])
+    modo = dados.get("modo") or "RETIRADA"
+    taxa = dec(cfg["taxa_entrega"]) if modo == "ENTREGA" else Decimal(0)
+    tot = _totais(linhas, taxa)
+    return {
+        "teste": True, "aceita": cfg["aceita"],
+        "itens": [{"nome": l["nome"], "quantidade": _num(l["quantidade"]),
+                   "preco_unitario": _num(l["preco_unitario"]), "total": _num(l["total"]),
+                   "adicionais": l["adicionais"]} for l in linhas],
+        "subtotal": _num(tot["subtotal"]), "taxa_entrega": _num(taxa), "total": _num(tot["total"]),
+        "abaixo_do_minimo": tot["subtotal"] < dec(cfg["pedido_minimo"]),
+        "pedido_minimo": cfg["pedido_minimo"],
+        "message": "Teste: o servidor conferiu o pedido — nada foi gravado.",
+    }
+
+
 def enviar(cur, id_unidade: int, id_catalogo: int, cliente: dict, dados: dict) -> dict:
     """Grava o pedido que o site mandou. Devolve o resumo público."""
     cur.execute("SELECT id FROM pedidos WHERE id_unidade = %s AND chave = %s",
@@ -277,21 +329,7 @@ def enviar(cur, id_unidade: int, id_catalogo: int, cliente: dict, dados: dict) -
         raise HTTPException(status_code=400, detail="Forma de pagamento não disponível.")
     quando = _conferir_quando(cur, id_unidade, cfg, dados.get("para_quando"))
 
-    ids = [int(i["id_item"]) for i in dados["itens"]]
-    catalogo = _itens_do_catalogo(cur, id_unidade, id_catalogo, ids)
-    _com_opcoes(cur, id_unidade, catalogo)
-    linhas = []
-    for n, i in enumerate(dados["itens"]):
-        c = catalogo.get(int(i["id_item"]))
-        if not c or not c["ativo"]:
-            raise HTTPException(status_code=409,
-                                detail="Um item do carrinho saiu do cardápio. Atualize a página.")
-        # 🔑 142: a escolha e os adicionais, pela MESMA regra da mesa (`item_do_pedido`).
-        linha = item_do_pedido.resolver(c, i.get("escolha"), [int(x) for x in i.get("adicionais") or []])
-        qtd = dec(i["quantidade"])
-        linhas.append({**linha, "quantidade": qtd,
-                       "total": (qtd * linha["preco_unitario"]).quantize(_CENTAVO),
-                       "observacao": (i.get("observacao") or "").strip() or None, "ordem": n})
+    linhas = montar_linhas(cur, id_unidade, id_catalogo, dados["itens"])
     taxa = dec(cfg["taxa_entrega"]) if modo == "ENTREGA" else Decimal(0)
     tot = _totais(linhas, taxa)
     if tot["subtotal"] < dec(cfg["pedido_minimo"]):

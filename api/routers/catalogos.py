@@ -31,14 +31,16 @@ from database import get_cursor
 from models.catalogos import (
     CatalogoCreate, CatalogoResponse, CatalogoUpdate, CategoriaCreate, ItemCreate,
     EscolhaCreate, ItemLugar, ItemOrdem,
-    ORIGENS, SITUACOES, SubcategoriaCreate,
+    ORIGEM_PRODUTOS, ORIGENS, SITUACOES, SubcategoriaCreate,
 )
 from models.cardapio_vivo import ExibicaoDaSecao, MarcasDoItem
+from models.pedidos import PedidoDeTeste
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import traducao
 from services import catalogo_conteudo as conteudo
 from services import catalogos as servico
 from services import reservas as reservas_servico
+from services import pedidos as pedidos_servico
 
 router = APIRouter(prefix="/catalogos", tags=["catálogos"])
 
@@ -200,6 +202,38 @@ def remover_arquivo(id_catalogo: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
             antes={"arquivo_nome": antes.get("arquivo_nome")},
             id_unidade=id_unidade)
         return depois
+
+
+# ---------------------------------------------------------------------------
+# Pré-visualização (30/10/2026)
+# ---------------------------------------------------------------------------
+
+@router.get("/{id_catalogo}/previa-site")
+def previa_do_site(id_catalogo: int, idioma: str | None = Query(None, pattern="^(pt|en|de)$"),
+                   ctx: Contexto = Depends(_VER)) -> dict:
+    """O cardápio como o SITE o mostraria — em qualquer situação (rascunho, fora do período).
+
+    🔑 Pedido do dono (30/10/2026): *"uma aba pré-visualização, onde podemos ver como este será
+    exibido online"*. ⚠️ É a MESMA montagem da rota pública (`publico._montar_cardapio`):
+    uma prévia por outra conta mostraria um cardápio que o cliente não vê.
+    """
+    from routers.publico import _montar_cardapio  # a montagem do público, sem a porta do "no ar"
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        capa = servico.obter(cur, id_unidade, id_catalogo)
+        if capa["origem"] != ORIGEM_PRODUTOS:
+            raise HTTPException(status_code=409, detail="A pré-visualização é do catálogo montado com produtos.")
+        nome = traducao.escolher(capa["nome"], capa.get("nome_en"), capa.get("nome_de"), idioma)
+        return _montar_cardapio(cur, id_unidade, id_catalogo, nome, idioma) | {"previa": True}
+
+
+@router.post("/{id_catalogo}/pedido-teste")
+def pedido_de_teste(id_catalogo: int, body: PedidoDeTeste, ctx: Contexto = Depends(_VER)) -> dict:
+    """O "enviar" da pré-visualização: confere preço, escolha, adicionais e esgotado — e NÃO grava."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        servico.obter(cur, id_unidade, id_catalogo)
+        return pedidos_servico.testar(cur, id_unidade, id_catalogo, body.model_dump())
 
 
 @router.get("/{id_catalogo}/exclusao")
