@@ -932,6 +932,12 @@ determinado período"* — o "Catering" de teste e a medição de teste só saí
   (`cardapio_eventos` e `cardapio_conteudo_dia` por `id_catalogo`, sem chave estrangeira) é apagada
   à mão no mesmo cursor, junto da mídia. Tela: `janela-excluir-catalogo.tsx` (aba Publicação,
   `#catalogo-excluir`, nome em `#excluir-catalogo-nome`).
+- 🔑 **30/10/2026 (1.1.154), pedido do dono:** *"permitir excluir um cardápio que não está
+  publicado"*. O ATIVO **fora do período** também se exclui, com o nome digitado
+  (`catalogos._por_que_nao_exclui`, a regra única da prévia e do excluir). ⚠️ **Exceção: o que
+  é Cardápio Vivo de alguma loja** — o feed olha só a situação, não o período, então ele continua
+  na mesa; a prévia e o 409 dizem para tirar do Cardápio Vivo ou inativar. A janela mostra o
+  `motivo` do servidor (`#excluir-catalogo-motivo`), que antes nem aparecia.
 - **Medição de um período** (`cardapio_vivo.medicao_do_periodo` / `apagar_medicao`,
   `GET /cardapio-vivo/medicao` e `POST /cardapio-vivo/medicao/apagar`, `catalogos.editar`, auditado):
   eventos da LOJA no período, os três resumos por dia (`agregados`, `resumo`, `conteudo`) e as

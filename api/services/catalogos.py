@@ -370,25 +370,48 @@ def previa_exclusao(cur, id_unidade: int, id_catalogo: int) -> dict:
                   EXISTS (SELECT 1 FROM cardapio_vivos WHERE id_catalogo = %(c)s) AS cardapio_vivo""",
         {"c": id_catalogo})
     n = dict(cur.fetchone())
-    pode = atual["situacao"] in ("RASCUNHO", "INATIVO")
+    motivo = _por_que_nao_exclui(atual, n["cardapio_vivo"])
     return {"id": id_catalogo, "nome": atual["nome"], "situacao": atual["situacao"], **n,
-            "pode": pode, "pede_nome": atual["situacao"] == "INATIVO",
-            "motivo": None if pode else "Está no ar: tire do ar (deixe INATIVO) antes de excluir."}
+            "pode": motivo is None, "pede_nome": atual["situacao"] != "RASCUNHO",
+            "motivo": motivo}
+
+
+def _por_que_nao_exclui(atual: dict, cardapio_vivo: bool) -> str | None:
+    """Por que o catálogo NÃO pode ser excluído agora — ou None, se pode.
+
+    🔑 **Só o que está NO AR fica protegido** (pedido do dono, 30/10/2026: *"permitir excluir
+    um cardápio que não está publicado"*). Antes, todo ATIVO era recusado, até o que já saiu do
+    período ou ainda não entrou — e a casa precisava inativar só para poder apagar.
+    ⚠️ **"No ar" é o site OU o feed.** O site respeita o período (`publicado_hoje`), mas o
+    Cardápio Vivo olha só a situação (`cardapio_vivo.cardapio_publico`): ATIVO fora do período
+    que é Cardápio Vivo continua na mesa, e apagá-lo derrubaria o cardápio do salão.
+    """
+    if atual["situacao"] != "ATIVO":
+        return None
+    if atual.get("publicado_hoje"):
+        return "Está no ar: tire do ar (deixe INATIVO) antes de excluir."
+    if cardapio_vivo:
+        return ("É o Cardápio Vivo de uma loja e continua na mesa, mesmo fora do período: "
+                "tire do Cardápio Vivo ou deixe INATIVO antes de excluir.")
+    return None
 
 
 def excluir(cur, id_unidade: int, id_catalogo: int, confirmar_nome: str | None = None) -> dict:
-    """Apaga o catálogo: o RASCUNHO direto; o INATIVO com o nome digitado; o ATIVO, nunca.
+    """Apaga o catálogo: o RASCUNHO direto; o resto com o nome digitado; o que está NO AR, nunca.
 
     🔑 **Catálogo no ar não se apaga** — primeiro sai do ar. E o que já esteve no ar só se
     apaga com o NOME digitado (pedido do dono, 20/10/2026: *"um botão para poder excluir
     cardápios"*): é o que a casa publicou, e o clique distraído não pode levar.
+    🔑 30/10/2026: ATIVO fora do período (e que não é Cardápio Vivo) não está no ar e se apaga
+    — ver `_por_que_nao_exclui`.
     ⚠️ A medição do catálogo (eventos e o resumo do dia) vai junto: sem o catálogo, ela não
     responde a pergunta nenhuma. Os pedidos e os anúncios ficam, sem ele (`SET NULL`).
     """
     atual = obter(cur, id_unidade, id_catalogo)
-    if atual["situacao"] == "ATIVO":
-        raise HTTPException(status_code=409, detail="Este catálogo está no ar: tire do ar (deixe INATIVO) "
-                                                    "antes de excluir.")
+    cur.execute("SELECT EXISTS (SELECT 1 FROM cardapio_vivos WHERE id_catalogo = %s) AS v", (id_catalogo,))
+    motivo = _por_que_nao_exclui(atual, cur.fetchone()["v"])
+    if motivo:
+        raise HTTPException(status_code=409, detail=motivo)
     if atual["situacao"] != "RASCUNHO" and (confirmar_nome or "").strip().casefold() != atual["nome"].strip().casefold():
         raise HTTPException(status_code=409, detail=f"Para excluir um catálogo que já esteve no ar, digite o "
                                                     f"nome dele: “{atual['nome']}”.")

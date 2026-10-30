@@ -362,6 +362,31 @@ checar("a prévia diz o que sai junto e que pede o nome",
 st, pv_ativo = chamar("GET", f"/catalogos/{sem_prazo['id']}/exclusao", token=token)
 checar("e no ATIVO diz que não pode, e por quê", st == 200 and not pv_ativo["pode"]
        and "tire do ar" in (pv_ativo["motivo"] or ""), pv_ativo)
+
+# 🔑 (30/10/2026, pedido do dono: "permitir excluir um cardápio que não está publicado") O ATIVO
+# FORA do período não está no ar e se apaga, com o nome — salvo se for Cardápio Vivo, que olha
+# só a situação e continua na mesa.
+st, vencido = criar("Ja venceu", origem="PRODUTOS", situacao="ATIVO",
+                    publica_de=str(date.today() - timedelta(days=30)),
+                    publica_ate=str(date.today() - timedelta(days=1)))
+st, pv_v = chamar("GET", f"/catalogos/{vencido['id']}/exclusao", token=token)
+checar("ATIVO fora do período: a prévia deixa excluir, pedindo o nome",
+       st == 200 and pv_v["pode"] and pv_v["pede_nome"] and pv_v["motivo"] is None, (st, pv_v))
+st, vivo = chamar("PUT", f"/cardapio-vivo/vivos/{vencido['id']}", {"slug": f"vencido-{marca}"}, token=token)
+st, pv_vivo = chamar("GET", f"/catalogos/{vencido['id']}/exclusao", token=token)
+checar("mas sendo Cardápio Vivo (continua na mesa) não deixa, e diz por quê",
+       st == 200 and not pv_vivo["pode"] and "Cardápio Vivo" in (pv_vivo["motivo"] or ""), pv_vivo)
+st, r = chamar("DELETE", f"/catalogos/{vencido['id']}?confirmar_nome={urllib.parse.quote(vencido['nome'])}",
+               token=token)
+checar("e o servidor recusa (409) mesmo com o nome", st == 409 and "Cardápio Vivo" in str(r), (st, r))
+chamar("DELETE", f"/cardapio-vivo/vivos/{vencido['id']}", token=token)
+st, r = chamar("DELETE", f"/catalogos/{vencido['id']}", token=token)
+checar("fora do Cardápio Vivo, sem o nome é recusado", st == 409, (st, r))
+st, r = chamar("DELETE", f"/catalogos/{vencido['id']}?confirmar_nome={urllib.parse.quote(vencido['nome'])}",
+               token=token)
+checar("com o nome, o ATIVO fora do período se apaga", st == 200, (st, r))
+if st == 200:
+    criados.remove(vencido["id"])
 st, r = chamar("DELETE", f"/catalogos/{ina['id']}", token=token)
 checar("apagar um INATIVO sem o nome é recusado (409), e a frase diz o nome",
        st == 409 and ina["nome"] in str((r or {}).get("detail")), (st, r))

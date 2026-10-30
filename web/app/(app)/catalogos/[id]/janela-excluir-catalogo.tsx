@@ -50,9 +50,17 @@ export default function JanelaExcluirCatalogo({ capa, aoFechar, aoExcluir }: {
     <Modal titulo={`Excluir “${capa.nome}”?`} aoFechar={aoFechar} largura="520px">
       {!pv ? <p className="text-[14px] text-suave">Conferindo o que vai junto…</p> : (
         <div className="flex flex-col gap-3 text-[14.5px] leading-snug" id="excluir-catalogo">
+          {/* 🔑 30/10/2026: o motivo vem do SERVIDOR (no ar no site, ou Cardápio Vivo na mesa). */}
+          {!pv.pode && pv.motivo && (
+            <p className="rounded border border-alerta/40 bg-alerta-claro px-3 py-2 text-alerta" id="excluir-catalogo-motivo">
+              {pv.motivo}
+            </p>
+          )}
           {pv.situacao === "RASCUNHO"
             ? <p>Ele ainda é rascunho, então nunca esteve no ar.</p>
-            : <p>Ele <b>já esteve no ar</b>. Excluir tira do sistema o que a casa publicou — inativo, ele continua guardado.</p>}
+            : pv.situacao === "ATIVO"
+              ? <p>Ele está <b>ativo, mas fora do período</b>: o cliente não o vê hoje. Excluir tira do sistema o que a casa publicou.</p>
+              : <p>Ele <b>já esteve no ar</b>. Excluir tira do sistema o que a casa publicou — inativo, ele continua guardado.</p>}
           <div>
             <p className="text-suave">Vai junto:</p>
             <ul className="ml-5 list-disc">

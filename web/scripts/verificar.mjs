@@ -9700,7 +9700,8 @@ try {
   checar("e publica", await clicarQuando(p, "Publicar", { exato: true }));
   await p.waitForFunction(() => /No ar hoje/.test(document.body.innerText), { timeout: 15000, polling: 300 }).catch(() => {});
   checar("e o catálogo fica no ar", await esperarTexto(p, "No ar hoje", 2000));
-  // ⚠️ O que está no ar não se exclui: primeiro sai do ar (20/10/2026).
+  // ⚠️ O que está NO AR não se exclui: primeiro sai do ar (20/10/2026). Desde 30/10/2026 o
+  // ATIVO fora do período se exclui (smoke_catalogos) — este está no ar hoje.
   checar("e um ATIVO nao oferece excluir", (await p.$("#catalogo-excluir")) === null);
 
   // 🔑 **A lista em CARTÕES**: um selo só para o estado e o que falta, e "Abrir".

@@ -111,8 +111,10 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
                 </button>
               )}
               {/* 🔑 20/10/2026: o rascunho e o INATIVO se excluem (o inativo, com o nome digitado);
-                  o que está no ar, primeiro sai do ar. */}
-              {capa.situacao !== "ATIVO" && (
+                  o que está no ar, primeiro sai do ar. 🔑 30/10/2026 (pedido do dono): o ATIVO
+                  fora do período também — não está publicado. Se for Cardápio Vivo, ele continua
+                  na mesa, e a janela diz por que não dá (a regra é do servidor). */}
+              {!capa.publicado_hoje && (
                 <button type="button" id="catalogo-excluir" className="btn btn-secundario text-erro" onClick={() => setApagando(true)}>
                   {capa.situacao === "RASCUNHO" ? "Excluir rascunho" : "Excluir catálogo"}
                 </button>
