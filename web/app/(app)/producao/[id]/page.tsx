@@ -524,7 +524,7 @@ export default function PaginaOrdemProducao() {
           </p>
           {p.itens_faltando > 0 && (
             <p className="mt-2 text-[13.5px] text-alerta">
-              {p.itens_faltando} insumo(s) sem saldo suficiente — o custo sai provisório.
+              {plural(p.itens_faltando, "insumo", "insumos")} sem saldo suficiente — o custo sai provisório.
             </p>
           )}
           {/* 🔑 As correções de consumo entram na pergunta: elas mudam o que sai

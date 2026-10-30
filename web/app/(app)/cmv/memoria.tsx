@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
-import { qtd } from "@/lib/numeros";
+import { plural, qtd } from "@/lib/numeros";
 import { Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 /**
@@ -50,7 +50,7 @@ const txt = (v: unknown) => (v == null || v === "" ? "—" : String(v));
 
 function QuadroEstoque({ q, titulo, posicao }: { q: Quadro; titulo: string; posicao: string }) {
   return (
-    <Cartao titulo={titulo} descricao={`Posição em ${posicao} · ${q.total} produto(s).`}>
+    <Cartao titulo={titulo} descricao={`Posição em ${posicao} · ${plural(q.total, "produto", "produtos")}.`}>
       {!q.linhas.length ? (
         <Vazio>Nenhum produto com saldo nesta data.</Vazio>
       ) : (
@@ -86,7 +86,7 @@ function QuadroEstoque({ q, titulo, posicao }: { q: Quadro; titulo: string; posi
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-linha2 font-semibold">
-                  <td colSpan={6}>Soma dos {q.total} produto(s)</td>
+                  <td colSpan={6}>Soma dos {plural(q.total, "produto", "produtos")}</td>
                   <td className="num">{reais(q.soma)}</td>
                 </tr>
               </tfoot>
@@ -202,7 +202,7 @@ export default function MemoriaDeCalculo({ inicio, fim }: { inicio: string; fim:
 
       <Cartao
         titulo="Quadro 2 — Compras do período, por documento"
-        descricao={`${m.compras_por_nota.total} documento(s). A coluna “Diferença” é onde mora o erro de lançamento.`}
+        descricao={`${plural(m.compras_por_nota.total, "documento", "documentos")}. A coluna “Diferença” é onde mora o erro de lançamento.`}
       >
         {!m.compras_por_nota.linhas.length ? (
           <Vazio>Nenhuma entrada no período.</Vazio>

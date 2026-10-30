@@ -9,6 +9,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
 import ExplicaTela from "@/components/explica-tela";
 
+import { plural } from "@/lib/numeros";
 /**
  * O código de barras que a NOTA já trouxe, e que o cadastro não tem.
  *
@@ -130,7 +131,7 @@ export default function PaginaEanDasNotas() {
       ) : (
         <>
           <Cartao
-            titulo={`${linhas.length} produto(s) podem ganhar código`}
+            titulo={`${plural(linhas.length, "produto", "produtos")} podem ganhar código`}
             descricao="Nada é gravado sem você marcar e confirmar."
           >
             {!linhas.length ? (
@@ -227,7 +228,7 @@ export default function PaginaEanDasNotas() {
                     >
                       {gravando
                         ? "Gravando…"
-                        : `Aplicar em ${escolhidos.size} produto(s)`}
+                        : `Aplicar em ${plural(escolhidos.size, "produto", "produtos")}`}
                     </button>
                     <button
                       type="button"

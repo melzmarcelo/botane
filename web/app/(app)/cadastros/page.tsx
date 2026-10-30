@@ -24,6 +24,7 @@ import Descricoes from "./descricoes";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
 
+import { plural } from "@/lib/numeros";
 type Aba = "setores" | "locais" | "categorias" | "unidades" | "grupos-cmv";
 
 const ABAS: { id: Aba; nome: string; chave: string; explica: string }[] = [
@@ -689,7 +690,7 @@ export default function PaginaCadastros() {
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{c.nome}</span>
                       {c.tipo && <Etiqueta>{nomeTipo(c.tipo).toLowerCase()}</Etiqueta>}
-                      {!!c.produtos && <Etiqueta cor="erva">{c.produtos} produto(s)</Etiqueta>}
+                      {!!c.produtos && <Etiqueta cor="erva">{plural(c.produtos, "produto", "produtos")}</Etiqueta>}
                       {enviaAoPdv && c.integrado_pdv && <Etiqueta cor="erva">PDV</Etiqueta>}
                     </span>
                     {podeAba("categorias") && (

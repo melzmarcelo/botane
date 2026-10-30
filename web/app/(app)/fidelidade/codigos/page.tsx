@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
 import ExplicaTela from "@/components/explica-tela";
 import { Aviso, Carregando, Cartao, Confirmacao, Vazio } from "@/components/ui";
+import { plural } from "@/lib/numeros";
 import {
   cancelarPedido,
   codigosDoCaixa,
@@ -66,7 +67,7 @@ function Pedido({
         <p className="mono text-[13px] text-suave">{telefone(p.telefone)}</p>
         <p className="mt-1 text-[12.5px] text-suave">
           pediu às {hora(p.criada_em)} · vence em <Restante ate={p.expira_em} />
-          {p.tentativas > 0 && ` · ${p.tentativas} tentativa(s) errada(s)`}
+          {p.tentativas > 0 && ` · ${plural(p.tentativas, "tentativa errada", "tentativas erradas")}`}
         </p>
       </div>
       {/* O código é o que se FALA ao cliente: grande, espaçado, fácil de ler de longe. */}
@@ -189,7 +190,7 @@ export default function CodigosDoCaixa() {
                   <span className="mono ml-2 text-[12.5px] text-suave">{telefone(p.telefone)}</span>
                 </span>
                 <span className="text-[13px] text-suave">
-                  {p.selos} selo(s) · às {hora(p.confirmada_em)}
+                  {plural(p.selos, "selo", "selos")} · às {hora(p.confirmada_em)}
                 </span>
               </li>
             ))}

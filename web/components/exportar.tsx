@@ -9,6 +9,7 @@ import { Aviso, Campo, Carregando, Modal } from "@/components/ui";
 import { api } from "@/lib/api";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 
+import { plural } from "@/lib/numeros";
 /**
  * Imprimir (ex-"Baixar") deixou de ser um clique cego.
  *
@@ -407,7 +408,7 @@ function Dialogo({
                         )}
                       </div>
                       <p className="mt-0.5 text-[12.5px] text-suave">
-                        {produtos.length ? `${produtos.length} escolhido(s)` : f.ajuda}
+                        {produtos.length ? `${plural(produtos.length, "escolhido", "escolhidos")}` : f.ajuda}
                       </p>
                       <BuscaCadastro
                         className="mt-2"

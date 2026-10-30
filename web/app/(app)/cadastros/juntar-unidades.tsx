@@ -5,6 +5,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Confirmacao, Etiqueta } from "@/components/ui";
 import { UnidadeMedida, juntarUnidade, previaJuntarUnidade, type PreviaJuntar } from "@/lib/cadastros";
 
+import { plural } from "@/lib/numeros";
 /**
  * Unidades repetidas: juntar a que veio do Omie na que a casa usa.
  *
@@ -143,10 +144,10 @@ export default function JuntarUnidades({
           {previa.pode ? (
             <>
               <ul className="ml-4 list-disc text-[14px]">
-                <li>{previa.produtos_estoque} produto(s) passam a contar em {previa.principal.sigla}</li>
-                <li>{previa.produtos_compra} unidade(s) de compra</li>
-                <li>{previa.fichas} linha(s) de ficha técnica</li>
-                {!!previa.etiquetas && <li>{previa.etiquetas} etiqueta(s)</li>}
+                <li>{plural(previa.produtos_estoque, "produto", "produtos")} passam a contar em {previa.principal.sigla}</li>
+                <li>{plural(previa.produtos_compra, "unidade", "unidades")} de compra</li>
+                <li>{plural(previa.fichas, "linha", "linhas")} de ficha técnica</li>
+                {!!previa.etiquetas && <li>{plural(previa.etiquetas, "etiqueta", "etiquetas")}</li>}
                 {!!previa.apelidos_que_mudam.length && (
                   <li>as traduções {previa.apelidos_que_mudam.join(", ")} passam a valer como{" "}
                     {previa.principal.sigla}</li>
@@ -156,7 +157,7 @@ export default function JuntarUnidades({
                 <b>{previa.absorvida.sigla}</b> sai do cadastro e vira tradução de{" "}
                 <b>{previa.principal.sigla}</b>.
                 {!!previa.movimentos_no_razao && (
-                  <> Os {previa.movimentos_no_razao} movimento(s) já lançados continuam
+                  <> Os {plural(previa.movimentos_no_razao, "movimento", "movimentos")} já lançados continuam
                     mostrando {previa.absorvida.sigla} — o razão não se reescreve —, e valem
                     como {previa.principal.sigla}.</>
                 )}

@@ -30,7 +30,7 @@ import {
   Etiqueta,
   Vazio,
 } from "@/components/ui";
-import { moedaParaNumero, numeroParaMoeda, qtd } from "@/lib/numeros";
+import { moedaParaNumero, numeroParaMoeda, plural, qtd } from "@/lib/numeros";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import BensDoProduto from "./bens";
@@ -793,7 +793,7 @@ export default function FormularioProduto() {
             </label>
             {(previaUnidade.prateleiras ?? 0) > 0 && (
               <span className="pb-2 text-[13px] text-suave">
-                há saldo em {previaUnidade.prateleiras} prateleira(s) — ele vira junto
+                há saldo em {plural(previaUnidade.prateleiras, "prateleira", "prateleiras")} — ele vira junto
               </span>
             )}
           </span>

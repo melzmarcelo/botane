@@ -9,6 +9,7 @@ import ExplicaTela from "@/components/explica-tela";
 import BotaoExportar from "@/components/exportar";
 import { reclassificar, ResultadoReclassificacao } from "@/lib/produto-reclassificar";
 
+import { plural } from "@/lib/numeros";
 /**
  * Reclassificar produtos por planilha: tipo, categoria, setor e local padrão.
  *
@@ -102,7 +103,7 @@ export default function PaginaReclassificar() {
       {previa && (
         <Cartao
           titulo={previa.aplicado ? "Aplicado" : "Prévia"}
-          descricao={`${previa.linhas} linha(s) na planilha — ${previa.message}`}
+          descricao={`${plural(previa.linhas, "linha", "linhas")} na planilha — ${previa.message}`}
         >
           {!previa.aplicado && previa.mudam.length > 0 && (
             <div className="mb-4">
@@ -113,7 +114,7 @@ export default function PaginaReclassificar() {
                 aria-busy={ocupado}
                 onClick={() => void enviar(false)}
               >
-                Aplicar em {previa.mudam.length} produto(s)
+                Aplicar em {plural(previa.mudam.length, "produto", "produtos")}
               </button>
             </div>
           )}
@@ -123,7 +124,7 @@ export default function PaginaReclassificar() {
               {/* ⚠️ As recusas ANTES da lista do que muda: são o que dá para consertar
                   na planilha, e uma lista longa de mudanças as empurraria para o fim. */}
               <Aviso tipo="erro">
-                {previa.recusados.length} linha(s) não {previa.aplicado ? "foram" : "serão"} aplicadas.
+                {plural(previa.recusados.length, "linha", "linhas")} não {previa.aplicado ? "foram" : "serão"} aplicadas.
                 Corrija na planilha e mande de novo — as outras não dependem delas.
               </Aviso>
               <div className="mt-3 grid-rolante">

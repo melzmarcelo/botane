@@ -66,7 +66,7 @@ function Filtro<T extends { toString(): string }>({
         )}
       </div>
       <p className="mt-0.5 text-[12.5px] leading-snug text-suave">
-        {escolhidos.length ? `${escolhidos.length} escolhido(s)` : ajuda}
+        {escolhidos.length ? `${plural(escolhidos.length, "escolhido", "escolhidos")}` : ajuda}
       </p>
       {!opcoes.length ? (
         <p className="mt-2 text-[13px] text-suave">nada cadastrado</p>
@@ -282,7 +282,7 @@ export default function PaginaNovaContagem() {
           titulo="Quem vai contar"
           descricao={
             contadores.length
-              ? `${contadores.length} pessoa(s) escalada(s) — só elas conseguem digitar nesta contagem.`
+              ? `${plural(contadores.length, "pessoa escalada", "pessoas escaladas")} — só elas conseguem digitar nesta contagem.`
               : "Ninguém escolhido: qualquer pessoa com permissão de contar pode preencher."
           }
         >
@@ -318,7 +318,7 @@ export default function PaginaNovaContagem() {
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
               <p className="mono text-[26px] font-bold">{previa.total}</p>
               <p className="text-suave">
-                linha(s) para contar · {previa.produtos} produto(s) ·{" "}
+                linha(s) para contar · {plural(previa.produtos, "produto", "produtos")} ·{" "}
                 {previa.locais.length} local(is)
               </p>
             </div>

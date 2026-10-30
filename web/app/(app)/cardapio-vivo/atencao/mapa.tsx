@@ -9,6 +9,7 @@
 import { Cartao, Vazio } from "@/components/ui";
 import type { PainelAtencao } from "@/lib/cardapio-vivo";
 
+import { plural } from "@/lib/numeros";
 export default function Mapa({ mapa }: { mapa: PainelAtencao["mapa"] }) {
   if (!mapa.length) return <Cartao titulo="Mesa × hora"><Vazio>Nenhuma sessão de mesa no recorte.</Vazio></Cartao>;
   const horas = [...new Set(mapa.map((m) => m.hora))].sort((a, b) => a - b);
@@ -36,7 +37,7 @@ export default function Mapa({ mapa }: { mapa: PainelAtencao["mapa"] }) {
                   const forca = n ? 0.15 + 0.85 * (n / maior) : 0;
                   return (
                     <td key={h} className="p-[1px]">
-                      <div title={`Mesa ${m.mesa} · ${h}h: ${n} sessão(ões)`}
+                      <div title={`Mesa ${m.mesa} · ${h}h: ${plural(n, "sessão", "sessões")}`}
                            className="mono flex h-8 w-10 items-center justify-center rounded-[4px]"
                            style={{ background: n ? `color-mix(in srgb, var(--color-erva) ${Math.round(forca * 100)}%, transparent)` : "var(--color-superficie2)",
                                     color: forca > 0.55 ? "var(--color-superficie)" : "var(--color-tinta)" }}>

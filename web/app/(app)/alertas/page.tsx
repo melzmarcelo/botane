@@ -10,6 +10,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import ExplicaTela from "@/components/explica-tela";
 import LinkProduto from "@/components/link-produto";
 
+import { plural } from "@/lib/numeros";
 type Alerta = {
   chave: string;
   severidade: "critico" | "atencao" | "aviso";
@@ -148,7 +149,7 @@ export default function PaginaAlertas() {
         </Cartao>
       ) : (
         <Cartao
-          titulo={`${alertas.length} ponto(s) de atenção`}
+          titulo={`${plural(alertas.length, "ponto", "pontos")} de atenção`}
           descricao={
             criticos
               ? `${criticos} pede ação hoje — está no topo da lista.`

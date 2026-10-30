@@ -8,7 +8,7 @@ import {
   corrigirReferencia,
   type ConferenciaDeReferencia,
 } from "@/lib/custo-referencia";
-import { custo, numeroParaCusto, reais, textoParaNumero } from "@/lib/numeros";
+import { custo, numeroParaCusto, plural, reais, textoParaNumero } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
 
 /**
@@ -109,7 +109,7 @@ export default function CustoReferencia() {
         {previa && !nada && (
           <button type="button" className="btn btn-primario" disabled={!itens.length || gravando}
                   aria-busy={gravando} onClick={() => setConfirmando(true)}>
-            Corrigir {itens.length} marcado(s)
+            Corrigir {plural(itens.length, "marcado", "marcados")}
           </button>
         )}
       </div>
@@ -119,7 +119,7 @@ export default function CustoReferencia() {
       {nada && (
         <div className="mt-4">
           <Aviso tipo="ok">
-            Nada a conferir: {previa.analisados} produto(s) custeados pela referência, e
+            Nada a conferir: {plural(previa.analisados, "produto", "produtos")} custeados pela referência, e
             nenhum discorda do estoque nem passa do preço de venda.
           </Aviso>
         </div>
@@ -129,7 +129,7 @@ export default function CustoReferencia() {
         <>
           <div className="mt-4">
             <Aviso tipo="info">
-              <b>{previa.suspeitos} produto(s)</b> com a referência suspeita, de{" "}
+              <b>{plural(previa.suspeitos, "produto", "produtos")}</b> com a referência suspeita, de{" "}
               {previa.analisados} custeados por ela. <b>{previa.certos}</b> já vêm marcados: o
               custo registrado no estoque confirma a correção. Os outros são palpite — marque
               só o que conferir, e troque o valor se souber o certo.

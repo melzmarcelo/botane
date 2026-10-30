@@ -11,6 +11,7 @@
 import { Cartao } from "@/components/ui";
 import type { PainelAtencao } from "@/lib/cardapio-vivo";
 
+import { plural } from "@/lib/numeros";
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${(v * 100).toFixed(1).replace(".", ",")}%`);
 export const segundos = (ms: number | null | undefined) => (ms === null || ms === undefined ? "—" : `${(ms / 1000).toFixed(1).replace(".", ",")} s`);
 
@@ -55,7 +56,7 @@ export default function Indicadores({ p }: { p: PainelAtencao }) {
           <ol className="flex flex-col gap-2.5" aria-label="Funil da sessão">
             {funil.map((f) => (
               <li key={f.nome} className="grid grid-cols-[9.5rem_1fr_3.5rem] items-center gap-3 text-[13.5px]"
-                  title={`${f.nome}: ${f.n} sessão(ões)`}>
+                  title={`${f.nome}: ${plural(f.n, "sessão", "sessões")}`}>
                 <span>{f.nome}</span>
                 <span className="h-4 rounded-r-[4px] bg-[var(--color-erva)]"
                       style={{ width: `${Math.max(1, (f.n / maior) * 100)}%` }} aria-hidden />

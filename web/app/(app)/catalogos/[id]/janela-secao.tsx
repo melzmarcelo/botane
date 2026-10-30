@@ -20,6 +20,7 @@ import { CartoesService } from "@/lib/cartoes";
 import { ExibicaoDaSecao } from "./cardapio-vivo";
 import { JanelaDeTraducao } from "./traducoes-do-catalogo";
 
+import { plural } from "@/lib/numeros";
 export type Editando = {
   tipo: cat.TipoDeSecao;
   /** A seção gravada; nula = criando. */
@@ -280,7 +281,7 @@ export default function JanelaSecao({ editando: e, podeEditar, vivo = true, aoFe
           {/* 🔑 A frase diz QUANTOS pratos saem junto. */}
           <p>
             {e.itens > 0
-              ? `${e.itens} prato(s) saem do cardápio junto. Os produtos continuam cadastrados — o que se desfaz é o vínculo.`
+              ? `${plural(e.itens, "prato", "pratos")} saem do cardápio junto. Os produtos continuam cadastrados — o que se desfaz é o vínculo.`
               : "Não há prato nenhum nela."}
             {e.tipo === "categoria" && " As subcategorias dela também são removidas."}
           </p>

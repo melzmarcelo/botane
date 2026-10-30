@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Modal } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
-import { custo as moedaCusto, qtd } from "@/lib/numeros";
+import { custo as moedaCusto, plural, qtd } from "@/lib/numeros";
 
 /**
  * Reprocessar o estoque de UM produto — o razão relido em ordem de data.
@@ -99,7 +99,7 @@ export default function ReprocessarEstoque({
                   disabled={ocupado}
                   onClick={aplicar}
                 >
-                  Reprocessar {previa.mudam} movimento(s)
+                  Reprocessar {plural(previa.mudam, "movimento", "movimentos")}
                 </button>
               )}
               <button className="btn btn-secundario" type="button" onClick={() => setPrevia(null)}>
@@ -117,7 +117,7 @@ export default function ReprocessarEstoque({
 
           {previa.mudam === 0 ? (
             <Aviso tipo="ok">
-              {previa.produto} já está em ordem — os {previa.movimentos} movimento(s) batem com
+              {previa.produto} já está em ordem — os {plural(previa.movimentos, "movimento", "movimentos")} batem com
               o que a prateleira diz. Nada a reprocessar.
             </Aviso>
           ) : (

@@ -8,6 +8,7 @@ import { Aviso, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import type { Formas, Lote } from "@/lib/receber";
 import { dataBr } from "../vendas/tipos";
 
+import { plural } from "@/lib/numeros";
 /**
  * Meu consumo — o que EU consumi e ainda não paguei.
  *
@@ -99,7 +100,7 @@ export default function PaginaMeuConsumo() {
         <Cartao titulo="Em aberto">
           <p className="text-[26px] font-bold tabular-nums">{reais(dados.total)}</p>
           <p className="mt-1 text-[13px] text-suave">
-            {cupons.length} cupom(ns) ainda não cobrados
+            {plural(cupons.length, "cupom", "cupons")} ainda não cobrados
           </p>
         </Cartao>
         <Cartao titulo="Valor cheio">

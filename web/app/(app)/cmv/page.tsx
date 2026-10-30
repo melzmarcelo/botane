@@ -487,7 +487,7 @@ export default function PaginaCmv() {
               },
               {
                 r: "Receita", v: reais(a.receita),
-                d: `${a.vendas} venda(s) no período`,
+                d: `${plural(a.vendas, "venda", "vendas")} no período`,
               },
               {
                 r: "Food cost", v: cmvNegativo ? "—" : pct(a.food_cost_pct),
@@ -675,7 +675,7 @@ export default function PaginaCmv() {
               </table>
             </div>
             <p className="mt-3 text-[13px] text-suave">
-              {a.vendas} venda(s) no período
+              {plural(a.vendas, "venda", "vendas")} no período
               {a.itens_sem_custo > 0 && ` · ${plural(a.itens_sem_custo, "item vendido", "itens vendidos")} sem custo conhecido`}
             </p>
           </Cartao>

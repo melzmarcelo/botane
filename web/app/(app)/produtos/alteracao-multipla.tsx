@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Etiqueta, Modal } from "@/components/ui";
 import { Categoria, Setor, TIPOS_PRODUTO } from "@/lib/cadastros";
 
+import { plural } from "@/lib/numeros";
 /**
  * Mudar tipo, categoria, setor ou a ativação em VÁRIOS produtos de uma vez.
  *
@@ -115,7 +116,7 @@ export default function AlteracaoMultipla({
 
   return (
     <Modal
-      titulo={`Alterar ${ids.length} produto(s)`}
+      titulo={`Alterar ${plural(ids.length, "produto", "produtos")}`}
       descricao="Só os campos preenchidos mudam. O resto fica como está."
       aoFechar={aoFechar}
       rodape={
@@ -225,7 +226,7 @@ export default function AlteracaoMultipla({
           {!!previa.mudam.length && (
             <div>
               <p className="mb-2 text-[13px] text-suave">
-                {previa.mudam.length} produto(s) mudam:
+                {plural(previa.mudam.length, "produto", "produtos")} mudam:
               </p>
               <div className="max-h-[34vh] overflow-y-auto">
                 <table className="tabela">

@@ -10,6 +10,7 @@ import { documentosEmAberto, gerarLotes } from "@/lib/receber";
 import type { LinhaDocumento } from "../vendas/por-pessoa/tabelas-documento";
 import { dataBr } from "../vendas/tipos";
 
+import { plural } from "@/lib/numeros";
 /**
  * Os documentos em aberto de UMA pessoa — para conferir e gerar o lote só com os
  * marcados (o "desmarcar algum" da proposta aceita pelo dono, 22/10/2026).
@@ -154,7 +155,7 @@ export default function DocumentosDaPessoa({
                 aria-busy={ocupado}
                 onClick={gerar}
               >
-                Gerar lote com {escolhidos.length} documento(s)
+                Gerar lote com {plural(escolhidos.length, "documento", "documentos")}
               </button>
               <span className="text-[14px] text-suave">
                 total <b className="tabular-nums">{reais(total)}</b>

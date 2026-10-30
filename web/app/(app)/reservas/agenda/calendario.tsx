@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Aviso, Carregando } from "@/components/ui";
 import { calendario, type Calendario } from "@/lib/reservas";
 
+import { plural } from "@/lib/numeros";
 /**
  * O mês da agenda — a visão geral do que está reservado.
  *
@@ -138,10 +139,10 @@ export default function CalendarioDoMes({
                     : d.especial
                       ? `Horário especial ${d.especial.abre}–${d.especial.fecha}` +
                         (d.especial.motivo ? `: ${d.especial.motivo}` : "") +
-                        ` · ${d.reservas} reserva(s)`
+                        ` · ${plural(d.reservas, "reserva", "reservas")}`
                       : !d.aberta
                       ? "A casa não atende neste dia da semana"
-                      : `${d.reservas} reserva(s), ${d.pessoas} pessoa(s)`
+                      : `${plural(d.reservas, "reserva", "reservas")}, ${plural(d.pessoas, "pessoa", "pessoas")}`
                 }
                 className={[
                   "flex min-h-[58px] flex-col items-stretch rounded-[10px] border p-1.5 text-left transition-colors sm:min-h-[84px] sm:p-2",

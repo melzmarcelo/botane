@@ -10,6 +10,7 @@ import { baixarLotesAbertos, lotes as buscarLotes, ROTULO_SITUACAO, type Formas,
          type SituacaoLote } from "@/lib/receber";
 import { dataBr } from "../vendas/tipos";
 
+import { plural } from "@/lib/numeros";
 const FILTROS: { valor: SituacaoLote | ""; nome: string }[] = [
   { valor: "ABERTO", nome: "Em cobrança" },
   { valor: "RECEBIDO", nome: "Recebidos" },
@@ -89,7 +90,7 @@ export default function ListaDeLotes({ versao }: { versao: number }) {
               disabled={baixando}
               onClick={baixarTodos}
             >
-              {baixando ? "Gerando…" : `PDF dos ${lista.length} lote(s) em cobrança`}
+              {baixando ? "Gerando…" : `PDF dos ${plural(lista.length, "lote", "lotes")} em cobrança`}
             </button>
           )}
         </div>

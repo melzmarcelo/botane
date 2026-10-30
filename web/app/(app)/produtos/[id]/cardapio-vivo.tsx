@@ -15,6 +15,7 @@ import { Aviso, Cartao } from "@/components/ui";
 import { api, urlArquivo } from "@/lib/api";
 import { ProdutoCardapioService, type CardapioDoProduto, type GrupoAdicionalCadastro } from "@/lib/cardapio-vivo";
 
+import { plural } from "@/lib/numeros";
 type Props = { idProduto: number; podeEditar: boolean };
 
 export default function CardapioVivoDoProduto({ idProduto, podeEditar }: Props) {
@@ -112,7 +113,7 @@ export default function CardapioVivoDoProduto({ idProduto, podeEditar }: Props) 
       if (!d.adicionais.length) { aviso.erro(`${outro.nome} não tem adicionais.`); return; }
       setGrupos((gs) => [...gs, ...d.adicionais.map(({ id: _g, ...g }) => ({
         ...g, opcoes: g.opcoes.map(({ id: _o, ...o }) => o) }))]);
-      aviso.sucesso(`Copiados ${d.adicionais.length} grupo(s) de ${outro.nome}. Confira e grave.`);
+      aviso.sucesso(`Copiados ${plural(d.adicionais.length, "grupo", "grupos")} de ${outro.nome}. Confira e grave.`);
     } catch (e) {
       falhou(e, "Falha ao copiar os adicionais.");
     }

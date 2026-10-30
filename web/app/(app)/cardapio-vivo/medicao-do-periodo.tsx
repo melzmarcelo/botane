@@ -14,6 +14,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Cartao, Confirmacao } from "@/components/ui";
 import { CardapioVivoService, type MedicaoDoPeriodo } from "@/lib/cardapio-vivo";
 
+import { plural } from "@/lib/numeros";
 export default function MedicaoDoPeriodo() {
   const aviso = useAviso();
   const [de, setDe] = useState("");
@@ -78,7 +79,7 @@ export default function MedicaoDoPeriodo() {
         <Confirmacao titulo={`Apagar a medição de ${data(pv.de)} a ${data(pv.ate)}?`} rotuloConfirmar="Apagar" perigo
                      ocupado={ocupado} aoConfirmar={() => void apagar()} aoCancelar={() => setConfirmando(false)}>
           <p>
-            Saem {pv.eventos} evento(s) de {pv.sessoes} visita(s) e os resumos daqueles dias. Atenção × Vendas, os testes A/B e
+            Saem {plural(pv.eventos, "evento", "eventos")} de {plural(pv.sessoes, "visita", "visitas")} e os resumos daqueles dias. Atenção × Vendas, os testes A/B e
             os relatórios dos anúncios passam a não contar esses dias. Isto não se desfaz.
           </p>
         </Confirmacao>

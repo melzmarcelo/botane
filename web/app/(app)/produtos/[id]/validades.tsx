@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao } from "@/components/ui";
+import { plural } from "@/lib/numeros";
 import {
   CONSERVACOES, EVENTOS, salvarValidades, validades, type Regra,
 } from "@/lib/etiquetas";
@@ -123,7 +124,7 @@ export default function ValidadesDoProduto({
               <>Na produção vale a regra abaixo; o campo <b>Validade (dias)</b> fica como reserva.</>
             ) : validadeDias ? (
               <>
-                Sem regra de produção, a etiqueta e o lote usam os <b>{validadeDias} dia(s)</b> do
+                Sem regra de produção, a etiqueta e o lote usam os <b>{plural(validadeDias, "dia", "dias")}</b> do
                 campo <b>Validade (dias)</b>, acima.
               </>
             ) : (

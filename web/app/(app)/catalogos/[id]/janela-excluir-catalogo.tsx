@@ -14,6 +14,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Modal } from "@/components/ui";
 import * as cat from "@/lib/catalogos";
 
+import { plural } from "@/lib/numeros";
 export default function JanelaExcluirCatalogo({ capa, aoFechar, aoExcluir }: {
   capa: cat.Catalogo; aoFechar: () => void; aoExcluir: () => void;
 }) {
@@ -75,8 +76,8 @@ export default function JanelaExcluirCatalogo({ capa, aoFechar, aoExcluir }: {
           </div>
           {(pv.pedidos > 0 || pv.anuncios > 0) && (
             <p className="text-[13.5px] text-suave">
-              Ficam, sem o catálogo: {pv.pedidos ? `${pv.pedidos} pedido(s) que o citam` : ""}
-              {pv.pedidos && pv.anuncios ? " e " : ""}{pv.anuncios ? `${pv.anuncios} anúncio(s) que o abrem (aparecem sem botão)` : ""}.
+              Ficam, sem o catálogo: {pv.pedidos ? `${plural(pv.pedidos, "pedido", "pedidos")} que o citam` : ""}
+              {pv.pedidos && pv.anuncios ? " e " : ""}{pv.anuncios ? `${plural(pv.anuncios, "anúncio", "anúncios")} que o abrem (aparecem sem botão)` : ""}.
             </p>
           )}
           {pv.pede_nome && (

@@ -10,6 +10,7 @@ import Voltar from "@/components/voltar";
 import { importar, type ResultadoImportacao } from "@/lib/patrimonio";
 import { useSessao } from "@/lib/sessao";
 
+import { plural } from "@/lib/numeros";
 /**
  * Importar os bens por planilha — a de inventário de equipamentos da casa (.xlsx, uma
  * aba por setor) ou a exportada do Patrimônio (corrigida no Excel e mandada de volta).
@@ -105,12 +106,12 @@ export default function ImportarPatrimonio() {
 
       {previa && (
         <Cartao titulo={previa.aplicado ? "Importado" : "Prévia"}
-                descricao={`${previa.linhas} linha(s) na planilha — ${previa.message}`}>
+                descricao={`${plural(previa.linhas, "linha", "linhas")} na planilha — ${previa.message}`}>
           {!previa.aplicado && total > 0 && (
             <div className="mb-4">
               <button type="button" className="btn btn-primario" id="patrimonio-aplicar"
                       disabled={ocupado} aria-busy={ocupado} onClick={() => void enviar(false)}>
-                Importar {total} bem(ns)
+                Importar {plural(total, "bem", "bens")}
               </button>
             </div>
           )}
@@ -118,7 +119,7 @@ export default function ImportarPatrimonio() {
           {previa.recusados.length > 0 && (
             <div className="mb-5">
               <Aviso tipo="erro">
-                {previa.recusados.length} linha(s) {previa.aplicado ? "não entraram" : "não vão entrar"}.
+                {plural(previa.recusados.length, "linha", "linhas")} {previa.aplicado ? "não entraram" : "não vão entrar"}.
                 Corrija na planilha e mande de novo — as outras não dependem delas.
               </Aviso>
               <div className="mt-3 grid-rolante">

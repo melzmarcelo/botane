@@ -219,7 +219,7 @@ export default function PaginaNota() {
     setOcupado(true);
     try {
       const r = await api.post<{ estornados: number }>(`/notas/${id}/estornar`, {});
-      aviso.sucesso(`${r.estornados} movimento(s) desfeito(s) — o razão guarda os dois lados.`);
+      aviso.sucesso(`${plural(r.estornados, "movimento desfeito", "movimentos desfeitos")} — o razão guarda os dois lados.`);
       setConfirmando(null);
       await carregar();
     } catch (e) {

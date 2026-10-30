@@ -12,6 +12,7 @@ import Excecoes from "./excecoes";
 import MedicaoDoPeriodo from "./medicao-do-periodo";
 import Vivos from "./vivos";
 
+import { plural } from "@/lib/numeros";
 /**
  * Portal de Clientes → Catálogos → Cardápio Vivo.
  *
@@ -57,7 +58,7 @@ export default function PaginaCardapioVivo() {
 
       {/* ⚠️ O aviso e a prévia abaixo são do PRINCIPAL; os outros têm a prévia no catálogo. */}
       {id && dados.sem_midia.length > 0 && (
-        <Cartao titulo={`${dados.sem_midia.length} prato(s) publicado(s) sem foto e sem vídeo`}
+        <Cartao titulo={`${plural(dados.sem_midia.length, "prato publicado", "pratos publicados")} sem foto e sem vídeo`}
                 descricao="No feed, eles aparecem com a foto da seção — ou com a cor de fundo, se a seção também não tiver.">
           <ul className="columns-1 gap-6 text-[14px] sm:columns-2">
             {dados.sem_midia.map((i) => (

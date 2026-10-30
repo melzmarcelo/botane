@@ -10,7 +10,7 @@ import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/
 import NotasOmie from "./notas-omie";
 import OpcoesNotasOmie from "./opcoes-notas-omie";
 
-import { custo } from "@/lib/numeros";
+import { custo, plural } from "@/lib/numeros";
 /**
  * Tudo o que o Botané troca com o Omie: credencial, notas, catálogo, custo
  * inicial e a conferência de estoque.
@@ -516,7 +516,7 @@ export default function Omie() {
               onClick={() =>
                 acao(
                   "/omie/importar-catalogo",
-                  (r) => `${r.criados} produto(s) criado(s) em rascunho`,
+                  (r) => `${plural(r.criados, "produto criado", "produtos criados")} em rascunho`,
                 )
               }
             >
@@ -529,7 +529,7 @@ export default function Omie() {
                 acao(
                   "/omie/importar-fornecedores",
                   (r) =>
-                    `${r.criados} fornecedor(es) criado(s), ${r.completados} completado(s)`,
+                    `${plural(r.criados, "fornecedor criado", "fornecedores criados")}, ${plural(r.completados, "completado", "completados")}`,
                 )
               }
             >
@@ -541,7 +541,7 @@ export default function Omie() {
               onClick={() =>
                 acao(
                   "/omie/importar-fornecedores?apenas_completar=true",
-                  (r) => `${r.completados} fornecedor(es) completado(s)`,
+                  (r) => `${plural(r.completados, "fornecedor completado", "fornecedores completados")}`,
                 )
               }
               title="Não cria ninguém: só preenche o que está em branco nos que já existem"
@@ -658,7 +658,7 @@ export default function Omie() {
               {!custos.aplicado && (
                 <div className="mt-4">
                   <button className="btn btn-primario" onClick={aplicarCustos} aria-busy={ocupado} disabled={ocupado}>
-                    {ocupado ? "Aplicando…" : `Aplicar em ${custos.produtos} produto(s)`}
+                    {ocupado ? "Aplicando…" : `Aplicar em ${plural(custos.produtos, "produto", "produtos")}`}
                   </button>
                 </div>
               )}
@@ -672,7 +672,7 @@ export default function Omie() {
           {!!custos.sem_conversao.length && (
             <div className="mt-5">
               <Aviso tipo="erro">
-                {custos.nao_convertidos} produto(s) têm custo no Omie mas em unidade que não dá
+                {plural(custos.nao_convertidos, "produto", "produtos")} têm custo no Omie mas em unidade que não dá
                 para converter para a daqui. Eles ficaram de fora — gravar o número cru faria o
                 preço do pacote valer como preço do quilo.
               </Aviso>
@@ -804,7 +804,7 @@ export default function Omie() {
                 </Etiqueta>
                 <span className="mono text-[13px]">{h.chamada}</span>
                 <span className="text-[13px] text-suave">
-                  {h.registros} registro(s) · {h.modo}
+                  {plural(h.registros, "registro", "registros")} · {h.modo}
                 </span>
                 <span className="mono ml-auto text-[12px] text-suave">
                   {new Date(h.iniciado_em).toLocaleString("pt-BR")}

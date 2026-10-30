@@ -6,7 +6,7 @@ import CabecalhoTela from "@/components/cabecalho-tela";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
-import { pct, qtd } from "@/lib/numeros";
+import { pct, plural, qtd } from "@/lib/numeros";
 import { useSessao } from "@/lib/sessao";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import {
@@ -210,7 +210,7 @@ export default function PaginaPrecificacao() {
               )}
               <button className="btn btn-primario" disabled={escolhidos.length === 0 || ocupado}
                       aria-busy={ocupado} onClick={() => setConfirmando(true)}>
-                {escolhidos.length ? `Aplicar ${escolhidos.length} preço(s)` : "Aplicar preços"}
+                {escolhidos.length ? `Aplicar ${plural(escolhidos.length, "preço", "preços")}` : "Aplicar preços"}
               </button>
             </span>
           ) : undefined
@@ -318,7 +318,7 @@ export default function PaginaPrecificacao() {
                        void aplicar();
                      }}>
           <p>
-            <b>{escolhidos.length} produto(s)</b> passam para o preço mínimo sugerido. O preço novo
+            <b>{plural(escolhidos.length, "produto", "produtos")}</b> passam para o preço mínimo sugerido. O preço novo
             vale no sistema a partir de agora.
           </p>
           <ul className="mt-3 max-h-[30vh] overflow-y-auto text-[14px]">

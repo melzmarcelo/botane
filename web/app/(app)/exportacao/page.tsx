@@ -12,6 +12,7 @@ import { useSessao } from "@/lib/sessao";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
 
+import { plural } from "@/lib/numeros";
 /**
  * Exportação para o PDV — o que daqui ainda não está no cardápio de lá.
  *
@@ -252,8 +253,8 @@ export default function PaginaExportacao() {
               {enviando
                 ? "Enviando…"
                 : selecionados.length
-                  ? `Enviar ${selecionados.length} selecionado(s)`
-                  : `Enviar ${pendentes.length} pendente(s)`}
+                  ? `Enviar ${plural(selecionados.length, "selecionado", "selecionados")}`
+                  : `Enviar ${plural(pendentes.length, "pendente", "pendentes")}`}
             </button>
           )}
         </div>
@@ -456,7 +457,7 @@ export default function PaginaExportacao() {
           aoCancelar={() => setConfirmando(false)}
         >
           <p>
-            São {aEnviar.length} registro(s), e {desativacoes} deles{" "}
+            São {plural(aEnviar.length, "registro", "registros")}, e {desativacoes} deles{" "}
             <b>serão desativados no cardápio do PDV</b> — deixam de aparecer para quem
             vende. Os demais são cadastros ou vínculos.
           </p>

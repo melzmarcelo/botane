@@ -18,6 +18,7 @@ import { TabelaPorDocumento, type LinhaDocumento } from "../../../vendas/por-pes
 import { dataBr } from "../../../vendas/tipos";
 import { EtiquetaDoLote } from "../../lotes";
 
+import { plural } from "@/lib/numeros";
 /**
  * Um lote de cobrança: o valor congelado, os documentos, o relatório e a baixa.
  *
@@ -127,7 +128,7 @@ export default function PaginaLote() {
         <Cartao titulo={lote.status === "RECEBIDO" ? "Recebido" : "A cobrar"}>
           <p id="lote-total" className="text-[26px] font-bold tabular-nums">{reais(lote.total)}</p>
           <p className="mt-1 text-[13px] text-suave">
-            {lote.cupons} documento(s) · {reais(lote.total_cheio)} cheio, {reais(lote.desconto)} de desconto
+            {plural(lote.cupons, "documento", "documentos")} · {reais(lote.total_cheio)} cheio, {reais(lote.desconto)} de desconto
           </p>
         </Cartao>
         <Cartao titulo="Gerado">
@@ -201,7 +202,7 @@ export default function PaginaLote() {
         </Cartao>
       )}
 
-      <Cartao titulo={`${documentos.length} documento(s)`} descricao="Cada cupom, com os itens.">
+      <Cartao titulo={`${plural(documentos.length, "documento", "documentos")}`} descricao="Cada cupom, com os itens.">
         {!documentos.length ? (
           <Vazio>Nenhum documento neste lote.</Vazio>
         ) : (
@@ -226,7 +227,7 @@ export default function PaginaLote() {
         <Confirmacao titulo="Cancelar o lote?" rotuloConfirmar="Cancelar o lote" perigo
           rotuloCancelar="Voltar" ocupado={ocupado}
           aoConfirmar={() => agir(() => cancelarLote(lote.id))} aoCancelar={() => setPergunta(null)}>
-          Os {lote.cupons} documento(s) voltam para <b>em aberto</b> e podem entrar num novo lote.
+          Os {plural(lote.cupons, "documento", "documentos")} voltam para <b>em aberto</b> e podem entrar num novo lote.
           O lote cancelado fica no histórico.
         </Confirmacao>
       )}

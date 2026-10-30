@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Confirmacao, Etiqueta, Modal } from "@/components/ui";
+import { plural } from "@/lib/numeros";
 import {
   ajustarVencimento,
   darSelos,
@@ -275,8 +276,8 @@ export default function FichaDoParticipante({
               <ul className="text-[13px]">
                 {f.pedidos.map((p) => (
                   <li key={p.id} className="border-b border-[var(--color-linha)] py-1.5">
-                    {dataBr(p.criada_em)} · {p.status.toLowerCase()} · {p.selos} selo(s)
-                    {p.tentativas > 0 && ` · ${p.tentativas} tentativa(s) errada(s)`}
+                    {dataBr(p.criada_em)} · {p.status.toLowerCase()} · {plural(p.selos, "selo", "selos")}
+                    {p.tentativas > 0 && ` · ${plural(p.tentativas, "tentativa errada", "tentativas erradas")}`}
                     {p.loja && ` · ${p.loja}`}
                   </li>
                 ))}
@@ -325,7 +326,7 @@ export default function FichaDoParticipante({
           }}
         >
           <p>
-            <b>{retirando.selos} selo(s)</b> de {dataBr(retirando.data)} ({ORIGEM[retirando.origem]})
+            <b>{plural(retirando.selos, "selo", "selos")}</b> de {dataBr(retirando.data)} ({ORIGEM[retirando.origem]})
             saem do cartão. Use para desfazer um lançamento feito por engano.
           </p>
         </Confirmacao>

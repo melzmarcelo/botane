@@ -18,6 +18,7 @@ import { useSessao } from "@/lib/sessao";
 
 import FichaDoParticipante from "./ficha";
 
+import { plural } from "@/lib/numeros";
 /**
  * Fidelidade → Painel: o programa inteiro numa tela.
  *
@@ -181,8 +182,8 @@ export default function PainelDaFidelidade() {
                     <td>
                       <span className="flex flex-wrap gap-1">
                         {x.disponiveis > 0 && <Etiqueta cor="erva">{x.disponiveis} disponível(is)</Etiqueta>}
-                        {x.vencidos > 0 && <Etiqueta cor="alerta">{x.vencidos} vencido(s)</Etiqueta>}
-                        {x.usados > 0 && <Etiqueta>{x.usados} entregue(s)</Etiqueta>}
+                        {x.vencidos > 0 && <Etiqueta cor="alerta">{plural(x.vencidos, "vencido", "vencidos")}</Etiqueta>}
+                        {x.usados > 0 && <Etiqueta>{plural(x.usados, "entregue", "entregues")}</Etiqueta>}
                         {!x.disponiveis && !x.vencidos && !x.usados && <span className="text-suave">—</span>}
                       </span>
                     </td>

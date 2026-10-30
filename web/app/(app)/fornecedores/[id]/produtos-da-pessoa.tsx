@@ -7,7 +7,7 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 
-import { custo } from "@/lib/numeros";
+import { custo, plural } from "@/lib/numeros";
 /**
  * O que esta pessoa fornece — e por quanto, da última vez.
  *
@@ -85,7 +85,7 @@ export default function ProdutosDaPessoa({ id }: { id: number }) {
       titulo="Produtos desta pessoa"
       descricao={
         itens.length
-          ? `${itens.length} produto(s) ativo(s) — o preço é por unidade de estoque.`
+          ? `${plural(itens.length, "produto ativo", "produtos ativos")} — o preço é por unidade de estoque.`
           : "O vínculo nasce sozinho quando uma nota dela é lançada."
       }
     >

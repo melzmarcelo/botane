@@ -12,7 +12,7 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
 
-import { qtd } from "@/lib/numeros";
+import { plural, qtd } from "@/lib/numeros";
 /**
  * A agenda de produção — o PLANO, que é diferente do que já aconteceu.
  *
@@ -504,7 +504,7 @@ export default function AgendaProducao({
         titulo="O que está marcado"
         descricao={
           dados.resumo.atrasadas
-            ? `${dados.resumo.atrasadas} linha(s) do passado ainda esperando — ou se produz, ou se cancela.`
+            ? `${plural(dados.resumo.atrasadas, "linha", "linhas")} do passado ainda esperando — ou se produz, ou se cancela.`
             : "Do que ficou para trás até o que vem."
         }
       >

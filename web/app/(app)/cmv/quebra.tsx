@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
-import { pct } from "@/lib/numeros";
+import { pct, plural } from "@/lib/numeros";
 import { Carregando, Cartao, Vazio } from "@/components/ui";
 
 /**
@@ -130,7 +130,7 @@ export default function Quebra({
                         <span className="ml-2 text-[12px] text-alerta">fora do CMV real</span>
                       )}
                       <span className="block text-[12.5px] text-suave">
-                        {l.produtos} produto(s)
+                        {plural(l.produtos, "produto", "produtos")}
                         {Number(l.perdas) > 0 && ` · ${reais(l.perdas)} de perda`}
                       </span>
                     </td>

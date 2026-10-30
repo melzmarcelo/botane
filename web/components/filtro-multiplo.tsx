@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { plural } from "@/lib/numeros";
 /**
  * Um filtro de várias escolhas: caixas de seleção, com "todos" sendo NENHUMA
  * marcada.
@@ -54,7 +55,7 @@ export default function FiltroMultiplo<T extends string | number>({
         )}
       </div>
       <p className="mt-0.5 text-[12.5px] leading-snug text-suave">
-        {escolhidos.length ? `${escolhidos.length} escolhido(s)` : ajuda}
+        {escolhidos.length ? `${plural(escolhidos.length, "escolhido", "escolhidos")}` : ajuda}
       </p>
 
       {!opcoes.length ? (

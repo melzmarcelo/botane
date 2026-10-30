@@ -7,7 +7,7 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
-import { custo, qtd } from "@/lib/numeros";
+import { custo, plural, qtd } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
 /**
  * A movimentação do período, produto a produto.
@@ -182,8 +182,8 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
         </label>
         <p className="pb-2 text-[13px] text-suave">
           {alvo
-            ? `${linhas.length} de ${dados.produtos} produto(s)`
-            : `${dados.produtos} produto(s)`}
+            ? `${linhas.length} de ${plural(dados.produtos, "produto", "produtos")}`
+            : `${plural(dados.produtos, "produto", "produtos")}`}
         </p>
       </div>
 

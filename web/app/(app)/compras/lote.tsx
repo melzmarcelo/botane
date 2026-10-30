@@ -8,6 +8,7 @@ import { reais } from "@/lib/cadastros";
 import { lancarLote, previaDoLote, type NotaDoLote, type PreviaDoLote } from "@/lib/compras";
 import { dataBr } from "./tipos";
 
+import { plural } from "@/lib/numeros";
 /**
  * Lançar de uma vez as notas que já estão conciliadas.
  *
@@ -103,7 +104,7 @@ export default function LancarLote({
         <div className="flex flex-wrap items-center justify-end gap-3">
           {previa && (
             <span className="text-[13.5px] text-suave">
-              {escolhidas.length} nota(s) · <b className="text-tinta">{reais(valorEscolhido)}</b>
+              {plural(escolhidas.length, "nota", "notas")} · <b className="text-tinta">{reais(valorEscolhido)}</b>
             </span>
           )}
           <button className="btn btn-secundario" onClick={aoFechar}>
@@ -115,7 +116,7 @@ export default function LancarLote({
             disabled={ocupado || escolhidas.length === 0}
             onClick={lancar}
           >
-            {ocupado ? "Lançando…" : `Lançar ${escolhidas.length} nota(s) no estoque`}
+            {ocupado ? "Lançando…" : `Lançar ${plural(escolhidas.length, "nota", "notas")} no estoque`}
           </button>
         </div>
       }
@@ -136,7 +137,7 @@ export default function LancarLote({
 
           {recusadas.length > 0 && (
             <Aviso tipo="erro">
-              <b>{recusadas.length} nota(s) não entraram</b>, porque mudaram desde a prévia:
+              <b>{plural(recusadas.length, "nota", "notas")} não entraram</b>, porque mudaram desde a prévia:
               <ul className="mt-1 list-disc pl-5">
                 {recusadas.slice(0, 5).map((n) => (
                   <li key={n.id}>
@@ -187,7 +188,7 @@ export default function LancarLote({
                           {!!n.fora_de_ordem && (
                             <span className="block text-[12px] text-alerta"
                                   title="Já há movimento desses produtos com data posterior à desta nota. Depois de lançar, reprocesse-os em Estoque ▸ Saldos e movimentos para o custo das saídas acompanhar.">
-                              {n.fora_de_ordem} produto(s) a reprocessar
+                              {plural(n.fora_de_ordem, "produto", "produtos")} a reprocessar
                             </span>
                           )}
                         </td>

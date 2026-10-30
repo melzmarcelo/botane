@@ -15,6 +15,7 @@ import {
 } from "@/lib/patrimonio";
 import { useSessao } from "@/lib/sessao";
 
+import { plural } from "@/lib/numeros";
 /**
  * Uma conferência do patrimônio: ler as plaquetas e fechar (etapa 3, migração 140).
  *
@@ -304,7 +305,7 @@ function JanelaFechar({ c, faltam, aoFechar, aoConcluir }: {
           <label className="flex items-start gap-2 text-[14px]">
             <input type="checkbox" id="conferencia-transferir" checked={transferir}
                    onChange={(e) => setTransferir(e.target.checked)} />
-            <span>Trazer para <b>{c.escopo}</b> os {c.de_fora} bem(ns) achado(s) aqui que o sistema
+            <span>Trazer para <b>{c.escopo}</b> os {plural(c.de_fora, "bem achado", "bens achados")} aqui que o sistema
               punha em outro setor (o local de lá sai).</span>
           </label>
         )}
@@ -312,7 +313,7 @@ function JanelaFechar({ c, faltam, aoFechar, aoConcluir }: {
           <label className="flex items-start gap-2 text-[14px]">
             <input type="checkbox" id="conferencia-confirmar" checked={confirmar}
                    onChange={(e) => setConfirmar(e.target.checked)} />
-            <span>Os {aConfirmar} lido(s) que estavam “A confirmar” passam a <b>Em uso</b> — a
+            <span>Os {plural(aConfirmar, "lido", "lidos")} que estavam “A confirmar” passam a <b>Em uso</b> — a
               conferência viu que eles existem.</span>
           </label>
         )}

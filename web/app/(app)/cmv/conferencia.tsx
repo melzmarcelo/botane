@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Aviso, Etiqueta } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
+import { plural } from "@/lib/numeros";
 import {
   conferirFechamento,
   type ConferenciaDoFechamento,
@@ -98,7 +99,7 @@ export default function ConferenciaDoFechamentoLista({
   return (
     <div className="mt-4">
       <p className="text-[14px] font-semibold">
-        Antes de fechar — {r.itens.length} ponto(s) neste período
+        Antes de fechar — {plural(r.itens.length, "ponto", "pontos")} neste período
       </p>
       {/* ⚠️ Uma LINHA por ponto, com o detalhe recolhido: a janela de confirmar
           tem os botões no fim do corpo, e uma lista aberta os empurrava para

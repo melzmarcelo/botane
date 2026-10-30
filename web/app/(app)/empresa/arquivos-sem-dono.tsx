@@ -5,6 +5,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Cartao, Confirmacao, Vazio } from "@/components/ui";
 import { ArquivosService, origemDoArquivo, tamanho, type Orfaos } from "@/lib/arquivos";
 
+import { plural } from "@/lib/numeros";
 /**
  * Administração → Empresa → Arquivos sem dono.
  *
@@ -91,7 +92,7 @@ export default function ArquivosSemDono() {
         </div>
       )}
       {confirmando && dados && (
-        <Confirmacao titulo={`Apagar ${dados.orfaos_n} arquivo(s) sem dono?`} rotuloConfirmar="Apagar" perigo
+        <Confirmacao titulo={`Apagar ${plural(dados.orfaos_n, "arquivo", "arquivos")} sem dono?`} rotuloConfirmar="Apagar" perigo
                      ocupado={apagando} aoConfirmar={() => void apagar()} aoCancelar={() => setConfirmando(false)}>
           Libera {tamanho(dados.orfaos_bytes)}. Não há desfazer — mas só sai o que, na hora de apagar, continuar
           sem nenhum registro apontando para ele.

@@ -12,7 +12,7 @@ import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/compo
 import IncluirProduto from "./incluir-produto";
 import Voltar from "@/components/voltar";
 
-import { concorda, qtd } from "@/lib/numeros";
+import { concorda, plural, qtd } from "@/lib/numeros";
 /**
  * A contagem — tela própria, feita para o celular na mão de quem conta.
  *
@@ -272,7 +272,7 @@ export default function PaginaContagem() {
         `/inventarios/${id}/fechar`,
       );
       aviso.sucesso(
-        `${r.message} — ${r.ajustes} ajuste(s), ${reais(Number(r.valor))} de diferença.`,
+        `${r.message} — ${plural(r.ajustes, "ajuste", "ajustes")}, ${reais(Number(r.valor))} de diferença.`,
         { texto: "voltar para os inventários", ao: () => router.push("/inventario") },
       );
       await carregar();
@@ -537,7 +537,7 @@ export default function PaginaContagem() {
             {faltam > 0 && (
               <>
                 {" "}
-                <b className="text-tinta">Ainda faltam {faltam} produto(s).</b>
+                <b className="text-tinta">Ainda faltam {plural(faltam, "produto", "produtos")}.</b>
               </>
             )}
           </p>
@@ -569,7 +569,7 @@ export default function PaginaContagem() {
           </p>
           {faltam > 0 && (
             <p className="mt-2 text-[13.5px] text-alerta">
-              {faltam} produto(s) sem contar ficam como estão — não viram zero.
+              {plural(faltam, "produto", "produtos")} sem contar ficam como estão — não viram zero.
             </p>
           )}
           <p className="mt-3 text-[13.5px] text-suave">

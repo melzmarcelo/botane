@@ -7,6 +7,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
+import { plural } from "@/lib/numeros";
 /**
  * Buscar notas no Omie e conferir se não ficou nenhuma para trás.
  *
@@ -125,7 +126,7 @@ export default function NotasOmie() {
           (estornar, atualizar, lançar de novo) é decisão de gente. */}
       {!!travadas.length && (
         <Aviso tipo="info">
-          <b>{travadas.length} nota(s) mudaram no Omie e já estão lançadas aqui.</b> A
+          <b>{plural(travadas.length, "nota", "notas")} mudaram no Omie e já estão lançadas aqui.</b> A
           atualização não as reescreve — o estoque já recebeu os movimentos. Para trazer o
           ajuste, estorne o lançamento, atualize a nota e lance de novo.
           <ul className="mt-2 flex flex-col gap-1">
@@ -157,7 +158,7 @@ export default function NotasOmie() {
           lançada de novo. A lista fica na tela porque mexeu no estoque. */}
       {!!desfeitas.length && (
         <Aviso tipo="info">
-          <b>{desfeitas.length} nota(s) tiveram o recebimento desfeito no Omie</b> — foram
+          <b>{plural(desfeitas.length, "nota", "notas")} tiveram o recebimento desfeito no Omie</b> — foram
           estornadas e voltaram à conferência. Quando forem recebidas de novo lá, entram
           sozinhas.
           <ul className="mt-2 flex flex-col gap-1">
@@ -298,7 +299,7 @@ export default function NotasOmie() {
 
           {!!conf.so_aqui.length && (
             <p className="mt-4 text-[13.5px] text-suave">
-              {conf.so_aqui.length} nota(s) existem aqui e não vieram na lista do Omie — quase
+              {plural(conf.so_aqui.length, "nota", "notas")} existem aqui e não vieram na lista do Omie — quase
               sempre é nota cancelada lá depois de ter sido importada.
             </p>
           )}

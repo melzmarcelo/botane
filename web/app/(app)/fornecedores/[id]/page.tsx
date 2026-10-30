@@ -11,6 +11,7 @@ import ProdutosDaPessoa from "./produtos-da-pessoa";
 import ConsumoDaPessoa from "./consumo-da-pessoa";
 import Voltar from "@/components/voltar";
 
+import { plural } from "@/lib/numeros";
 /** Corrigir um fornecedor — a mesma forma da criação, para o olho reconhecer. */
 export default function PaginaFornecedor() {
   const { id } = useParams<{ id: string }>();
@@ -48,7 +49,7 @@ export default function PaginaFornecedor() {
         </h1>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {!x.ativo && <Etiqueta cor="alerta">inativo</Etiqueta>}
-          {!!x.produtos && <Etiqueta cor="erva">{x.produtos} produto(s)</Etiqueta>}
+          {!!x.produtos && <Etiqueta cor="erva">{plural(x.produtos, "produto", "produtos")}</Etiqueta>}
         </div>
       </header>
 

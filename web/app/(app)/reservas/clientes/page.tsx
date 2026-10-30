@@ -10,6 +10,7 @@ import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { listarClientes, type Cliente } from "@/lib/reservas";
 import { useSessao } from "@/lib/sessao";
 
+import { plural } from "@/lib/numeros";
 /**
  * Os clientes cadastrados pelo site — o grid do Portal de Clientes.
  *
@@ -162,7 +163,7 @@ export default function ClientesDoPortal() {
                           <span className="mono">{c.no_cartao}</span> visita(s)
                           {c.premios > 0 && (
                             <span className="block text-[12px] text-suave">
-                              {c.premios} prêmio(s)
+                              {plural(c.premios, "prêmio", "prêmios")}
                             </span>
                           )}
                         </>

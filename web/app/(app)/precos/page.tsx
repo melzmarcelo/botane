@@ -8,7 +8,7 @@ import { Aviso, Carregando, Cartao, Vazio } from "@/components/ui";
 import { fonteProdutos, type ItemBusca } from "@/lib/busca-cadastro";
 import { reais } from "@/lib/cadastros";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
-import { pct } from "@/lib/numeros";
+import { pct, plural } from "@/lib/numeros";
 import { evolucaoPrecoCusto, type EvolucaoPrecoCusto } from "@/lib/precos";
 import GraficoDegrau, { COR_CUSTO, COR_PRECO } from "./grafico";
 
@@ -138,7 +138,7 @@ export default function PaginaPrecos() {
             <Ladrilho
               rotulo="Preço de venda"
               valor={`${reais(primeiro?.preco)} → ${reais(ultimo?.preco)}`}
-              sub={`${variacao(primeiro?.preco, ultimo?.preco)} · ${dados.mudancas_de_preco.length} mudança(s)`}
+              sub={`${variacao(primeiro?.preco, ultimo?.preco)} · ${plural(dados.mudancas_de_preco.length, "mudança", "mudanças")}`}
             />
             <Ladrilho
               rotulo="Custo"

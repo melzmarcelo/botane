@@ -19,6 +19,7 @@ import Emitidas from "./emitidas";
 import EscolhaDoEvento from "./escolha";
 import Previa from "./previa";
 
+import { plural } from "@/lib/numeros";
 /**
  * Etiquetas → Imprimir: a bancada da cozinha.
  *
@@ -142,7 +143,7 @@ export default function ImprimirEtiquetas() {
                 Produção #{producao.id}: {Number(producao.quantidade).toLocaleString("pt-BR")}{" "}
                 {producao.um_estoque} de {producao.produto}
                 {producao.lote ? ` · lote ${producao.lote}` : ""}
-                {producao.etiquetas ? ` · ${producao.etiquetas} etiqueta(s) já impressa(s)` : ""}.{" "}
+                {producao.etiquetas ? ` · ${plural(producao.etiquetas, "etiqueta", "etiquetas")} já impressa(s)` : ""}.{" "}
                 <button className="link-acao" onClick={() => { setIdProducao(""); trocarProduto(null); }}>
                   soltar
                 </button>

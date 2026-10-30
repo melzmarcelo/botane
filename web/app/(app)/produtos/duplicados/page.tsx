@@ -9,6 +9,7 @@ import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/compo
 import Voltar from "@/components/voltar";
 import ExplicaTela from "@/components/explica-tela";
 
+import { plural } from "@/lib/numeros";
 /**
  * Os cadastros que têm exatamente o mesmo nome — o caso do ABACATE, em lote.
  *
@@ -170,7 +171,7 @@ export default function Duplicados() {
       ) : (
         <>
           <p className="text-[14px] text-suave">
-            {grupos.length} nome(s) repetido(s), {prontos.length} pronto(s) para juntar.
+            {plural(grupos.length, "nome repetido", "nomes repetidos")}, {plural(prontos.length, "pronto", "prontos")} para juntar.
           </p>
           {grupos.map((g) => (
             <Cartao

@@ -17,7 +17,7 @@ import LotesEmEstoque from "./lotes";
 import ReprocessarEstoque from "./reprocessar";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
-import { custo, qtd } from "@/lib/numeros";
+import { custo, plural, qtd } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
 import LinkOrigem from "@/components/link-origem";
 /** Uma linha por PRODUTO somando os locais desta loja. */
@@ -644,7 +644,7 @@ export default function PaginaEstoque() {
                       outro conclui que um dos dois mente. */}
                   {!!fora?.produtos && (
                     <p id="fora-da-lista" className="mt-3 text-[12.5px] text-suave">
-                      E mais <strong>{reais(fora.valor)}</strong> em {fora.produtos} produto(s)
+                      E mais <strong>{reais(fora.valor)}</strong> em {plural(fora.produtos, "produto", "produtos")}
                       <strong> inativos</strong> que ainda têm saldo — o painel da rede os conta.
                       Marque <em>incluir inativos</em> para somá-los aqui.
                     </p>
@@ -836,7 +836,7 @@ export default function PaginaEstoque() {
           titulo="Razão de estoque"
           descricao={
             movimentos
-              ? `${pagMov.total} lançamento(s)${temFiltroMov ? " no filtro" : ""}.`
+              ? `${plural(pagMov.total, "lançamento", "lançamentos")}${temFiltroMov ? " no filtro" : ""}.`
               : undefined
           }
         >

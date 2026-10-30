@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Aviso, Cartao, Etiqueta } from "@/components/ui";
 import { COR_PREVENTIVA, doProduto, type DoProduto } from "@/lib/patrimonio";
 
+import { plural } from "@/lib/numeros";
 /**
  * Os bens de um produto do tipo Patrimônio: cada item físico cadastrado, onde está e a
  * preventiva — e quantos ainda faltam cadastrar.
@@ -32,7 +33,7 @@ export default function BensDoProduto({ idProduto, podeCadastrar }: {
   return (
     <Cartao
       titulo="Bens deste produto"
-      descricao={`${d.ativos} bem(ns) cadastrado(s) · ${d.saldo} no estoque desta loja`}
+      descricao={`${plural(d.ativos, "bem cadastrado", "bens cadastrados")} · ${d.saldo} no estoque desta loja`}
       acao={podeCadastrar ? <Link href={novo} className="btn btn-secundario" id="produto-novo-bem">Cadastrar bem</Link> : undefined}
     >
       {d.faltam > 0 && (

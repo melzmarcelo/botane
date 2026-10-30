@@ -16,6 +16,7 @@ import type { ItemDoCatalogo } from "@/lib/catalogos";
 import type { Cartao } from "@/lib/cartoes";
 import LinhaDoPrato from "./linha-do-prato";
 
+import { plural } from "@/lib/numeros";
 type Lista = { rotulo: string; id_categoria: number; id_subcategoria: number | null; itens: ItemDoCatalogo[] };
 export type CartaoComFalta = { cartao: Cartao; onde: string; faltas: string[] };
 /** O que está sem tradução: os nomes, para a pessoa reconhecer. */
@@ -85,9 +86,9 @@ export function PainelFaltas({ listas: comFaltas, aoAbrir: setGaveta, cartoes = 
             <span className="rotulo">Só em português · {nTraduzir}</span>
             <p className="mt-1 text-[13.5px]">
               {[traduzir.catalogo && "o nome do catálogo",
-                traduzir.secoes.length && `${traduzir.secoes.length} seção(ões)`,
-                traduzir.pratos.length && `${traduzir.pratos.length} prato(s)`,
-                traduzir.cartoes && `${traduzir.cartoes} cartão(ões)`].filter(Boolean).join(", ")}
+                traduzir.secoes.length && `${plural(traduzir.secoes.length, "seção", "seções")}`,
+                traduzir.pratos.length && `${plural(traduzir.pratos.length, "prato", "pratos")}`,
+                traduzir.cartoes && `${plural(traduzir.cartoes, "cartão", "cartões")}`].filter(Boolean).join(", ")}
               {" "}ainda sem inglês e alemão (ou com o português mudado desde a tradução). No site em EN ou DE,
               o cliente lê o português.
             </p>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Modal, Vazio } from "@/components/ui";
+import { plural } from "@/lib/numeros";
 import {
   Categoria,
   Setor,
@@ -97,7 +98,7 @@ export default function Descricoes({
         else await api.put(`/${qual}/${id}`, { descricao: texto });
         feitas += 1;
       }
-      aviso.sucesso(`${feitas} descrição(ões) gravada(s)`);
+      aviso.sucesso(`${plural(feitas, "descrição gravada", "descrições gravadas")}`);
       aoSalvar();
       aoFechar();
     } catch (e) {
@@ -125,7 +126,7 @@ export default function Descricoes({
       rodape={
         <div className="flex flex-wrap items-center justify-end gap-3">
           <span className="mr-auto text-[13px] text-suave">
-            {mudancas.length ? `${mudancas.length} alteração(ões) por gravar` : "nada alterado"}
+            {mudancas.length ? `${plural(mudancas.length, "alteração", "alterações")} por gravar` : "nada alterado"}
           </span>
           <button type="button" className="btn btn-secundario" onClick={aoFechar}>
             Fechar

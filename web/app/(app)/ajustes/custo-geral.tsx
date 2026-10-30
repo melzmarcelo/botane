@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Confirmacao, Vazio } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
-import { custo, qtd } from "@/lib/numeros";
+import { custo, plural, qtd } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
 
 /**
@@ -94,7 +94,7 @@ export default function CustoGeral({ aoLancar }: { aoLancar: () => void }) {
         {previa && !nada && (
           <button type="button" className="btn btn-primario" onClick={() => setConfirmando(true)}
                   aria-busy={lancando} disabled={lancando}>
-            Unificar {previa.produtos} produto(s)
+            Unificar {plural(previa.produtos, "produto", "produtos")}
           </button>
         )}
       </div>
@@ -113,7 +113,7 @@ export default function CustoGeral({ aoLancar }: { aoLancar: () => void }) {
         <>
           <div className="mt-4">
             <Aviso tipo="info">
-              <b>{previa.produtos} produto(s)</b> com prateleiras discordando.{" "}
+              <b>{plural(previa.produtos, "produto", "produtos")}</b> com prateleiras discordando.{" "}
               <b>{previa.prateleiras_reavaliadas}</b> com saldo serão{" "}
               <b>reavaliadas</b> — o estoque muda{" "}
               <b>

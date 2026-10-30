@@ -9,6 +9,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import ExplicaTela from "@/components/explica-tela";
 
 
+import { plural } from "@/lib/numeros";
 type Inventario = {
   id: number;
   nome: string | null;
@@ -104,7 +105,7 @@ export default function PaginaInventario() {
                   <span className="block text-[13px] text-suave">
                     {new Date(i.data).toLocaleDateString("pt-BR")}
                     {i.nome && i.local !== i.nome ? ` · ${i.local}` : ""} · {i.contados} de{" "}
-                    {i.total_itens} contado(s)
+                    {plural(i.total_itens, "contado", "contados")}
                   </span>
                 </Link>
                 <span className="flex flex-wrap items-center gap-1.5">

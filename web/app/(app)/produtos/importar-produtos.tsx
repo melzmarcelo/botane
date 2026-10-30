@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Etiqueta, Modal, Vazio } from "@/components/ui";
 
+import { plural } from "@/lib/numeros";
 /**
  * Importar produtos do PDV ou do Omie — só os que ainda não existem aqui, e só os marcados.
  *
@@ -134,7 +135,7 @@ export default function ImportarProdutos({
       rodape={
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-[13px] text-suave">
-            {busca ? `${marcados.size} de ${busca.novos.length} marcado(s)` : ""}
+            {busca ? `${marcados.size} de ${plural(busca.novos.length, "marcado", "marcados")}` : ""}
           </span>
           <div className="flex gap-2">
             <button type="button" className="btn btn-secundario" onClick={aoFechar}>

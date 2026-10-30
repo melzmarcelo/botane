@@ -9,6 +9,7 @@ import { reais } from "@/lib/cadastros";
 import { consumoEmAberto, type ConsumoEmAberto } from "@/lib/consumo";
 import { TabelaPorDocumento } from "../../vendas/por-pessoa/tabelas-documento";
 
+import { plural } from "@/lib/numeros";
 /**
  * O consumo desta pessoa ainda não cobrado — o que ela está devendo agora.
  *
@@ -75,7 +76,7 @@ export default function ConsumoDaPessoa({
               { r: "Valor cheio", v: dados.total_cheio },
               { r: "Desconto", v: dados.desconto },
               { r: "A cobrar", v: dados.total },
-              { r: `Em cobrança (${dados.lotes_em_cobranca} lote(s))`, v: dados.em_cobranca },
+              { r: `Em cobrança (${plural(dados.lotes_em_cobranca, "lote", "lotes")})`, v: dados.em_cobranca },
             ].map((t) => (
               <div key={t.r} className="rounded-[10px] border border-[var(--color-linha)] px-4 py-3">
                 <b className="block text-[22px] tabular-nums">{reais(t.v)}</b>

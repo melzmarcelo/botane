@@ -11,7 +11,7 @@ import { api } from "@/lib/api";
 import type { Local, Setor } from "@/lib/cadastros";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 import { hoje } from "@/lib/datas";
-import { moedaParaNumero, numeroParaMoeda, reais } from "@/lib/numeros";
+import { moedaParaNumero, numeroParaMoeda, plural, reais } from "@/lib/numeros";
 import {
   COR_PREVENTIVA, CRITICIDADES, SITUACOES, TENSOES, apagar, apagarManutencao, criar, dataBr,
   doProduto, imprimirPlaquetas, obter, registrarManutencao, salvar, type BemDetalhe, type BemForm,
@@ -224,7 +224,7 @@ export default function FichaDoBem() {
 
       {parado && bem?.estoque_no_local && bem.estoque_no_local.produtos > 0 && (
         <Aviso tipo="erro">
-          <b>{bem.local}</b> guarda {bem.estoque_no_local.produtos} produto(s) com saldo
+          <b>{bem.local}</b> guarda {plural(bem.estoque_no_local.produtos, "produto", "produtos")} com saldo
           {bem.estoque_no_local.valor !== null ? ` (${reais(bem.estoque_no_local.valor)})` : ""}.
           Com o equipamento {bem.situacao_txt.toLowerCase()}, confira se precisam ir para outro local.
         </Aviso>
@@ -462,7 +462,7 @@ function Historico({ bem, podeRegistrar, aoMudar }: {
   return (
     <Cartao titulo="Histórico de manutenção"
             descricao={bem.manutencoes.length
-              ? `${bem.manutencoes.length} registro(s) · ${reais(bem.custo_manutencao)} no total`
+              ? `${plural(bem.manutencoes.length, "registro", "registros")} · ${reais(bem.custo_manutencao)} no total`
               : "Nenhuma manutenção registrada ainda."}>
       {podeRegistrar && (
         <form onSubmit={registrar} className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6" id="manutencao-form">

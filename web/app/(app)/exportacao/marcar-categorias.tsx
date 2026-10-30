@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Etiqueta, Modal } from "@/components/ui";
 
+import { plural } from "@/lib/numeros";
 /**
  * Marcar de uma vez as categorias que JÁ EXISTEM no cardápio do PDV.
  *
@@ -121,7 +122,7 @@ export default function MarcarCategorias({ aoAplicar }: { aoAplicar?: () => void
           {!!previa.marcam.length && (
             <div className="mt-4">
               <p className="mb-2 text-[13px] text-suave">
-                {previa.marcam.length} categoria(s) serão marcadas:
+                {plural(previa.marcam.length, "categoria", "categorias")} serão marcadas:
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {previa.marcam.map((c) => (

@@ -7,6 +7,7 @@ import { Aviso, Campo, Etiqueta, Modal } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
+import { plural } from "@/lib/numeros";
 /**
  * Dizer que outros cadastros são o mesmo produto que este — e fundir todos.
  *
@@ -110,8 +111,8 @@ const SISTEMA: Record<string, string> = {
 /** O que este cadastro carrega de passado — é o que decide qual dos dois fica. */
 function historia(l: Lado): string {
   const partes: string[] = [];
-  if (l.movimentos) partes.push(`${l.movimentos} movimento(s) no razão`);
-  if (l.fichas) partes.push(`${l.fichas} ficha(s)`);
+  if (l.movimentos) partes.push(`${plural(l.movimentos, "movimento", "movimentos")} no razão`);
+  if (l.fichas) partes.push(`${plural(l.fichas, "ficha", "fichas")}`);
   if (l.vendido) partes.push(`${l.vendido} vendido(s)`);
   return partes.join(" · ");
 }

@@ -12,6 +12,7 @@ import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
 import BotaoExportar from "@/components/exportar";
 
+import { plural } from "@/lib/numeros";
 /**
  * A lista dos fornecedores — só a lista.
  *
@@ -160,7 +161,7 @@ export default function PaginaFornecedores() {
                   </span>
                   <span className="mt-1.5 flex flex-wrap gap-1.5">
                     {x.fornecedor === false && <Etiqueta cor="neutro">não fornecedor</Etiqueta>}
-                    {!!x.produtos && <Etiqueta cor="erva">{x.produtos} produto(s)</Etiqueta>}
+                    {!!x.produtos && <Etiqueta cor="erva">{plural(x.produtos, "produto", "produtos")}</Etiqueta>}
                     {x.dias_entrega && <Etiqueta>entrega {x.dias_entrega}</Etiqueta>}
                     {x.pedido_minimo ? (
                       <Etiqueta>mínimo {reais(Number(x.pedido_minimo))}</Etiqueta>

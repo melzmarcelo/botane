@@ -1171,7 +1171,7 @@ try {
     await assentar(800);
     const naLista = await p.evaluate(() => ({
       situacao: document.querySelector("#situacao-saldos")?.value,
-      linhas: document.body.innerText.match(/(\d+) linha\(s\)/)?.[1],
+      linhas: document.body.innerText.match(/(\d+) linha(?:\(s\)|s)?\b/)?.[1],
     }));
     checar("o cartão de negativos leva à lista filtrada, com o mesmo número",
       naLista.situacao === "negativo" && naLista.linhas === noCartao,
@@ -2376,7 +2376,7 @@ try {
       filtros: ["Locais", "Setores", "Categorias", "Tipos de produto"].filter((f) =>
         rotulos.includes(f)),
       cegaMarcada: cega?.checked ?? null,
-      previa: /linha\(s\) para contar/.test(document.body.innerText),
+      previa: /linha(?:\(s\)|s)? para contar/.test(document.body.innerText),
     };
   });
   checar("a tela nova oferece os quatro filtros", noNovo.filtros.length === 4, noNovo.filtros);
@@ -2390,7 +2390,7 @@ try {
   // filtro chega ao servidor, e não só ao estado da tela.
   const totalDaPrevia = () =>
     p.evaluate(() =>
-      Number(document.body.innerText.match(/(\d+)\s*linha\(s\) para contar/)?.[1] ?? -1));
+      Number(document.body.innerText.match(/(\d+)\s*linha(?:\(s\)|s)? para contar/)?.[1] ?? -1));
   const semFiltro = await totalDaPrevia();
   await p.evaluate((nome) => {
     const alvo = [...document.querySelectorAll("label")].find((l) =>
@@ -7174,12 +7174,12 @@ try {
   for (let tentativa = 0; tentativa < 90; tentativa++) {
     await new Promise((r) => setTimeout(r, 1000));
     conf = await textoVisivel(p);
-    if (/produto\(s\) conferido|Nenhum produto com c[óo]digo do Omie|Falha na confer/i.test(conf)) {
+    if (/produto(?:\(s\)|s)? conferido|Nenhum produto com c[óo]digo do Omie|Falha na confer/i.test(conf)) {
       break;
     }
   }
   checar("a conferencia de estoque responde",
-    /produto\(s\) conferido|Nenhum produto com c[óo]digo do Omie/i.test(conf),
+    /produto(?:\(s\)|s)? conferido|Nenhum produto com c[óo]digo do Omie/i.test(conf),
     conf.slice(0, 200));
   // ⚠️ O resumo diz o que a tabela nao diz: quantos foram conferidos e quantos
   // do Omie nao tem cadastro aqui. Lista curta sem ele le como "quase tudo bem".
@@ -8209,7 +8209,7 @@ try {
           rodape: (document.body.innerText.match(/\d+–\d+ de [\d.]+ produto/) ?? [null])[0],
           // ⚠️ Só os ATIVOS: a etiqueta de inativo não pode aparecer aqui, e a
           // descrição do cartão diz o recorte.
-          diz_ativos: /produto\(s\) ativo\(s\)/i.test(document.body.innerText),
+          diz_ativos: /produtos? ativos?|produto\(s\) ativo\(s\)/i.test(document.body.innerText),
         };
       });
       checar("a ficha da pessoa lista os produtos dela", cartao.tem, cartao);

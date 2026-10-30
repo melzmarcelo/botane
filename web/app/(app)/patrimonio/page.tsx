@@ -19,6 +19,7 @@ import {
 } from "@/lib/patrimonio";
 import { useSessao } from "@/lib/sessao";
 
+import { plural } from "@/lib/numeros";
 /**
  * Patrimônio: os equipamentos e móveis da loja, um registro por item físico.
  *
@@ -266,7 +267,7 @@ export default function PaginaPatrimonio() {
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <button type="button" className="btn btn-secundario" id="patrimonio-plaquetas"
                     disabled={imprimindo} aria-busy={imprimindo} onClick={() => void plaquetas()}>
-              Imprimir {marcados.length} plaqueta(s)
+              Imprimir {plural(marcados.length, "plaqueta", "plaquetas")}
             </button>
             <button type="button" className="link-acao text-[13px]" onClick={() => setMarcados([])}>
               desmarcar
