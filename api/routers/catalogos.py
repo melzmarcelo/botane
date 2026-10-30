@@ -208,6 +208,20 @@ def remover_arquivo(id_catalogo: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
 # Pré-visualização (30/10/2026)
 # ---------------------------------------------------------------------------
 
+@router.get("/{id_catalogo}/whatsapps")
+def whatsapps(id_catalogo: int, ctx: Contexto = Depends(_VER)) -> list[dict]:
+    """Os WhatsApps da loja dona, para escolher o que atende este catálogo (143).
+
+    ⚠️ Pela chave do CATÁLOGO, não pela de lojas: quem monta o cardápio escolhe o número sem
+    precisar poder mexer no cadastro da loja.
+    """
+    from services import whatsapps_da_loja
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        servico.obter(cur, id_unidade, id_catalogo)  # 404 de fora da loja
+        return whatsapps_da_loja.listar(cur, id_unidade)
+
+
 @router.get("/{id_catalogo}/previa-site")
 def previa_do_site(id_catalogo: int, idioma: str | None = Query(None, pattern="^(pt|en|de)$"),
                    ctx: Contexto = Depends(_VER)) -> dict:

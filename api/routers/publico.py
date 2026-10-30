@@ -674,7 +674,25 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
             # 🔑 30/10/2026: a abertura (cartão sem seção) e os cartões entre os pratos, sem vídeo.
             "cartoes": catalogo_cartoes.do_site(cur, id_catalogo, idioma),
             # 🔑 Nulo quando o catálogo não aceita pedido: o site só desenha o carrinho se vier.
-            "pedidos": pedidos_servico.config_publica(cur, id_unidade, id_catalogo)}
+            "pedidos": pedidos_servico.config_publica(cur, id_unidade, id_catalogo),
+            # 🔑 143: o WhatsApp que atende ESTE catálogo (o escolhido nele → o principal da
+            # loja → o da empresa) e se o cabeçalho mostra o botão "entre em contato".
+            **_contato_do_catalogo(cur, id_unidade, id_catalogo)}
+
+
+def _contato_do_catalogo(cur, id_unidade: int, id_catalogo: int) -> dict:
+    """O WhatsApp do catálogo (143), para o pedido e para o botão do cabeçalho.
+
+    🔑 Pedido do dono (30/10/2026): *"no cardápio, permitir a seleção do número que será
+    responsável pela interação … um botão para entrar em contato no cabeçalho do catálogo, que
+    direcionará para o contato cadastrado no catálogo"*. `contato` só vem verdadeiro quando há
+    número: botão que abre um WhatsApp vazio é pior que botão nenhum.
+    """
+    from services import whatsapps_da_loja
+    numero = whatsapps_da_loja.numero_do_catalogo(cur, id_catalogo, id_unidade)
+    cur.execute("SELECT permite_contato FROM catalogos WHERE id = %s", (id_catalogo,))
+    r = cur.fetchone()
+    return {"whatsapp": numero, "contato": bool(r and r["permite_contato"] and numero)}
 
 
 @router.get("/{id_unidade}/horarios")

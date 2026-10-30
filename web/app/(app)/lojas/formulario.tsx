@@ -5,6 +5,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { Campo, Cartao } from "@/components/ui";
 import { mascaraCnpj } from "@/lib/cadastros";
 
+import WhatsappsDaLoja, { type NumeroZap } from "./whatsapps";
+
 /**
  * O cadastro de uma loja — o mesmo formulário para criar e para corrigir.
  *
@@ -34,7 +36,8 @@ export type LojaForm = {
   cidade: string;
   uf: string;
   telefone: string;
-  whatsapp: string;
+  /** 143: vários WhatsApps, um principal (o campo único virou espelho do principal). */
+  whatsapps: NumeroZap[];
   email: string;
   mesas: string;
   /** Os botões do Hub do Cardápio Vivo (114). */
@@ -58,7 +61,7 @@ export const LOJA_VAZIA: LojaForm = {
   cidade: "",
   uf: "",
   telefone: "",
-  whatsapp: "",
+  whatsapps: [],
   email: "",
   mesas: "",
   google_avaliacao_url: "",
@@ -84,7 +87,10 @@ export function corpoDaLoja(f: LojaForm) {
     cidade: texto(f.cidade),
     uf: texto(f.uf)?.toUpperCase() ?? null,
     telefone: texto(f.telefone),
-    whatsapp: texto(f.whatsapp),
+    // 🔑 A lista inteira; o servidor espelha o principal em `unidades.whatsapp`.
+    whatsapps: f.whatsapps
+      .filter((n) => n.numero.trim())
+      .map((n) => ({ id: n.id, rotulo: n.rotulo.trim() || null, numero: n.numero.trim(), principal: n.principal })),
     email: texto(f.email),
     mesas: f.mesas.trim() ? Number(f.mesas) : null,
     google_avaliacao_url: texto(f.google_avaliacao_url),
@@ -300,22 +306,6 @@ export default function FormularioLoja({
               onChange={(e) => troca("telefone", e.target.value)}
             />
           </Campo>
-          {/* 🔑 **O WhatsApp da loja** (pedido do dono, 24/09/2026: *"o entre em
-              contato separado por loja"*). É para ele que o site do cliente
-              manda quem escolheu esta casa. */}
-          <Campo
-            rotulo="WhatsApp"
-            className="sm:col-span-3"
-            dica="O Entre em contato do site. Em branco, vale o da empresa."
-          >
-            <input
-              className="campo mono"
-              disabled={!podeEditar}
-              placeholder="(99) 99999-9999"
-              value={valor.whatsapp}
-              onChange={(e) => troca("whatsapp", e.target.value)}
-            />
-          </Campo>
           <Campo rotulo="E-mail" className="sm:col-span-3">
             <input
               className="campo"
@@ -326,6 +316,14 @@ export default function FormularioLoja({
             />
           </Campo>
         </div>
+      </Cartao>
+
+      {/* 🔑 **Os WhatsApps da loja** (143, pedido do dono, 30/10/2026: "poder configurar mais
+          de um, e tornar um o principal da loja"). */}
+      <Cartao titulo="WhatsApp"
+              descricao="Os números que o cliente pode chamar. O ★ principal é o “Entre em contato” do site; cada catálogo pode escolher outro.">
+        <WhatsappsDaLoja lista={valor.whatsapps} podeEditar={podeEditar}
+                         aoTrocar={(l) => aoTrocar({ ...valor, whatsapps: l })} />
       </Cartao>
 
       {/* 🔑 Cardápio Vivo (114): o que os botões do Hub da mesa mostram. Ligar cada botão é

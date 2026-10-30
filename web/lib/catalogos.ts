@@ -37,6 +37,10 @@ export type Catalogo = {
   resumo: { pratos: number; sem_foto: number; sem_descricao: number; inativos: number } | null;
   /** É o Cardápio Vivo (o feed da mesa) de alguma loja. */
   cardapio_vivo: boolean;
+  /** 143: o WhatsApp que atende este catálogo (nulo = o principal da loja). */
+  id_whatsapp: number | null;
+  /** 143: o botão "entre em contato" no cabeçalho (site e Cardápio Vivo). */
+  permite_contato: boolean;
 };
 
 /** O vocabulário vem do SERVIDOR: manter a lista aqui seria a segunda cópia. */
@@ -90,7 +94,13 @@ export type Gravar = {
   observacao?: string | null;
   exige_cadastro?: boolean;
   lojas?: number[];
+  id_whatsapp?: number | null;
+  permite_contato?: boolean;
 };
+
+/** Um WhatsApp da loja dona (143), para o catálogo escolher. */
+export type WhatsappDaLoja = { id: number; rotulo: string; numero: string; principal: boolean };
+export const whatsapps = (id: number) => api.get<WhatsappDaLoja[]>(`/catalogos/${id}/whatsapps`);
 
 export const criar = (corpo: Gravar) => api.post<Catalogo>("/catalogos", corpo);
 

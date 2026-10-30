@@ -51,6 +51,8 @@ OPERACAO = [
     # linha a guarda recusava a limpeza inteira (achado em 28/09/2026). O catálogo em si, as
     # categorias e a configuração de pedidos ficam — são a vitrine, não a operação.
     "catalogo_itens",
+    # As opções do item de escolha (142) apontam para o item e para o produto: saem junto.
+    "catalogo_item_escolhas",
     # ⚠️ Os cartões do feed (120) apontam para os itens (a posição "antes do prato" e o botão
     # "Ver o prato"): sem eles aqui, o TRUNCATE dos itens seria recusado. Saem junto.
     "catalogo_cartoes",
@@ -424,6 +426,8 @@ PRESERVADAS = [
     # A regra do cartão (quantas visitas, qual prêmio) descreve a casa.
     "fidelidade_config",
     "whatsapp_avisos",
+    # Os números de WhatsApp da loja (143) são o cadastro dela, como o campo que espelham.
+    "unidade_whatsapps",
     # O modelo da etiqueta é da impressora da loja, não da operação.
     "etiqueta_config",
     # Se o catálogo aceita pedido é configuração dele, como o próprio catálogo.

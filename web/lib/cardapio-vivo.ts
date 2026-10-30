@@ -101,6 +101,8 @@ export type Feed = {
   selecao: boolean;
   /** A tela de entrada (114): só o que a loja ligou E preencheu. Nulo = direto ao feed. */
   hub: { avaliacao: string | null; wifi: { rede: string; senha: string } | null } | null;
+  /** 143: o botão "entre em contato" do catálogo, com o WhatsApp dele. Nulo = sem botão. */
+  contato?: { whatsapp: string } | null;
   previa: boolean;
   /** Sem mesa, o catálogo aceita pedido pelo site: a seleção vira encomenda (o catering). */
   encomenda: boolean;

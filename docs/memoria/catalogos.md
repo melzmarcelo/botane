@@ -1018,3 +1018,34 @@ uma aba Pré-visualização com as funcionalidades de teste.
   Carrinho próprio (`botane.carrinho.previa`) e faixa "Pré-visualização" no topo.
 - Cobertura: `smoke_catalogo_previa.py` (17) e `web/scripts/verificar-catalogo-previa.mjs` (11, na
   bateria do navegador).
+
+## Vários WhatsApps por loja, o número do catálogo e o "entre em contato" (migração 143, 1.1.156, 30/10/2026)
+
+🔑 **Pedido do dono:** *"no cadastro de whatsapp nas lojas, poder configurar mais de um, e tornar um
+o principal da loja. E no cardápio, permitir a seleção do número que será responsável pela
+interação. E também uma opção no catálogo, permite entrar em contato: um botão no cabeçalho do
+catálogo que direciona para o contato cadastrado no catálogo."* Aprovado com as recomendações.
+Estudo em [`docs/whatsapp-numeros-estudo.md`](../whatsapp-numeros-estudo.md).
+- `unidade_whatsapps` (rótulo, número, `principal`, ordem; índice único parcial = um principal por
+  loja). A migração semeou o `unidades.whatsapp` de cada loja como "Atendimento", principal.
+- 🔑 **`unidades.whatsapp` ficou como ESPELHO do principal**, mantido por
+  `services/whatsapps_da_loja.gravar` — quem já lia o campo (`/publico/{u}/casa`, termo LGPD,
+  fidelidade) não mudou. ⚠️ Não gravar o campo à mão: com `whatsapps` no PUT da loja, o
+  `whatsapp` do corpo é ignorado.
+- A lista vai no PUT/POST de `/unidades` (`whatsapps`, nulo = não mexe) e volta no GET. A gravação
+  mantém o id de quem já existia (é o que o catálogo guarda); apagar → catálogo volta ao principal
+  (`ON DELETE SET NULL`). Lista sem principal → o primeiro vira. Recusa 2 principais, número
+  repetido (pelos dígitos) e número com menos de 10 dígitos.
+- `catalogos.id_whatsapp` (da loja DONA — conferido em `do_catalogo_valido`) e
+  `catalogos.permite_contato` (padrão falso). Na Publicação, só no catálogo de produtos; a lista
+  vem de `GET /catalogos/{id}/whatsapps` (chave do catálogo, não de lojas).
+- 🔑 **Regra única do número: `numero_do_catalogo`** — o do catálogo → o principal da loja onde o
+  cliente está → o da empresa. Site: `_montar_cardapio` devolve `whatsapp` e `contato` (só
+  verdadeiro com número). Feed: `contato: {whatsapp}` ou nulo.
+- Site: `.contato-catalogo` no topo das telas cardápio e seção ("Fale conosco"); o "Combinar o
+  pagamento pelo WhatsApp" usa o número do catálogo (`linkZapDoCatalogo`). Feed: `#cv-contato` no
+  topo. Mensagem em português (quem lê é a casa): "Olá! Vim pelo cardápio X." (+ " Estou na mesa Y.").
+- ⚠️ A conexão com a Meta (099, aba WhatsApp) continua UMA por loja — números de contato não enviam
+  aviso.
+- Cobertura: `smoke_whatsapps_da_loja.py` (24) e `verificar-whatsapps.mjs` (8). `limpar_dados`:
+  `unidade_whatsapps` em PRESERVADAS (e `catalogo_item_escolhas`, que faltava desde a 142, em OPERACAO).

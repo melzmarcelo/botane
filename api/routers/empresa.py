@@ -15,12 +15,13 @@ from models.empresa import (
     EmpresaUpdate,
     ParametrosResponse,
     ParametrosUpdate,
+    UnidadeAtualizar,
     UnidadeCreate,
+    UnidadeGravar,
     UnidadeResponse,
-    UnidadeUpdate,
 )
 from seguranca import Contexto, contexto_atual, requer_permissao
-from services import arquivos_orfaos, periodos
+from services import arquivos_orfaos, periodos, whatsapps_da_loja
 
 router = APIRouter(tags=["empresa"])
 
@@ -151,14 +152,18 @@ def listar_unidades(incluir_inativas: bool = False,
             (incluir_inativas,),
         )
         linhas = [dict(r) for r in cur.fetchall()]
+        # 🔑 Os WhatsApps de cada loja (143), o principal primeiro.
+        numeros = whatsapps_da_loja.listar_varias(cur, [u["id"] for u in linhas])
+    for u in linhas:
+        u["whatsapps"] = numeros.get(u["id"], [])
     # Quem não é de todas as lojas só enxerga as suas.
     return [u for u in linhas if ctx.ve_unidade(u["id"])]
 
 
 @router.post("/unidades", status_code=201)
-def criar_unidade(body: UnidadeCreate,
+def criar_unidade(body: UnidadeGravar,
                   ctx: Contexto = Depends(requer_permissao("admin.unidades"))) -> dict:
-    dados = body.model_dump()
+    dados = body.model_dump(exclude={"whatsapps"})
     with get_cursor() as cur:
         if dados.get("matriz"):
             cur.execute("UPDATE unidades SET matriz = false WHERE matriz")
@@ -185,20 +190,25 @@ def criar_unidade(body: UnidadeCreate,
                VALUES (%s, 'Estoque', 'SECO', true, true)""",
             (nova,),
         )
+        if body.whatsapps is not None:
+            whatsapps_da_loja.gravar(cur, nova, [w.model_dump() for w in body.whatsapps])
         auditoria.registrar(cur, ctx.id_usuario, "unidade", nova, "criar", depois=dados)
     return {"id": nova, "message": "Loja criada"}
 
 
 @router.put("/unidades/{id_unidade}")
-def atualizar_unidade(id_unidade: int, body: UnidadeUpdate,
+def atualizar_unidade(id_unidade: int, body: UnidadeAtualizar,
                       ctx: Contexto = Depends(requer_permissao("admin.unidades"))) -> dict:
     # ⚠️ A mesma conferência da LEITURA (validação de 29/09/2026): quem cuida só de uma
     # loja não altera outra trocando o número na URL.
     if not ctx.ve_unidade(id_unidade):
         raise HTTPException(status_code=404, detail="Loja não encontrada")
-    dados = body.model_dump(exclude_unset=True)
-    if not dados:
+    dados = body.model_dump(exclude_unset=True, exclude={"whatsapps"})
+    if not dados and body.whatsapps is None:
         raise HTTPException(status_code=400, detail="Nada para atualizar")
+    # ⚠️ Com a lista, o campo único vira espelho do principal: quem manda é a lista.
+    if body.whatsapps is not None:
+        dados.pop("whatsapp", None)
     with get_cursor() as cur:
         cur.execute(
             f"SELECT {', '.join(_CAMPOS_UNIDADE)} FROM unidades WHERE id = %s", (id_unidade,)
@@ -208,10 +218,14 @@ def atualizar_unidade(id_unidade: int, body: UnidadeUpdate,
             raise HTTPException(status_code=404, detail="Loja não encontrada")
         if dados.get("matriz"):
             cur.execute("UPDATE unidades SET matriz = false WHERE matriz AND id <> %s", (id_unidade,))
-        sets = ", ".join(f"{c} = %s" for c in dados)
-        cur.execute(
-            f"UPDATE unidades SET {sets} WHERE id = %s", [*dados.values(), id_unidade]
-        )
+        if dados:
+            sets = ", ".join(f"{c} = %s" for c in dados)
+            cur.execute(
+                f"UPDATE unidades SET {sets} WHERE id = %s", [*dados.values(), id_unidade]
+            )
+        if body.whatsapps is not None:
+            dados["whatsapps"] = whatsapps_da_loja.gravar(
+                cur, id_unidade, [w.model_dump() for w in body.whatsapps])
         auditoria.registrar(
             cur, ctx.id_usuario, "unidade", id_unidade, "atualizar",
             antes=dict(antes), depois=dados, id_unidade=id_unidade,

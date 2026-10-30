@@ -94,6 +94,10 @@ class CatalogoUpdate(BaseModel):
     observacao: str | None = None
     exige_cadastro: bool | None = None
     lojas: list[int] | None = None
+    # 🔑 O WhatsApp que atende este catálogo (143), um da loja dona; nulo = o principal.
+    id_whatsapp: int | None = None
+    # O botão "entre em contato" no cabeçalho do catálogo (site e Cardápio Vivo).
+    permite_contato: bool | None = None
 
 
 class CatalogoResponse(BaseModel):
@@ -125,6 +129,9 @@ class CatalogoResponse(BaseModel):
     resumo: dict | None = None
     # É o Cardápio Vivo (o feed da mesa) de alguma loja.
     cardapio_vivo: bool = False
+    # 143: o WhatsApp do catálogo (nulo = o principal da loja) e o botão de contato.
+    id_whatsapp: int | None = None
+    permite_contato: bool = False
 
 
 # ---------------------------------------------------------------------------

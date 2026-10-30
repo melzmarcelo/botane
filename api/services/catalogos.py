@@ -37,7 +37,8 @@ from models.catalogos import ORIGEM_PRODUTOS, ORIGENS, SITUACOES
 # As colunas que a tela lê, num lugar só: a lista e o registro têm de mostrar o
 # mesmo catálogo, e duas listas de campos divergem na primeira coluna nova.
 _CAMPOS = """c.id, c.nome, c.origem, c.publica_de, c.publica_ate, c.situacao,
-             c.observacao, c.exige_cadastro, u.nome AS criado_por,
+             c.observacao, c.exige_cadastro, c.id_whatsapp, c.permite_contato,
+             u.nome AS criado_por,
              ARRAY(SELECT l.id_unidade FROM catalogo_lojas l
                     WHERE l.id_catalogo = c.id ORDER BY l.id_unidade) AS lojas,
              c.arquivo_url, c.arquivo_nome, c.arquivo_bytes, c.arquivo_em,
@@ -322,13 +323,19 @@ def atualizar(cur, id_unidade: int, id_catalogo: int, dados: dict) -> dict:
             detail="O fim da publicação não pode ser antes do começo — o catálogo "
                    "sairia do ar antes de entrar.")
 
+    # 🔑 143: o número tem de ser da loja DONA do catálogo (nulo = o principal).
+    if "id_whatsapp" in dados:
+        from services import whatsapps_da_loja
+        whatsapps_da_loja.do_catalogo_valido(cur, id_catalogo, dados["id_whatsapp"])
+
     campos, valores = [], []
     for campo in ("nome", "origem", "publica_de", "publica_ate", "situacao", "observacao",
-                  "exige_cadastro"):
+                  "exige_cadastro", "id_whatsapp", "permite_contato"):
         if campo not in dados:
             continue
         valor = dados[campo]
-        if campo in ("nome", "origem", "situacao", "exige_cadastro") and valor is None:
+        if campo in ("nome", "origem", "situacao", "exige_cadastro",
+                     "permite_contato") and valor is None:
             # Estes três não têm "vazio": deixar nulo derrubaria o NOT NULL, e a
             # mensagem do banco não diria nada a quem está na tela.
             continue

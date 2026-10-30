@@ -31,6 +31,8 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
   const [apagando, setApagando] = useState(false);
   const [vivo, setVivo] = useState<RespostaConfig | null>(null);
   const [configVivo, setConfigVivo] = useState(false);
+  const [zaps, setZaps] = useState<cat.WhatsappDaLoja[]>([]);
+  const produtos = capa.origem === cat.ORIGEM_PRODUTOS;
 
   useEffect(() => setF(formDa(capa)), [capa]);
   useEffect(() => {
@@ -38,8 +40,9 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
     // ⚠️ Só no catálogo de produtos: o feed não sabe mostrar um PDF.
     if (capa.origem === cat.ORIGEM_PRODUTOS) {
       CardapioVivoService.config().then(setVivo).catch(() => setVivo(null));
+      cat.whatsapps(capa.id).then(setZaps).catch(() => setZaps([]));
     }
-  }, [capa.origem]);
+  }, [capa.origem, capa.id]);
 
   async function gravar(corpo: cat.Gravar, mensagem: string) {
     setSalvando(true);
@@ -64,6 +67,7 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
       observacao: f.observacao.trim() || null,
       exige_cadastro: f.exige_cadastro,
       lojas: f.lojas,
+      ...(produtos ? { id_whatsapp: f.id_whatsapp, permite_contato: f.permite_contato } : {}),
     }, "Publicação salva.");
   }
 
@@ -217,6 +221,33 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
               </span>
             </span>
           </label>
+          {/* 🔑 143 (pedido do dono, 30/10/2026): o número que atende este catálogo e o botão
+              "entre em contato" no cabeçalho dele, no site e no Cardápio Vivo. */}
+          {produtos && (<>
+            <Campo rotulo="WhatsApp deste catálogo"
+                   dica={zaps.length
+                     ? "Atende o botão de contato e o “combinar o pagamento” dos pedidos. Os números ficam no cadastro da loja."
+                     : "A loja não tem WhatsApp próprio: vale o da empresa. Os números se cadastram em Lojas."}>
+              <select className="campo" id="catalogo-whatsapp" disabled={!podeEditar}
+                      value={f.id_whatsapp ?? ""}
+                      onChange={(e) => setF({ ...f, id_whatsapp: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">O principal da loja</option>
+                {zaps.map((z) => (
+                  <option key={z.id} value={z.id}>{z.rotulo} · {z.numero}{z.principal ? " (principal)" : ""}</option>
+                ))}
+              </select>
+            </Campo>
+            <label className="flex items-start gap-3">
+              <input type="checkbox" className="mt-1" id="catalogo-permite-contato" disabled={!podeEditar}
+                     checked={f.permite_contato} onChange={(e) => setF({ ...f, permite_contato: e.target.checked })} />
+              <span className="text-[14px]">
+                Permite entrar em contato
+                <span className="block text-[13px] text-suave">
+                  Ligado, o cabeçalho do catálogo ganha um botão de WhatsApp, no site e no Cardápio Vivo.
+                </span>
+              </span>
+            </label>
+          </>)}
           <Campo rotulo="Observação" dica="Para a casa, não para o cliente.">
             <input className="campo" id="catalogo-observacao" maxLength={500} disabled={!podeEditar}
                    value={f.observacao} onChange={(e) => setF({ ...f, observacao: e.target.value })} />
@@ -247,5 +278,7 @@ function formDa(c: cat.Catalogo) {
     observacao: c.observacao ?? "",
     exige_cadastro: c.exige_cadastro,
     lojas: c.lojas,
+    id_whatsapp: c.id_whatsapp ?? null,
+    permite_contato: c.permite_contato ?? false,
   };
 }

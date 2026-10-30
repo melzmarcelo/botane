@@ -386,6 +386,16 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
   font: 500 13px/1 Karla, sans-serif; padding: 4px 0; align-self: flex-start;
 }
 .voltar:hover { color: var(--tinta); }
+/* 🔑 143: o botão de WhatsApp no cabeçalho do catálogo, à direita do "voltar". */
+.topo-cardapio { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.contato-catalogo {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--linha); color: var(--tinta); text-decoration: none;
+  font: 500 13px/1 Karla, sans-serif; background: #fff;
+}
+.contato-catalogo::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #25D366; }
+.contato-catalogo:hover { border-color: var(--tinta-suave); }
+.contato-catalogo[hidden] { display: none; }
 
 /* ---- a fidelidade: o cartão de visitas (pedido do dono, 24/09/2026) ---- */
 .carimbos {
@@ -648,7 +658,11 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
     <!-- 🔑 **O primeiro print**: cada categoria é título, descrição e uma foto
          grande com "ACESSAR" por cima. -->
     <section class="tela" data-tela="cardapio" aria-labelledby="t-cardapio">
-      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <!-- 🔑 143: o "entre em contato" do catálogo, quando a casa o liga. -->
+      <div class="topo-cardapio">
+        <button class="voltar" data-ir="inicio">‹ voltar</button>
+        <a class="contato-catalogo" target="_blank" rel="noopener" hidden>Fale conosco</a>
+      </div>
       <h2 id="t-cardapio">Cardápio</h2>
       <div class="passos" id="secoes-do-cardapio"></div>
     </section>
@@ -657,7 +671,10 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
     <!-- 🔑 **O segundo print**: a tira de subcategorias redondas no topo e, em
          baixo, os itens agrupados, com nome, preço e descrição. -->
     <section class="tela" data-tela="secao" aria-labelledby="t-secao">
-      <button class="voltar" data-ir="cardapio">‹ cardápio</button>
+      <div class="topo-cardapio">
+        <button class="voltar" data-ir="cardapio">‹ cardápio</button>
+        <a class="contato-catalogo" target="_blank" rel="noopener" hidden>Fale conosco</a>
+      </div>
       <h2 id="t-secao">Categoria</h2>
       <p class="sub-tela" id="secao-descricao"></p>
       <div class="tira" id="tira-subcategorias" role="group"
@@ -873,6 +890,7 @@ const TRADUCOES = {
      "Wählen Sie den Standort — Reservierung, Speisekarte und Kontakt gehören zu ihm."],
   "‹ voltar": ["‹ back", "‹ zurück"],
   "‹ cardápio": ["‹ menu", "‹ Speisekarte"],
+  "Fale conosco": ["Contact us", "Kontakt"],
   "Voltar ao início": ["Back to start", "Zurück zum Anfang"],
   "Aberto agora": ["Open now", "Jetzt geöffnet"],
   "Fechado hoje": ["Closed today", "Heute geschlossen"],
@@ -1608,6 +1626,28 @@ function moldura(url, nome, classe) {
     : `<span class="${classe}">${esc(nome)}</span>`;
 }
 
+/**
+ * 🔑 **O "entre em contato" do catálogo** (143, pedido do dono, 30/10/2026): com a opção ligada,
+ * o cabeçalho do cardápio e das seções ganha o botão do WhatsApp DO CATÁLOGO (o escolhido nele,
+ * ou o principal da loja). ⚠️ A mensagem vai em português, de propósito: quem lê é a casa.
+ */
+function pintarContato(c) {
+  const zap = c && c.contato && c.whatsapp
+    ? `https://wa.me/${c.whatsapp}?text=${encodeURIComponent(`Olá! Vim pelo cardápio ${c.nome}.`)}`
+    : null;
+  document.querySelectorAll(".contato-catalogo").forEach((a) => {
+    a.hidden = !zap;
+    if (zap) a.href = zap; else a.removeAttribute("href");
+  });
+}
+
+/** O WhatsApp do catálogo aberto (143) e, sem ele, o da casa. */
+function linkZapDoCatalogo(texto) {
+  return cardapio && cardapio.whatsapp
+    ? `https://wa.me/${cardapio.whatsapp}?text=${encodeURIComponent(texto)}`
+    : linkZap(texto);
+}
+
 function abrirCardapio(id, nome) {
   return mostrarCardapio(nome, () => pedir(`/catalogos/${id}${noIdioma()}`));
 }
@@ -1618,8 +1658,10 @@ async function mostrarCardapio(nome, buscar) {
   $("#t-cardapio").textContent = nome;
   caixa.innerHTML = `<p class="vazio">Carregando o cardápio…</p>`;
   ir("cardapio");
+  pintarContato(null);
   try {
     cardapio = await buscar();
+    pintarContato(cardapio);
   } catch (e) {
     caixa.innerHTML = `<p class="vazio">${esc(e.mensagem
       || "Não conseguimos abrir o cardápio agora.")}</p>`;
@@ -2175,7 +2217,8 @@ async function enviarPedido() {
   avisar("#aviso-pedido-pronto",
     t("A casa vai conferir e confirmar seu pedido. Acompanhe em “Meus pedidos”")
     + (cfg && cfg.texto_pagamento ? ". " + cfg.texto_pagamento : "."), false);
-  const zap = pedidoPagamento === "WHATSAPP" && linkZap(
+  // 🔑 143: o "combinar o pagamento" vai ao WhatsApp do CATÁLOGO do pedido.
+  const zap = pedidoPagamento === "WHATSAPP" && linkZapDoCatalogo(
     `Olá! Fiz o pedido nº ${r.numero} pelo site e quero combinar o pagamento.`);
   $("#zap-pedido").innerHTML = zap
     ? `<a class="item destaque" href="${zap}" target="_blank" rel="noopener">Combinar o pagamento pelo WhatsApp</a>` : "";

@@ -406,6 +406,17 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
               navegador do computador abre é branca — branco sobre branco. No celular a lista é
               do sistema e não herda, por isso só aparecia na web. */}
           <SeletorDeIdioma idioma={idioma} aoEscolher={setIdioma} />
+          {/* 🔑 143 (pedido do dono, 30/10/2026): o "entre em contato" do catálogo, para o
+              WhatsApp escolhido nele. ⚠️ A mensagem vai em português: quem lê é a casa. */}
+          {feed.contato && (
+            <a href={`https://wa.me/${feed.contato.whatsapp}?text=${encodeURIComponent(
+                 `Olá! Vim pelo cardápio ${feed.cardapio}.${feed.mesa ? ` Estou na mesa ${feed.mesa.nome}.` : ""}`)}`}
+               target="_blank" rel="noopener noreferrer" aria-label={t.faleConosco} title={t.faleConosco}
+               id="cv-contato"
+               className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-xs backdrop-blur">
+              <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-[#25D366]" /> WhatsApp
+            </a>
+          )}
           <button type="button" onClick={() => setFiltroAberto((v) => !v)} aria-expanded={filtroAberto}
                   className={`rounded-full px-3 py-1 text-xs backdrop-blur ${filtro.length ? "bg-white text-black" : "bg-white/15"}`}>
             {t.filtrar}{filtro.length ? ` (${filtro.length})` : ""}

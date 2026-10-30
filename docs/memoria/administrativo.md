@@ -822,3 +822,9 @@ uma prateleira — e o conector só sabia LER as duas coisas.
 - Integrações ▸ Omie ganhou **"Somente recebidas"** e **"Lançar notas recebidas"** (migração 130,
   23/10/2026). A regra mora em Compras — ver `compras.md`. ⚠️ No `PUT /omie/config` os dois campos são
   opcionais: ausentes MANTÊM o que está (como o `trazer_categorias` do PDV).
+
+## Vários WhatsApps por loja (migração 143, 1.1.156, 30/10/2026)
+A loja tem uma LISTA de WhatsApps (`unidade_whatsapps`), um principal (★); `unidades.whatsapp`
+virou espelho do principal, mantido por `services/whatsapps_da_loja.gravar` — não gravar à mão.
+Cartão "WhatsApp" no cadastro (`lojas/whatsapps.tsx`). O uso pelo catálogo (número escolhido e
+botão de contato) está em [`catalogos.md`](catalogos.md#vários-whatsapps-por-loja-o-número-do-catálogo-e-o-entre-em-contato-migração-143-11156-30102026).

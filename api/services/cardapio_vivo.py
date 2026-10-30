@@ -633,6 +633,9 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         # 🔑 **O Hub** (114): só o que a loja LIGOU e PREENCHEU. Nenhum dos dois → nulo, e a
         # tela pula direto para o feed.
         "hub": _hub(cfg, loja),
+        # 🔑 143: o botão "entre em contato" no topo do feed, com o WhatsApp do catálogo. Nulo
+        # quando o catálogo não o liga ou não há número nenhum (nem da loja, nem da empresa).
+        "contato": _contato(cur, id_unidade, id_catalogo),
         "previa": bool(previa_catalogo),
         # 🔑 Os cartões de conteúdo (120): a abertura do cardápio e os cartões entre os pratos.
         # Só no feed — o site e o PDF continuam só com os pratos (decisão do dono).
@@ -649,6 +652,16 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
            else {"anuncios": [], "regras_anuncio": None, "grupo_anuncio": None}),
         **conteudo,
     }
+
+
+def _contato(cur, id_unidade: int, id_catalogo: int) -> dict | None:
+    from services import whatsapps_da_loja
+    cur.execute("SELECT permite_contato FROM catalogos WHERE id = %s", (id_catalogo,))
+    r = cur.fetchone()
+    if not r or not r["permite_contato"]:
+        return None
+    numero = whatsapps_da_loja.numero_do_catalogo(cur, id_catalogo, id_unidade)
+    return {"whatsapp": numero} if numero else None
 
 
 def _aceita_encomenda(cur, id_catalogo: int) -> bool:

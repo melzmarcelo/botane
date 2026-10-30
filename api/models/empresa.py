@@ -44,6 +44,14 @@ class EmpresaResponse(EmpresaUpdate):
     id: int
 
 
+class WhatsappDaLoja(BaseModel):
+    """Um dos WhatsApps da loja (migração 143). `id` nulo = número novo."""
+    id: int | None = None
+    rotulo: str | None = Field(default=None, max_length=60)
+    numero: str = Field(max_length=30)
+    principal: bool = False
+
+
 class UnidadeCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=120)
     apelido: str | None = Field(default=None, max_length=40)
@@ -77,8 +85,22 @@ class UnidadeUpdate(UnidadeCreate):
     nome: str | None = Field(default=None, min_length=2, max_length=120)
 
 
+class UnidadeGravar(UnidadeCreate):
+    """O que a tela de Lojas envia ao CRIAR: a loja e a lista de WhatsApps (143).
+
+    ⚠️ `whatsapps` não é coluna de `unidades`: fica fora de `_CAMPOS_UNIDADE` por estar só aqui.
+    Nulo = não mexe na lista; o principal da lista vira `unidades.whatsapp`.
+    """
+    whatsapps: list[WhatsappDaLoja] | None = Field(default=None, max_length=20)
+
+
+class UnidadeAtualizar(UnidadeUpdate):
+    whatsapps: list[WhatsappDaLoja] | None = Field(default=None, max_length=20)
+
+
 class UnidadeResponse(UnidadeCreate):
     id: int
+    whatsapps: list[WhatsappDaLoja] = []
 
 
 class ParametrosUpdate(BaseModel):
