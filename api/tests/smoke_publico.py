@@ -127,6 +127,16 @@ print("\n3. o whatsapp sai so com DIGITOS")
 # do cliente nao deve saber o formato do cadastro da casa.
 st, e_antes = chamar("GET", "/empresa", token=token)
 zap_antes = (e_antes or {}).get("whatsapp")
+# ⚠️ v1.2.0: o que se testa aqui é o da EMPRESA, que só vale quando a loja não tem número
+# próprio (143). A loja 1 da base local ganhou o dela, e o site mostrava esse — certo, mas
+# não o que esta seção confere. O número da loja sai durante a seção e volta no fim.
+sys.path.insert(0, ".")
+from database import get_cursor as _gc, init_pool as _ip  # noqa: E402
+_ip()
+with _gc() as _cur:
+    _cur.execute("SELECT whatsapp FROM unidades WHERE id = 1")
+    _zap_loja = (_cur.fetchone() or {}).get("whatsapp")
+    _cur.execute("UPDATE unidades SET whatsapp = NULL WHERE id = 1")
 chamar("PUT", "/empresa", {**e_antes, "whatsapp": "(47) 99910-5033"}, token=token)
 st, c2 = chamar("GET", "/publico/1/casa")
 checar("o numero mascarado vira so digitos",
@@ -139,6 +149,8 @@ st, c3 = chamar("GET", "/publico/1/casa")
 checar("e sem cadastro vem nulo, nao um numero inventado",
        (c3 or {}).get("whatsapp") is None, (c3 or {}).get("whatsapp"))
 chamar("PUT", "/empresa", {**e_antes, "whatsapp": zap_antes}, token=token)
+with _gc() as _cur:
+    _cur.execute("UPDATE unidades SET whatsapp = %s WHERE id = 1", (_zap_loja,))
 
 
 print("\n3b. a MENSAGEM que abre no WhatsApp vem da configuracao")
