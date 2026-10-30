@@ -2431,7 +2431,7 @@ try {
       achar: rotulos.includes("Achar produto"),
       contei: rotulos.includes("Contei"),
       unidade: rotulos.includes("Unidade"),
-      progresso: /contado\(s\)/.test(document.body.innerText),
+      progresso: /(?:contado\(s\)|contados|contado)/.test(document.body.innerText),
       // Abaixo de 16px o iPhone dá zoom no foco e a tela salta a cada campo.
       tamanhoFonte: campo ? parseFloat(getComputedStyle(campo).fontSize) : 0,
     };
@@ -2647,7 +2647,7 @@ try {
         colunas: ["Insumo", "Por unidade", "Total", "Tem no local"].every((c) =>
           cab.includes(c)),
         rende: /A receita rende/i.test(document.body.innerText),
-        falta: /tem tudo|item\(ns\) faltando/i.test(document.body.innerText),
+        falta: /tem tudo|i(?:tem\(ns\)|tens|tem) faltando/i.test(document.body.innerText),
         // 🔑 **A folha e da COZINHA** (16/09/2026, pedido do dono: "quem vai ver
         // esta tela precisa saber as quantidades e o modo de preparo, e nao os
         // custos; disponibilizar a impressao desta tela, para que seja passada
@@ -2930,7 +2930,7 @@ try {
   }));
   checar("escolher na lupa fixa o produto como etiqueta", fixado.etiqueta === true, fixado.etiqueta);
   checar("e o razão passa a mostrar só ele",
-    /lançamento\(s\) no filtro/.test(fixado.texto), fixado.texto.slice(0, 200));
+    /(?:lançamento\(s\)|lançamentos|lançamento) no filtro/.test(fixado.texto), fixado.texto.slice(0, 200));
   await foto(p, "18e-razao-produto-fixado");
   await p.evaluate(() => {
     document.querySelector('button[aria-label="tirar o filtro de produto"]')?.click();
@@ -3840,7 +3840,7 @@ try {
   });
   await assentar(2200);
   const textoImport = await p.evaluate(() => document.body.innerText);
-  checar("importa a venda pela tela", /1 venda\(s\) importada/.test(textoImport),
+  checar("importa a venda pela tela", /1 (?:venda\(s\)|vendas|venda) importada/.test(textoImport),
     textoImport.slice(0, 160));
   checar("e volta para a lista", /\/vendas$/.test(new URL(p.url()).pathname) ||
     p.url().endsWith("/vendas"), p.url());
@@ -4141,7 +4141,7 @@ try {
     await p.waitForSelector("#receber-pdf-abertos", { timeout: 8000 }).catch(() => {});
     const botaoTodos = await p.$eval("#receber-pdf-abertos", (e) => e.textContent).catch(() => "");
     checar("a lista de lotes oferece o PDF de todos os em cobranca",
-      /PDF dos \d+ lote\(s\) em cobran/.test(botaoTodos ?? ""), botaoTodos);
+      /PDF dos \d+ (?:lote\(s\)|lotes|lote) em cobran/.test(botaoTodos ?? ""), botaoTodos);
     if (loteTela) {
       await irPara(p, `${WEB}/receber/lotes/${loteTela.id}`);
       await p.waitForSelector("#lote-total", { timeout: 15000 }).catch(() => {});
@@ -4482,11 +4482,11 @@ try {
     [...(d?.querySelectorAll("button") ?? [])]
       .find((b) => b.textContent?.trim() === "Sincronizar")?.click();
   });
-  await p.waitForFunction(() => /nota\(s\) nova\(s\)/i.test(document.body.innerText),
+  await p.waitForFunction(() => /(?:nota\(s\)|notas|nota) (?:nova\(s\)|novas|nova)/i.test(document.body.innerText),
     { timeout: 90000, polling: 500 }).catch(() => {});
   const textoCompras = await p.evaluate(() => document.body.innerText);
   checar("sincroniza pela tela: as novas e a releitura na mesma frase",
-    /nota\(s\) nova\(s\)/i.test(textoCompras)
+    /(?:nota\(s\)|notas|nota) (?:nova\(s\)|novas|nova)/i.test(textoCompras)
       && /relidas?\b|nenhuma nota do Omie aberta/i.test(textoCompras),
     textoCompras.slice(0, 300));
   // ⚠️ A fila de conciliação é da CASA INTEIRA e vem do servidor — antes a tela
@@ -5290,7 +5290,7 @@ try {
   });
   await assentar(1800);
   const textoGravado = await p.evaluate(() => document.body.innerText);
-  checar("a composição grava pela tela", /componente\(s\)/i.test(textoGravado),
+  checar("a composição grava pela tela", /(?:componente\(s\)|componentes|componente)/i.test(textoGravado),
     textoGravado.slice(0, 160));
   checar("e o custo do combo aparece", /R\$\s*3,00/.test(textoGravado),
     textoGravado.slice(-260));
@@ -5668,7 +5668,7 @@ try {
   checar("/alertas carrega",
     !/Erro 5|Não autenticado|Falha ao carregar/.test(textoAlertas), textoAlertas.slice(0, 90));
   checar("a tela lista pontos de atenção (ou diz que não há)",
-    /ponto\(s\) de atenção|Nada pendente/i.test(textoAlertas), textoAlertas.slice(0, 140));
+    /(?:ponto\(s\)|pontos|ponto) de atenção|Nada pendente/i.test(textoAlertas), textoAlertas.slice(0, 140));
   await foto(p, "30-alertas");
 
   // ---- Baixar deixou de ser um clique cego ----
@@ -5742,7 +5742,7 @@ try {
   // ⚠️ **A prévia ESPERA pelo texto, não por um relógio** (21/10/2026). O cadastro de
   // produtos da base local cresce a cada rodada (53 mil em outubro) e a prévia dele
   // passou a levar ~1,8 s no servidor: os 2,4 s fixos acima viraram sorteio.
-  await p.waitForFunction(() => /linha\(s\) neste recorte/.test(
+  await p.waitForFunction(() => /(?:linha\(s\)|linhas|linha) neste recorte/.test(
     document.querySelector('[role="dialog"]')?.innerText ?? ""), { timeout: 15000 }).catch(() => {});
   const janelaExp = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
@@ -5753,7 +5753,7 @@ try {
       titulo: d?.querySelector("h2")?.textContent ?? "",
       rotulos,
       // A prévia diz quantas linhas viriam ANTES do botão.
-      previa: /linha\(s\) neste recorte/.test(d?.innerText ?? ""),
+      previa: /(?:linha\(s\)|linhas|linha) neste recorte/.test(d?.innerText ?? ""),
       formatos: /Planilha/.test(d?.innerText ?? "") && /PDF/.test(d?.innerText ?? ""),
       caixinhas: (d?.querySelectorAll('input[type="checkbox"]') ?? []).length,
     };
@@ -7184,7 +7184,7 @@ try {
   // ⚠️ O resumo diz o que a tabela nao diz: quantos foram conferidos e quantos
   // do Omie nao tem cadastro aqui. Lista curta sem ele le como "quase tudo bem".
   checar("e mostra o resumo antes da tabela",
-    /conferido\(s\)/i.test(conf) || /Nenhum produto/i.test(conf), conf.slice(0, 200));
+    /(?:conferido\(s\)|conferidos|conferido)/i.test(conf) || /Nenhum produto/i.test(conf), conf.slice(0, 200));
   await foto(p, "33-conferencia-estoque");
 
   // 🔑 **O custo inicial.** Medido na base: 2.323 produtos ativos que controlam
@@ -8209,7 +8209,7 @@ try {
           rodape: (document.body.innerText.match(/\d+–\d+ de [\d.]+ produto/) ?? [null])[0],
           // ⚠️ Só os ATIVOS: a etiqueta de inativo não pode aparecer aqui, e a
           // descrição do cartão diz o recorte.
-          diz_ativos: /produtos? ativos?|produto\(s\) ativo\(s\)/i.test(document.body.innerText),
+          diz_ativos: /produtos? ativos?|p(?:roduto\(s\)|rodutos|roduto) (?:ativo\(s\)|ativos|ativo)/i.test(document.body.innerText),
         };
       });
       checar("a ficha da pessoa lista os produtos dela", cartao.tem, cartao);
@@ -9192,7 +9192,8 @@ try {
     checar("e diz quanto ficou de fora quando ha inativo com saldo",
       foraApi.produtos === 0
         ? oAviso.texto === ""
-        : /inativos/i.test(oAviso.texto) && oAviso.texto.includes(String(foraApi.produtos)),
+        : /inativos/i.test(oAviso.texto) && (oAviso.texto.includes(String(foraApi.produtos))
+            || oAviso.texto.includes(foraApi.produtos.toLocaleString("pt-BR"))),
       { foraApi, ...oAviso });
     // Volta ao modo de sempre: o proximo bloco le a lista por prateleira.
     await p.select("#visao-saldos", "prateleira");
@@ -9783,7 +9784,7 @@ try {
   await p.waitForSelector("#medicao-previa", { timeout: 10000 }).catch(() => {});
   const previaMed = await p.$eval("#medicao-previa", (d) => d.innerText).catch(() => "");
   checar("o Cardápio Vivo confere a medição de um período antes de apagar",
-    /Nada medido de 01\/01\/2001/.test(previaMed) || /evento\(s\) de/.test(previaMed), previaMed);
+    /Nada medido de 01\/01\/2001/.test(previaMed) || /(?:evento\(s\)|eventos|evento) de/.test(previaMed), previaMed);
   // ⚠️ **Devolve o parametro.** A fase 12 logo abaixo comeca afirmando que o
   // menu NAO tem o grupo Reservas — deixa-lo ligado aqui derrubaria a primeira
   // checagem dela, e a culpa pareceria ser de Reservas.
@@ -10926,7 +10927,7 @@ try {
   await assentar(1200);
   const listaOutras = await p.evaluate(() => document.querySelector("main")?.innerText ?? "");
   checar("e o filtro vai na URL, com a lista de não fornecedores",
-    p.url().includes("tipo=outras") && /pessoa\(s\)/.test(listaOutras), p.url());
+    p.url().includes("tipo=outras") && /(?:pessoa\(s\)|pessoas|pessoa)/.test(listaOutras), p.url());
   const temRelatorio = await p.evaluate(() => [...document.querySelectorAll("main button")]
     .some((b) => b.textContent?.trim() === "Imprimir"));
   checar("e a tela oferece imprimir o relatório de pessoas", temRelatorio);
