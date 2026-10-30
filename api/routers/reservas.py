@@ -31,6 +31,7 @@ from seguranca import Contexto, requer_permissao, unidade_atual
 from services import reserva_clientes as clientes
 from services import reservas as servico
 from services import reservas_agenda as agenda
+from services import reservas_plano as plano_reservas
 from services import whatsapp
 
 router = APIRouter(prefix="/reservas", tags=["Reservas"])
@@ -285,6 +286,31 @@ def listar_clientes(resposta: Response,
         for campo in ("criado_em", "termo_aceito_em"):
             x[campo] = x[campo].isoformat() if x[campo] else None
     return linhas
+
+
+@router.get("/plano-de-acao")
+def ver_plano_de_acao(
+    vip_reservas: int | None = Query(None, ge=1, le=100),
+    vip_dias: int | None = Query(None, ge=1, le=3650),
+    grupo_pessoas: int | None = Query(None, ge=2, le=99),
+    grupo_reservas: int | None = Query(None, ge=1, le=100),
+    grupo_dias: int | None = Query(None, ge=1, le=3650),
+    adormecido_max: int | None = Query(None, ge=1, le=100),
+    adormecido_dias: int | None = Query(None, ge=1, le=3650),
+    ctx: Contexto = Depends(requer_permissao("reservas.ver")),
+) -> dict:
+    """Quem chamar de volta: VIPs em risco, organizadores de grupo sumidos e adormecidos.
+
+    🔑 **Pedido do dono (30/10/2026):** *"comece pelo plano de ação de reservas"* — a tela do
+    LeadsFood que a casa usa. A regra mora em `services/reservas_plano.py`. Critério que não
+    vem fica no padrão. ⚠️ `reservas.ver`, como Clientes: a agenda já mostra nome e telefone.
+    """
+    c = plano_reservas.criterios(
+        vip_reservas=vip_reservas, vip_dias=vip_dias, grupo_pessoas=grupo_pessoas,
+        grupo_reservas=grupo_reservas, grupo_dias=grupo_dias,
+        adormecido_max=adormecido_max, adormecido_dias=adormecido_dias)
+    with get_cursor() as cur:
+        return plano_reservas.plano(cur, _unidade(cur, ctx), c)
 
 
 @router.get("/agenda")

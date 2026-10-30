@@ -226,6 +226,16 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Reservas",
       },
       {
+        // 🔑 **Plano de ação** (pedido do dono, 30/10/2026: *"comece pelo plano de ação de
+        // reservas"*, a tela do LeadsFood): quem chamar de volta, com o WhatsApp pronto.
+        href: "/reservas/plano-de-acao",
+        nome: "Plano de ação",
+        icone: "grafico",
+        chave: "reservas.ver",
+        soComReservas: true,
+        subgrupo: "Reservas",
+      },
+      {
         href: "/reservas/salao",
         nome: "Salão",
         icone: "mesas",

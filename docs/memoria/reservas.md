@@ -1319,3 +1319,29 @@ desta ação."*
 - Tela: Reservas ▸ Configurações, as duas caixas (`#reservas-no-site`, `#fidelidade-no-site`; a
   da fidelidade só vale com "Utiliza Fidelidade").
 - Cobertura: `smoke_portal_no_site.py` (10) e `verificar-portal-no-site.mjs` (5).
+
+## Plano de ação das reservas (30/10/2026, sem migração)
+🔑 **Pedido do dono:** *"comece pelo plano de ação de reservas"* — depois da leitura do LeadsFood
+que a casa usa (`docs/leadsfood-analise.md`, item 2). Reservas ▸ **Plano de ação**
+(`reservas/plano-de-acao/`), `GET /reservas/plano-de-acao`, regra em `services/reservas_plano.py`.
+- Três listas: **VIPs em risco** (3+ reservas, 120+ dias sem vir), **organizadores de grupo
+  sumidos** (2+ reservas de 6+ pessoas, 120+ dias) e **adormecidos** (até 2 reservas, 90+ dias) —
+  os padrões do LeadsFood. Os critérios vêm na query (padrão no que não vier) e a tela os ajusta
+  na hora; ⚠️ não são gravados: é lente, não configuração.
+- ⚠️ **A pessoa é o TELEFONE**, não o `id_cliente`: a reserva do balcão não liga ao cadastro (só
+  a do site preenche `reservas.id_cliente`). Normaliza como o cadastro guarda (só dígitos, sem o
+  55). Reserva sem telefone de 10/11 dígitos fica de fora. Nome: o do cadastro, senão o da
+  reserva mais recente.
+- 🔑 **Conta como visita**: CONFIRMADA, CHEGOU ou ENCERRADA com data ≤ hoje. CONFIRMADA no passado
+  conta porque o balcão nem sempre marca a chegada. Faltas vêm à parte.
+- ⚠️ **Quem tem reserva marcada para frente não entra.** **Cada pessoa numa lista só**, na ordem
+  VIP → organizador → adormecido (`classificar`, função pura).
+- O botão **abre** o WhatsApp de quem está na tela (`wa.me/55…?text=`) com o convite pronto,
+  editável na tela (`{nome}` = primeiro nome, `{loja}` = nome fantasia da EMPRESA — o apelido
+  "Matriz" não diz nada ao cliente). ⚠️ Não envia pela API oficial: reativação é marketing e
+  pediria modelo aprovado na Meta. Quem respondeu "PARAR" (`whatsapp_optout_em`) aparece sem botão.
+- ⚠️ **O histórico está no LeadsFood** (170 reservas desde 11/2025): até importar, o plano daqui
+  só enxerga o que foi reservado no Botané.
+- `reservas.ver`, como Clientes. Por loja (as reservas da loja atual).
+- Cobertura: `smoke_plano_de_acao.py` (23) e `verificar-plano-de-acao.mjs` (15, na bateria), com
+  o cenário em `tests/cenario_plano.py` (telefones `00900001…`, montar/limpar).

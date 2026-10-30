@@ -174,11 +174,12 @@ Configuração) · Catálogos · Pedidos (Painel, Lista).
 - **Rotas:** `reservas.py`, `fidelidade.py`, `catalogos.py`, `pedidos.py`, `traducao.py` (o cardápio em EN/DE), `publico.py` (o site do cliente), `cardapio_vivo.py` (o cardápio da mesa, `/publico/cardapio/...` e `/cardapio-vivo/...`), `produto_cardapio.py` (vídeo, restrições e adicionais do produto). Serviços do Cardápio Vivo: `cardapio_vivo.py`, `cardapio_pedido.py` (pedido da mesa, chamados, identificação), `cardapio_atencao.py` (o painel Atenção × Vendas), `cardapio_testes.py` (testes A/B e sugestões de destaque)
 - **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),
   `reserva_clientes.py` (quem reserva pelo site, e o limite de abuso),
+  `reservas_plano.py` (o Plano de ação: VIPs, organizadores e adormecidos para chamar de volta),
   `catalogos.py` (a capa), `catalogo_conteudo.py` (o cardápio montado por produtos),
   `pedidos.py` (o pedido pelo cardápio — NÃO vira venda; a casa lança no PDV),
   `traducao.py` (Claude Haiku traduz ao salvar; corrigido à mão não é sobrescrito)
 - **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`,
-  `reservas/clientes/` (o grid dos cadastrados), `fidelidade/`, `catalogos/`, `pedidos/`
+  `reservas/clientes/` (o grid dos cadastrados), `reservas/plano-de-acao/`, `fidelidade/`, `catalogos/`, `pedidos/`
 - **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`,
   `catalogos.ver`, `catalogos.editar`, `pedidos.ver`, `pedidos.operar`
 

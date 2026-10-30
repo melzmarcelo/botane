@@ -120,3 +120,50 @@ export const listarClientes = (parametros: Record<string, string>, busca: string
   if (busca.trim()) q.set("busca", busca.trim());
   return api.listar<Cliente>(`/reservas/clientes?${q}`);
 };
+
+// ── Plano de ação (30/10/2026) ───────────────────────────────────────────────
+
+/** Uma pessoa a chamar de volta. A pessoa é o TELEFONE (balcão e site juntos). */
+export type PessoaDoPlano = {
+  telefone: string;
+  nome: string | null;
+  /** O cadastro do site, quando há. */
+  id_cliente: number | null;
+  /** Reservas que contaram como visita (sem canceladas e faltas). */
+  reservas: number;
+  /** Delas, quantas foram grupo grande. */
+  grupos: number;
+  pessoas: number;
+  maior_grupo: number;
+  faltas: number;
+  /** Última visita (AAAA-MM-DD) e há quantos dias. */
+  ultima: string;
+  dias: number;
+  /** Respondeu "PARAR" ao WhatsApp da casa: não se manda mensagem. */
+  nao_quer_whatsapp: boolean;
+};
+
+export type CriteriosDoPlano = {
+  vip_reservas: number;
+  vip_dias: number;
+  grupo_pessoas: number;
+  grupo_reservas: number;
+  grupo_dias: number;
+  adormecido_max: number;
+  adormecido_dias: number;
+};
+
+export type ListaDoPlano = "vips" | "organizadores" | "adormecidos";
+
+export type PlanoDeAcao = {
+  loja: string | null;
+  criterios: CriteriosDoPlano;
+  resumo: { total: number } & Record<ListaDoPlano, number>;
+} & Record<ListaDoPlano, PessoaDoPlano[]>;
+
+/** Critério que não vem fica no padrão do servidor. */
+export const verPlanoDeAcao = (criterios: Partial<CriteriosDoPlano> = {}) => {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(criterios)) if (v) q.set(k, String(v));
+  return api.get<PlanoDeAcao>(`/reservas/plano-de-acao${q.size ? `?${q}` : ""}`);
+};
