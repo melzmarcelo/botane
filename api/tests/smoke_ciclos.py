@@ -225,7 +225,9 @@ checar("e a recusa nomeia o período que está no caminho",
 
 print("\n6. o razão nomeia o período, não o mês")
 local = garantir_local(chamar, token)
-st, produtos = chamar("GET", "/produtos?limite=200&ativo=true", token=token)
+# ⚠️ Filtra NA API (30/10/2026): os 200 primeiros ativos chegaram a ser todos produtos de teste
+# sem estoque (as suítes criam muitos), e a suíte falhava sem nada ter quebrado.
+st, produtos = chamar("GET", "/produtos?limite=200&ativo=true&controla_estoque=true", token=token)
 lista = produtos if isinstance(produtos, list) else []
 alvo = next((p for p in lista if p.get("controla_estoque") and p.get("um_estoque")), None)
 if not alvo:
