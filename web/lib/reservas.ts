@@ -167,3 +167,25 @@ export const verPlanoDeAcao = (criterios: Partial<CriteriosDoPlano> = {}) => {
   for (const [k, v] of Object.entries(criterios)) if (v) q.set(k, String(v));
   return api.get<PlanoDeAcao>(`/reservas/plano-de-acao${q.size ? `?${q}` : ""}`);
 };
+
+// ── Painel das reservas (30/10/2026) ─────────────────────────────────────────
+
+/** Uma fatia do painel: reservas válidas, pessoas que passaram e faltas. */
+export type ContaDoPainel = { reservas: number; pessoas: number; faltas: number };
+
+export type PainelReservas = {
+  de: string;
+  ate: string;
+  meses: number;
+  grupo_pessoas: number;
+  resumo: ContaDoPainel & { clientes: number; canceladas: number };
+  grupos: { reservas: number; pessoas: number; maior: number; faltas: number };
+  por_dia_semana: (ContaDoPainel & { dia: number; nome: string })[];
+  /** Todos os meses do período, com zero onde não houve reserva. */
+  por_mes: (ContaDoPainel & { mes: string; parcial: boolean; grupos: number; grupos_pessoas: number })[];
+  por_objetivo: (ContaDoPainel & { objetivo: string })[];
+  por_hora: (ContaDoPainel & { hora: number })[];
+};
+
+export const verPainelReservas = (meses: number, grupoPessoas = 6) =>
+  api.get<PainelReservas>(`/reservas/painel?meses=${meses}&grupo_pessoas=${grupoPessoas}`);

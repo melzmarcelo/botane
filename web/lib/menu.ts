@@ -226,6 +226,16 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Reservas",
       },
       {
+        // 🔑 **Painel** (pedido do dono, 30/10/2026: os gráficos do BI de reservas do
+        // LeadsFood): dia da semana, mês, objetivo, horário e grupos grandes.
+        href: "/reservas/painel",
+        nome: "Painel",
+        icone: "grafico",
+        chave: "reservas.ver",
+        soComReservas: true,
+        subgrupo: "Reservas",
+      },
+      {
         // 🔑 **Plano de ação** (pedido do dono, 30/10/2026: *"comece pelo plano de ação de
         // reservas"*, a tela do LeadsFood): quem chamar de volta, com o WhatsApp pronto.
         href: "/reservas/plano-de-acao",

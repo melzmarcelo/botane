@@ -40,19 +40,25 @@ PADRAO = {
     "adormecido_dias": 90,   # …e sem vir há N dias
 }
 
+# 🔑 **Quem é a pessoa de uma reserva `r`** — usado aqui e no painel (`reservas_painel`).
 # ⚠️ O telefone como o cadastro guarda: só dígitos e, se vier com o 55 do país, sem ele.
-_SQL = r"""
+# `FONE_JUNTAS` vai no FROM, logo depois de `reservas r`; `FONE` é a expressão.
+FONE_JUNTAS = r"""
+          LEFT JOIN reserva_clientes c ON c.id = r.id_cliente
+          CROSS JOIN LATERAL
+               (SELECT regexp_replace(coalesce(r.telefone, ''), '\D', '', 'g') AS d) x"""
+FONE = """coalesce(c.telefone,
+                        CASE WHEN length(x.d) IN (12, 13) AND x.d LIKE '55%%'
+                             THEN substr(x.d, 3) ELSE x.d END)"""
+
+_SQL = f"""
     WITH base AS (
         SELECT r.id, r.data, r.pessoas, r.status, r.nome,
-               coalesce(c.telefone,
-                        CASE WHEN length(x.d) IN (12, 13) AND x.d LIKE '55%%'
-                             THEN substr(x.d, 3) ELSE x.d END) AS fone,
+               {FONE} AS fone,
                r.status IN ('CONFIRMADA', 'CHEGOU', 'ENCERRADA')
                    AND r.data <= current_date AS conta
           FROM reservas r
-          LEFT JOIN reserva_clientes c ON c.id = r.id_cliente
-          CROSS JOIN LATERAL
-               (SELECT regexp_replace(coalesce(r.telefone, ''), '\D', '', 'g') AS d) x
+          {FONE_JUNTAS}
          WHERE r.id_unidade = %(unidade)s
     ), por_fone AS (
         SELECT fone,

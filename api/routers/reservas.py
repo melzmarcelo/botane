@@ -31,6 +31,7 @@ from seguranca import Contexto, requer_permissao, unidade_atual
 from services import reserva_clientes as clientes
 from services import reservas as servico
 from services import reservas_agenda as agenda
+from services import reservas_painel as painel_reservas
 from services import reservas_plano as plano_reservas
 from services import whatsapp
 
@@ -311,6 +312,19 @@ def ver_plano_de_acao(
         adormecido_max=adormecido_max, adormecido_dias=adormecido_dias)
     with get_cursor() as cur:
         return plano_reservas.plano(cur, _unidade(cur, ctx), c)
+
+
+@router.get("/painel")
+def ver_painel(meses: int = Query(12, ge=1, le=36),
+               grupo_pessoas: int = Query(6, ge=2, le=99),
+               ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> dict:
+    """Como a agenda andou: dia da semana, mês, objetivo, horário e grupos grandes.
+
+    🔑 **Pedido do dono (30/10/2026):** os gráficos do BI de reservas do LeadsFood. As
+    definições (válida, pessoas que passaram, no-show) estão em `services/reservas_painel.py`.
+    """
+    with get_cursor() as cur:
+        return painel_reservas.painel(cur, _unidade(cur, ctx), meses, grupo_pessoas)
 
 
 @router.get("/agenda")

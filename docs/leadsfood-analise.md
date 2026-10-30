@@ -42,7 +42,7 @@ cidade, origem, data de cadastro), cartões com selos em aberto e os prêmios ai
 Caminho: o "Exportar" de Contatos/Prêmios/Checkins, ou a API pública deles (há token em
 Configurações → Integrações). Idempotência pelo telefone, já única desde a 087.
 
-### 2. Plano de ação de reservas — "dinheiro na mesa" ✅ feito em 30/10/2026 (o BI ainda não)
+### 2. Plano de ação de reservas — "dinheiro na mesa" ✅ feito em 30/10/2026, e o BI (Reservas ▸ Painel) também — falta só o ano contra ano
 A tela mais útil deles, e **os dados já estão no nosso banco**. Listas com botão WhatsApp:
 - **VIPs em risco**: 3+ reservas e não voltam há 120+ dias
 - **Organizadores de grupo sumidos**: 2+ reservas de 6+ pessoas, sem voltar há 120+ dias

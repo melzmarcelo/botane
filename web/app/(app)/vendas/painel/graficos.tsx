@@ -53,7 +53,7 @@ export function marcasDoEixo(maximo: number): { teto: number; marcas: number[] }
   return { teto: passo * n, marcas: Array.from({ length: n + 1 }, (_, k) => k * passo) };
 }
 
-export function GraficoBarras({ barras, altura, rotulo, noEixo, aoClicar, W = 1080 }: {
+export function GraficoBarras({ barras, altura, rotulo, noEixo, aoClicar, W = 1080, maxRotulos = 12 }: {
   barras: Barra[];
   altura: number;
   /**
@@ -65,6 +65,11 @@ export function GraficoBarras({ barras, altura, rotulo, noEixo, aoClicar, W = 10
   rotulo: string;
   noEixo: (v: number) => string;
   aoClicar?: (b: Barra) => void;
+  /**
+   * Quantos rótulos cabem no eixo de baixo. ⚠️ Num quadro de meia tela, doze meses ("nov/25")
+   * encostam um no outro e viram borrão: ali vão 6 (um mês sim, um não).
+   */
+  maxRotulos?: number;
 }) {
   const caixa = useRef<SVGSVGElement>(null);
   const [sobre, setSobre] = useState<number | null>(null);
@@ -76,7 +81,7 @@ export function GraficoBarras({ barras, altura, rotulo, noEixo, aoClicar, W = 10
   const grossura = Math.max(2, Math.min(56, passo * 0.72));
   const y = (v: number) => M.topo + (altura - M.topo - M.base) * (1 - v / teto);
   // ⚠️ Rótulos do eixo espaçados: com 60 dias, um rótulo por barra vira borrão.
-  const cada = Math.max(1, Math.ceil(barras.length / 12));
+  const cada = Math.max(1, Math.ceil(barras.length / maxRotulos));
 
   function mover(e: React.MouseEvent<SVGSVGElement>) {
     const r = caixa.current?.getBoundingClientRect();

@@ -1,6 +1,7 @@
 """Cenário do Plano de ação para o roteiro de navegador (verificar-plano-de-acao.mjs).
 
     python tests/cenario_plano.py montar <id_unidade>     → imprime o JSON do cenário
+    python tests/cenario_plano.py painel <id_unidade>     → um ano de reservas, para o painel
     python tests/cenario_plano.py limpar <id_unidade>
 
 Reservas no PASSADO, gravadas direto no banco: a rota de reservar recusa data passada, e o
@@ -51,12 +52,43 @@ def montar(cur, u: int) -> dict:
     return FONES
 
 
+def montar_painel(cur, u: int) -> dict:
+    """Um ano de reservas espalhadas, para o painel ter o que desenhar (mesmo prefixo).
+
+    Determinístico (sem `random`): o mesmo cenário em toda rodada, para o roteiro poder
+    contar. Sábado pesa mais, almoço e café da tarde, um grupo grande a cada sete.
+    """
+    limpar(cur, u)
+    hoje = date.today()
+    objetivos = ("Aniversário", "Confraternização", "Negócios", None, None)
+    n = 0
+    for i in range(1, 360, 3):
+        d = hoje - timedelta(days=i)
+        if d.isoweekday() == 1:          # a casa não abre na segunda
+            continue
+        vezes = 3 if d.isoweekday() == 6 else 1
+        for k in range(vezes):
+            n += 1
+            pessoas = 8 + (n % 5) if n % 7 == 0 else 2 + (n % 3)
+            status = "NAO_COMPARECEU" if n % 9 == 0 else "ENCERRADA"
+            hora = ("12:00", "12:30", "16:00", "10:00")[n % 4]
+            cur.execute(
+                """INSERT INTO reservas (id_unidade, data, hora, pessoas, status, origem, nome,
+                                         telefone, objetivo)
+                   VALUES (%s, %s, %s, %s, %s, 'BALCAO', 'Painel roteiro', %s, %s)""",
+                (u, d, hora, pessoas, status, f"{PREFIXO}{100 + n % 60:03d}",
+                 objetivos[n % len(objetivos)]))
+    return {"reservas": n}
+
+
 if __name__ == "__main__":
     acao, unidade = sys.argv[1], int(sys.argv[2])
     init_pool()
     with get_cursor() as c:
         if acao == "montar":
             print(json.dumps(montar(c, unidade)))
+        elif acao == "painel":
+            print(json.dumps(montar_painel(c, unidade)))
         else:
             limpar(c, unidade)
             print("{}")

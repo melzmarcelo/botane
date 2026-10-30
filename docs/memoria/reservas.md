@@ -1345,3 +1345,27 @@ que a casa usa (`docs/leadsfood-analise.md`, item 2). Reservas ▸ **Plano de a�
 - `reservas.ver`, como Clientes. Por loja (as reservas da loja atual).
 - Cobertura: `smoke_plano_de_acao.py` (23) e `verificar-plano-de-acao.mjs` (15, na bateria), com
   o cenário em `tests/cenario_plano.py` (telefones `00900001…`, montar/limpar).
+
+## Painel das reservas (30/10/2026, sem migração)
+🔑 **Pedido do dono:** *"seguir para os gráficos"* — a "Análise de desempenho" e os "Grupos
+grandes" do BI de reservas do LeadsFood. Reservas ▸ **Painel** (`reservas/painel/`),
+`GET /reservas/painel?meses=&grupo_pessoas=`, regra em `services/reservas_painel.py`.
+- 🔑 **Três contas diferentes:** *reserva válida* = CONFIRMADA, CHEGOU, ENCERRADA ou
+  NAO_COMPARECEU com data ≤ hoje (a conta do LeadsFood, faltas dentro); *pessoas que vieram* =
+  pessoas das válidas que NÃO faltaram; *no-show* = NAO_COMPARECEU ÷ válidas. Cancelada vem à
+  parte; PENDENTE no passado não conta (nunca foi aprovada). ⚠️ Só o passado.
+- Quadros: números do período, evolução por mês (com "Ver os números" em tabela), dia da semana
+  (ISO, 1 = segunda, os 7 sempre), horário de chegada (por hora cheia), objetivo da visita
+  (texto livre agrupado sem caixa/espaço; 7 mais frequentes, "Outros" e "Não informado" no fim)
+  e grupos grandes (6+, com a evolução mensal). Medida Reservas/Pessoas e período (3/6/12/24
+  meses) na URL.
+- ⚠️ **Os meses vêm TODOS, com zero**: mês sem reserva é o vale da sazonalidade, não buraco.
+- Clientes diferentes = telefones normalizados (o mesmo `FONE` do Plano de ação, agora exportado
+  por `reservas_plano.py`); sem telefone válido, conta pelo nome.
+- Desenhos: `GraficoBarras`/`BarrasDeitadas` do painel de vendas. `GraficoBarras` ganhou
+  `maxRotulos` (padrão 12): no quadro de meia tela, doze meses encostavam — ali vão 6.
+- ⏳ Falta: o comparativo ano contra ano e a sazonalidade média (precisam do histórico do
+  LeadsFood para ter dois anos).
+- Cobertura: `smoke_painel_reservas.py` (21, por DIFERENÇA antes/depois do cenário) e
+  `verificar-painel-reservas.mjs` (18, na bateria), com `cenario_plano.py painel` (um ano de
+  reservas determinístico).
