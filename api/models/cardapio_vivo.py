@@ -174,7 +174,7 @@ class GrupoAdicional(BaseModel):
 class ItemDoPedidoDaMesa(BaseModel):
     item: int
     quantidade: int = Field(ge=1, le=50)
-    # 🔑 142: o PRODUTO escolhido, quando o item é de escolha (Chocolate Quente → Branco).
+    # 🔑 142: a OPÇÃO escolhida (`catalogo_item_escolhas.id`), quando o item é de escolha.
     escolha: int | None = None
     # Id repetido = a mesma opção mais de uma vez, nos grupos que deixam repetir (142).
     adicionais: list[int] = Field(default_factory=list, max_length=60)

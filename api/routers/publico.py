@@ -645,7 +645,9 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
         }
         escolhas = opcoes[l["id_item"]]["escolhas"]
         if escolhas is not None:
-            item["escolhas"] = [{**o, "preco": float(o["preco"]) if o["preco"] is not None else None}
+            # ⚠️ Sem `id_produto`: o cliente manda o id da OPÇÃO, e o servidor acha o produto.
+            item["escolhas"] = [{"id": o["id"], "nome": o["nome"], "adicionais": o["adicionais"],
+                                 "preco": float(o["preco"]) if o["preco"] is not None else None}
                                 for o in escolhas]
             precos = [o["preco"] for o in item["escolhas"] if o["preco"] is not None]
             item["preco"] = min(precos) if precos else None  # "a partir de"

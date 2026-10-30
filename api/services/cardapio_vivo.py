@@ -503,7 +503,9 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
         opcoes = None
         preco = float(l["preco"]) if l["preco"] is not None else None
         if l["tipo"] == "ESCOLHA":
-            opcoes = [{"id_produto": o["id_produto"],
+            # ⚠️ A opção sai com o id DELA (`catalogo_item_escolhas.id`), nunca o do produto:
+            # o cardápio público não expõe id de produto (`smoke_publico`). O servidor o descobre.
+            opcoes = [{"id": o["id"],
                        "nome": traducao.escolher(o["rotulo"], o["rotulo_en"], o["rotulo_de"], idioma)
                        if o["rotulo"] else traducao.escolher(o["vitrine"], o["nome_catalogo_en"],
                                                              o["nome_catalogo_de"], idioma),

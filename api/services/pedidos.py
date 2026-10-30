@@ -221,7 +221,8 @@ def _com_opcoes(cur, id_unidade: int, catalogo: dict) -> None:
         c["adicionais"] = adicionais.get(c["id_produto"], []) if c["id_produto"] else []
         c["escolhas"] = None
         if c["tipo"] == "ESCOLHA":
-            c["escolhas"] = [{"id_produto": o["id_produto"], "nome": o["nome"],
+            # `id` = a opção (o que o cardápio público mostra); `id_produto` fica só aqui dentro.
+            c["escolhas"] = [{"id": o["id"], "id_produto": o["id_produto"], "nome": o["nome"],
                               "preco": o["preco"], "adicionais": adicionais.get(o["id_produto"], [])}
                              for o in escolhas.get(k, []) if o["ativo"]]
 

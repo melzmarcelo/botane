@@ -5,8 +5,9 @@
 da observação; o item de escolha (142) chegou aos dois ao mesmo tempo, e duas cópias da
 conta de mínimo/máximo divergiriam na primeira mudança.
 
-- **Item de escolha**: o cliente escolhe UM produto (Chocolate Quente → Branco; Monte sua
-  cesta → Cesta Média). É ESSE produto que vai na linha, com o preço dele.
+- **Item de escolha**: o cliente escolhe UMA opção (Chocolate Quente → Branco; Monte sua
+  cesta → Cesta Média) pelo id DELA (`catalogo_item_escolhas.id`) — o cardápio público não
+  expõe id de produto. O produto da opção vai na linha, com o preço dele.
 - **Adicionais** são os do produto que vai na linha. Num grupo que `permite_repetir`, o mesmo
   id repetido na lista conta como quantidade ("2 geleias") e mínimo/máximo contam UNIDADES;
   nos outros, repetido conta uma vez (como sempre foi).
@@ -57,11 +58,12 @@ def resolver(item: dict, escolha: int | None, adicionais: list[int]) -> dict:
     """O produto, o nome, o preço unitário (com os adicionais) e os adicionais congelados.
 
     `item` é o item como o cardápio o mostra: `nome`, `preco`, `id_produto`, `adicionais` e
-    `escolhas` (nulo no prato comum; a lista de opções no item de escolha).
+    `escolhas` (nulo no prato comum; a lista de opções no item de escolha, cada uma com `id`
+    da opção e `id_produto`). `escolha` é o id da OPÇÃO.
     """
     nome, preco, grupos, id_produto = item["nome"], item["preco"], item["adicionais"], item["id_produto"]
     if item.get("escolhas") is not None:
-        opcao = next((o for o in item["escolhas"] if o["id_produto"] == escolha), None)
+        opcao = next((o for o in item["escolhas"] if o["id"] == escolha), None)
         if escolha is None:
             raise HTTPException(status_code=422, detail=f"{nome}: escolha uma das opções.")
         if opcao is None:

@@ -16,7 +16,7 @@ import { imagem, type Idioma, type ItemFeed } from "@/lib/cardapio-vivo";
 import type { EscolhaAdicional } from "./selecao";
 
 /** O que vai para a seleção quando o item é de escolha (142). */
-export type OpcaoEscolhida = { id_produto: number; nome: string; preco: number | null };
+export type OpcaoEscolhida = { id: number; nome: string; preco: number | null };
 import { moeda, nomeRestricao, type Textos } from "./textos";
 
 type Props = {
@@ -35,7 +35,7 @@ export default function Detalhe({ item, t, idioma, aoFechar, aoAdicionar, aoEsco
   /** Por grupo, os ids marcados — com repetição nos grupos que deixam repetir (142). */
   const [marcados, setMarcados] = useState<Record<number, number[]>>({});
   const [idOpcao, setIdOpcao] = useState<number | null>(null);
-  const opcao = item.escolhas?.find((o) => o.id_produto === idOpcao) ?? null;
+  const opcao = item.escolhas?.find((o) => o.id === idOpcao) ?? null;
   const grupos = useMemo(() => (item.escolhas ? (opcao?.adicionais ?? []) : item.adicionais),
     [item.escolhas, item.adicionais, opcao]);
   const base = item.escolhas ? (opcao?.preco ?? null) : item.preco;
@@ -112,10 +112,10 @@ export default function Detalhe({ item, t, idioma, aoFechar, aoAdicionar, aoEsco
               </legend>
               <div className="mt-2 divide-y divide-current/10 rounded-2xl border border-current/15">
                 {item.escolhas.map((o) => (
-                  <label key={o.id_produto} className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
+                  <label key={o.id} className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
                     <span className="flex items-center gap-3">
-                      <input type="radio" name={`escolha-${item.id}`} checked={idOpcao === o.id_produto}
-                             onChange={() => escolherOpcao(o.id_produto)}
+                      <input type="radio" name={`escolha-${item.id}`} checked={idOpcao === o.id}
+                             onChange={() => escolherOpcao(o.id)}
                              className="h-5 w-5 accent-[var(--cv-principal)]" />
                       {o.nome}
                     </span>
@@ -192,7 +192,7 @@ export default function Detalhe({ item, t, idioma, aoFechar, aoAdicionar, aoEsco
               type="button"
               disabled={item.esgotado || falta}
               onClick={() => aoAdicionar(quantidade, escolhas,
-                                         opcao ? { id_produto: opcao.id_produto, nome: opcao.nome, preco: opcao.preco } : undefined)}
+                                         opcao ? { id: opcao.id, nome: opcao.nome, preco: opcao.preco } : undefined)}
               className="flex-1 rounded-full bg-[var(--cv-principal)] px-4 py-3 font-semibold text-white disabled:opacity-40"
             >
               {item.esgotado ? t.esgotado : (

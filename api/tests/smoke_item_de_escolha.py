@@ -204,8 +204,12 @@ checar("o item de escolha aparece com nome, descrição e as opções",
        and [o["nome"] for o in sc.get("escolhas") or []] == ["Branco", "Preto"], sc)
 checar("com o preço de cada opção e 'a partir de' no item",
        [o["preco"] for o in sc["escolhas"]] == [16.0, 14.0] and sc["preco"] == 14.0, sc)
+checar("a opção sai com o id DELA, nunca o do produto",
+       all("id_produto" not in o and o["id"] not in (PRETO, BRANCO) for o in sc["escolhas"]), sc["escolhas"])
 scesta = todos.get(cesta["id"]) or {}
-media = next((o for o in scesta.get("escolhas") or [] if o["id_produto"] == CM), {})
+media = next((o for o in scesta.get("escolhas") or [] if o["nome"] == "Média"), {})
+# 🔑 O pedido manda o id da OPÇÃO; o servidor acha o produto.
+OPC = {o["nome"]: o["id"] for i in (sc, scesta) for o in i.get("escolhas") or []}
 checar("a opção da cesta traz os adicionais dela, com 'repete' e o incluso a R$ 0",
        media.get("adicionais") and media["adicionais"][0]["permite_repetir"] is True
        and media["adicionais"][1]["opcoes"][0]["preco"] == 0, media)
@@ -226,19 +230,21 @@ def pedir_site(itens_):
 
 st, r = pedir_site([{"id_item": choc["id"], "quantidade": 1}])
 checar("item de escolha sem escolha é recusado (422)", st == 422 and "escolha" in r["detail"], (st, r))
-st, r = pedir_site([{"id_item": choc["id"], "quantidade": 1, "escolha": GELEIA}])
+st, r = pedir_site([{"id_item": choc["id"], "quantidade": 1, "escolha": OPC["Média"]}])
 checar("escolha que não é opção do item é recusada (409)", st == 409, (st, r))
-st, r = pedir_site([{"id_item": comum["id"], "quantidade": 1, "escolha": PRETO}])
+st, r = pedir_site([{"id_item": comum["id"], "quantidade": 1, "escolha": OPC["Preto"]}])
 checar("prato comum com escolha é recusado", st == 409, (st, r))
-st, r = pedir_site([{"id_item": cesta["id"], "quantidade": 1, "escolha": CM,
+st, r = pedir_site([{"id_item": cesta["id"], "quantidade": 1, "escolha": OPC["Média"],
                      "adicionais": [OP["Geleia"], OP["Pão"]]}])
 checar("cesta abaixo do mínimo (2 de 3) é recusada, dizendo o grupo",
        st == 422 and "Itens da cesta" in r["detail"], (st, r))
-st, r = pedir_site([{"id_item": cesta["id"], "quantidade": 1, "escolha": CM,
+st, r = pedir_site([{"id_item": cesta["id"], "quantidade": 1, "escolha": OPC["Média"],
                      "adicionais": [OP["Geleia"]] * 3 + [OP["Pão"]] * 2}])
 checar("acima do máximo (5 de 4) também", st == 422, (st, r))
-st, p = pedir_site([{"id_item": choc["id"], "quantidade": 2, "escolha": BRANCO},
-                    {"id_item": cesta["id"], "quantidade": 1, "escolha": CM,
+st, r = pedir_site([{"id_item": choc["id"], "quantidade": 1, "escolha": BRANCO}])
+checar("mandar o id do PRODUTO no lugar do da opção é recusado", st == 409, (st, r))
+st, p = pedir_site([{"id_item": choc["id"], "quantidade": 2, "escolha": OPC["Branco"]},
+                    {"id_item": cesta["id"], "quantidade": 1, "escolha": OPC["Média"],
                      "adicionais": [OP["Geleia"], OP["Pão"], OP["Geleia"], OP["Laço"]]}])
 checar("o pedido nasce (201)", st == 201, (st, p))
 itens_p = (p or {}).get("itens") or []
@@ -264,7 +270,7 @@ chamar("PUT", f"/produtos/{PRETO}", {**atual, "ativo": False}, token)
 _st, site = chamar("GET", f"/publico/{U}/catalogos/{ID_CAT}")
 sc = next((i for c in site["categorias"] for i in c["itens"] if i["id"] == choc["id"]), {})
 checar("a opção inativa não é oferecida", [o["nome"] for o in sc.get("escolhas") or []] == ["Branco"], sc)
-st, r = pedir_site([{"id_item": choc["id"], "quantidade": 1, "escolha": PRETO}])
+st, r = pedir_site([{"id_item": choc["id"], "quantidade": 1, "escolha": OPC["Preto"]}])
 checar("e não pode ser pedida", st == 409, (st, r))
 _st, ct = chamar("GET", f"/catalogos/{ID_CAT}/conteudo", token=token)
 it = next(i for c in ct["categorias"] for i in c["itens"] if i["id"] == choc["id"])
@@ -292,6 +298,8 @@ gravar_cardapio(chamar, token, {"id_catalogo": ID_CAT, "modo": "PEDIDO", "exige_
                                 "chamar_garcom": False, "fonte": "NEWSREADER", "retencao_meses": 13})
 _st, f = chamar("GET", f"/publico/cardapio/mesa/{T1}")
 fi = next((i for i in f.get("itens", []) if i["id"] == choc["id"]), {})
+fcesta = next((i for i in f.get("itens", []) if i["id"] == cesta["id"]), {})
+OPF = {o["nome"]: o["id"] for i in (fi, fcesta) for o in i.get("escolhas") or []}
 checar("o feed traz o item de escolha com as opções", [o["nome"] for o in fi.get("escolhas") or []]
        == ["Branco", "Preto"] and fi.get("preco") == 14.0, fi)
 fc = next((i for i in f.get("itens", []) if i["id"] == comum["id"]), {})
@@ -299,16 +307,15 @@ checar("e o prato comum com escolhas nulo", fc.get("escolhas", "x") is None, fc)
 S = str(uuid.uuid4())
 st, r = chamar("POST", f"/publico/cardapio/mesa/{T1}/pedido", {
     "sessao": S, "chave": uuid.uuid4().hex,
-    "itens": [{"item": cesta["id"], "quantidade": 1, "escolha": CP,
-               "adicionais": [OP_P for OP_P in []]}]})
+    "itens": [{"item": cesta["id"], "quantidade": 1, "escolha": OPF["Pequena"], "adicionais": []}]})
 checar("na mesa, a cesta pequena sem itens é recusada", st == 422, (st, r))
 _st, adp = chamar("GET", f"/produtos/{CP}/cardapio", token=token)
 OPP = {o["nome"]: o["id"] for gg in adp["adicionais"] for o in gg["opcoes"]}
 st, pm = chamar("POST", f"/publico/cardapio/mesa/{T1}/pedido", {
     "sessao": S, "chave": uuid.uuid4().hex,
-    "itens": [{"item": cesta["id"], "quantidade": 1, "escolha": CP,
+    "itens": [{"item": cesta["id"], "quantidade": 1, "escolha": OPF["Pequena"],
                "adicionais": [OPP["Pão"], OPP["Pão"], OPP["Pão"]]},
-              {"item": choc["id"], "quantidade": 1, "escolha": PRETO}]})
+              {"item": choc["id"], "quantidade": 1, "escolha": OPF["Preto"]}]})
 checar("na mesa, 3 pães na pequena: 20 + 24 = 44; + Preto 14 = 58",
        st == 201 and pm.get("total") == 58.0, (st, pm))
 chamar("DELETE", f"/reservas/mesas/{m1['id']}", token=token)

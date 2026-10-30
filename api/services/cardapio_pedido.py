@@ -62,6 +62,9 @@ def enviar(cur, mesa: dict, dados: dict, telefone: str | None) -> dict:
     cur.execute("SELECT id, id_produto FROM catalogo_itens WHERE id = ANY(%s)",
                 ([int(i["item"]) for i in dados["itens"]],))
     produto_do_item = {r["id"]: r["id_produto"] for r in cur.fetchall()}
+    cur.execute("SELECT id, id_produto FROM catalogo_item_escolhas WHERE id_item = ANY(%s)",
+                (list(produto_do_item),))
+    produto_da_opcao = {r["id"]: r["id_produto"] for r in cur.fetchall()}
 
     linhas = []
     for n, i in enumerate(dados["itens"]):
@@ -75,6 +78,10 @@ def enviar(cur, mesa: dict, dados: dict, telefone: str | None) -> dict:
             raise HTTPException(status_code=409, detail=f"{item['nome']} está sem preço — peça ao garçom.")
         # 🔑 142: a escolha (item de escolha) e os adicionais seguem a regra única do site e
         # da mesa, em `item_do_pedido`.
+        if item.get("escolhas"):
+            # O feed é público e não leva o produto da opção: ele sai daqui, pelo id da opção.
+            item = {**item, "escolhas": [{**o, "id_produto": produto_da_opcao.get(o["id"])}
+                                         for o in item["escolhas"]]}
         linha = item_do_pedido.resolver({**item, "id_produto": produto_do_item[item["id"]]},
                                         i.get("escolha"), [int(x) for x in i.get("adicionais") or []])
         qtd = dec(i["quantidade"])

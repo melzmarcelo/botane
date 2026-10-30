@@ -260,7 +260,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
 
   const adicionar = (item: Item, quantidade: number, adicionais: EscolhaAdicional[], escolha?: OpcaoEscolhida) => {
     // 🔑 142: no item de escolha, a linha é a OPÇÃO — nome "Chocolate Quente · Branco" e o preço dela.
-    selecao.adicionar({ id_item: item.id, escolha: escolha?.id_produto ?? null,
+    selecao.adicionar({ id_item: item.id, escolha: escolha?.id ?? null,
                         nome: escolha ? `${item.nome} · ${escolha.nome}` : item.nome,
                         preco: escolha ? escolha.preco : item.preco, quantidade, adicionais });
     medidor.current?.registrar("adicionou", { item: item.id, midia: item.midia.tipo });

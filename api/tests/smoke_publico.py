@@ -312,7 +312,11 @@ checar("o item traz nome, descricao e PRECO",
 # aparece desde 28/09/2026 (migracao 101) e o do ITEM do catalogo, que o carrinho manda de
 # volta ao pedir — o servidor e que descobre o produto e o preco.
 checar("e NADA de id de produto na resposta (so o id do ITEM, para o carrinho)",
-       sorted(item) == ["descricao", "foto", "id", "nome", "preco"], list(item))
+       sorted(item) == ["adicionais", "descricao", "escolhas", "foto", "id", "nome", "preco"], list(item))
+# 🔑 142: o item de escolha e os adicionais também não levam o produto — a opção sai com o id
+# DELA. Conferido no JSON inteiro, para nenhuma camada nova escorregar.
+checar("nenhum 'id_produto' em lugar nenhum do cardapio publico",
+       "id_produto" not in json.dumps(card), [k for k in json.dumps(card).split('"') if "produto" in k][:5])
 
 # 🔑 **O nome de VITRINE ganha do nome do cadastro** (migracao 085).
 chamar("PUT", f"/produtos/{prod['id']}",

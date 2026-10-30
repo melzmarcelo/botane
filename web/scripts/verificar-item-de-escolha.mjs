@@ -167,8 +167,12 @@ try {
     carrinho.slice(0, 400));
   const guardado = await p.evaluate(() => JSON.parse(sessionStorage.getItem("botane.carrinho") || "null"));
   const linhaC = guardado && Object.values(guardado.itens)[0];
-  checar("e guarda a escolha (o produto) e os adicionais para o envio",
-    linhaC?.escolha === MEDIA_ID() && (linhaC.adicionais || []).length === 2, linhaC);
+  // ⚠️ A escolha é o id da OPÇÃO (o cardápio público não expõe produto).
+  const { dados: pub } = await api("GET", `/publico/1/catalogos/${cat.id}`);
+  const idMedia = pub.categorias.flatMap((c) => c.itens).find((i) => i.id === cesta.id)
+    ?.escolhas.find((o) => o.nome === "Média")?.id;
+  checar("e guarda a escolha (a opção) e os adicionais para o envio",
+    !!idMedia && linhaC?.escolha === idMedia && (linhaC.adicionais || []).length === 2, { linhaC, idMedia });
 
   console.log("\n4. o site, direto: Escolher abre a janela de montar");
   // ⚠️ Sendo Cardápio Vivo, o site levaria ao feed: tira-se o Vivo para ver as seções do site.
@@ -206,8 +210,6 @@ try {
   await api("PUT", `/catalogos/${cat.id}`, { situacao: "INATIVO" }, token);
   await api("PUT", "/unidades/1/parametros", par, token);
 }
-
-function MEDIA_ID() { return MEDIA; }
 
 console.log(`\n${ok} passaram, ${falhas.length} falharam`);
 falhas.forEach((f) => console.log(`  - ${f}`));

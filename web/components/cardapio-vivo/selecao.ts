@@ -15,7 +15,7 @@ export type EscolhaAdicional = { id: number; nome: string; preco: number | null;
 export type LinhaSelecao = {
   chave: string;
   id_item: number;
-  /** 142: o PRODUTO escolhido no item de escolha (Chocolate Quente → Branco). */
+  /** 142: a OPÇÃO escolhida no item de escolha (o id dela; Chocolate Quente → Branco). */
   escolha?: number | null;
   nome: string;
   preco: number | null;

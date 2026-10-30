@@ -1949,15 +1949,15 @@ function abrirMontar(item) {
 
 function desenharMontar() {
   const { item } = montando;
-  const opcao = item.escolhas ? item.escolhas.find((o) => o.id_produto === montando.opcao) : null;
+  const opcao = item.escolhas ? item.escolhas.find((o) => o.id === montando.opcao) : null;
   const grupos = item.escolhas ? (opcao ? opcao.adicionais : []) : item.adicionais;
   const base = item.escolhas ? (opcao ? opcao.preco : null) : item.preco;
   const marcados = montando.marcados;
   let html = item.descricao ? `<p>${esc(item.descricao)}</p>` : "";
   if (item.escolhas) {
     html += `<fieldset><legend>${esc(t("Escolha uma opção"))}<small>${esc(t("obrigatório"))}</small></legend>${
-      item.escolhas.map((o) => `<div class="opcao"><label><input type="radio" name="montar-opcao" data-opcao="${o.id_produto}"
-        ${montando.opcao === o.id_produto ? "checked" : ""}> ${esc(o.nome)}</label>
+      item.escolhas.map((o) => `<div class="opcao"><label><input type="radio" name="montar-opcao" data-opcao="${o.id}"
+        ${montando.opcao === o.id ? "checked" : ""}> ${esc(o.nome)}</label>
         <small>${o.preco !== null ? "R$ " + dinheiro(o.preco) : ""}</small></div>`).join("")}</fieldset>`;
   }
   grupos.forEach((g) => {
@@ -1993,8 +1993,8 @@ function desenharMontar() {
   botao.onclick = () => {
     const ids = escolhidos.flatMap((a) => Array(a.quantidade).fill(a.id)).sort((a, b) => a - b);
     const linha = {
-      chave: `${item.id}:${opcao ? opcao.id_produto : ""}:${ids.join(",")}`, id: item.id,
-      escolha: opcao ? opcao.id_produto : null, adicionais_escolhidos: escolhidos,
+      chave: `${item.id}:${opcao ? opcao.id : ""}:${ids.join(",")}`, id: item.id,
+      escolha: opcao ? opcao.id : null, adicionais_escolhidos: escolhidos,
       nome: opcao ? `${item.nome} · ${opcao.nome}` : item.nome, preco: unitario,
     };
     mudarQuantidade(linha, 1);
@@ -2049,7 +2049,7 @@ async function enviarPedido() {
       forma_pagamento: pedidoPagamento, observacao: $("#obs-pedido").value.trim() || null,
       itens: Object.values(carrinho.itens).map((i) => ({
         id_item: i.id, quantidade: i.quantidade, observacao: i.observacao || null,
-        // 🔑 142: o produto escolhido e os adicionais (a opção repetida vai uma vez por unidade).
+        // 🔑 142: a opção escolhida (o id dela) e os adicionais (a repetida vai uma vez por unidade).
         escolha: i.escolha || null,
         adicionais: (i.adicionais || []).flatMap((a) => Array(vezes(a)).fill(a.id)) })),
     });

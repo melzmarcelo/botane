@@ -965,6 +965,10 @@ e os itens em linhas (a cesta NÃO é KIT — kit tem composição fixa).
   e máximo contam UNIDADES) e `produto_adicionais_opcoes.incluso` (R$ 0). Congelados com
   `quantidade` em `pedido_itens.adicionais`; a folha do pedido (PDF) passou a imprimi-los —
   não imprimia nem os da mesa.
+- ⚠️ **A opção sai no cardápio público com o id DELA (`catalogo_item_escolhas.id`), nunca o do
+  produto** — regra antiga do `smoke_publico` ("nada de id de produto"), que pegou a primeira
+  versão na bateria. O pedido manda esse id e o servidor acha o produto (`pedidos._com_opcoes`;
+  na mesa, `cardapio_pedido` busca `catalogo_item_escolhas`).
 - Preço do item de escolha no cardápio = o MENOR das opções ativas ("a partir de"). Opção
   inativa some do feed/site e não pode ser pedida; o cadastro a mostra marcada. Sem opção
   ativa, o item some.

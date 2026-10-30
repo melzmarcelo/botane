@@ -36,7 +36,7 @@ class ItemDoCarrinho(BaseModel):
     id_item: int
     quantidade: float = Field(gt=0, le=999)
     observacao: str | None = Field(default=None, max_length=200)
-    # 🔑 142: o PRODUTO escolhido no item de escolha, e os adicionais (id repetido = a mesma
+    # 🔑 142: a OPÇÃO escolhida no item de escolha (o id dela, não o do produto), e os adicionais (id repetido = a mesma
     # opção mais de uma vez, nos grupos que deixam). A regra é a mesma da mesa.
     escolha: int | None = None
     adicionais: list[int] = Field(default_factory=list, max_length=60)

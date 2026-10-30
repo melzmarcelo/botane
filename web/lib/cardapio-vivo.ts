@@ -19,9 +19,10 @@ export type GrupoAdicionalFeed = {
   permite_repetir?: boolean;
 };
 
-/** 142: uma opção do item de escolha — é um PRODUTO, e é ele que vai no pedido. */
+/** 142: uma opção do item de escolha. `id` é o da OPÇÃO (o cardápio público não expõe o
+ *  produto); o servidor descobre o produto que vai no pedido. */
 export type OpcaoDeEscolha = {
-  id_produto: number; nome: string; preco: number | null; adicionais: GrupoAdicionalFeed[];
+  id: number; nome: string; preco: number | null; adicionais: GrupoAdicionalFeed[];
 };
 
 export type ItemFeed = {
