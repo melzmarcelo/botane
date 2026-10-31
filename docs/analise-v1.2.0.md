@@ -5,6 +5,10 @@ reservas, validando layouts, informações, segurança. Apontando melhorias e po
 Pode implementar o que achar sem perguntar, e ao fim pode promover para a produção. Vamos
 iniciar uma nova versão do sistema, a v1.2.0."*
 
+**No ar desde 31/10/2026, 09:24** (1.1.161 → 1.2.0, com a migração 146). Bateria da API 117/117
+(5.555 checagens) e do navegador rodadas pelo próprio `promover`; `verificar_deploy` com a impressão
+igual à deste repositório (`f9d3654e4d39`, 440 arquivos).
+
 ## Como foi feita
 
 | Frente | O que se olhou |
