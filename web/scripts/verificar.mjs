@@ -10400,7 +10400,21 @@ try {
     return b ? b.disabled : null;
   });
   checar("o conjunto novo não se cria sem mesas marcadas", (await criarCj()) === true);
-  for (const figura of await p.$$(seletorDaPlanta)) await figura.click();
+  // ⚠️ v1.2.0: centraliza cada mesa antes do clique e anota o que está POR CIMA do ponto —
+  // a planta rola junto com o painel do conjunto, e um clique por coordenada que cai em
+  // outro elemento passa como "não marcou" sem dizer por quê.
+  const porCima = [];
+  for (const figura of await p.$$(seletorDaPlanta)) {
+    await figura.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await assentar(150);
+    const caixa = await figura.boundingBox();
+    porCima.push(caixa ? await p.evaluate((x, y) => {
+      const e = document.elementFromPoint(x, y);
+      return e ? `${e.tagName.toLowerCase()} ${e.closest("button")?.getAttribute("aria-label") ?? ""}` : null;
+    }, caixa.x + caixa.width / 2, caixa.y + caixa.height / 2) : "sem caixa");
+    await figura.click();
+    await assentar(200);
+  }
   await assentar(300);
   const cjMarcando = await p.evaluate((sel) => ({
     naPlanta: [...document.querySelectorAll(sel)]
@@ -10411,7 +10425,8 @@ try {
     capacidade: document.querySelector('[aria-label="novo conjunto"] output')?.textContent?.trim(),
   }), seletorDaPlanta);
   checar("clicar nas mesas da planta as MARCA, na planta e na lista de botões, sem abrir o painel",
-    cjMarcando.naPlanta === 2 && cjMarcando.nosBotoes === 2 && !cjMarcando.painelAbriu, cjMarcando);
+    cjMarcando.naPlanta === 2 && cjMarcando.nosBotoes === 2 && !cjMarcando.painelAbriu,
+    { ...cjMarcando, porCima });
   checar("e a capacidade sugerida é a soma dos máximos: 16", cjMarcando.capacidade === "16",
     cjMarcando.capacidade);
   checar("nada é criado antes do botão",
