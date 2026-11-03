@@ -357,14 +357,21 @@ st, p_cmv = chamar("GET", f"/exportar/cmv/previa?{periodo}", token=token)
 # arquivo tinha linha demais, quando quem estava cortado era a consulta.
 st, _margem = chamar("GET", f"/cmv/margem?{periodo}&limite=200", token=token)
 _anexo = len(_margem or []) if isinstance(_margem, list) else 0
+# ⚠️ **A apuração não tem sempre 10 linhas** (03/11/2026): com mais de um motivo de
+# consumo interno no período (134), o arquivo abre o consumo interno por motivo, uma
+# linha cada. No começo do mês, os documentos de teste de várias suítes caem no mesmo
+# período e o "10" fixo acusava um defeito que não existe.
+_st, _apur = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
+_motivos = len((_apur or {}).get("consumo_por_motivo") or [])
+_base = 10 + (_motivos if _motivos > 1 else 0)
 # ⚠️ Acima do teto do endpoint a igualdade deixa de valer — e ai o que se
 # afirma e o que importa: o anexo ESTA no arquivo, nao so a apuracao.
 if _anexo < 200:
     checar("e conta o anexo junto no relatório composto",
-           p_cmv["linhas"] == 10 + _anexo, (p_cmv, _anexo))
+           p_cmv["linhas"] == _base + _anexo, (p_cmv, _base, _anexo))
 else:
     checar("e conta o anexo junto no relatório composto",
-           p_cmv["linhas"] > 10 + _anexo - 1, (p_cmv, _anexo))
+           p_cmv["linhas"] > _base + _anexo - 1, (p_cmv, _base, _anexo))
 
 
 print("7. planilha e PDF saem do MESMO recorte")
