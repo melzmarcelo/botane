@@ -1234,7 +1234,7 @@ e pedidos de código.
   verdade no mesmo dia. A sobra repartida herda a origem do lançamento que a gerou.
 - Cobertura: seção 5e do `smoke_fidelidade.py` (93 no total).
 
-## ⏳ PENDENTE — o consumo (resgate) do prêmio da fidelidade (28/09/2026)
+## ✅ O consumo (resgate) do prêmio da fidelidade (pendente de 28/09/2026, construído na 1.2.1)
 
 🔑 **Pedido do dono:** *"implementar o consumo do prêmio adquirido"*, e em seguida: *"vamos
 gravar em memória este resgate do prêmio, por isto preciso validar com a cliente como é
@@ -1263,7 +1263,35 @@ cliente.**
   sem uso; a proposta é o documento Prêmio ENTREGAR o prêmio na mesma transação (opção 1
   acima). Dono respondeu: o almoço vai num documento do PDV que NÃO
   é importado e é lançado à mão depois — o documento manual é o único registro, e o caso
-  principal é prêmio já entregue → o documento só liga. Falta: código obrigatório?
+  principal é prêmio já entregue → o documento só liga. Código: obrigatório (dono, 03/11).
+
+### O documento com motivo Prêmio liga o prêmio (migração 147, 1.2.1, 03/11/2026)
+
+🔑 **Pedido do dono:** *"sim, obrigatório, pode construir"*. Estudo:
+[`docs/fidelidade-resgate-estudo.md`](../fidelidade-resgate-estudo.md).
+- **Vendas ▸ Lançar, motivo Prêmio → `codigo_premio` OBRIGATÓRIO** (422 sem; o código em
+  outro motivo é descartado). `fidelidade.ligar_ao_documento` roda DENTRO do savepoint da
+  venda (a entrega volta se a venda falhar): prêmio já entregue → só liga; disponível →
+  ENTREGA na DATA DO DOCUMENTO (meio-dia no fuso da casa se retroativo; as regras de vale_de,
+  vencimento e dia de consumo conferidas naquele dia por `_conferir_dia_da_entrega`, a mesma
+  função do balcão), tira o check-in aberto daquele dia e marca
+  `fidelidade_premios.entregue_pelo_documento`.
+- 🔑 **Cancelar o documento**: só devolve o prêmio quando foi o DOCUMENTO quem entregou; o do
+  balcão continua entregue (o almoço foi servido) e volta a "sem documento". O check-in
+  retirado não volta. Trocar a data do documento leva a entrega junto (`mudar_dia_da_entrega`).
+- Banco (regra 8): `ck_vendas_premio` (`id_premio` só com motivo PREMIO) e `ux_venda_premio`
+  (um documento NÃO cancelado por prêmio — o cancelado libera para um documento novo). O CHECK
+  não exige código: os documentos Prêmio de antes da 147 não têm.
+- Prêmios: aba **Sem documento** (`status=SEM_DOCUMENTO`, constante `SEM_DOCUMENTO`) com o
+  botão "Lançar documento" → `/vendas/lancar?motivo=PREMIO&premio=COD` (só para quem lança
+  vendas: `cmv.fechamento`/`cmv.painel`). ⚠️ Os prêmios IMPORTADOS do LeadsFood ficam fora de
+  "sem documento" — servidos antes do Botané. O grid mostra o documento e o custo (o que saiu
+  do estoque e não foi estornado). Entregar no balcão lembra de lançar o documento.
+- Painel: `entregues_sem_documento`, `documentos_no_mes`, `custo_no_mes` (pela data do
+  documento). Detalhe da venda: o prêmio, o cliente e quem entregou (balcão/documento).
+  Conector: `lancar_vendas` aceita `codigo_premio`.
+- Cobertura: `smoke_premio_no_documento.py` (27) e `verificar-premio-documento.mjs` (10, na
+  bateria; cenário em `api/tests/cenario_premio.py`, telefone `00900002…`).
 
 ## Mensagens por WhatsApp — API oficial da Meta, por loja (migração 099, 28/09/2026)
 

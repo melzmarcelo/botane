@@ -49,6 +49,12 @@ export type Premio = {
   status: "DISPONIVEL" | "USADO" | "VENCIDO";
   /** Disponível, já valendo (`vale_de`) e hoje é dia de consumo. */
   pode_hoje: boolean;
+  /** 147: o documento com motivo Prêmio ligado a ele (o que foi servido) e o custo. */
+  id_venda?: number | null;
+  documento?: string | null;
+  custo_documento?: number | null;
+  /** Entregue, nascido no Botané, e ainda sem documento: falta lançar. */
+  sem_documento?: boolean;
 };
 
 
@@ -129,6 +135,11 @@ export type ResumoFidelidade = {
   premios_vencidos: number;
   entregues_no_mes: number;
   visitas_hoje: number;
+  /** 147: entregues que ainda não têm o documento do que foi servido. */
+  entregues_sem_documento: number;
+  documentos_no_mes: number;
+  /** O que saiu do estoque com os documentos de prêmio do mês (R$). */
+  custo_no_mes: number;
   visitas_por_premio: number;
   premio: string;
   metodo: FidelidadeConfig["metodo"];

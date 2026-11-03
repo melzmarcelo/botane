@@ -18,7 +18,7 @@ import { useSessao } from "@/lib/sessao";
 
 import FichaDoParticipante from "./ficha";
 
-import { plural } from "@/lib/numeros";
+import { plural, reais } from "@/lib/numeros";
 /**
  * Fidelidade → Painel: o programa inteiro numa tela.
  *
@@ -125,6 +125,27 @@ export default function PainelDaFidelidade() {
           A cada {resumo.visitas_por_premio} selos: {resumo.premio} · método{" "}
           {resumo.metodo === "CODIGO_CAIXA" ? "código do caixa" : "QR na mesa"} ·{" "}
           <Link href="/fidelidade/configuracao" className="link-acao">configuração</Link>
+        </p>
+      )}
+      {/* 🔑 147 (pedido do dono, 03/11/2026): quanto o programa custou no mês — o que saiu
+          do estoque com os documentos de motivo Prêmio — e o que ainda falta lançar. */}
+      {resumo && (
+        <p className="-mt-3 text-[13px]" id="fidelidade-custo">
+          <span className="text-suave">Custo dos prêmios no mês: </span>
+          <b className="mono">{reais(resumo.custo_no_mes)}</b>
+          <span className="text-suave">
+            {" "}({plural(resumo.documentos_no_mes, "documento", "documentos")})
+          </span>
+          {resumo.entregues_sem_documento > 0 && (
+            <>
+              {" · "}
+              <Link href="/fidelidade/premios?status=SEM_DOCUMENTO"
+                    className="link-acao text-[var(--color-alerta)]">
+                {plural(resumo.entregues_sem_documento, "prêmio entregue", "prêmios entregues")}{" "}
+                sem documento
+              </Link>
+            </>
+          )}
         </p>
       )}
 

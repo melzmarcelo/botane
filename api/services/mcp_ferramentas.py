@@ -802,7 +802,14 @@ FERRAMENTAS: list[Ferramenta] = [
                                   "description": "Quando NÃO é venda: fica fora da receita "
                                                  "e sai pelo custo. PERDA sai como perda "
                                                  "(pede id_motivo_perda); CONSUMO_INTERNO "
-                                                 "pede id_pessoa; OUTROS pede observação."},
+                                                 "pede id_pessoa; OUTROS pede observação; "
+                                                 "PREMIO pede codigo_premio."},
+                       "codigo_premio": {"type": "string",
+                                         "description": "Com motivo PREMIO (obrigatório): o "
+                                                        "código de 6 letras do prêmio da "
+                                                        "fidelidade (de `premios_da_fidelidade`"
+                                                        "). Liga o prêmio ao documento e, se "
+                                                        "ainda não foi entregue, entrega."},
                        "motivo_observacao": {"type": "string",
                                              "description": "Por quê, em palavras."},
                        "id_motivo_perda": {"type": "integer",

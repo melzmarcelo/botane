@@ -30,6 +30,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "tests")
 
 from comum import garantir_local  # noqa: E402
+from database import get_cursor, init_pool  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -117,6 +118,21 @@ _st, pes = chamar("POST", "/fornecedores", {"nome": f"PESSOA MOTIVO PAINEL {marc
 pessoa = (pes or {}).get("id")
 _st, mps = chamar("GET", "/estoque/motivos-perda", token=token)
 quebra = next((m for m in mps or [] if m["nome"] == "Quebra"), (mps or [{}])[0])
+# 🔑 147: o motivo Prêmio exige o código de um prêmio da fidelidade — um, de teste
+# (telefone 00900003…, que ninguém tem), que o documento MPX entrega e o cancelamento devolve.
+init_pool()
+FONE_PREMIO = f"00900003{marca[-3:]}"
+with get_cursor() as cur:
+    cur.execute("DELETE FROM reserva_clientes WHERE telefone = %s", (FONE_PREMIO,))
+    cur.execute("INSERT INTO reserva_clientes (nome, telefone) VALUES (%s, %s) RETURNING id",
+                (f"CLIENTE MOTIVO PAINEL {marca}", FONE_PREMIO))
+    cliente_premio = cur.fetchone()["id"]
+    codigo_premio = "ZM" + "".join("ABCDEFGHJK"[int(c)] for c in marca[-4:])
+    cur.execute(
+        """INSERT INTO fidelidade_premios (id_cliente, id_unidade, codigo, premio, visitas,
+                                           dias_consumo, vence_em, vale_de)
+           VALUES (%s, 1, %s, 'Almoço cortesia', 10, '{1,2,3,4,5,6,7}', %s, %s)""",
+        (cliente_premio, codigo_premio, hoje + timedelta(days=20), hoje - timedelta(days=3)))
 
 
 def lancar(doc, dia, qtd, **cab):
@@ -135,7 +151,7 @@ lancar("MPP", hoje, 1, motivo="PERDA", id_motivo_perda=quebra.get("id"))
 lancar("MPO", ontem, 3, motivo="OUTROS", motivo_observacao="festa da equipe")
 lancar("MPC", hoje, 1, motivo="CONSUMO_INTERNO")
 lancar("MPA", antes, 1, motivo="BRINDE")                 # o período anterior
-cancelado = lancar("MPX", hoje, 5, motivo="PREMIO")
+cancelado = lancar("MPX", hoje, 5, motivo="PREMIO", codigo_premio=codigo_premio)
 lancar("MPV", hoje, 1)                                    # venda de verdade
 st, r = chamar("DELETE", f"/vendas/{cancelado}", token=token)
 checar("o prêmio é cancelado", st == 200, (st, r))
@@ -266,6 +282,12 @@ for v in todos or []:
 _st, todos = chamar("GET", f"/vendas?busca=-{marca}&limite=50", token=token)
 checar("tudo cancelado", all(v["cancelada"] for v in todos or []), todos)
 chamar("DELETE", f"/produtos/{produto}", token=token)
+with get_cursor() as cur:
+    # O documento cancelado ainda aponta para o prêmio: solta antes de apagar o cliente.
+    cur.execute("""UPDATE vendas SET id_premio = NULL WHERE id_premio IN
+                     (SELECT id FROM fidelidade_premios WHERE id_cliente = %s)""",
+                (cliente_premio,))
+    cur.execute("DELETE FROM reserva_clientes WHERE id = %s", (cliente_premio,))
 
 print(f"\n{ok} checagens ok, {len(falhas)} falharam")
 sys.exit(1 if falhas else 0)

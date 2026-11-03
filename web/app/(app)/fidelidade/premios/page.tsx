@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
@@ -8,6 +9,8 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { entregarPremio, listarPremios, type Premio } from "@/lib/fidelidade";
+import { plural, reais } from "@/lib/numeros";
+import { useSessao } from "@/lib/sessao";
 
 /**
  * Fidelidade → Prêmios: o balcão confere o código e entrega.
@@ -21,6 +24,8 @@ import { entregarPremio, listarPremios, type Premio } from "@/lib/fidelidade";
 const SITUACOES = [
   { v: "DISPONIVEL", r: "Disponíveis" },
   { v: "USADO", r: "Entregues" },
+  // 147: entregues sem o documento do que foi servido — a lista do que falta lançar.
+  { v: "SEM_DOCUMENTO", r: "Sem documento" },
   { v: "VENCIDO", r: "Vencidos" },
   { v: "", r: "Todos" },
 ];
@@ -43,6 +48,9 @@ function telefone(t: string) {
 
 export default function PremiosDaFidelidade() {
   const aviso = useAviso();
+  const { pode } = useSessao();
+  // Lançar o documento é de quem lança vendas (as chaves de Vendas ▸ Lançar).
+  const lancaDocumento = pode("cmv.fechamento") || pode("cmv.painel");
   const [status, setStatus] = useEstadoNaUrl<string>("status", "DISPONIVEL");
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [lista, setLista] = useState<Premio[] | null>(null);
@@ -90,7 +98,8 @@ export default function PremiosDaFidelidade() {
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Prêmios</h1>
         <ExplicaTela>
           O cliente mostra o código do prêmio no celular. Busque pelo código, nome ou telefone,
-          confira e entregue.
+          confira e entregue. Depois, lance o que foi servido em Vendas com o motivo Prêmio e o
+          código: os entregues sem esse documento ficam em &quot;Sem documento&quot;.
         </ExplicaTela>
       </header>
 
@@ -125,7 +134,7 @@ export default function PremiosDaFidelidade() {
         </div>
       </Cartao>
 
-      <Cartao titulo={lista ? `${pag.total ?? lista.length} prêmio(s)` : "Prêmios"}>
+      <Cartao titulo={lista ? plural(pag.total ?? lista.length, "prêmio", "prêmios") : "Prêmios"}>
         {!lista ? (
           <Carregando />
         ) : !lista.length ? (
@@ -171,8 +180,32 @@ export default function PremiosDaFidelidade() {
                           {p.entregue_por ? ` · ${p.entregue_por}` : ""}
                         </span>
                       )}
+                      {/* 147: o documento do que foi servido, ou o aviso de que falta. */}
+                      {p.id_venda ? (
+                        <Link
+                          href={`/vendas/${p.id_venda}`}
+                          className="block text-[12px] text-suave underline-offset-2 hover:underline"
+                          data-premio-documento={p.codigo}
+                        >
+                          documento {p.documento || `#${p.id_venda}`}
+                          {p.custo_documento != null ? ` · custo ${reais(p.custo_documento)}` : ""}
+                        </Link>
+                      ) : p.sem_documento ? (
+                        <span className="mt-0.5 block">
+                          <Etiqueta cor="alerta">sem documento</Etiqueta>
+                        </span>
+                      ) : null}
                     </td>
                     <td>
+                      {p.sem_documento && lancaDocumento && (
+                        <Link
+                          href={`/vendas/lancar?motivo=PREMIO&premio=${p.codigo}`}
+                          className="btn btn-secundario px-3 py-1 text-[13px]"
+                          data-lancar-documento={p.codigo}
+                        >
+                          Lançar documento
+                        </Link>
+                      )}
                       {p.status === "DISPONIVEL" &&
                         (p.pode_hoje ? (
                           <button className="btn btn-primario px-3 py-1 text-[13px]"

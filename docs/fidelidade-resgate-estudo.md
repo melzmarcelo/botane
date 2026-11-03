@@ -4,7 +4,9 @@
 de prêmios."* Retoma o pendente de 28/09/2026 (`docs/memoria/reservas.md`, "PENDENTE — o
 consumo (resgate) do prêmio") com o que a migração 134 trouxe depois.
 
-Estado: **análise, nada construído.**
+Estado: ✅ **construído na 1.2.1 (migração 147, 03/11/2026)** — código obrigatório. Cancelar o
+documento devolve o prêmio só quando foi o DOCUMENTO quem entregou (o do balcão continua
+entregue). Detalhes em `docs/memoria/reservas.md`.
 
 ## 1. Os dois lados, hoje, sem ligação
 
@@ -88,7 +90,7 @@ gerência completar depois.
 1. ~~O almoço do prêmio é lançado no PDV hoje?~~ **Respondida (03/11):** sim, num documento
    do PDV que não é importado; no Botané entra só pelo lançamento manual, depois. O filtro
    "Entregue sem documento" vira a lista do que falta lançar.
-2. **O código do prêmio é obrigatório no motivo Prêmio?** Recomendado: sim, quando a loja usa
+2. ~~O código do prêmio é obrigatório no motivo Prêmio?~~ **Respondida (03/11): sim.** Recomendado: sim, quando a loja usa
    fidelidade — sem ele não há custo por programa. Brinde que não é da fidelidade usa
    "Brinde/Aniversário".
 3. **Cancelar o documento devolve o prêmio ao cliente?** Recomendado: sim, se ainda não venceu.

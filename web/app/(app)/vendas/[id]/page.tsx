@@ -111,6 +111,19 @@ export default function PaginaVenda() {
               ) : null}
             </p>
           )}
+          {/* 147: o prêmio da fidelidade servido com este documento. */}
+          {venda.premio_codigo && (
+            <p className="mt-1 text-[13.5px]" id="venda-premio">
+              <span className="text-suave">prêmio </span>
+              <b className="mono">{venda.premio_codigo}</b>
+              {venda.premio_cliente ? ` de ${venda.premio_cliente}` : ""}
+              <span className="text-suave">
+                {venda.entregue_pelo_documento
+                  ? " — entregue por este documento"
+                  : " — entregue no balcão"}
+              </span>
+            </p>
+          )}
           {/* 🔑 **Para quem foi o cupom, e por qual regra** (04/09/2026). A
               política vem CONGELADA do dia do lançamento, não do cadastro de
               hoje: quem passou de 20% para 30% de desconto faria este cupom

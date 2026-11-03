@@ -100,6 +100,10 @@ export type VendaDetalhe = {
   motivo?: string | null;
   motivo_observacao?: string | null;
   motivo_perda?: string | null;
+  // 147: o prêmio da fidelidade ligado ao documento (motivo Prêmio).
+  premio_codigo?: string | null;
+  premio_cliente?: string | null;
+  entregue_pelo_documento?: boolean | null;
   importada_em: string | null;
   usuario: string | null;
   /** Para quem foi este cupom — e a política que valia NO DIA, congelada. */

@@ -127,7 +127,7 @@ def qrcodes(quantidade: int = Query(1, ge=1, le=200),
 
 @router.get("/premios")
 def listar_premios(resposta: Response,
-                   status: str | None = Query(None, pattern="^(DISPONIVEL|USADO|VENCIDO)$"),
+                   status: str | None = Query(None, pattern="^(DISPONIVEL|USADO|VENCIDO|SEM_DOCUMENTO)$"),
                    busca: str | None = Query(None, max_length=120),
                    limite: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
                    ctx: Contexto = Depends(_OPERAR)) -> list[dict]:
@@ -149,7 +149,10 @@ def entregar(body: EntregaPremio, ctx: Contexto = Depends(_OPERAR)) -> dict:
                             depois={"codigo": body.codigo.upper(), "loja": id_unidade})
     return r | {"message": f"Prêmio entregue a {r['cliente']}: {r['premio']}."
                            + (" O check-in de hoje foi retirado — a visita do prêmio não conta "
-                              "carimbo." if r["carimbo_retirado"] else "")}
+                              "carimbo." if r["carimbo_retirado"] else "")
+                           # 147: o que falta — o documento com o que foi servido.
+                           + f" Lance o que foi servido em Vendas com o motivo Prêmio e o "
+                             f"código {body.codigo.strip().upper()}."}
 
 
 # ---------------------------------------------------------------- código do caixa (097)

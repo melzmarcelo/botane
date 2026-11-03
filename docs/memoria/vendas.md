@@ -1107,8 +1107,9 @@
   campo Observação: Perda, Prêmio, Brinde/Aniversário, Outros … basicamente consumo interno, saindo
   pelo custo"*. A caixa "Considerar consumo interno" (095) virou o motivo CONSUMO_INTERNO.
   - `vendas.motivo` (CONSUMO_INTERNO, PERDA, PREMIO, BRINDE, OUTROS), `motivo_observacao`,
-    `id_motivo_perda` (→ `perda_motivos`) e `id_premio` (→ `fidelidade_premios`, previsto para a
-    fidelidade, ainda sem uso). CHECK: com motivo, `consumo_interno` é verdadeiro. A migração deu
+    `id_motivo_perda` (→ `perda_motivos`) e `id_premio` (→ `fidelidade_premios`; em uso desde a
+    147/1.2.1: motivo PREMIO exige `codigo_premio` — ver `reservas.md`, "O documento com motivo
+    Prêmio liga o prêmio"). CHECK: com motivo, `consumo_interno` é verdadeiro. A migração deu
     o motivo CONSUMO_INTERNO a todo consumo interno antigo.
   - 🔑 **`consumo_interno` continua sendo a chave de "fora da receita"** para TODO motivo: as dez
     consultas que já o excluem (apuração, margem, painel, início, cardápio) não mudaram.

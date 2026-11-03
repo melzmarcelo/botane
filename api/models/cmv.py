@@ -65,6 +65,10 @@ class VendaImportar(BaseModel):
     motivo: Literal["CONSUMO_INTERNO", "PERDA", "PREMIO", "BRINDE", "OUTROS"] | None = None
     motivo_observacao: str | None = Field(default=None, max_length=500)
     id_motivo_perda: int | None = None
+    # 🔑 **O código do prêmio da fidelidade** (migração 147, pedido do dono, 03/11/2026):
+    # obrigatório no motivo PREMIO. O documento liga o prêmio (ou o entrega, se o balcão
+    # ainda não entregou) — ver `fidelidade.ligar_ao_documento`.
+    codigo_premio: str | None = Field(default=None, max_length=12)
     itens: list[ItemVenda]
 
 

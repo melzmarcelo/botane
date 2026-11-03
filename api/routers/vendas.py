@@ -23,6 +23,7 @@ from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
 from services import consumo_pessoa as consumo
 from services import estoque as motor_estoque
+from services import fidelidade
 from services import painel_vendas
 from services import vendas_motivos
 from services import precos
@@ -369,6 +370,14 @@ def _normalizar_motivo(cur, venda) -> None:
     if venda.consumo_interno and not venda.motivo:
         venda.motivo = "CONSUMO_INTERNO"
     venda.motivo_observacao = (venda.motivo_observacao or "").strip() or None
+    # 🔑 147: o código do prêmio só existe no motivo Prêmio — e nele é obrigatório.
+    venda.codigo_premio = ((getattr(venda, "codigo_premio", None) or "").strip().upper()
+                           or None) if venda.motivo == "PREMIO" else None
+    if venda.motivo == "PREMIO" and not venda.codigo_premio and not venda.cancelada:
+        raise HTTPException(
+            status_code=422,
+            detail="Com o motivo Prêmio, informe o código do prêmio da fidelidade "
+                   "(as 6 letras do cartão do cliente).")
     if not venda.motivo:
         venda.motivo_observacao = None
         venda.id_motivo_perda = None
@@ -531,6 +540,8 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
     # As vendas que o banco recusou — o lote segue sem elas (ver o SAVEPOINT).
     falhas: list[dict] = []
     primeira_falha: Exception | None = None
+    # O que cada documento de prêmio fez com o prêmio (147), para a frase da resposta.
+    frases_premio: list[str] = []
 
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
@@ -607,19 +618,26 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                 # soma dos itens, e o desconto vai na coluna própria — assim a
                 # conferência com o PDV fecha sem ninguém precisar refazer a conta.
                 total = bruto - (venda.desconto or 0)
+                # 🔑 147: o prêmio da fidelidade, conferido e ligado DENTRO do savepoint —
+                # se a venda falhar, a entrega que o documento fez volta junto.
+                premio = None
+                if venda.codigo_premio and not venda.cancelada:
+                    premio = fidelidade.ligar_ao_documento(
+                        cur, id_unidade, venda.codigo_premio, venda.data, ctx.id_usuario)
                 cur.execute(
                     """INSERT INTO vendas (id_unidade, data, hora, origem, canal, documento,
                                            valor_total, desconto, cancelada, id_pessoa,
                                            consumo_interno, motivo, motivo_observacao,
-                                           id_motivo_perda,
+                                           id_motivo_perda, id_premio,
                                            cupom_base, cupom_desconto_pct, id_usuario)
                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                               %s, %s, %s)
+                               %s, %s, %s, %s)
                        RETURNING id""",
                     (id_unidade, venda.data, venda.hora, venda.origem, venda.canal,
                      venda.documento, total, venda.desconto or 0, venda.cancelada,
                      venda.id_pessoa, bool(venda.consumo_interno), venda.motivo,
                      venda.motivo_observacao, venda.id_motivo_perda,
+                     premio["id"] if premio else None,
                      # 🔑 A política CONGELADA, como o custo da ficha: ela muda no
                      # cadastro, e sem isto o relatório de março passaria a se
                      # explicar por uma regra de setembro.
@@ -642,6 +660,13 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                     produzidos_na_hora += r_item["produzido"]
                     baixados += r_item["baixado"]
                 cur.execute("RELEASE SAVEPOINT uma_venda")
+                if premio:
+                    frases_premio.append(
+                        f"Prêmio {premio['codigo']} de {premio['cliente']} "
+                        + ("entregue por este documento" if premio["entregou"]
+                           else "ligado ao documento")
+                        + (" (o check-in do dia foi retirado)"
+                           if premio["carimbo_retirado"] else ""))
             except Exception as e:  # noqa: BLE001 — uma venda não derruba o lote
                 cur.execute("ROLLBACK TO SAVEPOINT uma_venda")
                 (importadas, canceladas, itens_total, sem_vinculo, sem_custo, de_rascunho,
@@ -695,6 +720,7 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         # ver por que o cupom saiu por outro valor, na mesma linha em que soube
         # que ele foi gravado.
         + (" · " + "; ".join(politicas_aplicadas) if politicas_aplicadas else "")
+        + (" · " + "; ".join(frases_premio) if frases_premio else "")
         # ⚠️ Dito na resposta, e não só na tela: quem lança por outro caminho
         # (planilha, integração) também precisa saber que parte do cupom saiu
         # pelo preço cheio.
@@ -817,7 +843,7 @@ def alterar(id_venda: int, body: VendaAlterar, ctx: Contexto = Depends(_editar))
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
-            """SELECT id, data, hora, origem, documento, cancelada, id_consumo_lote
+            """SELECT id, data, hora, origem, documento, cancelada, id_consumo_lote, id_premio
                  FROM vendas WHERE id = %s AND id_unidade = %s FOR UPDATE""",
             (id_venda, id_unidade),
         )
@@ -894,6 +920,9 @@ def alterar(id_venda: int, body: VendaAlterar, ctx: Contexto = Depends(_editar))
 
         cur.execute("UPDATE vendas SET data = %s, documento = %s WHERE id = %s",
                     (nova_data, novo_doc, id_venda))
+        # 147: o prêmio que ESTE documento entregou acompanha a data nova.
+        if muda_data and venda["id_premio"]:
+            fidelidade.mudar_dia_da_entrega(cur, venda["id_premio"], nova_data)
         # O "desde" do lote em cobrança acompanha a data nova; o valor não muda.
         if muda_data and venda["id_consumo_lote"]:
             from services import receber as receber_motor
@@ -1012,7 +1041,7 @@ def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
         # ⚠️ A loja entra na busca: sem ela, um id de outra loja seria cancelado
         # por quem nem enxerga aquela venda na tela.
         id_unidade = unidade_atual(cur, ctx)
-        cur.execute("SELECT cancelada, id_consumo_lote FROM vendas "
+        cur.execute("SELECT cancelada, id_consumo_lote, id_premio FROM vendas "
                     "WHERE id = %s AND id_unidade = %s FOR UPDATE",
                     (id_venda, id_unidade))
         venda = cur.fetchone()
@@ -1051,12 +1080,21 @@ def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
                                    f"Cancelamento da venda #{id_venda}")
 
         cur.execute("UPDATE vendas SET cancelada = true WHERE id = %s", (id_venda,))
+        # 🔑 147: o prêmio sai do documento. Se foi o documento quem o entregou, ele volta
+        # para o cliente; o entregue no balcão continua entregue (e volta a "sem documento").
+        premio_devolvido = (fidelidade.devolver_do_documento(cur, venda["id_premio"])
+                            if venda["id_premio"] else False)
         auditoria.registrar(cur, ctx.id_usuario, "vendas", id_venda, "cancelar",
-                            depois={"movimentos_estornados": len(movimentos)})
-    return {"estornados": len(movimentos),
+                            depois={"movimentos_estornados": len(movimentos),
+                                    "id_premio": venda["id_premio"],
+                                    "premio_devolvido": premio_devolvido})
+    return {"estornados": len(movimentos), "premio_devolvido": premio_devolvido,
             "message": "Venda cancelada"
                        + (f" — {len(movimentos)} movimento(s) devolvido(s) ao estoque"
-                          if movimentos else "")}
+                          if movimentos else "")
+                       + (" · o prêmio voltou para o cliente" if premio_devolvido
+                          else " · o prêmio continua entregue, agora sem documento"
+                          if venda["id_premio"] else "")}
 
 
 @router.get("/sem-baixa/previa")
@@ -1508,12 +1546,16 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
                       v.id_pessoa, v.cupom_base, v.cupom_desconto_pct, v.consumo_interno,
                       v.motivo, v.motivo_observacao, v.id_motivo_perda,
                       pm.nome AS motivo_perda,
+                      v.id_premio, fp.codigo AS premio_codigo, fp.premio AS premio,
+                      rc.nome AS premio_cliente, fp.entregue_pelo_documento,
                       f.nome AS pessoa,
                       u.nome AS usuario
                  FROM vendas v
                  LEFT JOIN usuarios u ON u.id = v.id_usuario
                  LEFT JOIN fornecedores f ON f.id = v.id_pessoa
                  LEFT JOIN perda_motivos pm ON pm.id = v.id_motivo_perda
+                 LEFT JOIN fidelidade_premios fp ON fp.id = v.id_premio
+                 LEFT JOIN reserva_clientes rc ON rc.id = fp.id_cliente
                 WHERE v.id = %s AND v.id_unidade = %s""",
             (id_venda, id_unidade),
         )

@@ -621,18 +621,7 @@ def entregar(cur, id_unidade: int, codigo: str, id_usuario: int | None) -> dict:
         raise HTTPException(
             status_code=409,
             detail=f"Este prêmio já foi entregue em {p['usado_em']:%d/%m/%Y}.")
-    if p["vence_em"] < hoje:
-        raise HTTPException(status_code=409,
-                            detail=f"Este prêmio venceu em {p['vence_em']:%d/%m/%Y}.")
-    if hoje < p["vale_de"]:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Este prêmio vale a partir da próxima visita ({p['vale_de']:%d/%m}) — "
-                   "o cartão foi completado hoje.")
-    if hoje.isoweekday() not in p["dias_consumo"]:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Este prêmio vale de {dias_em_texto(p['dias_consumo'])} — hoje não.")
+    _conferir_dia_da_entrega(p, hoje)
     cur.execute(
         """UPDATE fidelidade_premios SET usado_em = now(), usado_por = %s, id_unidade_uso = %s
             WHERE id = %s""",
@@ -651,6 +640,126 @@ def entregar(cur, id_unidade: int, codigo: str, id_usuario: int | None) -> dict:
             "carimbo_retirado": tirou}
 
 
+def _conferir_dia_da_entrega(p: dict, dia: date) -> None:
+    """As regras do prêmio para ser servido NESTE dia — as mesmas no balcão e no documento."""
+    hoje = agora_da_casa().date()
+    if p["vence_em"] < dia:
+        raise HTTPException(status_code=409,
+                            detail=f"Este prêmio venceu em {p['vence_em']:%d/%m/%Y}.")
+    if dia < p["vale_de"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Este prêmio vale a partir da próxima visita ({p['vale_de']:%d/%m}) — "
+                   "o cartão foi completado " + ("hoje." if dia == hoje else
+                                                 f"em {p['vale_de'] - timedelta(days=1):%d/%m}."))
+    if dia.isoweekday() not in p["dias_consumo"]:
+        quando = "hoje não" if dia == hoje else f"{dia:%d/%m} não"
+        raise HTTPException(
+            status_code=409,
+            detail=f"Este prêmio vale de {dias_em_texto(p['dias_consumo'])} — {quando}.")
+
+
+# ------------------------------------------------- o prêmio no documento (147)
+# 🔑 **Pedido do dono (03/11/2026):** o documento com motivo Prêmio, lançado à mão DEPOIS
+# (o do PDV não é importado), leva o código do prêmio — obrigatório. Quase sempre o balcão
+# já entregou: o documento só liga. Se ainda estava disponível, o documento entrega, na
+# data DELE, e marca `entregue_pelo_documento` para devolver se for cancelado.
+
+def ligar_ao_documento(cur, id_unidade: int, codigo: str, dia: date,
+                       id_usuario: int | None) -> dict:
+    """Confere o código e devolve o prêmio para o documento gravar em `vendas.id_premio`.
+
+    ⚠️ Roda DENTRO da transação do documento: se a gravação dele falhar, a entrega volta.
+    """
+    cur.execute(
+        """SELECT p.id, p.id_cliente, p.codigo, p.premio, p.vence_em, p.vale_de,
+                  p.dias_consumo, p.usado_em, c.nome
+             FROM fidelidade_premios p JOIN reserva_clientes c ON c.id = p.id_cliente
+            WHERE p.codigo = %s FOR UPDATE OF p""",
+        ((codigo or "").strip().upper(),),
+    )
+    p = cur.fetchone()
+    if not p:
+        raise HTTPException(status_code=404,
+                            detail=f"Código de prêmio {(codigo or '').strip().upper()} "
+                                   "não encontrado.")
+    cur.execute(
+        """SELECT id, documento FROM vendas
+            WHERE id_premio = %s AND NOT cancelada LIMIT 1""",
+        (p["id"],),
+    )
+    outro = cur.fetchone()
+    if outro:
+        raise HTTPException(
+            status_code=409,
+            detail=f"O prêmio {p['codigo']} já está no documento "
+                   f"{outro['documento'] or '(sem número)'} (venda nº {outro['id']}).")
+    base = {"id": p["id"], "codigo": p["codigo"], "premio": p["premio"], "cliente": p["nome"]}
+    if p["usado_em"]:
+        return {**base, "entregou": False, "carimbo_retirado": False}
+
+    _conferir_dia_da_entrega(p, dia)
+    # O documento do dia: agora. O retroativo: meio-dia daquele dia, no fuso da casa —
+    # é o que diz "foi servido no almoço de terça" sem inventar minuto.
+    cur.execute(
+        """UPDATE fidelidade_premios
+              SET usado_em = CASE WHEN %(dia)s = (now() AT TIME ZONE 'America/Sao_Paulo')::date
+                                  THEN now()
+                                  ELSE (%(dia)s + time '12:00') AT TIME ZONE 'America/Sao_Paulo'
+                             END,
+                  usado_por = %(usuario)s, id_unidade_uso = %(loja)s,
+                  entregue_pelo_documento = true
+            WHERE id = %(id)s""",
+        {"dia": dia, "usuario": id_usuario, "loja": id_unidade, "id": p["id"]},
+    )
+    # A visita do prêmio não conta carimbo (093), também quando quem entrega é o documento.
+    cur.execute(
+        """DELETE FROM fidelidade_checkins
+            WHERE id_cliente = %s AND data = %s AND id_premio IS NULL RETURNING id""",
+        (p["id_cliente"], dia),
+    )
+    return {**base, "entregou": True, "carimbo_retirado": cur.fetchone() is not None}
+
+
+def devolver_do_documento(cur, id_premio: int) -> bool:
+    """O documento com o prêmio foi cancelado: o prêmio volta se foi ELE quem entregou.
+
+    ⚠️ O entregue no balcão continua entregue — o almoço foi servido; cancelar o documento
+    só o põe de volta na lista "entregue sem documento". O carimbo retirado não volta.
+    """
+    cur.execute(
+        """UPDATE fidelidade_premios
+              SET usado_em = NULL, usado_por = NULL, id_unidade_uso = NULL,
+                  entregue_pelo_documento = false
+            WHERE id = %s AND entregue_pelo_documento
+        RETURNING id""",
+        (id_premio,),
+    )
+    return cur.fetchone() is not None
+
+
+def mudar_dia_da_entrega(cur, id_premio: int, dia: date) -> None:
+    """O documento que entregou mudou de data: a entrega acompanha."""
+    cur.execute(
+        """UPDATE fidelidade_premios
+              SET usado_em = (%s + time '12:00') AT TIME ZONE 'America/Sao_Paulo'
+            WHERE id = %s AND entregue_pelo_documento""",
+        (dia, id_premio),
+    )
+
+
+# O custo do que saiu do estoque com o documento do prêmio (só o que não foi estornado).
+_CUSTO_DO_DOCUMENTO = """
+    SELECT coalesce(sum(abs(m.custo_total)), 0) FROM estoque_movimentos m
+     WHERE m.origem_tipo = 'VENDA' AND m.origem_id = v.id AND m.id_estorno_de IS NULL
+       AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e WHERE e.id_estorno_de = m.id)"""
+
+# ⚠️ "Sem documento" não conta os prêmios IMPORTADOS do LeadsFood: foram servidos antes
+# do Botané, e não há documento a lançar para eles.
+SEM_DOCUMENTO = """p.usado_em IS NOT NULL AND p.importado_de IS NULL
+    AND NOT EXISTS (SELECT 1 FROM vendas v WHERE v.id_premio = p.id AND NOT v.cancelada)"""
+
+
 def consulta_premios(status: str | None, busca: str | None) -> tuple[str, list]:
     """Os prêmios, para o grid do balcão — SEM `LIMIT` (quem corta é `pagina`)."""
     onde, params = [], []
@@ -660,6 +769,8 @@ def consulta_premios(status: str | None, busca: str | None) -> tuple[str, list]:
         onde.append("p.usado_em IS NOT NULL")
     elif status == "VENCIDO":
         onde.append("p.usado_em IS NULL AND p.vence_em < (now() AT TIME ZONE 'America/Sao_Paulo')::date")
+    elif status == "SEM_DOCUMENTO":
+        onde.append(SEM_DOCUMENTO)
     texto = (busca or "").strip()
     if texto:
         digitos = "".join(ch for ch in texto if ch.isdigit())
@@ -674,12 +785,17 @@ def consulta_premios(status: str | None, busca: str | None) -> tuple[str, list]:
                p.usado_em,
                p.dias_consumo, c.nome, c.telefone,
                coalesce(u.apelido, u.nome) AS loja, coalesce(uu.apelido, uu.nome) AS loja_uso,
-               us.nome AS entregue_por
+               us.nome AS entregue_por, p.importado_de,
+               doc.id AS id_venda, doc.documento, doc.custo AS custo_documento
           FROM fidelidade_premios p
           JOIN reserva_clientes c ON c.id = p.id_cliente
           LEFT JOIN unidades u ON u.id = p.id_unidade
           LEFT JOIN unidades uu ON uu.id = p.id_unidade_uso
           LEFT JOIN usuarios us ON us.id = p.usado_por
+          LEFT JOIN LATERAL (
+                SELECT v.id, v.documento, ({_CUSTO_DO_DOCUMENTO}) AS custo
+                  FROM vendas v WHERE v.id_premio = p.id AND NOT v.cancelada
+                 LIMIT 1) doc ON true
          {"WHERE " + " AND ".join(onde) if onde else ""}
          ORDER BY (p.usado_em IS NULL) DESC, p.emitido_em DESC, p.id DESC"""
     return sql, params
@@ -691,6 +807,12 @@ def linha_do_premio(x: dict, hoje: date) -> dict:
     x["pode_hoje"] = (x["status"] == "DISPONIVEL" and x["vale_de"] <= hoje
                       and hoje.isoweekday() in x["dias_consumo"])
     x["consumo"] = dias_em_texto(x.pop("dias_consumo"))
+    if "custo_documento" in x:
+        x["custo_documento"] = (float(x["custo_documento"])
+                                if x["custo_documento"] is not None else None)
+        # Entregue, nascido no Botané e sem documento: falta lançar o que foi servido.
+        x["sem_documento"] = bool(x["usado_em"] and not x.get("id_venda")
+                                  and not x.get("importado_de"))
     for campo in ("emitido_em", "usado_em", "vence_em", "vale_de"):
         x[campo] = x[campo].isoformat() if x[campo] else None
     return x
@@ -723,7 +845,21 @@ def resumo(cur) -> dict:
         {"hoje": _hoje(), "semana": _hoje() + timedelta(days=7),
          "mes": _hoje().replace(day=1)},
     )
-    return {k: int(v or 0) for k, v in dict(cur.fetchone()).items()}
+    r = {k: int(v or 0) for k, v in dict(cur.fetchone()).items()}
+    # 🔑 147: o que falta lançar e quanto o programa custou no mês (o que saiu do estoque
+    # com os documentos de prêmio do mês, pela data do documento).
+    cur.execute(f"SELECT count(*) AS n FROM fidelidade_premios p WHERE {SEM_DOCUMENTO}")
+    r["entregues_sem_documento"] = int(cur.fetchone()["n"])
+    cur.execute(
+        f"""SELECT count(*) AS n, coalesce(sum(({_CUSTO_DO_DOCUMENTO})), 0) AS custo
+              FROM vendas v
+             WHERE v.id_premio IS NOT NULL AND NOT v.cancelada AND v.data >= %s""",
+        (_hoje().replace(day=1),),
+    )
+    m = cur.fetchone()
+    r["documentos_no_mes"] = int(m["n"])
+    r["custo_no_mes"] = float(m["custo"])
+    return r
 
 
 def _hoje() -> date:

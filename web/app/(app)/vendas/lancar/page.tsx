@@ -115,14 +115,25 @@ export default function PaginaLancarVenda() {
   const [motivoObs, setMotivoObs] = useState("");
   const [idMotivoPerda, setIdMotivoPerda] = useState("");
   const [motivosPerda, setMotivosPerda] = useState<{ id: number; nome: string }[]>([]);
+  // 🔑 **O código do prêmio da fidelidade** (migração 147, pedido do dono, 03/11/2026):
+  // obrigatório no motivo Prêmio. O documento liga o prêmio — ou o entrega, se o balcão
+  // ainda não entregou. Chegando de Fidelidade ▸ Prêmios ("Lançar o documento"), o
+  // endereço traz `?motivo=PREMIO&premio=CODIGO` e a tela já vem preenchida.
+  const [codigoPremio, setCodigoPremio] = useState("");
   useEffect(() => {
     motivosDePerda().then(setMotivosPerda).catch(() => {});
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("motivo") === "PREMIO") {
+      setMotivo("PREMIO");
+      setCodigoPremio((q.get("premio") ?? "").toUpperCase());
+    }
   }, []);
   const corpoMotivo = motivo
     ? {
         motivo,
         motivo_observacao: motivoObs.trim() || null,
         id_motivo_perda: motivo === "PERDA" && idMotivoPerda ? Number(idMotivoPerda) : null,
+        codigo_premio: motivo === "PREMIO" ? codigoPremio.trim().toUpperCase() || null : null,
       }
     : {};
 
@@ -459,8 +470,22 @@ export default function PaginaLancarVenda() {
               </select>
             </Campo>
           )}
+          {motivo === "PREMIO" && (
+            <Campo rotulo="Código do prêmio" dica="obrigatório: as 6 letras do cartão do cliente">
+              <input
+                id="venda-codigo-premio"
+                className="campo mono uppercase"
+                maxLength={12}
+                required
+                autoComplete="off"
+                placeholder="ex.: 77GE8G"
+                value={codigoPremio}
+                onChange={(e) => setCodigoPremio(e.target.value.toUpperCase())}
+              />
+            </Campo>
+          )}
           {motivo && (
-            <div className={motivo === "PERDA" ? "" : "sm:col-span-2"}>
+            <div className={motivo === "PERDA" || motivo === "PREMIO" ? "" : "sm:col-span-2"}>
               <Campo
                 rotulo="Observação"
                 dica={motivo === "OUTROS" ? "obrigatória com Outros" : "opcional"}
@@ -493,6 +518,9 @@ export default function PaginaLancarVenda() {
               O documento fica fora da receita e do CMV teórico; o preço digitado fica só como
               referência.
               {motivo === "CONSUMO_INTERNO" && " Continua aparecendo no consumo desta pessoa."}
+              {motivo === "PREMIO" &&
+                " O prêmio fica ligado a este documento; se o balcão ainda não o entregou, ele é" +
+                  " entregue agora, na data do documento."}
             </Aviso>
           </div>
         )}
