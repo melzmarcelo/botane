@@ -24,6 +24,12 @@ Estado: **análise, nada construído.**
 entregar, 1 vencido. Cerca de 3 a 4 almoços por mês, sempre "Almoço cortesia (terça a sexta)".
 Nenhum dos entregues tem documento ligado — o custo do programa hoje é desconhecido.
 
+🔑 **Resposta do dono (03/11/2026):** *"é lançado no PDV, mas como documento que não vem para o
+Botané, ele é lançado posteriormente à mão."* Logo: o documento manual com motivo Prêmio é o
+ÚNICO registro do almoço no Botané (sem baixa em dobro, sem receita zero no food cost), e ele
+chega DEPOIS da entrega. O caso principal é, portanto, **prêmio já entregue no balcão → o
+documento só liga**; entregar pelo documento é o caso de quem não passou por Prêmios.
+
 ## 2. Proposta: uma ação só, no lugar de duas
 
 🔑 **O documento com motivo Prêmio ENTREGA o prêmio.** Na tela Lançar, escolhido o motivo
@@ -79,10 +85,9 @@ gerência completar depois.
 
 ## 5. Perguntas para o dono
 
-1. **O almoço do prêmio é lançado no PDV hoje?** (a zero, com desconto de 100%) Se for, o
-   cupom chega pela importação como VENDA de receita zero, puxa o food cost para cima e,
-   somado ao documento Prêmio, baixaria o prato DUAS vezes. Precisamos escolher um caminho:
-   documento no Botané (recomendado) e o PDV não lança; ou o cupom do PDV é que recebe o código.
+1. ~~O almoço do prêmio é lançado no PDV hoje?~~ **Respondida (03/11):** sim, num documento
+   do PDV que não é importado; no Botané entra só pelo lançamento manual, depois. O filtro
+   "Entregue sem documento" vira a lista do que falta lançar.
 2. **O código do prêmio é obrigatório no motivo Prêmio?** Recomendado: sim, quando a loja usa
    fidelidade — sem ele não há custo por programa. Brinde que não é da fidelidade usa
    "Brinde/Aniversário".
@@ -94,5 +99,5 @@ gerência completar depois.
 
 Uma entrega pequena (uma migração com índice e CHECK, regra no `vendas` + `fidelidade`, campo na
 tela, filtro em Prêmios, cartão de custo no Painel), com seção nova em `smoke_venda_motivo.py` e
-`smoke_fidelidade.py` e um passo na bateria do navegador. Começa depois das respostas 1 e 2 —
-a primeira pode mudar o desenho.
+`smoke_fidelidade.py` e um passo na bateria do navegador. A resposta 1 manteve o desenho; falta a 2
+(as 3 e 4 têm padrão recomendado).

@@ -1261,7 +1261,9 @@ cliente.**
 - **03/11/2026 — estudo do vínculo documento × prêmio**: [`docs/fidelidade-resgate-estudo.md`](../fidelidade-resgate-estudo.md).
   A 134 já trouxe o motivo PREMIO (baixa pelo custo, fora da receita) e `vendas.id_premio`
   sem uso; a proposta é o documento Prêmio ENTREGAR o prêmio na mesma transação (opção 1
-  acima). Aguarda as respostas do dono (PDV lança o almoço? código obrigatório?).
+  acima). Dono respondeu: o almoço vai num documento do PDV que NÃO
+  é importado e é lançado à mão depois — o documento manual é o único registro, e o caso
+  principal é prêmio já entregue → o documento só liga. Falta: código obrigatório?
 
 ## Mensagens por WhatsApp — API oficial da Meta, por loja (migração 099, 28/09/2026)
 
