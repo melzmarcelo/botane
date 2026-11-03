@@ -1258,6 +1258,10 @@ cliente.**
 - ⚠️ Perguntas para a cliente: o prêmio é sempre o mesmo prato ou o cliente escolhe? é
   lançado no PDV hoje (a zero, com desconto de 100%)? quem entrega (caixa, garçom)? o custo
   do programa precisa aparecer separado no CMV?
+- **03/11/2026 — estudo do vínculo documento × prêmio**: [`docs/fidelidade-resgate-estudo.md`](../fidelidade-resgate-estudo.md).
+  A 134 já trouxe o motivo PREMIO (baixa pelo custo, fora da receita) e `vendas.id_premio`
+  sem uso; a proposta é o documento Prêmio ENTREGAR o prêmio na mesma transação (opção 1
+  acima). Aguarda as respostas do dono (PDV lança o almoço? código obrigatório?).
 
 ## Mensagens por WhatsApp — API oficial da Meta, por loja (migração 099, 28/09/2026)
 
