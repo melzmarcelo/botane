@@ -91,6 +91,35 @@ try {
     cli.origens.every((x) => t.origem.includes(x.origem)), t.origem);
   checar("o menu tem o Painel de clientes", t.menu);
   await foto("painel-clientes");
+
+  // 🔑 04/11/2026: os aniversariantes, no fim do painel.
+  const an = cli.aniversariantes;
+  const ab = await p.evaluate(() => ({
+    abas: [...document.querySelectorAll("#clientes-aniversariantes [role=tab]")]
+      .map((b) => ({ aba: b.dataset.aba, n: b.querySelector(".mono")?.textContent, sel: b.getAttribute("aria-selected") })),
+    linhas: document.querySelectorAll("#clientes-aniversariantes li").length,
+    zap: [...document.querySelectorAll("#clientes-aniversariantes a[href^='https://wa.me/']")].map((a) => a.href),
+    barras: document.querySelectorAll("#aniversarios-por-mes svg rect").length,
+  }));
+  checar("aniversariantes: as quatro abas com os números da API",
+    JSON.stringify(ab.abas.map((x) => x.n)) === JSON.stringify([an.hoje, an.semana, an.no_mes, an.proximo_mes].map(inteiro)), ab.abas);
+  const contas = { hoje: an.hoje, semana: an.semana, mes: an.no_mes, proximo: an.proximo_mes };
+  const aberta = ab.abas.find((x) => x.sel === "true");
+  checar("abre na primeira aba que tem gente, uma linha por pessoa (até 20 por página)",
+    aberta && aberta.aba === (ab.abas.find((x) => contas[x.aba] > 0)?.aba ?? "hoje")
+    && ab.linhas === Math.min(contas[aberta.aba], 20), { aberta, linhas: ab.linhas });
+  checar("o botão abre o WhatsApp com o parabéns e o nome da casa",
+    !ab.linhas || (ab.zap.length > 0 && ab.zap.every((h) => decodeURIComponent(h).includes("Feliz aniversário")
+      && decodeURIComponent(h).includes(cli.loja ?? "nossa casa"))), ab.zap.slice(0, 1));
+  checar("aniversários por mês: doze barras", ab.barras === 12, ab.barras);
+  await p.$eval("#clientes-aniversariantes [data-aba=proximo]", (b) => b.click());
+  // A URL vem com atraso de propósito (useEstadoNaUrl, 300 ms).
+  await p.waitForFunction(() => location.search.includes("aniversario="), { timeout: 5000 }).catch(() => {});
+  checar("trocar de aba muda a lista e vai para a URL",
+    p.url().includes("aniversario=proximo") &&
+    await p.evaluate(() => document.querySelectorAll("#clientes-aniversariantes li").length) === Math.min(an.proximo_mes, 20),
+    p.url());
+
   await p.setViewport({ width: 390, height: 844 });
   await p.reload({ waitUntil: "networkidle2" });
   await p.waitForSelector("#clientes-piramide", { timeout: 30000 }).catch(() => {});

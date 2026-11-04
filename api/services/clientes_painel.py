@@ -65,6 +65,66 @@ def painel(cur, meses: int = 6, dias: int = 14) -> dict:
         **_idade_e_genero(cur, hoje),
         "cidades": _cidades(cur),
         "origens": _origens(cur),
+        "aniversariantes": _aniversariantes(cur, hoje),
+    }
+
+
+def nome_da_casa(cur, id_unidade: int) -> str | None:
+    """O nome que o CLIENTE conhece (o fantasia da empresa), para a mensagem de parabéns.
+
+    ⚠️ Mesma regra do Plano de ação: o apelido da loja ("Matriz") é nome interno.
+    """
+    cur.execute(
+        """SELECT coalesce(nullif(trim((SELECT nome_fantasia FROM empresa LIMIT 1)), ''),
+                           u.nome) AS loja
+             FROM unidades u WHERE u.id = %s""", (id_unidade,))
+    return (cur.fetchone() or {}).get("loja")
+
+
+def _no_ano(nasc: date, ano: int) -> date:
+    """O aniversário naquele ano. ⚠️ Quem nasceu em 29/02 comemora em 28/02 no ano comum."""
+    try:
+        return nasc.replace(year=ano)
+    except ValueError:
+        return date(ano, 2, 28)
+
+
+def _aniversariantes(cur, hoje: date) -> dict:
+    """Quem faz aniversário neste mês e no próximo, e quantos fazem em cada mês do ano.
+
+    🔑 **Pedido do dono (04/11/2026):** aniversariantes no Painel de clientes, como os filtros
+    prontos do LeadsFood (hoje, 7 dias, mês). A lista cobre o mês corrente INTEIRO (inclusive
+    quem já fez: dá para mandar um "atrasado") e o seguinte, para planejar; as abas da tela
+    recortam dela. ⚠️ A mesma régua de idade da pirâmide: nascimento fora de 0 a 110 anos é
+    erro de digitação e fica de fora.
+    """
+    proximo = (hoje.replace(day=1) + timedelta(days=32)).replace(day=1)
+    cur.execute(
+        """SELECT id, nome, telefone, nascimento, whatsapp_optout_em IS NOT NULL AS nao_quer_whatsapp
+             FROM reserva_clientes
+            WHERE nascimento IS NOT NULL
+              AND extract(year FROM age(%s, nascimento)) BETWEEN 0 AND 110""", (hoje,))
+    por_mes = [0] * 12
+    lista = []
+    for c in cur.fetchall():
+        nasc = c["nascimento"]
+        por_mes[nasc.month - 1] += 1
+        if nasc.month not in (hoje.month, proximo.month):
+            continue
+        # O mês seguinte de dezembro é janeiro do ano que vem.
+        dia = _no_ano(nasc, hoje.year if nasc.month == hoje.month else proximo.year)
+        lista.append({"id": c["id"], "nome": c["nome"], "telefone": c["telefone"],
+                      "dia": dia.isoformat(), "faz": dia.year - nasc.year,
+                      "faltam": (dia - hoje).days, "nao_quer_whatsapp": c["nao_quer_whatsapp"]})
+    lista.sort(key=lambda x: (x["dia"], (x["nome"] or "").lower()))
+    no_mes = [x for x in lista if x["dia"][:7] == hoje.isoformat()[:7]]
+    return {
+        "hoje": sum(x["faltam"] == 0 for x in lista),
+        "semana": sum(0 <= x["faltam"] < 7 for x in lista),
+        "no_mes": len(no_mes),
+        "proximo_mes": len(lista) - len(no_mes),
+        "por_mes": por_mes,
+        "lista": lista,
     }
 
 

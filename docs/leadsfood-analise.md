@@ -61,7 +61,8 @@ cadastro (086).
 ### 4. Ficha do cliente mais rica
 Tags (com ícone, múltiplas), notas, e-mail, CPF, bairro e estado, quais campos são
 obrigatórios (configurável) e idade mínima. Na ficha: histórico, reservas, check-ins e
-prêmios numa tela só. Filtros prontos de **aniversariantes** (hoje, 7 dias, mês) e exportação.
+prêmios numa tela só. Filtros prontos de **aniversariantes** (hoje, 7 dias, mês) e exportação. ✅ Aniversariantes
+feitos no Painel de clientes em 04/11/2026 (1.2.3), com o botão do WhatsApp.
 
 ### 5. Engajamento (Frio → Morno → Engajado → VIP)
 Nota de 0 a 100 = **40% recência + 30% frequência + 30% qualidade**, recalculada após cada

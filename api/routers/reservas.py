@@ -277,8 +277,10 @@ def ver_painel_de_clientes(meses: int = Query(6, ge=1, le=36),
     o grid de Clientes — as contas estão em `services/clientes_painel.py`.
     """
     with get_cursor() as cur:
-        _unidade(cur, ctx)
-        return clientes_painel.painel(cur, meses, dias)
+        id_unidade = _unidade(cur, ctx)
+        return {**clientes_painel.painel(cur, meses, dias),
+                # Para a mensagem de parabéns dos aniversariantes (04/11/2026).
+                "loja": clientes_painel.nome_da_casa(cur, id_unidade)}
 
 
 @router.get("/clientes")

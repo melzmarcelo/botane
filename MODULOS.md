@@ -176,7 +176,7 @@ Configuração) · Catálogos · Pedidos (Painel, Lista).
   `reserva_clientes.py` (quem reserva pelo site, e o limite de abuso),
   `reservas_plano.py` (o Plano de ação: VIPs, organizadores e adormecidos para chamar de volta),
   `reservas_painel.py` (o Painel: dia da semana, mês, objetivo, horário, grupos grandes, ano contra ano e sazonalidade),
-  `clientes_painel.py` (o Painel de clientes: base, novos, idade × gênero, cidades, origem),
+  `clientes_painel.py` (o Painel de clientes: base, novos, idade × gênero, cidades, origem, aniversariantes),
   `importacao_leadsfood.py` (contatos, reservas, selos e prêmios do sistema anterior),
   `catalogos.py` (a capa), `catalogo_conteudo.py` (o cardápio montado por produtos),
   `pedidos.py` (o pedido pelo cardápio — NÃO vira venda; a casa lança no PDV),

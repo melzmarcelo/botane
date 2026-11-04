@@ -1,7 +1,8 @@
 """Os três painéis que vieram do LeadsFood (04/11/2026).
 
 🔑 **Pedido do dono:** *"uma tela com todos os indicadores que são apresentados lá"*.
-1. `services/clientes_painel.py` — base, novos por mês e por dia, idade × gênero, cidades, origem;
+1. `services/clientes_painel.py` — base, novos por mês e por dia, idade × gênero, cidades, origem
+   e os aniversariantes (hoje, 7 dias, este mês e o próximo; virada do ano e 29/02);
 2. `services/fidelidade.graficos` — check-ins por mês (com clientes únicos), por dia e rankings;
 3. `services/reservas_painel._historia` — ano contra ano e sazonalidade.
 
@@ -25,7 +26,7 @@ sys.path.insert(0, "tests")
 from comum import preservar_reserva  # noqa: E402
 from database import get_cursor, init_pool  # noqa: E402
 from relogio import agora_da_casa  # noqa: E402
-from services import fidelidade, reservas_painel  # noqa: E402
+from services import clientes_painel, fidelidade, reservas_painel  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -179,6 +180,67 @@ try:
     checar("origem do LeadsFood conta pelo nome (+1 Conversão, nova origem 1)",
            origem(depois, "Conversão") - origem(antes, "Conversão") == 1
            and origem(depois, ORIGEM_NOVA) == 1)
+
+    # ── 1b. aniversariantes (04/11/2026) ─────────────────────────────────────────
+    print("\n1b. Aniversariantes")
+    antes = get("/reservas/clientes/painel")["aniversariantes"]
+    em3 = HOJE + timedelta(days=3)
+    proximo = (HOJE.replace(day=1) + timedelta(days=32)).replace(day=1)
+    # (sufixo, nascimento, não quer WhatsApp)
+    ANIVERSARIOS = [
+        ("21", clientes_painel._no_ano(HOJE, HOJE.year - 40), False),   # hoje, faz 40
+        ("22", clientes_painel._no_ano(em3, em3.year - 25), False),     # daqui a 3 dias
+        ("23", proximo.replace(day=15, year=proximo.year - 33), False),  # no mês que vem
+        ("24", clientes_painel._no_ano(HOJE, HOJE.year - 120), False),  # 120 anos: erro, fica fora
+        ("25", clientes_painel._no_ano(HOJE, HOJE.year - 19), True),    # hoje, mas disse PARAR
+        ("26", None, False),                                            # sem nascimento
+        ("27", date(1990, 1, 3), False),                                # para a virada do ano
+        ("28", date(2000, 2, 29), False),                               # para o 29 de fevereiro
+    ]
+    with get_cursor() as cur:
+        for suf, nasc, parar in ANIVERSARIOS:
+            cur.execute("""INSERT INTO reserva_clientes (nome, telefone, nascimento, whatsapp_optout_em)
+                           VALUES (%s, %s, %s, %s) RETURNING id""",
+                        (f"Aniversario {suf}", PREFIXO + suf + "0", nasc, datetime.now(CASA) if parar else None))
+            ids[suf] = cur.fetchone()["id"]
+        virada = clientes_painel._aniversariantes(cur, date(HOJE.year, 12, 28))
+        fev_comum = clientes_painel._aniversariantes(cur, date(2027, 2, 10))
+        fev_bissexto = clientes_painel._aniversariantes(cur, date(2028, 2, 10))
+    dep_p = get("/reservas/clientes/painel")
+    dep = dep_p["aniversariantes"]
+    validos = [(s, n) for s, n, _ in ANIVERSARIOS if n and s != "24"]
+    no_mes = [s for s, n in validos if n.month == HOJE.month]
+    no_prox = [s for s, n in validos if n.month == proximo.month]
+    meus = {x["id"]: x for x in dep["lista"]}
+    eu = {s: meus.get(ids[s]) for s, _, _ in ANIVERSARIOS}
+    checar("hoje +2 (quem disse PARAR também faz aniversário), e faz 40",
+           dep["hoje"] - antes["hoje"] == 2 and eu["21"] and eu["21"]["faz"] == 40
+           and eu["21"]["faltam"] == 0, (dep["hoje"], antes["hoje"], eu["21"]))
+    checar("próximos 7 dias +3 (hoje, hoje e daqui a 3 dias)",
+           dep["semana"] - antes["semana"] == 3 and eu["22"] and eu["22"]["faltam"] == 3)
+    checar("este mês e o próximo contam pelo mês do nascimento",
+           dep["no_mes"] - antes["no_mes"] == len(no_mes)
+           and dep["proximo_mes"] - antes["proximo_mes"] == len(no_prox)
+           and eu["23"] and eu["23"]["dia"] == proximo.replace(day=15).isoformat(),
+           (no_mes, no_prox))
+    checar("120 anos e sem nascimento ficam fora da lista e do gráfico",
+           eu["24"] is None and eu["26"] is None
+           and sum(dep["por_mes"]) - sum(antes["por_mes"]) == len(validos))
+    checar("cada um no mês do ano em que nasceu",
+           all(dep["por_mes"][m] - antes["por_mes"][m]
+               == sum(n.month == m + 1 for _, n in validos) for m in range(12)))
+    checar("quem disse PARAR vem marcado (a tela tira o botão)",
+           eu["25"] and eu["25"]["nao_quer_whatsapp"] and not eu["21"]["nao_quer_whatsapp"])
+    checar("a lista vem pela data", [x["dia"] for x in dep["lista"]] == sorted(x["dia"] for x in dep["lista"]))
+    checar("a rota traz o nome da casa para a mensagem", bool(dep_p.get("loja")))
+    v = next((x for x in virada["lista"] if x["id"] == ids["27"]), None)
+    checar("em 28/12, quem faz em 03/01 está no 'mês que vem', no ano seguinte",
+           v and v["dia"] == f"{HOJE.year + 1}-01-03" and v["faltam"] == 6
+           and v["faz"] == HOJE.year + 1 - 1990, v)
+    c = next((x for x in fev_comum["lista"] if x["id"] == ids["28"]), None)
+    b = next((x for x in fev_bissexto["lista"] if x["id"] == ids["28"]), None)
+    checar("quem nasceu em 29/02 comemora em 28/02 no ano comum e em 29/02 no bissexto",
+           c and c["dia"] == "2027-02-28" and b and b["dia"] == "2028-02-29", (c, b))
 
     # ── 2. fidelidade ────────────────────────────────────────────────────────────
     print("\n2. Fidelidade: check-ins e quem mais vem")

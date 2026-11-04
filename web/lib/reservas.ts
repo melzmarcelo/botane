@@ -222,6 +222,25 @@ export type PainelClientes = {
   sem_idade: number;
   cidades: { top: { cidade: string; n: number }[]; outras: number; outras_cidades: number; sem_cidade: number };
   origens: { origem: string; n: number }[];
+  /** Este mês inteiro (inclusive quem já fez) e o próximo; `por_mes` é jan..dez. */
+  aniversariantes: {
+    hoje: number; semana: number; no_mes: number; proximo_mes: number;
+    por_mes: number[];
+    lista: Aniversariante[];
+  };
+  /** O nome que o cliente conhece, para a mensagem de parabéns. */
+  loja: string | null;
+};
+
+export type Aniversariante = {
+  id: number; nome: string | null; telefone: string;
+  /** O aniversário (AAAA-MM-DD) neste mês ou no próximo. */
+  dia: string;
+  /** A idade que faz. */
+  faz: number;
+  /** Dias até o aniversário; negativo se já passou neste mês. */
+  faltam: number;
+  nao_quer_whatsapp: boolean;
 };
 
 export const verPainelClientes = () => api.get<PainelClientes>("/reservas/clientes/painel");

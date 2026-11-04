@@ -1469,6 +1469,27 @@ Leads, Reservas (BI) e Fidelidade; o quarto, "Strategy", é só um blog.
   ⚠️ No verificador, o clique no ranking é `$eval(b => b.click())`: o `p.click` caía na faixa
   fixa do rodapé (aviso de instalar) depois de rolar.
 
+## Aniversariantes no Painel de clientes (1.2.3, 04/11/2026, sem migração)
+🔑 **Pedido do dono:** *"podemos colocar no Painel de cliente algo relacionado a aniversariantes"*.
+Quadro no fim do painel (`reservas/clientes/painel/aniversariantes.tsx`), dados em
+`clientes_painel._aniversariantes` dentro do mesmo `GET /reservas/clientes/painel`.
+- Abas **Hoje / Próximos 7 dias / Em <mês> / Em <mês seguinte>** (os filtros prontos do LeadsFood
+  mais o mês que vem, para planejar). A API manda a lista do mês corrente INTEIRO (inclusive quem
+  já fez, `faltam` negativo) e do seguinte; as abas recortam na tela. Abre na primeira aba com
+  gente; a aba vai para a URL (`?aniversario=`).
+- Botão **WhatsApp** = `wa.me` com o parabéns editável (`{nome}`, `{loja}`; `montarMensagem` do
+  Plano de ação). ⚠️ ABRE, não envia. O parabéns automático é outra coisa: o aviso ANIVERSARIO
+  do WhatsApp da loja (`whatsapp.varrer`), só com número conectado. Quem disse PARAR
+  (`whatsapp_optout_em`) aparece sem botão.
+- A rota passou a devolver `loja` (o fantasia da empresa, `clientes_painel.nome_da_casa`, mesma
+  regra do Plano de ação).
+- ⚠️ Mesma régua da pirâmide: nascimento fora de 0–110 anos fica fora. ⚠️ 29/02 comemora em 28/02
+  no ano comum. ⚠️ Em dezembro, o "mês que vem" é janeiro do ano SEGUINTE (a idade conta por ele).
+- ⚠️ Na base LOCAL, janeiro aparece inflado: ~160 "Tela Pedido" nascidos em 02/01/1988, resíduo
+  de verificador de navegador. Não é dado da casa.
+- Cobertura: +10 em `smoke_paineis_leadsfood.py` (40) e +5 em `verificar-paineis-leadsfood.mjs`
+  (25). ⚠️ No verificador, a troca de aba espera a URL: `useEstadoNaUrl` escreve com 300 ms.
+
 ## Importação do LeadsFood (migração 145, 30/10/2026)
 🔑 **Pedido do dono:** *"siga para a importação do LeadsFood"*. Portal de Clientes ▸ Clientes ▸
 **Importar do LeadsFood** (`reservas/clientes/importar/`), `POST /reservas/importar-leadsfood`

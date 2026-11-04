@@ -13,6 +13,8 @@ import { dataCurta } from "@/lib/datas";
 import { inteiro, pct, plural } from "@/lib/numeros";
 import { verPainelClientes, type PainelClientes } from "@/lib/reservas";
 
+import Aniversariantes from "./aniversariantes";
+
 /**
  * O painel dos clientes — quem é a base.
  *
@@ -44,6 +46,8 @@ export default function PainelDeClientes() {
           <ExplicaTela>
             Quem é a base de clientes da rede: quantos são, quando se cadastraram, idade, gênero,
             cidade e de onde vieram. Quem veio do LeadsFood conta pela data em que se cadastrou lá.
+            No fim, os aniversariantes de hoje, da semana, deste mês e do próximo, com o botão
+            que abre o WhatsApp já com o parabéns.
           </ExplicaTela>
         </div>
         <Link href="/reservas/clientes" className="btn btn-secundario">Lista de clientes</Link>
@@ -132,6 +136,8 @@ function Quadros({ p }: { p: PainelClientes }) {
           </div>
         </Cartao>
       </div>
+
+      <Aniversariantes p={p} />
     </>
   );
 }
