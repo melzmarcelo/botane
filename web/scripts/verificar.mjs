@@ -10711,6 +10711,11 @@ try {
   const fonePed = `4797${String(Date.now()).slice(-7)}`;
   await api("POST", "/publico/1/cliente", { telefone: fonePed, nome: "Tela Pedido",
     genero: "MASCULINO", cidade: "Blumenau", nascimento: "1988-01-02", aceite_termo: true });
+  // ⚠️ Não há rota para apagar cliente nem pedido: sem isto, um "Tela Pedido" ficava a cada
+  // rodada (164 em 04/11/2026, inflando janeiro nos aniversariantes do Painel de clientes).
+  aoTerminar.push(() => {
+    execFileSync("python", ["tests/limpar_clientes_de_teste.py"], { cwd: "../api" });
+  });
   const amanhaPed = new Date(Date.now() + 86400000).toLocaleDateString("sv-SE");
   const { status: stPed, dados: pedido } = await api("POST", `/publico/1/catalogos/${catPed.id}/pedido`, {
     telefone: fonePed, chave: `tela-${marcaNota}`, modo: "RETIRADA", forma_pagamento: "RETIRADA",

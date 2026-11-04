@@ -1485,8 +1485,10 @@ Quadro no fim do painel (`reservas/clientes/painel/aniversariantes.tsx`), dados 
   regra do Plano de ação).
 - ⚠️ Mesma régua da pirâmide: nascimento fora de 0–110 anos fica fora. ⚠️ 29/02 comemora em 28/02
   no ano comum. ⚠️ Em dezembro, o "mês que vem" é janeiro do ano SEGUINTE (a idade conta por ele).
-- ⚠️ Na base LOCAL, janeiro aparece inflado: ~160 "Tela Pedido" nascidos em 02/01/1988, resíduo
-  de verificador de navegador. Não é dado da casa.
+- ⚠️ Na base LOCAL, janeiro aparecia inflado: 164 "Tela Pedido" (02/01/1988) e 14 "Site Pedido",
+  com 70 pedidos, deixados pelos verificadores de pedido. Apagados em 04/11, e desde então
+  `verificar.mjs` e `verificar-pedido-site.mjs` chamam `api/tests/limpar_clientes_de_teste.py` no
+  fim (SQL direto, casando nome + nascimento + cidade do cadastro de teste).
 - Cobertura: +10 em `smoke_paineis_leadsfood.py` (40) e +5 em `verificar-paineis-leadsfood.mjs`
   (25). ⚠️ No verificador, a troca de aba espera a URL: `useEstadoNaUrl` escreve com 300 ms.
 

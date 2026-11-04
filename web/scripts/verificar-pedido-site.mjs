@@ -5,12 +5,12 @@
  * 🔑 Pedido do dono (28/09/2026) — ver `docs/pedidos-estudo.md`. A bateria `verificar.mjs`
  * cobre o sistema interno; o site do cliente é outro endereço, e o carrinho mora só nele.
  * O cenário (catálogo, itens, cliente) é montado pela API; o catálogo sai no fim.
- * ⚠️ O pedido e a cliente de teste (nome "Site Pedido") FICAM — não há rota para apagá-los,
- * de propósito. Limpar: `DELETE FROM pedidos WHERE nome = 'Site Pedido'` e o mesmo em
- * `reserva_clientes`.
+ * ⚠️ Não há rota para apagar o pedido e a cliente de teste ("Site Pedido"), de propósito: no
+ * fim, `api/tests/limpar_clientes_de_teste.py` apaga os dois por SQL (04/11/2026; antes ficavam).
  *
  *    node scripts/verificar-pedido-site.mjs     (API na 9200 e site na 3200 de pé)
  */
+import { execFileSync } from "node:child_process";
 import puppeteer from "puppeteer-core";
 
 const CHROME = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
@@ -123,6 +123,7 @@ try {
   checar("'Meus pedidos' mostra o pedido aguardando a casa", /Aguardando a casa confirmar/.test(meus), meus.slice(0, 200));
 } finally {
   await navegador.close();
+  execFileSync("python", ["tests/limpar_clientes_de_teste.py"], { cwd: "../api" });
   await api("PUT", "/unidades/1/parametros", par, token);
   // ⚠️ Catálogo ATIVO não se apaga (só rascunho): inativa, e ele sai do site.
   await api("PUT", `/catalogos/${cat.id}`, { situacao: "INATIVO" }, token);
