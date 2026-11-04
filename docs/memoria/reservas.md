@@ -1431,11 +1431,43 @@ grandes" do BI de reservas do LeadsFood. Reservas ▸ **Painel** (`reservas/pain
   por `reservas_plano.py`); sem telefone válido, conta pelo nome.
 - Desenhos: `GraficoBarras`/`BarrasDeitadas` do painel de vendas. `GraficoBarras` ganhou
   `maxRotulos` (padrão 12): no quadro de meia tela, doze meses encostavam — ali vão 6.
-- ⏳ Falta: o comparativo ano contra ano e a sazonalidade média (precisam do histórico do
-  LeadsFood para ter dois anos).
+- ✅ Ano contra ano e sazonalidade entraram em 04/11/2026 — ver "Os painéis do LeadsFood" abaixo.
 - Cobertura: `smoke_painel_reservas.py` (21, por DIFERENÇA antes/depois do cenário) e
   `verificar-painel-reservas.mjs` (18, na bateria), com `cenario_plano.py painel` (um ano de
   reservas determinístico).
+
+## Os painéis do LeadsFood aqui dentro (1.2.2, 04/11/2026, sem migração)
+🔑 **Pedido do dono:** *"podemos aplicar uma tela com todos os indicadores que são apresentados
+lá?"* → *"sim, pode construir os três"*. Lidos no LeadsFood em 04/11 (só olhando): Desempenho ▸
+Leads, Reservas (BI) e Fidelidade; o quarto, "Strategy", é só um blog.
+- **Portal de Clientes ▸ Painel de clientes** (`reservas/clientes/painel/`,
+  `GET /reservas/clientes/painel`, `reservas.ver`, `services/clientes_painel.py`): base, novos no
+  ano/mês/hoje, novos por mês (6) e por dia (14), pirâmide idade × gênero (faixas de 5 do
+  LeadsFood, "até 14" só se houver), gênero, top 10 cidades e origem.
+  - 🔑 **Base da REDE**, sem filtro de loja (telefone único desde a 087), como o grid.
+  - ⚠️ "Chegou" = `criado_em`, que a importação já grava com a "Data de criação" de lá.
+  - ⚠️ Idade fora de 0–110 anos = "sem data" (nascimento digitado errado não vira bebê).
+  - Cidade agrupada por `lower(trim())`, com a grafia mais usada (`mode()`).
+  - Origem vazia = "Cadastro no Botané": só o importado tem origem.
+- **Reservas ▸ Painel** ganhou `ano_contra_ano` e `sazonalidade` (`reservas_painel._historia`):
+  sobre a HISTÓRIA INTEIRA (não o período) e só MESES FECHADOS. Em janeiro, ano passado inteiro ×
+  retrasado. 🔑 Sem nada no ano anterior a variação é `None` e a tela diz "sem reservas para
+  comparar" — o LeadsFood mostra "+0%" com 0 contra 154. Sazonalidade = média de cada mês do
+  calendário do primeiro mês com reserva ao último fechado, com zero onde não houve.
+- **Fidelidade ▸ Painel** ganhou check-ins por mês (com clientes únicos), por dia (14) e "Quem
+  mais veio" (30 dias e sempre, 10 cada; o nome abre a ficha). `GET /fidelidade/painel/graficos`,
+  `services/fidelidade.graficos`. ⚠️ Check-in = `parte = 0` (o selo manual não é visita).
+  ⚠️ O "desde sempre" daqui é menor que o de lá: a importação trouxe só os selos dos cartões em
+  aberto, não os cartões que já viraram prêmio.
+- Desenho: `GraficoBarrasPareadas` (duas barras por ponto, UM eixo, legenda sempre, parcial
+  tracejado) em `vendas/painel/graficos.tsx`; a 2ª série usa o token novo `--color-serie-2`
+  (#b08a3e). ⚠️ O latão reprovou no validador de paleta (protan 5,6 contra a erva).
+- ⚠️ **Enquanto a casa usar o LeadsFood, os números daqui param na última importação** (em 04/11
+  lá havia 9 contatos e 6 check-ins novos): bater com o de lá só depois da troca ou reimportando.
+- Cobertura: `smoke_paineis_leadsfood.py` (30, por diferença) e `verificar-paineis-leadsfood.mjs`
+  (19, na bateria). `verificar-painel-reservas.mjs` passou a esperar 6 desenhos.
+  ⚠️ No verificador, o clique no ranking é `$eval(b => b.click())`: o `p.click` caía na faixa
+  fixa do rodapé (aviso de instalar) depois de rolar.
 
 ## Importação do LeadsFood (migração 145, 30/10/2026)
 🔑 **Pedido do dono:** *"siga para a importação do LeadsFood"*. Portal de Clientes ▸ Clientes ▸

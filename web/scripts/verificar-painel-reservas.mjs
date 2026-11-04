@@ -70,8 +70,9 @@ try {
   for (const t of ["Evolução por mês", "Por dia da semana", "Por horário de chegada", "Objetivo da visita", "Grupos grandes"]) {
     checar(`tem "${t}"`, quadros.includes(t), quadros);
   }
-  checar("quatro desenhos (mês, dia, hora, grupos) e as barras de objetivo",
-    await p.evaluate(() => document.querySelectorAll("main svg[role=img]").length) === 4
+  // 🔑 04/11/2026: mais o ano contra ano e a sazonalidade (o cenário tem meses fechados).
+  checar("seis desenhos (mês, dia, hora, grupos, ano contra ano, sazonalidade) e as barras de objetivo",
+    await p.evaluate(() => document.querySelectorAll("main svg[role=img]").length) === 6
     && await p.evaluate(() => document.body.textContent.includes("Aniversário")));
   checar("a semana tem os sete dias no eixo",
     await p.evaluate(() => ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].every((d) =>

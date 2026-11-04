@@ -208,3 +208,117 @@ export function BarrasDeitadas({ linhas, valor, ativo, aoClicar }: {
     </ul>
   );
 }
+
+/** As duas séries de um gráfico pareado: a primeira na erva, a segunda no `--color-serie-2`. */
+export const CORES_PAREADAS = ["var(--color-erva)", "var(--color-serie-2)"] as const;
+
+export type Par = {
+  chave: string;
+  rotulo: string;
+  titulo: string;
+  /** Na ordem das `series`. */
+  valores: [number, number];
+  /** Barra tracejada: o mês em andamento, que ainda vai crescer. */
+  parcial?: boolean;
+};
+
+/**
+ * 🔑 **Duas barras lado a lado por ponto** (04/11/2026, os painéis do LeadsFood): ano anterior
+ * × atual, check-ins × clientes únicos. ⚠️ UM eixo só — as duas séries são da mesma medida
+ * (contagem); medida diferente pede dois gráficos. A legenda vem sempre, e a dica diz os dois
+ * números com o nome da série: a cor nunca é a única pista.
+ */
+export function GraficoBarrasPareadas({ pares, series, altura, rotulo, noEixo, W = 1080, maxRotulos = 12 }: {
+  pares: Par[];
+  series: [string, string];
+  altura: number;
+  W?: number;
+  rotulo: string;
+  noEixo: (v: number) => string;
+  maxRotulos?: number;
+}) {
+  const caixa = useRef<SVGSVGElement>(null);
+  const [sobre, setSobre] = useState<number | null>(null);
+  if (!pares.length) return null;
+
+  const { teto, marcas: grade } = marcasDoEixo(Math.max(...pares.flatMap((p) => p.valores)));
+  const largura = W - M.esquerda - M.direita;
+  const passo = largura / pares.length;
+  const grossura = Math.max(2, Math.min(28, passo * 0.34));
+  const y = (v: number) => M.topo + (altura - M.topo - M.base) * (1 - v / teto);
+  const cada = Math.max(1, Math.ceil(pares.length / maxRotulos));
+
+  function mover(e: React.MouseEvent<SVGSVGElement>) {
+    const r = caixa.current?.getBoundingClientRect();
+    if (!r) return;
+    const i = Math.floor((((e.clientX - r.left) / r.width) * W - M.esquerda) / passo);
+    setSobre(i >= 0 && i < pares.length ? i : null);
+  }
+  const atual = sobre !== null ? pares[sobre] : null;
+  const xMira = sobre !== null ? M.esquerda + passo * (sobre + 0.5) : 0;
+
+  return (
+    <div className="relative">
+      <div className="mb-1 flex flex-wrap gap-4 px-2 text-[12.5px] text-suave">
+        {series.map((s, k) => (
+          <span key={s} className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: CORES_PAREADAS[k] }} />
+            {s}
+          </span>
+        ))}
+      </div>
+      <svg ref={caixa} viewBox={`0 0 ${W} ${altura}`} width="100%" role="img" aria-label={rotulo}
+           onMouseMove={mover} onMouseLeave={() => setSobre(null)}>
+        {grade.map((g) => (
+          <g key={g}>
+            <line x1={M.esquerda} x2={W - M.direita} y1={y(g)} y2={y(g)}
+                  stroke="var(--color-linha)" strokeWidth={1} />
+            <text x={M.esquerda - 8} y={y(g) + 4} textAnchor="end" fontSize={12}
+                  fill="var(--color-suave)">{noEixo(g)}</text>
+          </g>
+        ))}
+        {pares.map((p, i) => {
+          const cx = M.esquerda + passo * (i + 0.5);
+          return (
+            <g key={p.chave} opacity={sobre === null || sobre === i ? 1 : 0.55}>
+              {p.valores.map((v, k) => {
+                // 2px de folga entre as duas barras do mesmo ponto.
+                const x = k === 0 ? cx - grossura - 1 : cx + 1;
+                const h = Math.max(0, y(0) - y(v));
+                return (
+                  <rect key={k} x={x} y={y(v)} width={grossura} height={h}
+                        rx={Math.min(3, grossura / 4)} fill={CORES_PAREADAS[k]}
+                        fillOpacity={p.parcial ? 0.35 : 1}
+                        stroke={p.parcial ? CORES_PAREADAS[k] : "none"}
+                        strokeDasharray={p.parcial ? "4 3" : undefined} strokeWidth={1.5}>
+                    <title>{`${p.titulo} · ${series[k]}: ${noEixo(v)}`}</title>
+                  </rect>
+                );
+              })}
+              {i % cada === 0 && (
+                <text x={cx} y={altura - 9} fontSize={12} textAnchor="middle"
+                      fill="var(--color-suave)">{p.rotulo}</text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {atual && (
+        <div
+          className="pointer-events-none absolute top-8 z-10 whitespace-nowrap rounded-lg bg-tinta px-3 py-2 text-[13px] leading-snug text-white shadow-lg"
+          style={{
+            left: `${(xMira / W) * 100}%`,
+            transform: xMira > W * 0.65 ? "translateX(calc(-100% - 10px))" : "translateX(10px)",
+          }}
+        >
+          <b>{atual.titulo}</b>
+          {series.map((s, k) => (
+            <span key={s} className="block">
+              {s} <b className="mono font-medium">{noEixo(atual.valores[k])}</b>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

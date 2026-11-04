@@ -17,6 +17,7 @@ import {
 import { useSessao } from "@/lib/sessao";
 
 import FichaDoParticipante from "./ficha";
+import GraficosDaFidelidade from "./graficos";
 
 import { plural, reais } from "@/lib/numeros";
 /**
@@ -149,6 +150,8 @@ export default function PainelDaFidelidade() {
         </p>
       )}
 
+      {/* 🔑 04/11/2026: os check-ins no tempo e quem mais vem (o painel do LeadsFood). */}
+      <GraficosDaFidelidade aoAbrir={(id) => setAberto(String(id))} />
       <Cartao>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1">

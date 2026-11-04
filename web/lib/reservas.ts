@@ -190,10 +190,41 @@ export type PainelReservas = {
   por_mes: (ContaDoPainel & { mes: string; parcial: boolean; grupos: number; grupos_pessoas: number })[];
   por_objetivo: (ContaDoPainel & { objetivo: string })[];
   por_hora: (ContaDoPainel & { hora: number })[];
+  /** 04/11/2026: de janeiro ao último mês FECHADO, este ano × o anterior (história inteira). */
+  ano_contra_ano: {
+    ano: number;
+    anterior: number;
+    ate_mes: number;
+    meses: { mes: number; nome: string; atual: ContaMensal; anterior: ContaMensal }[];
+    /** `null` quando o ano anterior não tem nada: não há base para comparar. */
+    variacao: { reservas: number | null; pessoas: number | null };
+  };
+  /** A média de cada mês do calendário sobre os meses fechados; `null` se o mês nunca passou. */
+  sazonalidade: { mes: number; nome: string; anos: number; reservas: number | null; pessoas: number | null }[];
 };
+
+export type ContaMensal = { reservas: number; pessoas: number };
 
 export const verPainelReservas = (meses: number, grupoPessoas = 6) =>
   api.get<PainelReservas>(`/reservas/painel?meses=${meses}&grupo_pessoas=${grupoPessoas}`);
+
+// ── Painel de clientes (04/11/2026) ──────────────────────────────────────────
+
+/** O painel "Leads" do LeadsFood, sobre a base da REDE (`services/clientes_painel.py`). */
+export type PainelClientes = {
+  hoje: string;
+  resumo: { base: number; no_mes: number; no_ano: number; hoje: number };
+  por_mes: { mes: string; n: number; parcial: boolean }[];
+  por_dia: { dia: string; n: number }[];
+  genero: { feminino: number; masculino: number; nao_informado: number };
+  /** Dos mais velhos para os mais novos, como a pirâmide se lê. */
+  idade: { faixa: string; feminino: number; masculino: number; outros: number }[];
+  sem_idade: number;
+  cidades: { top: { cidade: string; n: number }[]; outras: number; outras_cidades: number; sem_cidade: number };
+  origens: { origem: string; n: number }[];
+};
+
+export const verPainelClientes = () => api.get<PainelClientes>("/reservas/clientes/painel");
 
 // ── Importação do LeadsFood (30/10/2026) ─────────────────────────────────────
 

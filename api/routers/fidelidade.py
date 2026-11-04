@@ -197,6 +197,16 @@ def cancelar_codigo(id_pedido: int, ctx: Contexto = Depends(_OPERAR)) -> dict:
 # ⚠️ **Ver é do caixa (`operar`); mexer é da gerência (`configurar`)**: dar selo, tirar selo
 # e esticar validade é dar benefício de graça.
 
+@router.get("/painel/graficos")
+def graficos_do_programa(meses: int = Query(6, ge=1, le=24), dias: int = Query(14, ge=7, le=90),
+                         ctx: Contexto = Depends(_OPERAR)) -> dict:
+    """Check-ins por mês e por dia, e quem mais vem (30 dias e sempre). Pedido do dono,
+    04/11/2026 — as contas estão em `services/fidelidade.graficos`."""
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        return servico.graficos(cur, meses, dias)
+
+
 @router.get("/painel/resumo")
 def resumo_do_programa(ctx: Contexto = Depends(_OPERAR)) -> dict:
     with get_cursor() as cur:

@@ -28,6 +28,7 @@ from models.reservas import (
     MesaCreate, MesasEmLote, MesaUpdate, MudarStatus, PlantaDoSalao, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
+from services import clientes_painel
 from services import importacao_leadsfood as importacao
 from services import reserva_clientes as clientes
 from services import reservas as servico
@@ -264,6 +265,20 @@ def ver_disponibilidade(
     """
     with get_cursor() as cur:
         return agenda.disponibilidade(cur, _unidade(cur, ctx), data, pessoas, ignorar)
+
+
+@router.get("/clientes/painel")
+def ver_painel_de_clientes(meses: int = Query(6, ge=1, le=36),
+                           dias: int = Query(14, ge=7, le=90),
+                           ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> dict:
+    """Quem é a base: novos por mês e por dia, idade por gênero, cidades e origem.
+
+    🔑 **Pedido do dono (04/11/2026):** o painel "Leads" do LeadsFood. A base é da REDE, como
+    o grid de Clientes — as contas estão em `services/clientes_painel.py`.
+    """
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        return clientes_painel.painel(cur, meses, dias)
 
 
 @router.get("/clientes")

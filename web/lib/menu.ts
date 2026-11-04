@@ -207,6 +207,15 @@ export const MENU: GrupoMenu[] = [
         soComReservas: true,
       },
       {
+        // 🔑 **Painel de clientes** (pedido do dono, 04/11/2026): o painel "Leads" do
+        // LeadsFood — base, novos por mês e dia, idade × gênero, cidades e origem.
+        href: "/reservas/clientes/painel",
+        nome: "Painel de clientes",
+        icone: "grafico",
+        chave: "reservas.ver",
+        soComReservas: true,
+      },
+      {
         // 🔑 **QR codes** (pedido do dono, 27/09/2026): site, reserva, cardápio de mesa e
         // fidelidade — todos os QR da casa num lugar só, com a impressão.
         href: "/reservas/qrcodes",

@@ -21,6 +21,7 @@ from datetime import date
 
 from services.reservas_plano import FONE, FONE_JUNTAS
 
+MESES = ("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
 DIAS = ("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")  # ISO: 1 = segunda
 VALIDAS = "('CONFIRMADA', 'CHEGOU', 'ENCERRADA', 'NAO_COMPARECEU')"
 # Objetivos além destes viram "Outros": a reserva do balcão aceita texto livre, e uma lista de
@@ -118,6 +119,57 @@ def painel(cur, id_unidade: int, meses: int, grupo_pessoas: int) -> dict:
         "por_mes": meses_lista,
         "por_objetivo": _objetivos(objetivos),
         "por_hora": por_hora,
+        **_historia(cur, id_unidade, hoje),
+    }
+
+
+def _historia(cur, id_unidade: int, hoje: date) -> dict:
+    """O ano contra ano e a sazonalidade — sobre a HISTÓRIA INTEIRA, não sobre o período.
+
+    🔑 Pedido do dono (04/11/2026), o que faltava do BI do LeadsFood. Os dois olham só
+    MESES FECHADOS: o mês corrente pela metade puxaria a média e o ano para baixo.
+    - **Ano contra ano**: de janeiro ao último mês fechado, este ano × o anterior (em janeiro,
+      o ano passado inteiro × o retrasado). ⚠️ Sem nada no ano anterior a variação é `None`:
+      o LeadsFood escreve "+0%" com 0 contra 154, e isso não é crescimento zero.
+    - **Sazonalidade**: a média de cada mês do calendário, do primeiro mês com reserva até o
+      último fechado — com ZERO onde não houve reserva (mês vazio é o vale, não um buraco).
+    """
+    cur.execute(f"""
+        SELECT to_char(data, 'YYYY-MM') AS mes, count(*) AS reservas,
+               coalesce(sum(pessoas) FILTER (WHERE status <> 'NAO_COMPARECEU'), 0) AS pessoas
+          FROM reservas
+         WHERE id_unidade = %s AND status IN {VALIDAS} AND data < %s
+         GROUP BY 1""", (id_unidade, hoje.replace(day=1)))
+    por_mes = {x["mes"]: {"reservas": int(x["reservas"]), "pessoas": int(x["pessoas"])}
+               for x in cur.fetchall()}
+    zero = {"reservas": 0, "pessoas": 0}
+
+    ano, ate = (hoje.year, hoje.month - 1) if hoje.month > 1 else (hoje.year - 1, 12)
+    meses_aa = [{"mes": m, "nome": MESES[m - 1],
+                 "atual": por_mes.get(f"{ano:04d}-{m:02d}", zero),
+                 "anterior": por_mes.get(f"{ano - 1:04d}-{m:02d}", zero)}
+                for m in range(1, ate + 1)]
+
+    def variacao(k: str) -> float | None:
+        a = sum(x["anterior"][k] for x in meses_aa)
+        return None if not a else round((sum(x["atual"][k] for x in meses_aa) / a - 1) * 100, 1)
+
+    sazonal = []
+    if por_mes:
+        primeiro = min(por_mes)
+        p = int(primeiro[:4]) * 12 + int(primeiro[5:]) - 1
+        u = hoje.year * 12 + hoje.month - 2  # o último mês fechado
+        contas = {m: [] for m in range(1, 13)}
+        for i in range(p, u + 1):
+            contas[i % 12 + 1].append(por_mes.get(f"{i // 12:04d}-{i % 12 + 1:02d}", zero))
+        sazonal = [{"mes": m, "nome": MESES[m - 1], "anos": len(v),
+                    **{k: round(sum(x[k] for x in v) / len(v), 1) if v else None
+                       for k in ("reservas", "pessoas")}}
+                   for m, v in contas.items()]
+    return {
+        "ano_contra_ano": {"ano": ano, "anterior": ano - 1, "ate_mes": ate, "meses": meses_aa,
+                           "variacao": {k: variacao(k) for k in ("reservas", "pessoas")}},
+        "sazonalidade": sazonal,
     }
 
 

@@ -862,6 +862,57 @@ def resumo(cur) -> dict:
     return r
 
 
+def graficos(cur, meses: int = 6, dias: int = 14, top: int = 10) -> dict:
+    """Os check-ins no tempo e quem mais vem — o que faltava do painel do LeadsFood.
+
+    🔑 **Pedido do dono (04/11/2026):** check-ins por mês (com clientes únicos), por dia e os
+    "Top clientes" dos últimos 30 dias e de todos os tempos.
+    ⚠️ **Check-in é a VISITA (`parte = 0`)**, como nas "visitas" do grid: o selo manual entra
+    numa parte acima de zero e não é alguém que veio. Selos e visitas são contas diferentes.
+    ⚠️ **O histórico de antes de 30/10/2026 é o que a importação trouxe**: só os selos dos
+    cartões em aberto. Os cartões que já viraram prêmio no LeadsFood não vieram — o "todos os
+    tempos" daqui começa menor que o de lá.
+    """
+    hoje = _hoje()
+    m0 = hoje.year * 12 + hoje.month - 1 - (meses - 1)
+    de_mes = date(m0 // 12, m0 % 12 + 1, 1)
+    de_dia = hoje - timedelta(days=dias - 1)
+    cur.execute("""SELECT to_char(data, 'YYYY-MM') AS mes, count(*) AS checkins,
+                          count(DISTINCT id_cliente) AS clientes
+                     FROM fidelidade_checkins WHERE parte = 0 AND data >= %s
+                    GROUP BY 1""", (de_mes,))
+    por_mes = {x["mes"]: x for x in cur.fetchall()}
+    cur.execute("""SELECT data, count(*) AS n FROM fidelidade_checkins
+                    WHERE parte = 0 AND data >= %s GROUP BY 1""", (de_dia,))
+    por_dia = {x["data"]: int(x["n"]) for x in cur.fetchall()}
+
+    def ranking(desde: date | None) -> list[dict]:
+        cur.execute(
+            f"""SELECT c.id, c.nome, count(*) AS visitas, max(f.data) AS ultima
+                  FROM fidelidade_checkins f JOIN reserva_clientes c ON c.id = f.id_cliente
+                 WHERE f.parte = 0 {"AND f.data >= %(desde)s" if desde else ""}
+                 GROUP BY c.id, c.nome ORDER BY 3 DESC, 4 DESC, 2 LIMIT %(top)s""",
+            {"desde": desde, "top": top})
+        return [{"id": x["id"], "nome": x["nome"], "visitas": int(x["visitas"]),
+                 "ultima": x["ultima"].isoformat()} for x in cur.fetchall()]
+
+    meses_lista = []
+    for i in range(meses):
+        m = m0 + i
+        chave = f"{m // 12:04d}-{m % 12 + 1:02d}"
+        x = por_mes.get(chave, {})
+        meses_lista.append({"mes": chave, "parcial": i == meses - 1,
+                            "checkins": int(x.get("checkins", 0)),
+                            "clientes": int(x.get("clientes", 0))})
+    return {
+        "por_mes": meses_lista,
+        "por_dia": [{"dia": (de_dia + timedelta(days=i)).isoformat(),
+                     "n": por_dia.get(de_dia + timedelta(days=i), 0)} for i in range(dias)],
+        "top_30_dias": ranking(hoje - timedelta(days=29)),
+        "top_sempre": ranking(None),
+    }
+
+
 def _hoje() -> date:
     return agora_da_casa().date()
 

@@ -76,12 +76,17 @@ export default function ClientesDoPortal() {
             LeadsFood. O cadastro vale para todas as lojas: o telefone é único.
           </ExplicaTela>
         </div>
-        {/* 🔑 A importação do LeadsFood (30/10/2026) — só para quem configura as reservas. */}
-        {pode("reservas.configurar") && (
-          <Link href="/reservas/clientes/importar" className="btn btn-secundario" id="ir-importar-leadsfood">
-            Importar do LeadsFood
+        <div className="flex flex-wrap gap-2">
+          <Link href="/reservas/clientes/painel" className="btn btn-secundario" id="ir-painel-clientes">
+            Painel de clientes
           </Link>
-        )}
+          {/* 🔑 A importação do LeadsFood (30/10/2026) — só para quem configura as reservas. */}
+          {pode("reservas.configurar") && (
+            <Link href="/reservas/clientes/importar" className="btn btn-secundario" id="ir-importar-leadsfood">
+              Importar do LeadsFood
+            </Link>
+          )}
+        </div>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

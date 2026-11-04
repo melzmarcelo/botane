@@ -199,6 +199,18 @@ export type FichaFidelidade = {
   }[];
 };
 
+/** 04/11/2026: os check-ins no tempo e quem mais vem (`services/fidelidade.graficos`). */
+export type GraficosFidelidade = {
+  por_mes: { mes: string; parcial: boolean; checkins: number; clientes: number }[];
+  por_dia: { dia: string; n: number }[];
+  top_30_dias: ClienteDoTop[];
+  top_sempre: ClienteDoTop[];
+};
+export type ClienteDoTop = { id: number; nome: string; visitas: number; ultima: string };
+
+export const graficosFidelidade = () =>
+  api.get<GraficosFidelidade>("/fidelidade/painel/graficos");
+
 export const resumoFidelidade = () =>
   api.get<ResumoFidelidade>("/fidelidade/painel/resumo");
 

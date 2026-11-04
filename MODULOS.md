@@ -175,13 +175,14 @@ Configuração) · Catálogos · Pedidos (Painel, Lista).
 - **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),
   `reserva_clientes.py` (quem reserva pelo site, e o limite de abuso),
   `reservas_plano.py` (o Plano de ação: VIPs, organizadores e adormecidos para chamar de volta),
-  `reservas_painel.py` (o Painel: dia da semana, mês, objetivo, horário e grupos grandes),
+  `reservas_painel.py` (o Painel: dia da semana, mês, objetivo, horário, grupos grandes, ano contra ano e sazonalidade),
+  `clientes_painel.py` (o Painel de clientes: base, novos, idade × gênero, cidades, origem),
   `importacao_leadsfood.py` (contatos, reservas, selos e prêmios do sistema anterior),
   `catalogos.py` (a capa), `catalogo_conteudo.py` (o cardápio montado por produtos),
   `pedidos.py` (o pedido pelo cardápio — NÃO vira venda; a casa lança no PDV),
   `traducao.py` (Claude Haiku traduz ao salvar; corrigido à mão não é sobrescrito)
 - **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`,
-  `reservas/clientes/` (o grid dos cadastrados), `reservas/plano-de-acao/`, `reservas/painel/`, `reservas/clientes/importar/`, `fidelidade/`, `catalogos/`, `pedidos/`
+  `reservas/clientes/` (o grid dos cadastrados), `reservas/plano-de-acao/`, `reservas/painel/`, `reservas/clientes/painel/`, `reservas/clientes/importar/`, `fidelidade/`, `catalogos/`, `pedidos/`
 - **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`,
   `catalogos.ver`, `catalogos.editar`, `pedidos.ver`, `pedidos.operar`
 

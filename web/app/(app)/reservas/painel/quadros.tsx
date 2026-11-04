@@ -1,6 +1,8 @@
 "use client";
 
-import { BarrasDeitadas, GraficoBarras, type Barra } from "@/app/(app)/vendas/painel/graficos";
+import {
+  BarrasDeitadas, GraficoBarras, GraficoBarrasPareadas, type Barra,
+} from "@/app/(app)/vendas/painel/graficos";
 import { Cartao, Vazio } from "@/components/ui";
 import { inteiro, pct, plural } from "@/lib/numeros";
 import type { ContaDoPainel, PainelReservas } from "@/lib/reservas";
@@ -172,6 +174,66 @@ export function GruposGrandes({ p, m }: { p: PainelReservas; m: Metrica }) {
       <div className="px-3 py-3">
         <GraficoBarras barras={barras} altura={220} W={540} noEixo={numero} maxRotulos={6}
                        rotulo={`Grupos grandes por mês (${m === "reservas" ? "reservas" : "pessoas"})`} />
+      </div>
+    </Cartao>
+  );
+}
+
+const decimal = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+
+/**
+ * 🔑 **Ano contra ano** (04/11/2026, o que faltava do BI do LeadsFood): de janeiro ao último
+ * mês fechado. ⚠️ Olha a HISTÓRIA INTEIRA, não o período escolhido acima — e sem nada no ano
+ * anterior não há porcentagem (o LeadsFood escreve "+0%" com 0 contra 154).
+ */
+export function AnoContraAno({ p, m }: { p: PainelReservas; m: Metrica }) {
+  const a = p.ano_contra_ano;
+  if (!a.meses.length) return null;
+  const total = (k: "atual" | "anterior") => a.meses.reduce((s, x) => s + x[k][m], 0);
+  const v = a.variacao[m];
+  const ate = a.meses[a.meses.length - 1].nome.toLowerCase();
+  return (
+    <Cartao titulo="Ano contra ano"
+            descricao={`Janeiro a ${ate}, meses fechados · ${a.ano}: ${inteiro(total("atual"))} · ${
+              a.anterior}: ${inteiro(total("anterior"))} · ${
+              v === null ? `sem reservas em ${a.anterior} para comparar`
+                : `${v > 0 ? "+" : ""}${decimal(v)}% em ${a.ano}`}`}>
+      <div className="px-3 py-3" id="reservas-ano-contra-ano">
+        <GraficoBarrasPareadas
+          pares={a.meses.map((x) => ({
+            chave: String(x.mes), rotulo: x.nome, titulo: x.nome,
+            valores: [x.atual[m], x.anterior[m]],
+          }))}
+          series={[String(a.ano), String(a.anterior)]} altura={240} W={540} noEixo={numero}
+          rotulo={`${m === "reservas" ? "Reservas" : "Pessoas"} por mês, ${a.ano} contra ${a.anterior}`} />
+      </div>
+    </Cartao>
+  );
+}
+
+/** 🔑 **Sazonalidade**: a média de cada mês do calendário, do primeiro mês com reserva ao
+ *  último fechado (mês sem reserva conta zero). Diz o pico e o vale. */
+export function Sazonalidade({ p, m }: { p: PainelReservas; m: Metrica }) {
+  const s = p.sazonalidade.filter((x) => x[m] !== null);
+  if (!s.length) return null;
+  const ordem = [...s].sort((x, y) => (y[m] ?? 0) - (x[m] ?? 0));
+  const pico = ordem[0];
+  const vale = ordem[ordem.length - 1];
+  const barras: Barra[] = p.sazonalidade.map((x) => ({
+    chave: String(x.mes), rotulo: x.nome, valor: x[m] ?? 0,
+    titulo: x[m] === null ? `${x.nome} (ainda sem mês fechado)` : x.nome,
+    dica: x[m] === null ? [] : [
+      { rotulo: `Média de ${m === "reservas" ? "reservas" : "pessoas"}`, valor: decimal(x[m] ?? 0) },
+      { rotulo: "Meses na média", valor: inteiro(x.anos) },
+    ],
+  }));
+  return (
+    <Cartao titulo="Sazonalidade"
+            descricao={`Média por mês do calendário, em toda a história · pico: ${pico.nome} (${
+              decimal(pico[m] ?? 0)}/mês) · vale: ${vale.nome} (${decimal(vale[m] ?? 0)}/mês)`}>
+      <div className="px-3 py-3" id="reservas-sazonalidade">
+        <GraficoBarras barras={barras} altura={240} W={540} noEixo={numero}
+                       rotulo={`Média de ${m === "reservas" ? "reservas" : "pessoas"} por mês do ano`} />
       </div>
     </Cartao>
   );

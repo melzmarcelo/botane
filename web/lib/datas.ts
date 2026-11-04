@@ -35,3 +35,6 @@ export const somarMeses = (meses: number, base: Date = new Date()): string => {
 /** O primeiro dia do mês corrente. */
 export const primeiroDiaDoMes = (base: Date = new Date()): string =>
   diaLocal(new Date(base.getFullYear(), base.getMonth(), 1));
+
+/** "2026-10-30" → "30/10": o dia no eixo de um gráfico ou numa lista curta. */
+export const dataCurta = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;

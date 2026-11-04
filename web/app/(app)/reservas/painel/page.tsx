@@ -9,7 +9,8 @@ import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { verPainelReservas, type PainelReservas } from "@/lib/reservas";
 
 import {
-  GruposGrandes, Numeros, PorDiaDaSemana, PorHorario, PorMes, PorObjetivo, type Metrica,
+  AnoContraAno, GruposGrandes, Numeros, PorDiaDaSemana, PorHorario, PorMes, PorObjetivo,
+  Sazonalidade, type Metrica,
 } from "./quadros";
 
 /**
@@ -53,7 +54,8 @@ export default function PainelDasReservas() {
             Como a agenda andou nesta loja: dias e horários mais procurados, a evolução mês a
             mês, por que as pessoas reservam e o peso dos grupos grandes. Conta só reservas que
             já passaram e que ocuparam a agenda (canceladas à parte). Pessoas que vieram não
-            inclui quem faltou.
+            inclui quem faltou. O ano contra ano e a sazonalidade olham toda a história, só
+            com meses fechados.
           </ExplicaTela>
         </div>
         <Link href="/reservas/plano-de-acao" className="btn btn-secundario">Plano de ação</Link>
@@ -98,6 +100,9 @@ export default function PainelDasReservas() {
                 <PorHorario p={p} m={m} />
                 <PorObjetivo p={p} m={m} />
                 <GruposGrandes p={p} m={m} />
+                {/* 🔑 04/11/2026: estes dois olham a história inteira, não o período. */}
+                <AnoContraAno p={p} m={m} />
+                <Sazonalidade p={p} m={m} />
               </div>
             </>
           )}
