@@ -22,6 +22,9 @@ type Props = {
   podeEditar: boolean;
   aoAbrir: () => void;
   aoMover: (passo: number) => void;
+  /** 🔑 05/11/2026: marcar vários para tirar de uma vez (pedido do dono). */
+  marcado?: boolean;
+  aoMarcar?: () => void;
 };
 
 /** O que falta para o prato sair bem no cardápio — o que a linha avisa. */
@@ -34,11 +37,18 @@ export function faltasDo(i: ItemDoCatalogo): string[] {
   return f;
 }
 
-export default function LinhaDoPrato({ item: i, primeiro, ultimo, podeEditar, aoAbrir, aoMover }: Props) {
+export default function LinhaDoPrato({ item: i, primeiro, ultimo, podeEditar, aoAbrir, aoMover, marcado = false, aoMarcar }: Props) {
   const nome = i.nome_catalogo || i.produto;
   const faltas = faltasDo(i);
   return (
     <li className="flex items-center gap-3 bg-superficie py-2">
+      {/* 🔑 A caixa fica FORA do botão da linha: marcar não abre a gaveta. O rótulo dá o alvo de 44px. */}
+      {podeEditar && aoMarcar && (
+        <label className="-ml-2 flex h-[44px] w-9 shrink-0 cursor-pointer items-center justify-center">
+          <input type="checkbox" checked={marcado} onChange={aoMarcar} aria-label={`marcar ${nome}`}
+                 data-marcar-prato={i.id} />
+        </label>
+      )}
       {/* 🔑 A linha INTEIRA abre a gaveta (foto e nome): é o alvo grande do toque. */}
       <button type="button" onClick={aoAbrir} aria-label={`abrir ${nome}`}
               className="flex min-w-0 flex-1 items-center gap-3 text-left">

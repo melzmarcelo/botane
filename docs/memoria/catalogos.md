@@ -1049,3 +1049,15 @@ Estudo em [`docs/whatsapp-numeros-estudo.md`](../whatsapp-numeros-estudo.md).
   número do catálogo quando ele está conectado — ver [`reservas.md`](reservas.md).
 - Cobertura: `smoke_whatsapps_da_loja.py` (24) e `verificar-whatsapps.mjs` (8). `limpar_dados`:
   `unidade_whatsapps` em PRESERVADAS (e `catalogo_item_escolhas`, que faltava desde a 142, em OPERACAO).
+
+## Tirar vários pratos de uma vez (05/11/2026, 1.3.0)
+
+🔑 Pedido do dono: *"para tirar do catálogo, poderia ter esta opção também, check box para seleção
+e botão para retirar, não sendo necessário entrar no item"* — o espelho do "+ pratos" (vários de uma vez).
+- Caixa em cada `LinhaDoPrato` (`data-marcar-prato`), FORA do botão da linha: marcar não abre a
+  gaveta. Barra `#marcar-pratos` acima da lista: "Marcar todos" (da seção aberta) e `#tirar-marcados`
+  → `Confirmacao` com a lista dos nomes.
+- ⚠️ As marcas são da SEÇÃO aberta: trocar de seção limpa (nunca tirar o que não está à vista).
+- Sem rota nova: um `DELETE /catalogos/itens/{id}` por prato, o mesmo da gaveta — a auditoria
+  continua item por item, e falha parcial avisa quais não saíram.
+- Cobertura: `verificar-tirar-varios.mjs` (12), na lista do `verificar.mjs`.

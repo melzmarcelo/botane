@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
-import { Aviso, Carregando, Vazio } from "@/components/ui";
+import { Aviso, Carregando, Confirmacao, Vazio } from "@/components/ui";
 import { useSessao } from "@/lib/sessao";
 import { urlArquivo } from "@/lib/api";
 import * as cat from "@/lib/catalogos";
@@ -57,6 +57,11 @@ export default function AbaCardapio({ idCatalogo, podeEditar, vivo = true, aoIdi
   const [abrindoCartao, setAbrindoCartao] = useState<AbrindoCartao | null>(null);
   // 🔑 O que está sem tradução, por tipo e id (1.1.109) — entra no "O que falta".
   const [semTraducao, setSemTraducao] = useState<Partial<Record<TipoTraduzivel, number[]>>>({});
+  /** 🔑 05/11/2026 (pedido do dono): tirar vários pratos de uma vez, sem abrir cada um.
+   *  ⚠️ As marcas são da seção aberta: trocar de seção limpa (tirar o que não se vê, não). */
+  const [marcados, setMarcados] = useState<Set<number>>(new Set());
+  const [tirandoVarios, setTirandoVarios] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
 
   const recarregar = useCallback(async () => {
     pendentesDoCatalogo(idCatalogo).then((r) => setSemTraducao(r.por_tipo ?? {})).catch(() => setSemTraducao({}));
@@ -190,6 +195,27 @@ export default function AbaCardapio({ idCatalogo, podeEditar, vivo = true, aoIdi
     await recarregar();
   }
 
+  /** Tira os marcados um a um pela mesma rota da gaveta — a auditoria fica igual, item por item. */
+  async function tirarMarcados(lista: cat.ItemDoCatalogo[]) {
+    setOcupado(true);
+    const falhas: string[] = [];
+    let foram = 0;
+    for (const i of lista) {
+      try {
+        await cat.desvincularProduto(i.id);
+        foram += 1;
+      } catch (e) {
+        falhas.push(`${i.nome_catalogo || i.produto}: ${e instanceof Error ? e.message : "falhou"}`);
+      }
+    }
+    await recarregar();
+    setOcupado(false);
+    setTirandoVarios(false);
+    setMarcados(new Set());
+    if (falhas.length) aviso.erro(`${foram} saíram; ${falhas.length} não: ${falhas.join(" · ")}`);
+    else aviso.sucesso(foram === 1 ? "1 prato saiu do cardápio." : `${foram} pratos saíram do cardápio.`);
+  }
+
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!conteudo) return <Carregando />;
 
@@ -224,6 +250,15 @@ export default function AbaCardapio({ idCatalogo, podeEditar, vivo = true, aoIdi
   const indiceNaLista = irmas.findIndex((x) => x.id === secao.id);
   const onde = a.sub ? `${a.categoria.nome} ▸ ${a.sub.nome}` : a.categoria.nome;
   const ehSel = (tipo: cat.TipoDeSecao, id: number) => a.tipo === tipo && secao.id === id;
+  const escolher = (s: Selecao) => { setSoFaltas(false); setMarcados(new Set()); setSel(s); };
+  // Só os marcados que ainda estão NESTA seção (o recarregar pode ter tirado algum).
+  const marcadosAqui = itens.filter((i) => marcados.has(i.id));
+  const todosMarcados = itens.length > 0 && marcadosAqui.length === itens.length;
+  const alternarMarca = (id: number) => setMarcados((m) => {
+    const x = new Set(m);
+    if (x.has(id)) x.delete(id); else x.add(id);
+    return x;
+  });
 
   // A seção da janela, resolvida no conteúdo de agora (a foto muda enquanto ela está aberta).
   const editandoAgora = editando && editando.secao
@@ -257,11 +292,11 @@ export default function AbaCardapio({ idCatalogo, podeEditar, vivo = true, aoIdi
         {categorias.map((c) => (
           <div key={c.id} className="contents md:block">
             <BotaoSecao nome={c.nome} total={totalDa(c)} ativo={!soFaltas && ehSel("categoria", c.id)}
-                        aoClicar={() => { setSoFaltas(false); setSel({ tipo: "categoria", id: c.id }); }} />
+                        aoClicar={() => escolher({ tipo: "categoria", id: c.id })} />
             {c.subcategorias.map((s) => (
               <BotaoSecao key={s.id} nome={s.nome} total={s.itens.length} sub
                           ativo={!soFaltas && ehSel("subcategoria", s.id)}
-                          aoClicar={() => { setSoFaltas(false); setSel({ tipo: "subcategoria", id: s.id }); }} />
+                          aoClicar={() => escolher({ tipo: "subcategoria", id: s.id })} />
             ))}
           </div>
         ))}
@@ -335,7 +370,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, vivo = true, aoIdi
               <span className="text-suave">Se divide em</span>
               {a.categoria.subcategorias.map((s) => (
                 <button key={s.id} type="button" className="link-acao"
-                        onClick={() => setSel({ tipo: "subcategoria", id: s.id })}>
+                        onClick={() => escolher({ tipo: "subcategoria", id: s.id })}>
                   {s.nome} ({s.itens.length})
                 </button>
               ))}
@@ -364,6 +399,25 @@ export default function AbaCardapio({ idCatalogo, podeEditar, vivo = true, aoIdi
             )}
           </div>
 
+          {podeEditar && itens.length > 0 && (
+            <div className="mt-3 flex min-h-[44px] flex-wrap items-center gap-3 border-b border-linha pb-2" id="marcar-pratos">
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-[13.5px]">
+                <input type="checkbox" checked={todosMarcados} aria-label="marcar todos os pratos desta seção"
+                       onChange={() => setMarcados(todosMarcados ? new Set() : new Set(itens.map((i) => i.id)))} />
+                {marcadosAqui.length ? `${marcadosAqui.length} marcado${marcadosAqui.length > 1 ? "s" : ""}` : "Marcar todos"}
+              </label>
+              {marcadosAqui.length > 0 && (
+                <>
+                  <button type="button" className="btn btn-secundario" id="tirar-marcados"
+                          style={{ color: "var(--color-erro)" }} onClick={() => setTirandoVarios(true)}>
+                    Tirar do cardápio
+                  </button>
+                  <button type="button" className="link-acao" onClick={() => setMarcados(new Set())}>desmarcar</button>
+                </>
+              )}
+            </div>
+          )}
+
           {itens.length === 0 && <p className="py-4 text-[13.5px] text-suave">Nenhum prato aqui ainda.</p>}
           <PratosECartoes itens={itens} idCategoria={a.categoria.id} idSubcategoria={a.sub?.id ?? null}
                           cartoes={cartoes} pratosPorCartao={listaCartoes?.pratos_por_cartao ?? 4}
@@ -372,12 +426,23 @@ export default function AbaCardapio({ idCatalogo, podeEditar, vivo = true, aoIdi
                           desenharPrato={(i, n) => (
                             <LinhaDoPrato key={i.id} item={i} primeiro={n === 0} ultimo={n === itens.length - 1}
                                           podeEditar={podeEditar} aoAbrir={() => setGaveta(i.id)}
-                                          aoMover={(passo) => void moverPrato(itens, n, passo)} />
+                                          aoMover={(passo) => void moverPrato(itens, n, passo)}
+                                          marcado={marcados.has(i.id)} aoMarcar={() => alternarMarca(i.id)} />
                           )} />
         </div>
       </section>
       )}
 
+      {tirandoVarios && marcadosAqui.length > 0 && (
+        <Confirmacao titulo={marcadosAqui.length === 1 ? "Tirar 1 prato do cardápio?" : `Tirar ${marcadosAqui.length} pratos do cardápio?`}
+                     rotuloConfirmar="Tirar do cardápio" perigo ocupado={ocupado}
+                     aoConfirmar={() => void tirarMarcados(marcadosAqui)} aoCancelar={() => setTirandoVarios(false)}>
+          <p>Saem de <strong>{onde}</strong>. O produto continua cadastrado e pode voltar por “+ pratos”.</p>
+          <ul className="mt-2 max-h-48 list-disc overflow-y-auto pl-5 text-[14px] text-suave">
+            {marcadosAqui.map((i) => <li key={i.id}>{i.nome_catalogo || i.produto}</li>)}
+          </ul>
+        </Confirmacao>
+      )}
       {editandoAgora && (
         <JanelaSecao editando={editandoAgora} podeEditar={podeEditar} vivo={vivo} aoFechar={() => setEditando(null)}
                      aoSalvar={async (id) => { await recarregar(); setSel({ tipo: editandoAgora.tipo, id }); }}

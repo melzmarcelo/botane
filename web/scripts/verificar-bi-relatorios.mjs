@@ -53,8 +53,9 @@ try {
   await p.goto(WEB + "/", { waitUntil: "networkidle2" });
   await p.waitForSelector("aside nav", { timeout: 60000 });
   const hrefs = await p.evaluate(() => [...document.querySelectorAll("aside a")].map((a) => a.getAttribute("href")));
-  const grupo = await p.evaluate(() => [...document.querySelectorAll("aside .menu-grupo")].map((g) => g.innerText.trim()));
-  checar("o grupo Análise existe, com Relatórios e Estúdio BI",
+  // 🔑 Desde o menu do protótipo (05/11), Análise é SEÇÃO (`.secao-menu`) com os itens soltos, não grupo.
+  const grupo = await p.evaluate(() => [...document.querySelectorAll("aside .secao-menu, aside .menu-grupo")].map((g) => g.textContent.trim()));
+  checar("a seção Análise existe, com Relatórios e Estúdio BI",
     grupo.includes("Análise") && hrefs.includes("/relatorios") && hrefs.includes("/bi"), { grupo });
 
   console.log("\n2. Relatórios: catálogo e prévia em folha");
