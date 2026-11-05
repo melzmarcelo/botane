@@ -398,6 +398,22 @@ export const MENU: GrupoMenu[] = [
     ],
   },
   {
+    // 🔑 **Análise** (layout novo, fases 3 e 4 — 05/11/2026, pedido do dono): a tela única de
+    // Relatórios (os padrão do catálogo e os personalizados) e o Estúdio BI, que só o
+    // administrador usa. ⚠️ Relatórios abre para quem tem QUALQUER relatório: a própria tela
+    // mostra só os que a pessoa pode tirar (o catálogo do servidor já vem filtrado).
+    grupo: "Análise",
+    icone: "grafico",
+    itens: [
+      { href: "/relatorios", nome: "Relatórios", icone: "exportar",
+        chave: ["estoque.saldos", "cmv.painel", "cmv.relatorios", "compras.notas", "reservas.ver",
+                "fichas.visualizar", "cadastros.produtos", "producao.agenda", "etiquetas.imprimir",
+                "pedidos.ver", "fidelidade.operar", "patrimonio.ver", "admin.auditoria",
+                "relatorios.personalizados", "bi.estudio"] },
+      { href: "/bi", nome: "Estúdio BI", icone: "grafico", chave: "bi.estudio" },
+    ],
+  },
+  {
     grupo: "Administração",
     icone: "predio",
     itens: [

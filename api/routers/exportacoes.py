@@ -914,6 +914,35 @@ def _com_as_lojas(cur, ctx: Contexto, filtros: dict) -> dict:
     return filtros
 
 
+@router.get("/{relatorio}/dados")
+def dados(relatorio: str, filtros: _Filtros = Depends(),
+          ctx: Contexto = Depends(contexto_atual)) -> dict:
+    """As primeiras linhas do relatório como DADOS, para a prévia em folha da tela de Relatórios.
+
+    🔑 Layout novo, fase 3 (05/11/2026): ver antes de imprimir. É o mesmo `montar` do arquivo — a
+    folha da tela e o PDF não podem discordar. ⚠️ Só as primeiras `PREVIA_LINHAS`: o arquivo
+    continua sendo o lugar do relatório inteiro, e o total vem junto para dizer quanto falta.
+    """
+    rel = catalogo_motor.RELATORIOS.get(relatorio)
+    if not rel:
+        raise HTTPException(status_code=404, detail=f"Relatório que não existe: {relatorio}")
+    _exige(ctx, rel.permissao)
+    with get_cursor() as cur:
+        saida = catalogo_motor.montar(cur, relatorio, unidade_atual(cur, ctx),
+                                      _com_as_lojas(cur, ctx, filtros.como_dict) | {"_formato": "pdf"})
+    return {
+        "titulo": saida.titulo,
+        "colunas": [{"chave": k, "rotulo": r} for k, r in saida.colunas],
+        "linhas": [[exportacao._valor_pdf(l.get(k)) for k, _ in saida.colunas] for l in saida.linhas[:PREVIA_LINHAS]],
+        "total": len(saida.linhas),
+        "resumo": [[k, exportacao._valor_pdf(v)] for k, v in saida.resumo],
+        "inicio": saida.inicio, "fim": saida.fim,
+    }
+
+
+PREVIA_LINHAS = 200
+
+
 @router.get("/{relatorio}/previa")
 def previa(relatorio: str, filtros: _Filtros = Depends(),
            ctx: Contexto = Depends(contexto_atual)) -> dict:

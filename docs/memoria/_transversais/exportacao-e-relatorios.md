@@ -333,3 +333,10 @@
   (escolha: dia, semana, mês), declarado também em `routers/exportacoes.py` — filtro que o
   catálogo oferece e o router não declara chega vazio (a lição do consumo por pessoa).
   Chave `cmv.relatorios`: quem tem só `cmv.painel` vê o painel sem o Baixar.
+
+## A tela única de Relatórios e o Estúdio BI (1.3.0, 05/11/2026)
+Ver `padroes-de-ui.md` → "Layout novo", fases 3 e 4. Em resumo: o catálogo ganhou a ÁREA de cada
+relatório (`GRUPOS`), a rota `GET /exportar/{relatorio}/dados` devolve a prévia em folha (o mesmo
+`montar` do arquivo), e os campos de filtro viraram uma peça só (`CamposDoRelatorio`). O Estúdio BI
+(`services/bi.py`) monta relatórios personalizados a partir de uma lista branca, e imprime pelo
+mesmo `_render` daqui. ⚠️ Relatório novo no catálogo precisa de uma entrada em `GRUPOS`.

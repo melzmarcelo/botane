@@ -41,12 +41,30 @@ protótipo navegável (artifact `https://claude.ai/artifact/Jvq2Pku1vEjUVy8DQxeQ
     (`g.personalizado`): escolheu Setor, o Setor aparece mesmo vazio.
   - ⚠️ `direcao=asc` é o padrão e por isso NÃO vai para a URL (a bateria quase reprovou por isso).
   - Cobertura: `smoke_preferencias.py` (15) e `verificar-grade-produtos.mjs` (18, na bateria).
-  - ⏳ Levar às outras listas (notas, vendas, movimentos, fichas…): cada uma precisa das COLUNAS
-    e, para ordenar, de um `ORDENS` no router dela.
-- ⏳ **Próximas fases, do protótipo** (não começadas):
-  3. a tela única de Relatórios (catálogo dos padrão, filtros e prévia em folha);
-  4. o Estúdio BI (fontes, ligações e campos, só administrador). ⚠️ Precisa de backend próprio com
-     fontes e ligações numa LISTA BRANCA e SQL montado pelo servidor; nada de SQL vindo da tela.
+  - Também em **Fichas** (colunas de custo só para `fichas.custos`, via `useMemo`), **Patrimônio** e
+    **Portal de Clientes ▸ Clientes** — sem ordenar (o servidor delas não tem `ORDENS` ainda).
+  - ⏳ Faltam as listas em `<li>` com grade fixa (Notas, Vendas): pedem reescrita para tabela.
+- **Fase 3 (feita): a tela única de Relatórios** (`relatorios/`): catálogo do servidor por área
+  (`GRUPOS` em `exportacao_catalogo.py`; relatório sem área cai em "Outros" e a `smoke_bi` reprova),
+  os campos de filtro são os MESMOS da janela de imprimir (`CamposDoRelatorio`, extraído de
+  `components/exportar.tsx`), prévia em folha por `GET /exportar/{rel}/dados` (o mesmo `montar` do
+  arquivo, 200 linhas + total; valores já formatados como no PDF). ⚠️ A prévia só roda no clique.
+- **Fase 4 (feita): o Estúdio BI** (`bi/`, `routers/bi.py`, `services/bi.py`, migração 149).
+  - 🔑 **Lista branca**: `FONTES` (tabela, campos com a expressão SQL, colunas de ligação, coluna de
+    loja e de data, filtro de linha válida) e `RELACOES` (muitos → um). A tela manda NOMES; nome fora
+    da lista = 422. Ligação manual só entre colunas de `chaves`.
+  - **Segurança**: transação `READ ONLY` (com `rollback` antes, para ser a primeira instrução),
+    `statement_timeout` de 8 s, `LIMIT 500`, e TODA fonte com loja recortada pela loja atual.
+  - **Grão**: medida `soma=True` numa fonte que tem outra "muitos" ligada a ela é recusada com a
+    explicação (somar o cupom com os itens junto repete o cupom). Contagem distinta vale.
+  - "Manter todos" (LEFT) leva o recorte da fonte nova para o ON — no WHERE viraria INNER.
+  - Itens da venda / da nota exigem Vendas / Notas (`exige`): a tela marca junto.
+  - Relatório salvo guarda ESCOLHAS (jsonb), nunca SQL; salvar valida montando. Quem vê: EU, TODOS
+    (`relatorios.personalizados`) ou PAPEIS; quem tem `bi.estudio` vê e edita todos. ⚠️ Rodar um
+    publicado NÃO exige a permissão das fontes — publicar é a decisão do administrador. Quem não vê
+    recebe 404.
+  - Imprimir/Gerar planilha do personalizado reaproveitam `_render` de `routers/exportacoes.py`.
+  - Cobertura: `smoke_bi.py` (40) e `verificar-bi-relatorios.mjs` (18, na bateria).
 
 ## O que já existe
 

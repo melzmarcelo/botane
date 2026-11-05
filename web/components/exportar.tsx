@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import BuscaCadastro from "@/components/busca-cadastro";
 import FiltroMultiplo from "@/components/filtro-multiplo";
@@ -37,7 +37,7 @@ import { plural } from "@/lib/numeros";
 
 type Opcao = { valor: string | number; nome: string };
 
-type FiltroDoServidor = {
+export type FiltroDoServidor = {
   nome: string;
   tipo:
     | "periodo"
@@ -54,10 +54,12 @@ type FiltroDoServidor = {
   opcoes?: Opcao[];
 };
 
-type RelatorioDoServidor = {
+export type RelatorioDoServidor = {
   chave: string;
   rotulo: string;
   descricao: string;
+  /** A área na tela de Relatórios (layout novo, fase 3). */
+  grupo?: string;
   filtros: FiltroDoServidor[];
 };
 
@@ -75,7 +77,7 @@ export type ValoresIniciais = Record<string, unknown>;
  */
 let catalogoEmCurso: Promise<RelatorioDoServidor[]> | null = null;
 
-function pedirCatalogo(): Promise<RelatorioDoServidor[]> {
+export function pedirCatalogo(): Promise<RelatorioDoServidor[]> {
   if (!catalogoEmCurso) {
     catalogoEmCurso = api.get<RelatorioDoServidor[]>("/exportar/catalogo").catch((e) => {
       // Falha não pode virar cache: a próxima tentativa tem de ir ao servidor.
@@ -87,7 +89,7 @@ function pedirCatalogo(): Promise<RelatorioDoServidor[]> {
 }
 
 /** Os valores viram query string: lista repete a chave, vazio não vai. */
-function comoQuery(valores: ValoresIniciais): string {
+export function comoQuery(valores: ValoresIniciais): string {
   const q = new URLSearchParams();
   for (const [chave, valor] of Object.entries(valores)) {
     if (valor === null || valor === undefined || valor === "") continue;
@@ -103,6 +105,248 @@ function comoQuery(valores: ValoresIniciais): string {
   }
   const s = q.toString();
   return s ? `?${s}` : "";
+}
+
+/**
+ * 🔑 Os campos de filtro de um relatório do catálogo — os MESMOS na janela de imprimir e na tela
+ * única de Relatórios (layout novo, fase 3 — 05/11/2026). Uma cópia só: duas divergiriam caladas.
+ */
+export function CamposDoRelatorio({
+  rel,
+  valores,
+  setValores,
+  produtos,
+  setProdutos,
+}: {
+  rel: RelatorioDoServidor;
+  valores: ValoresIniciais;
+  setValores: React.Dispatch<React.SetStateAction<ValoresIniciais>>;
+  produtos: { id: number; rotulo: string }[];
+  setProdutos: React.Dispatch<React.SetStateAction<{ id: number; rotulo: string }[]>>;
+}) {
+  const trocar = (nome: string, valor: unknown) => setValores((v) => ({ ...v, [nome]: valor }));
+  return (
+    <div className="grid gap-5 sm:grid-cols-2">
+      {rel.filtros.map((f) => {
+        if (f.tipo === "periodo") {
+          /* 🔑 **Período COM opções é o ciclo da loja, não duas datas**
+             (pedido do dono, 16/09/2026: *"esta vai abrir o filtro do
+             período, e não datas como está"*). Quem decide é o
+             SERVIDOR, mandando as opções — a janela não sabe o que é um
+             ciclo de CMV, e não deve saber.
+             ⚠️ **O valor é `inicio|fim` e é desmembrado aqui.** O
+             contrato do servidor continua sendo as duas pontas: todo o
+             resto do catálogo segue lendo `inicio` e `fim`, e a
+             auditoria registra o recorte de verdade, não um apelido. */
+          if (f.opcoes?.length) {
+            const atual = `${String(valores.inicio ?? "")}|${String(valores.fim ?? "")}`;
+            return (
+              <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
+                <div>
+                  <span className="rotulo">{f.rotulo}</span>
+                  <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
+                </div>
+                <select
+                  className="campo"
+                  value={f.opcoes.some((o) => String(o.valor) === atual) ? atual : ""}
+                  onChange={(e) => {
+                    const [i, fi] = e.target.value.split("|");
+                    setValores((v) => ({ ...v, inicio: i ?? "", fim: fi ?? "" }));
+                  }}
+                >
+                  {/* ⚠️ A linha vazia só existe enquanto o recorte da
+                      tela não casa com nenhum período pronto — sem ela
+                      o seletor mostraria um período que não é o do
+                      arquivo. */}
+                  {!f.opcoes.some((o) => String(o.valor) === atual) && (
+                    <option value="">escolha o período</option>
+                  )}
+                  {f.opcoes.map((o) => (
+                    <option key={String(o.valor)} value={String(o.valor)}>
+                      {o.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          }
+          return (
+            <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
+              <div>
+                <span className="rotulo">{f.rotulo}</span>
+                <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  className="campo w-auto"
+                  value={String(valores.inicio ?? "")}
+                  onChange={(e) => trocar("inicio", e.target.value)}
+                />
+                <span className="text-[13px] text-suave">até</span>
+                <input
+                  type="date"
+                  className="campo w-auto"
+                  value={String(valores.fim ?? "")}
+                  onChange={(e) => trocar("fim", e.target.value)}
+                />
+              </div>
+            </div>
+          );
+        }
+
+        /* 🔑 **Escolha ÚNICA.** `detalhe` e `ciclo` são múltiplas e o
+           relatório usa só a primeira — um remendo do vocabulário da
+           janela que se aguentava com duas ou três opções. Com doze,
+           viraria doze caixinhas para uma escolha só. */
+        if (f.tipo === "escolha") {
+          return (
+            <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
+              <div>
+                <span className="rotulo">{f.rotulo}</span>
+                <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
+              </div>
+              <select
+                className="campo"
+                value={String(valores[f.nome] ?? "")}
+                onChange={(e) => trocar(f.nome, e.target.value)}
+              >
+                {(f.opcoes ?? []).map((o) => (
+                  <option key={String(o.valor)} value={String(o.valor)}>
+                    {o.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        }
+
+        // ⚠️ Uma DATA sozinha, não um período: o inventário valorizado
+        // responde "quanto valia o estoque naquele dia", e oferecer duas
+        // pontas faria escolher um intervalo para uma pergunta que tem
+        // uma data só.
+        if (f.tipo === "data") {
+          return (
+            <div key={f.nome} className="flex flex-col gap-2">
+              <div>
+                <span className="rotulo">{f.rotulo}</span>
+                <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
+              </div>
+              <input
+                type="date"
+                className="campo w-auto"
+                value={String(valores.data ?? "")}
+                onChange={(e) => trocar("data", e.target.value)}
+              />
+            </div>
+          );
+        }
+
+        if (f.tipo === "multipla") {
+          return (
+            <FiltroMultiplo
+              key={f.nome}
+              titulo={f.rotulo}
+              ajuda={f.ajuda}
+              opcoes={f.opcoes ?? []}
+              escolhidos={(valores[f.nome] as (string | number)[]) ?? []}
+              aoTrocar={(v) => trocar(f.nome, v)}
+            />
+          );
+        }
+
+        if (f.tipo === "produtos") {
+          // ⚠️ Produto NÃO vira lista de caixinhas: são milhares. Vai
+          // pela busca da casa, que pergunta ao servidor, e o que se
+          // escolhe fica como etiqueta — para a lista curta não parecer
+          // curta por acaso.
+          return (
+            <div key={f.nome} className="flex min-w-0 flex-col sm:col-span-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="rotulo">{f.rotulo}</span>
+                {produtos.length > 0 && (
+                  <button
+                    type="button"
+                    className="link-acao"
+                    onClick={() => setProdutos([])}
+                  >
+                    limpar
+                  </button>
+                )}
+              </div>
+              <p className="mt-0.5 text-[12.5px] text-suave">
+                {produtos.length ? `${plural(produtos.length, "escolhido", "escolhidos")}` : f.ajuda}
+              </p>
+              <BuscaCadastro
+                className="mt-2"
+                fonte={fonteProdutos()}
+                selecionado={null}
+                aoEscolher={(item) => {
+                  if (!item) return;
+                  setProdutos((l) =>
+                    l.some((p) => p.id === item.id)
+                      ? l
+                      : [...l, { id: item.id, rotulo: item.nome }],
+                  );
+                }}
+              />
+              {produtos.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {produtos.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center gap-1.5 rounded-full border border-erva bg-erva-claro px-2.5 py-1 text-[12.5px] text-erva"
+                    >
+                      {p.rotulo}
+                      <button
+                        type="button"
+                        aria-label={`tirar ${p.rotulo}`}
+                        className="text-[15px] leading-none"
+                        onClick={() =>
+                          setProdutos((l) => l.filter((x) => x.id !== p.id))
+                        }
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        }
+
+        if (f.tipo === "sim_nao") {
+          return (
+            <label key={f.nome} className="flex items-start gap-2 self-end pb-2">
+              <input
+                type="checkbox"
+                id={`filtro-${f.nome}`}
+                className="mt-0.5 h-4 w-4 accent-erva"
+                checked={valores[f.nome] === true}
+                onChange={(e) => trocar(f.nome, e.target.checked)}
+              />
+              <span>
+                <span className="block text-[14px]">{f.rotulo}</span>
+                <span className="block text-[12.5px] text-suave">{f.ajuda}</span>
+              </span>
+            </label>
+          );
+        }
+
+        return (
+          <Campo key={f.nome} rotulo={f.rotulo} dica={f.ajuda}>
+            <input
+              className="campo"
+              type={f.tipo === "numero" ? "number" : "text"}
+              value={String(valores[f.nome] ?? "")}
+              onChange={(e) => trocar(f.nome, e.target.value)}
+            />
+          </Campo>
+        );
+      })}
+    </div>
+  );
 }
 
 function Dialogo({
@@ -184,11 +428,6 @@ function Dialogo({
     return () => clearTimeout(t);
   }, [rel, query, avulso]);
 
-  const trocar = useCallback(
-    (nome: string, valor: unknown) => setValores((v) => ({ ...v, [nome]: valor })),
-    [],
-  );
-
   async function baixar() {
     if (!rel) return;
     setBaixando(true);
@@ -259,226 +498,8 @@ function Dialogo({
           {!rel.filtros.length ? (
             <p className="text-[14px] text-suave">Este relatório sai inteiro, sem recorte.</p>
           ) : (
-            <div className="grid gap-5 sm:grid-cols-2">
-              {rel.filtros.map((f) => {
-                if (f.tipo === "periodo") {
-                  /* 🔑 **Período COM opções é o ciclo da loja, não duas datas**
-                     (pedido do dono, 16/09/2026: *"esta vai abrir o filtro do
-                     período, e não datas como está"*). Quem decide é o
-                     SERVIDOR, mandando as opções — a janela não sabe o que é um
-                     ciclo de CMV, e não deve saber.
-                     ⚠️ **O valor é `inicio|fim` e é desmembrado aqui.** O
-                     contrato do servidor continua sendo as duas pontas: todo o
-                     resto do catálogo segue lendo `inicio` e `fim`, e a
-                     auditoria registra o recorte de verdade, não um apelido. */
-                  if (f.opcoes?.length) {
-                    const atual = `${String(valores.inicio ?? "")}|${String(valores.fim ?? "")}`;
-                    return (
-                      <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
-                        <div>
-                          <span className="rotulo">{f.rotulo}</span>
-                          <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
-                        </div>
-                        <select
-                          className="campo"
-                          value={f.opcoes.some((o) => String(o.valor) === atual) ? atual : ""}
-                          onChange={(e) => {
-                            const [i, fi] = e.target.value.split("|");
-                            setValores((v) => ({ ...v, inicio: i ?? "", fim: fi ?? "" }));
-                          }}
-                        >
-                          {/* ⚠️ A linha vazia só existe enquanto o recorte da
-                              tela não casa com nenhum período pronto — sem ela
-                              o seletor mostraria um período que não é o do
-                              arquivo. */}
-                          {!f.opcoes.some((o) => String(o.valor) === atual) && (
-                            <option value="">escolha o período</option>
-                          )}
-                          {f.opcoes.map((o) => (
-                            <option key={String(o.valor)} value={String(o.valor)}>
-                              {o.nome}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
-                      <div>
-                        <span className="rotulo">{f.rotulo}</span>
-                        <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <input
-                          type="date"
-                          className="campo w-auto"
-                          value={String(valores.inicio ?? "")}
-                          onChange={(e) => trocar("inicio", e.target.value)}
-                        />
-                        <span className="text-[13px] text-suave">até</span>
-                        <input
-                          type="date"
-                          className="campo w-auto"
-                          value={String(valores.fim ?? "")}
-                          onChange={(e) => trocar("fim", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  );
-                }
-
-                /* 🔑 **Escolha ÚNICA.** `detalhe` e `ciclo` são múltiplas e o
-                   relatório usa só a primeira — um remendo do vocabulário da
-                   janela que se aguentava com duas ou três opções. Com doze,
-                   viraria doze caixinhas para uma escolha só. */
-                if (f.tipo === "escolha") {
-                  return (
-                    <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
-                      <div>
-                        <span className="rotulo">{f.rotulo}</span>
-                        <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
-                      </div>
-                      <select
-                        className="campo"
-                        value={String(valores[f.nome] ?? "")}
-                        onChange={(e) => trocar(f.nome, e.target.value)}
-                      >
-                        {(f.opcoes ?? []).map((o) => (
-                          <option key={String(o.valor)} value={String(o.valor)}>
-                            {o.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                }
-
-                // ⚠️ Uma DATA sozinha, não um período: o inventário valorizado
-                // responde "quanto valia o estoque naquele dia", e oferecer duas
-                // pontas faria escolher um intervalo para uma pergunta que tem
-                // uma data só.
-                if (f.tipo === "data") {
-                  return (
-                    <div key={f.nome} className="flex flex-col gap-2">
-                      <div>
-                        <span className="rotulo">{f.rotulo}</span>
-                        <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
-                      </div>
-                      <input
-                        type="date"
-                        className="campo w-auto"
-                        value={String(valores.data ?? "")}
-                        onChange={(e) => trocar("data", e.target.value)}
-                      />
-                    </div>
-                  );
-                }
-
-                if (f.tipo === "multipla") {
-                  return (
-                    <FiltroMultiplo
-                      key={f.nome}
-                      titulo={f.rotulo}
-                      ajuda={f.ajuda}
-                      opcoes={f.opcoes ?? []}
-                      escolhidos={(valores[f.nome] as (string | number)[]) ?? []}
-                      aoTrocar={(v) => trocar(f.nome, v)}
-                    />
-                  );
-                }
-
-                if (f.tipo === "produtos") {
-                  // ⚠️ Produto NÃO vira lista de caixinhas: são milhares. Vai
-                  // pela busca da casa, que pergunta ao servidor, e o que se
-                  // escolhe fica como etiqueta — para a lista curta não parecer
-                  // curta por acaso.
-                  return (
-                    <div key={f.nome} className="flex min-w-0 flex-col sm:col-span-2">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="rotulo">{f.rotulo}</span>
-                        {produtos.length > 0 && (
-                          <button
-                            type="button"
-                            className="link-acao"
-                            onClick={() => setProdutos([])}
-                          >
-                            limpar
-                          </button>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-[12.5px] text-suave">
-                        {produtos.length ? `${plural(produtos.length, "escolhido", "escolhidos")}` : f.ajuda}
-                      </p>
-                      <BuscaCadastro
-                        className="mt-2"
-                        fonte={fonteProdutos()}
-                        selecionado={null}
-                        aoEscolher={(item) => {
-                          if (!item) return;
-                          setProdutos((l) =>
-                            l.some((p) => p.id === item.id)
-                              ? l
-                              : [...l, { id: item.id, rotulo: item.nome }],
-                          );
-                        }}
-                      />
-                      {produtos.length > 0 && (
-                        <ul className="mt-2 flex flex-wrap gap-1.5">
-                          {produtos.map((p) => (
-                            <li
-                              key={p.id}
-                              className="flex items-center gap-1.5 rounded-full border border-erva bg-erva-claro px-2.5 py-1 text-[12.5px] text-erva"
-                            >
-                              {p.rotulo}
-                              <button
-                                type="button"
-                                aria-label={`tirar ${p.rotulo}`}
-                                className="text-[15px] leading-none"
-                                onClick={() =>
-                                  setProdutos((l) => l.filter((x) => x.id !== p.id))
-                                }
-                              >
-                                ×
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                }
-
-                if (f.tipo === "sim_nao") {
-                  return (
-                    <label key={f.nome} className="flex items-start gap-2 self-end pb-2">
-                      <input
-                        type="checkbox"
-                        id={`filtro-${f.nome}`}
-                        className="mt-0.5 h-4 w-4 accent-erva"
-                        checked={valores[f.nome] === true}
-                        onChange={(e) => trocar(f.nome, e.target.checked)}
-                      />
-                      <span>
-                        <span className="block text-[14px]">{f.rotulo}</span>
-                        <span className="block text-[12.5px] text-suave">{f.ajuda}</span>
-                      </span>
-                    </label>
-                  );
-                }
-
-                return (
-                  <Campo key={f.nome} rotulo={f.rotulo} dica={f.ajuda}>
-                    <input
-                      className="campo"
-                      type={f.tipo === "numero" ? "number" : "text"}
-                      value={String(valores[f.nome] ?? "")}
-                      onChange={(e) => trocar(f.nome, e.target.value)}
-                    />
-                  </Campo>
-                );
-              })}
-            </div>
+            <CamposDoRelatorio rel={rel} valores={valores} setValores={setValores}
+                               produtos={produtos} setProdutos={setProdutos} />
           )}
 
           <div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useSessao } from "@/lib/sessao";
@@ -14,6 +14,7 @@ import ExplicaTela from "@/components/explica-tela";
 import { useAviso } from "@/components/aviso-flutuante";
 import { baixarLivroDeFichas } from "@/lib/fichas";
 import BotaoExportar from "@/components/exportar";
+import { BotaoColunas, type ColunaGrade, DensidadeGrade, useGrade, VisoesDaGrade } from "@/components/grade-configuravel";
 
 type Ficha = {
   id: number;
@@ -53,6 +54,16 @@ export default function PaginaFichas() {
   const [baixandoLivro, setBaixandoLivro] = useState(false);
   const aviso = useAviso();
   const pag = usePaginacao("fichas", { filtros: [busca, status] });
+  // 🔑 Grid configurável (layout novo, 05/11/2026). As colunas de custo só existem para quem vê custo.
+  const colunas = useMemo<ColunaGrade[]>(() => [
+    { chave: "produto", rotulo: "Produto", fixa: true },
+    { chave: "versao", rotulo: "Versão" },
+    { chave: "situacao", rotulo: "Situação" },
+    { chave: "itens", rotulo: "Itens" },
+    { chave: "rendimento", rotulo: "Rendimento" },
+    ...(veCusto ? [{ chave: "custo_total", rotulo: "Custo total" }, { chave: "por_porcao", rotulo: "Por porção" }] : []),
+  ], [veCusto]);
+  const g = useGrade("fichas", colunas);
 
   const carregar = useCallback(async () => {
     // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
@@ -157,6 +168,8 @@ export default function PaginaFichas() {
         </Aviso>
       )}
 
+      <VisoesDaGrade g={g} />
+
       <Cartao>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1">
@@ -226,61 +239,60 @@ export default function PaginaFichas() {
               ))}
             </ul>
 
+            <div className="mb-3 hidden items-center justify-end gap-2 md:flex">
+              <DensidadeGrade g={g} />
+              <BotaoColunas g={g} />
+            </div>
             <div className="hidden grid-rolante md:block">
-              <table className="tabela">
+              <table className={`tabela ${g.compacta ? "tabela-compacta" : ""}`}>
                 <thead>
                   <tr>
-                    <th>Produto</th>
-                    <th>Versão</th>
-                    <th>Situação</th>
-                    <th className="num">Itens</th>
-                    <th>Rendimento</th>
-                    {veCusto && <th className="num">Custo total</th>}
-                    {veCusto && <th className="num">Por porção</th>}
+                    {g.visiveis.map((c) => (
+                      <th key={c.chave} className={["itens", "custo_total", "por_porcao"].includes(c.chave) ? "num" : undefined}>{c.rotulo}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {lista.map((f) => (
                     <tr key={f.id} className={f.status === "ARQUIVADA" ? "opacity-55" : ""}>
-                      <td>
-                        <Link href={`/fichas/${f.id}`} className="link-registro">
-                          {f.produto}
-                        </Link>
-                        <span className="mono ml-2 text-[12px] text-suave">{f.codigo}</span>
-                      </td>
-                      <td className="mono">
-                        v{f.versao}
-                        {/* ⚠️ **"de 3" em vez de uma linha por versão.** O número
-                            diz que há histórico sem repetir o produto na lista —
-                            quem quiser ver as outras abre a ficha, que tem o
-                            seletor. */}
-                        {f.versoes > 1 && (
-                          <span className="text-suave"> de {f.versoes}</span>
-                        )}
-                      </td>
-                      <td>
-                        <Etiqueta cor={CORES[f.status]}>{f.status.toLowerCase()}</Etiqueta>
-                      </td>
-                      <td className="num">{f.itens}</td>
-                      <td className="text-suave">
-                        {Number(f.rendimento_qtd)} {f.rendimento_um ?? ""} ·{" "}
-                        {Number(f.porcoes)} {concorda(Number(f.porcoes), "porção", "porções")}
-                      </td>
-                      {veCusto && (
-                        <td className="num">
-                          {f.custo_total !== null ? custo(Number(f.custo_total)) : "—"}
-                          {f.custo_completo === false && (
-                            <span className="ml-1 text-alerta" title="há item sem preço">
-                              *
-                            </span>
-                          )}
-                        </td>
-                      )}
-                      {veCusto && (
-                        <td className="num font-semibold">
-                          {f.custo_por_porcao !== null ? custo(Number(f.custo_por_porcao)) : "—"}
-                        </td>
-                      )}
+                      {g.visiveis.map((c) => {
+                        switch (c.chave) {
+                          case "produto": return (
+                            <td key={c.chave}>
+                              <Link href={`/fichas/${f.id}`} className="link-registro">{f.produto}</Link>
+                              <span className="mono ml-2 text-[12px] text-suave">{f.codigo}</span>
+                            </td>
+                          );
+                          case "versao": return (
+                            <td key={c.chave} className="mono">
+                              v{f.versao}
+                              {/* ⚠️ "de 3" em vez de uma linha por versão: quem quiser ver as
+                                  outras abre a ficha, que tem o seletor. */}
+                              {f.versoes > 1 && <span className="text-suave"> de {f.versoes}</span>}
+                            </td>
+                          );
+                          case "situacao": return <td key={c.chave}><Etiqueta cor={CORES[f.status]}>{f.status.toLowerCase()}</Etiqueta></td>;
+                          case "itens": return <td key={c.chave} className="num">{f.itens}</td>;
+                          case "rendimento": return (
+                            <td key={c.chave} className="text-suave">
+                              {Number(f.rendimento_qtd)} {f.rendimento_um ?? ""} ·{" "}
+                              {Number(f.porcoes)} {concorda(Number(f.porcoes), "porção", "porções")}
+                            </td>
+                          );
+                          case "custo_total": return (
+                            <td key={c.chave} className="num">
+                              {f.custo_total !== null ? custo(Number(f.custo_total)) : "—"}
+                              {f.custo_completo === false && <span className="ml-1 text-alerta" title="há item sem preço">*</span>}
+                            </td>
+                          );
+                          case "por_porcao": return (
+                            <td key={c.chave} className="num font-semibold">
+                              {f.custo_por_porcao !== null ? custo(Number(f.custo_por_porcao)) : "—"}
+                            </td>
+                          );
+                          default: return <td key={c.chave} />;
+                        }
+                      })}
                     </tr>
                   ))}
                 </tbody>

@@ -44,6 +44,7 @@ from routers import (
     ajustes,
     alertas,
     autenticacao,
+    bi,
     cadastros,
     cardapio_anuncios,
     cardapio_vivo,
@@ -532,6 +533,7 @@ app.include_router(pedidos.router)
 app.include_router(traducao.router)
 app.include_router(precificacao.router)
 app.include_router(preferencias.router)
+app.include_router(bi.router)
 # 🔑 Patrimônio (139, 27/10/2026): os bens, a plaqueta e a manutenção.
 app.include_router(patrimonio.router)
 

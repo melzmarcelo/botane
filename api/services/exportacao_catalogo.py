@@ -3375,6 +3375,24 @@ RELATORIOS: dict[str, Relatorio] = {
 }
 
 
+# 🔑 A área de cada relatório na tela única de Relatórios (layout novo, fase 3 — 05/11/2026).
+# ⚠️ Relatório sem área cai em "Outros": um relatório novo aparece sem ninguém lembrar daqui.
+GRUPOS = {
+    "saldos": "Estoque", "saldos-rede": "Estoque", "movimentos": "Estoque", "vencimentos": "Estoque",
+    "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
+    "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
+    "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
+    "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
+    "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",
+    "compras": "Compras",
+    "producao": "Produção", "agenda-producao": "Produção", "fichas": "Produção", "etiquetas": "Produção",
+    "reservas-dia": "Portal de Clientes", "pedidos": "Portal de Clientes", "fidelidade": "Portal de Clientes",
+    "produtos": "Cadastros", "pessoas": "Cadastros",
+    "patrimonio": "Patrimônio", "patrimonio-valor": "Patrimônio", "patrimonio-manutencoes": "Patrimônio",
+    "acessos": "Administração", "auditoria": "Administração",
+}
+
+
 def catalogo(cur, id_unidade: int, pode: Callable[[str], bool]) -> list[dict]:
     """Os relatórios que ESTA pessoa pode exportar, com as opções já resolvidas.
 
@@ -3403,7 +3421,7 @@ def catalogo(cur, id_unidade: int, pode: Callable[[str], bool]) -> list[dict]:
                 item["opcoes"] = d["opcoes"](cur, id_unidade)
             filtros.append(item)
         saida.append({"chave": chave, "rotulo": r.rotulo, "descricao": r.descricao,
-                      "filtros": filtros})
+                      "grupo": GRUPOS.get(chave, "Outros"), "filtros": filtros})
     return saida
 
 

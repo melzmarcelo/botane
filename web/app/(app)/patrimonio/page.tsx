@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import BotaoExportar from "@/components/exportar";
@@ -18,6 +18,7 @@ import {
   resumo, type ACadastrar, type Bem, type Resumo,
 } from "@/lib/patrimonio";
 import { useSessao } from "@/lib/sessao";
+import { BotaoColunas, type ColunaGrade, DensidadeGrade, useGrade, VisoesDaGrade } from "@/components/grade-configuravel";
 
 import { plural } from "@/lib/numeros";
 /**
@@ -31,6 +32,16 @@ import { plural } from "@/lib/numeros";
  * filtrada ("preventiva vencida", "crítico parado"). `PARADOS` junta "em manutenção" e
  * "parado", que é o que o alerta crítico procura.
  */
+
+/** 🔑 Grid configurável (layout novo, 05/11/2026). O código (a plaqueta) não sai. */
+const COLUNAS: ColunaGrade[] = [
+  { chave: "codigo", rotulo: "Código", fixa: true },
+  { chave: "equipamento", rotulo: "Equipamento" },
+  { chave: "setor", rotulo: "Setor · local" },
+  { chave: "criticidade", rotulo: "Criticidade" },
+  { chave: "situacao", rotulo: "Situação" },
+  { chave: "preventiva", rotulo: "Preventiva" },
+];
 
 const SITUACAO_OPCOES: [string, string][] = [
   ["", "Sem os baixados"],
@@ -55,6 +66,7 @@ export default function PaginaPatrimonio() {
   const [marcados, setMarcados] = useState<number[]>([]);
   const [imprimindo, setImprimindo] = useState(false);
   const pag = usePaginacao("patrimonio", { filtros: [busca, setor, situacao, preventiva, criticidade] });
+  const g = useGrade("patrimonio", COLUNAS);
 
   const filtros = useMemo(() => ({
     busca,
@@ -237,6 +249,8 @@ export default function PaginaPatrimonio() {
         </Cartao>
       )}
 
+      <VisoesDaGrade g={g} />
+
       <Cartao>
         {/* A busca ganha a linha inteira: em um quinto dela o exemplo saía cortado (auditoria de 29/10/2026). */}
         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -284,8 +298,13 @@ export default function PaginaPatrimonio() {
               : "Nenhum bem cadastrado ainda. Comece importando a planilha de equipamentos."}
           </Vazio>
         ) : (
+          <>
+          <div className="mb-3 hidden items-center justify-end gap-2 md:flex">
+            <DensidadeGrade g={g} />
+            <BotaoColunas g={g} />
+          </div>
           <div className="grid-rolante">
-            <table className="tabela" id="patrimonio-lista">
+            <table className={`tabela ${g.compacta ? "tabela-compacta" : ""}`} id="patrimonio-lista">
               <thead>
                 <tr>
                   {podeCadastrar && (
@@ -297,12 +316,7 @@ export default function PaginaPatrimonio() {
                                : marcados.filter((id) => !lista.some((b) => b.id === id)))} />
                     </th>
                   )}
-                  <th>Código</th>
-                  <th>Equipamento</th>
-                  <th>Setor · local</th>
-                  <th>Criticidade</th>
-                  <th>Situação</th>
-                  <th>Preventiva</th>
+                  {g.visiveis.map((c) => <th key={c.chave}>{c.rotulo}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -314,10 +328,15 @@ export default function PaginaPatrimonio() {
                                checked={marcados.includes(b.id)} onChange={() => alternar(b.id)} />
                       </td>
                     )}
+                    {g.visiveis.map((c) => {
+                      const celulas: Record<string, React.ReactNode> = {
+                      codigo: (
                     <td className="mono">
                       <Link href={`/patrimonio/${b.id}`} className="link-registro font-semibold">{b.codigo}</Link>
                       {b.apelido && <span className="block text-[12px] text-suave">{b.apelido}</span>}
                     </td>
+                      ),
+                      equipamento: (
                     <td>
                       {b.descricao}
                       {(b.marca || b.modelo) && (
@@ -326,11 +345,17 @@ export default function PaginaPatrimonio() {
                         </span>
                       )}
                     </td>
+                      ),
+                      setor: (
                     <td>
                       {b.setor ?? "—"}
                       {b.local && <span className="text-suave"> · {b.local}</span>}
                     </td>
+                      ),
+                      criticidade: (
                     <td>{b.criticidade_txt ?? "—"}</td>
+                      ),
+                      situacao: (
                     <td>
                       {b.situacao === "EM_USO" ? b.situacao_txt : (
                         <Etiqueta cor={b.situacao === "A_CONFIRMAR" ? "neutro" : "alerta"}>
@@ -338,6 +363,8 @@ export default function PaginaPatrimonio() {
                         </Etiqueta>
                       )}
                     </td>
+                      ),
+                      preventiva: (
                     <td>
                       {b.status_preventiva === "FORA" ? "—" : (
                         <>
@@ -352,11 +379,16 @@ export default function PaginaPatrimonio() {
                         </>
                       )}
                     </td>
+                      ),
+                      };
+                      return <Fragment key={c.chave}>{celulas[c.chave]}</Fragment>;
+                    })}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          </>
         )}
         <Paginacao p={pag} rotulo="bens" />
       </Cartao>

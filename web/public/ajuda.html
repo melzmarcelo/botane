@@ -797,6 +797,7 @@
           <tr><td><strong>Precificação</strong></td><td>A análise e o aplicar dos preços, o preço × custo de um produto no tempo e a configuração da loja (impostos, taxas, custo operacional, margem)</td></tr>
           <tr><td><strong>Portal de Clientes</strong></td><td>Clientes e QR codes; <strong>Reservas</strong> (agenda, salão, configuração); <strong>Fidelidade</strong> (painel, códigos, prêmios, configuração); <strong>Catálogos</strong> (cadastro, Cardápio Vivo, anúncios, Atenção × Vendas, testes A/B); <strong>Pedidos</strong> (painel e lista) — só aparece na loja que ligou o módulo. A busca de telas (Ctrl+K) mostra o subgrupo de cada uma</td></tr>
           <tr><td><strong>Etiquetas</strong></td><td>Imprimir, painel de validades, configuração</td></tr>
+          <tr><td><strong>Análise</strong></td><td>Relatórios (todos os relatórios por área, com prévia) e o Estúdio BI (relatórios personalizados, só para o administrador)</td></tr>
           <tr><td><strong>Administração</strong></td><td>Empresa, lojas (com a aba WhatsApp), visão da rede (com mais de uma loja), usuários, papéis, integrações, auditoria</td></tr>
 </tbody>
       </table>
@@ -846,14 +847,33 @@
       </p>
       <h3>O grid que cada um arruma</h3>
       <p>
-        Em <strong>Cadastros ▸ Produtos</strong> o grid é configurável. O botão
+        Em <strong>Cadastros ▸ Produtos</strong>, <strong>Fichas técnicas</strong>, <strong>Patrimônio</strong> e
+        <strong>Portal de Clientes ▸ Clientes</strong> o grid é configurável. O botão
         <strong>Colunas</strong> escolhe o que aparece e muda a ordem (as setas sobem e descem cada
         coluna); <strong>Confortável</strong> e <strong>Compacta</strong> trocam a altura das linhas;
-        e clicar no nome de uma coluna <strong>ordena</strong> por ela (o segundo clique inverte).
+        e, em Produtos, clicar no nome de uma coluna <strong>ordena</strong> por ela (o segundo clique inverte).
         Acima dos filtros ficam as <strong>visões</strong>: <em>Salvar esta visão</em> guarda as
         colunas e os filtros de agora com um nome, e <em>Padrão</em> volta ao jeito de fábrica.
         Tudo fica guardado para o seu usuário, e vale em qualquer computador ou celular em que você
         entrar. As outras listas do sistema vão ganhar o mesmo grid aos poucos.
+      </p>
+      <h3>Relatórios e o Estúdio BI</h3>
+      <p>
+        Em <strong>Análise ▸ Relatórios</strong> ficam todos os relatórios num lugar só, separados por área
+        (Estoque, Vendas, Custos e CMV, Compras…): escolha um, ajuste os filtros, clique em
+        <strong>Ver prévia</strong> para ver a folha como vai sair, e depois <strong>Imprimir</strong> (PDF numa aba)
+        ou <strong>Gerar planilha</strong>. A lista mostra só os relatórios que o seu acesso permite.
+      </p>
+      <p>
+        Em <strong>Análise ▸ Estúdio BI</strong> o administrador monta relatórios próprios em quatro passos:
+        as <strong>fontes</strong> (vendas, itens da venda, produtos, reservas, clientes, notas, fornecedores,
+        movimentos de estoque), as <strong>ligações</strong> entre elas (o sistema sugere as que conhece; dá para
+        trocar o tipo ou criar uma ligação manual), os <strong>campos</strong> (por que agrupar e o que somar) e o
+        <strong>período</strong>. A prévia aparece ao lado, em barras, tabela ou indicadores, e <em>Ver consulta</em>
+        mostra a consulta que o sistema montou. <strong>Salvar e publicar</strong> define quem pode ver (só você,
+        todos com acesso aos relatórios personalizados, ou papéis escolhidos); o relatório passa a aparecer em
+        Relatórios ▸ Personalizados. O estúdio só lê os dados, sempre da loja escolhida no topo, e recusa somas que
+        repetiriam valores (por exemplo, o valor do cupom junto com os itens dele).
       </p>
     </section>
 
@@ -4524,7 +4544,7 @@
         <table>
           <thead><tr><th>Quando</th><th>O que entrou</th><th>Onde ler</th></tr></thead>
           <tbody>
-            <tr><td class="mono">05/11</td><td><strong>Layout novo</strong>: uma letra só, cores mais suaves, a busca de telas na barra do topo e a entrada em duas metades. Em <strong>Produtos</strong>, o <strong>grid configurável</strong>: colunas, ordem, densidade, ordenar pelo cabeçalho e visões salvas</td><td><a href="#navegar">navegar</a></td></tr>
+            <tr><td class="mono">05/11</td><td><strong>Layout novo</strong>: uma letra só, cores mais suaves, a busca de telas na barra do topo e a entrada em duas metades. <strong>Grid configurável</strong> (colunas, ordem, densidade e visões salvas) em Produtos, Fichas, Patrimônio e Clientes. Menu <strong>Análise</strong>: a tela única de <strong>Relatórios</strong>, com prévia em folha, e o <strong>Estúdio BI</strong> para relatórios personalizados</td><td><a href="#navegar">navegar</a></td></tr>
             <tr><td class="mono">04/11</td><td>No <strong>Painel de clientes</strong>, os <strong>aniversariantes</strong> de hoje, da semana, do mês e do próximo, com o botão que abre o WhatsApp com o parabéns</td><td><a href="#portal">Portal de Clientes</a></td></tr>
             <tr><td class="mono">04/11</td><td>Os painéis do LeadsFood aqui dentro: <strong>Painel de clientes</strong> (base, novos por mês e por dia, idade e gênero, cidades, origem); no painel de Reservas, o <strong>ano contra ano</strong> e a <strong>sazonalidade</strong>; no painel da Fidelidade, os <strong>check-ins por mês e por dia</strong> e <strong>quem mais veio</strong></td><td><a href="#portal">Portal de Clientes</a>, <a href="#fidelidade">Fidelidade</a></td></tr>
             <tr><td class="mono">30/10</td><td>Em Reservas ▸ Configurações, <strong>Mostrar Reservas no site</strong> e <strong>Mostrar Fidelidade no site</strong>: desmarcadas, o site não mostra o botão “Reserve sua Mesa” ou o item Fidelidade. Esconder não desliga: a agenda do balcão continua e o QR da mesa continua contando visitas</td><td><a href="#portal">Portal de Clientes</a></td></tr>

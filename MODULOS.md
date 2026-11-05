@@ -319,6 +319,21 @@ O que não pertence a um módulo e atravessa todos. Fica em
 - **Rotas:** `exportacoes.py`  ·  **Tela:** `exportacao/`
 - **Serviços:** `exportacao.py`, `exportacao_catalogo.py`, `paginacao.py`
 
+### Análise: Relatórios e Estúdio BI (1.3.0, 05/11/2026)
+- **Telas:** `relatorios/` (catálogo por área, filtros de `CamposDoRelatorio`, prévia em folha) e
+  `bi/` (o Estúdio: fontes, ligações, campos, período, prévia e salvar)
+- **Rotas:** `exportacoes.py` (`/exportar/{relatorio}/dados`, a prévia) e `bi.py` (`/bi/fontes`,
+  `/bi/consultar`, `/bi/relatorios` + executar/exportar)
+- **Serviços:** `bi.py` (lista branca de fontes, campos e ligações; monta o SQL; só leitura) e
+  `exportacao_catalogo.GRUPOS` (a área de cada relatório)
+- **Migração:** 149 (`bi_relatorios`, permissões `bi.estudio` e `relatorios.personalizados`)
+- **Suítes:** `smoke_bi.py`, `verificar-bi-relatorios.mjs`
+
+### Preferências de tela e grid configurável (1.3.0)
+- **Rota:** `preferencias.py` (`/preferencias/{chave}`, só a do próprio usuário) · **Migração:** 148
+- **Componente:** `components/grade-configuravel.tsx` — em Produtos, Fichas, Patrimônio e Clientes
+- **Suítes:** `smoke_preferencias.py`, `verificar-grade-produtos.mjs`
+
 ---
 
 ## Como usar isto
