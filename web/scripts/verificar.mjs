@@ -986,8 +986,10 @@ try {
   const marcaDoPdv = () =>
     p.evaluate(() => {
       const c = document.querySelector("#integrado_pdv");
+      const travada = document.querySelector("#vende-no-pdv");
       return { existe: !!c, marcado: c ? c.checked : null,
-               rotulo: /Integrado com PDV/.test(document.body.innerText) };
+               travada: travada ? travada.disabled : null,
+               rotulo: /Vende no PDV/.test(document.body.innerText) };
     });
   // ⚠️ **Não SUPÕE que o envio está desligado — desliga.** A casa pode estar com
   // ele ligado (foi o que aconteceu na primeira rodada depois de o dono ligá-lo),
@@ -1015,8 +1017,10 @@ try {
       { timeout: 20000 })
     .catch(() => {});
   const semEnvio = await marcaDoPdv();
-  checar("com o envio desligado, a marca do PDV nem aparece",
-    !semEnvio.existe && !semEnvio.rotulo, semEnvio);
+  // 🔑 05/11/2026 (pedido do dono): com o envio desligado ela APARECE, mas travada — mostra se
+  // o produto vai ao PDV e não deixa mudar. Antes ela sumia.
+  checar("com o envio desligado, 'Vende no PDV' aparece travado",
+    !semEnvio.existe && semEnvio.travada === true && semEnvio.rotulo, semEnvio);
   await comEnvioAssim(true);
   await p.reload({ waitUntil: "networkidle2" });
   await p
@@ -11151,7 +11155,7 @@ for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mj
                        "verificar-painel-reservas.mjs", "verificar-importacao-leadsfood.mjs",
                        "verificar-premio-documento.mjs", "verificar-paineis-leadsfood.mjs",
                        "verificar-grade-produtos.mjs", "verificar-bi-relatorios.mjs",
-                       "verificar-tirar-varios.mjs"]) {
+                       "verificar-tirar-varios.mjs", "verificar-cadastro-produto.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {

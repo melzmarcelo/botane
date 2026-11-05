@@ -27,7 +27,6 @@ import {
   Carregando,
   Cartao,
   Confirmacao,
-  Etiqueta,
   Vazio,
 } from "@/components/ui";
 import { moedaParaNumero, numeroParaMoeda, plural, qtd } from "@/lib/numeros";
@@ -44,6 +43,7 @@ import UnidadesDeCompra from "./unidades";
 import MovimentacaoDoProduto from "./movimentacao";
 import ValidadesDoProduto from "./validades";
 import Vincular from "./vincular";
+import ResumoDoProduto from "./resumo";
 import Voltar from "@/components/voltar";
 
 type VinculoFornecedor = {
@@ -667,10 +667,24 @@ export default function FormularioProduto() {
           <h1 className="mt-1 break-words text-[26px] font-bold tracking-tight sm:text-[30px]">
             {novo ? "Novo produto" : f.nome || "Produto"}
           </h1>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            {!novo && f.codigo && <Etiqueta>{f.codigo}</Etiqueta>}
-            {f.status === "RASCUNHO" && <Etiqueta cor="alerta">rascunho</Etiqueta>}
-            {!f.ativo && <Etiqueta cor="alerta">inativo</Etiqueta>}
+          {/* 🔑 Protótipo (05/11/2026): a SITUAÇÃO num selo ao lado do nome, e a linha de baixo
+              diz o que o produto é — código, tipo e categoria. ⚠️ O selo tem texto: a cor não
+              vai sozinha. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[14px] text-suave">
+            {!novo && (
+              <span id="situacao-produto"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[12px] font-bold ${
+                      f.status === "RASCUNHO" ? "bg-alerta-claro text-alerta"
+                        : f.ativo ? "bg-erva-claro text-erva" : "bg-superficie2 text-suave"}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${f.status === "RASCUNHO" ? "bg-alerta" : f.ativo ? "bg-erva" : "bg-linha2"}`} aria-hidden />
+                {f.status === "RASCUNHO" ? "Rascunho" : f.ativo ? "Ativo" : "Inativo"}
+              </span>
+            )}
+            {!novo && f.codigo && <span className="mono">{f.codigo}</span>}
+            {!novo && <span>· {TIPOS_PRODUTO.find((t) => t.valor === f.tipo)?.nome ?? f.tipo}</span>}
+            {!novo && f.id_categoria && (
+              <span>· {categorias.find((c) => String(c.id) === f.id_categoria)?.caminho}</span>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -998,7 +1012,11 @@ export default function FormularioProduto() {
       </div>
 
 
-      <div hidden={aba !== "principal"} className="flex flex-col gap-6">
+      {/* 🔑 Protótipo (05/11/2026): o RESUMO à direita da aba Principal. ⚠️ Só nela: as outras
+          abas têm tabelas largas (movimentação, fornecedores), e a coluna as apertaria. */}
+      <div hidden={aba !== "principal"}
+           className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start">
+      <div className="flex min-w-0 flex-col gap-6">
       {/* 🔑 **O interruptor de ATIVO mora aqui** (16/09/2026, protótipo aprovado
           pelo dono). Ele era uma caixinha no pé do cartão "Observações", a nove
           cartões de distância do nome — e desativar um produto é decisão de
@@ -1009,15 +1027,17 @@ export default function FormularioProduto() {
         titulo="Identificação"
         acao={
           !novo && podeEditar ? (
-            <label className="flex cursor-pointer items-center gap-2">
+            <label className="linha-interruptor">
               <input
                 type="checkbox"
-                className="h-4 w-4 accent-erva"
+                role="switch"
+                aria-label="Produto ativo"
+                className="interruptor"
                 checked={f.ativo}
                 onChange={(e) => set("ativo", e.target.checked)}
               />
               <span className="text-[14px] font-semibold">
-                Ativo
+                {f.ativo ? "Ativo" : "Inativo"}
                 {!f.ativo && (
                   <span className="ml-2 font-normal text-suave">
                     some das listas e das buscas
@@ -1354,15 +1374,17 @@ export default function FormularioProduto() {
               // ⚠️ Só aparece com o envio LIGADO na integração: controle para um
               // recurso desligado é ruído. Desligar o envio NÃO desmarca ninguém —
               // o valor gravado fica, e volta a aparecer quando religarem.
-              ...(enviaAoPdv
-                ? [
-                    {
-                      campo: "integrado_pdv" as const,
-                      nome: "Integrado com PDV",
-                      explica: "Este produto existe (ou deve existir) no cardápio do PDV.",
-                    },
-                  ]
-                : []),
+              // 🔑 **05/11/2026 (pedido do dono): SEMPRE à vista**, como no protótipo — "colocar
+              // como visível se ele está no PDV, mas caso não utilize o envio das informações
+              // não deixa alterar". Com o envio DESLIGADO a caixa mostra o FATO (`vaiAoPdv`:
+              // marcado ou com código do PDV) e fica travada; ligado, edita `integrado_pdv`.
+              {
+                campo: "integrado_pdv" as const,
+                nome: "Vende no PDV",
+                explica: enviaAoPdv
+                  ? "Este produto existe (ou deve existir) no cardápio do PDV."
+                  : "Só leitura: o envio ao PDV está desligado em Integrações, e quem decide é o PDV.",
+              },
             ].map((i, n, lista) => (
               <li
                 key={i.campo}
@@ -1374,15 +1396,20 @@ export default function FormularioProduto() {
               >
                 {/* ⚠️ Serviço nunca controla estoque (131): o servidor grava assim
                     qualquer que seja a caixa, e a tela não pode prometer outra coisa. */}
+                {/* ⚠️ O id `integrado_pdv` é só da caixa que EDITA: travada, ela é `vende-no-pdv`. */}
                 <input
-                  id={i.campo}
+                  id={i.campo === "integrado_pdv" && !enviaAoPdv ? "vende-no-pdv" : i.campo}
                   type="checkbox"
-                  className="mt-1 h-4 w-4 accent-erva"
-                  disabled={!podeEditar || (i.campo === "controla_estoque" && f.tipo === "SERVICO")}
-                  checked={i.campo === "controla_estoque" && f.tipo === "SERVICO" ? false : f[i.campo]}
+                  role="switch"
+                  className="interruptor mt-0.5"
+                  disabled={!podeEditar || (i.campo === "controla_estoque" && f.tipo === "SERVICO")
+                    || (i.campo === "integrado_pdv" && !enviaAoPdv)}
+                  checked={i.campo === "controla_estoque" && f.tipo === "SERVICO" ? false
+                    : i.campo === "integrado_pdv" && !enviaAoPdv ? vaiAoPdv : f[i.campo]}
                   onChange={(e) => set(i.campo, e.target.checked)}
                 />
-                <label htmlFor={i.campo} className="cursor-pointer">
+                <label htmlFor={i.campo === "integrado_pdv" && !enviaAoPdv ? "vende-no-pdv" : i.campo}
+                       className="cursor-pointer">
                   <span className="block text-[14.5px] font-semibold">{i.nome}</span>
                   <span className="mt-0.5 block text-[13px] leading-snug text-suave">
                     {i.explica}
@@ -1596,6 +1623,15 @@ export default function FormularioProduto() {
           onChange={(e) => set("observacao", e.target.value)}
         />
       </Cartao>
+      </div>
+      {!novo && (
+        <div className="order-first xl:order-none xl:sticky xl:top-20">
+          <ResumoDoProduto idProduto={Number(id)} preco={moedaParaNumero(f.preco_venda)}
+                           minimo={f.estoque_minimo === "" ? null : Number(f.estoque_minimo)}
+                           um={f.um_estoque || null} controlaEstoque={f.controla_estoque}
+                           podeVerCusto={pode("estoque.saldos")} vaiAoPdv={vaiAoPdv} recarga={recarga} />
+        </div>
+      )}
       </div>
 
       <div hidden={aba !== "fornecedores"} className="flex flex-col gap-6">

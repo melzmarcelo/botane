@@ -1491,3 +1491,26 @@ são cadastro, esperando a vitrine que os mostre. Ver [`catalogos.md`](catalogos
   - O botão **Reclassificar por planilha** saiu da lista de produtos (a tela continua em
     `/produtos/reclassificar`, sem link). `verificar-reclassificar.mjs` confere a ausência.
   - Cobertura: `verificar.mjs` (produto e ficha próprios: sem ficha → rascunho → homologada).
+
+## Cadastro de produto no estilo do protótipo (05/11/2026, 1.3.0)
+
+🔑 Pedido do dono: *"gostei como no protótipo ficou o cadastro de produtos… com o resumo, o estilo
+do botão de situação, colocar como visível se ele está no PDV, mas caso não utilize o envio das
+informações não deixa alterar"*.
+- **Selo de situação** (`#situacao-produto`) ao lado do código: Ativo / Inativo / Rascunho, com
+  texto (a cor não vai sozinha). A linha diz código · tipo · categoria.
+- **Interruptor** = `input.interruptor` em `globals.css`: a CAIXA NATIVA redesenhada
+  (`appearance: none`, `role="switch"`), não um botão — `checked`/`disabled`, teclado e os testes que
+  leem `.checked` continuam valendo. Trilha desligada `#808a83` (≥ 3:1, a régua da borda do campo);
+  o alvo de 44px é do rótulo `.linha-interruptor`. Usado no Ativo e nos itens de Natureza.
+- 🔑 **"Vende no PDV" SEMPRE à vista** (antes sumia com o envio desligado). Envio DESLIGADO: a
+  caixa é `#vende-no-pdv`, travada, e mostra o FATO `vaiAoPdv` (marcado OU com código do PDV —
+  ver "Vai ao PDV NÃO é integrado_pdv" acima). Envio LIGADO: `#integrado_pdv`, editável como antes.
+  ⚠️ O id muda de propósito: `#integrado_pdv` existe só quando dá para editar.
+- **Resumo** (`resumo.tsx`, `#resumo-produto`) à direita da aba **Principal só** (as outras têm
+  tabela larga). Margem BRUTA (preço − custo) ÷ preço, antes de impostos — a de verdade é a da
+  Precificação. Preço vem do formulário (mexe enquanto se digita); custo de `/produtos/{id}/custo`
+  (só com `estoque.saldos`; sem apurado, o da ficha por porção) e saldo de `/produtos/{id}/locais`,
+  refeitos a cada salvar. Aviso de saldo abaixo do mínimo. No celular vem antes dos campos.
+- Cobertura: `verificar-cadastro-produto.mjs` (12); o bloco do PDV em `verificar.mjs` passou a
+  exigir a caixa travada com o envio desligado.

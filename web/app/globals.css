@@ -1031,3 +1031,43 @@ header p.rotulo:has(+ h1) {
   color: var(--color-suave);
 }
 header p.rotulo:has(+ h1)::after { content: "›"; font-size: 15px; line-height: 1; color: #8a938c; }
+
+/* 🔑 **O interruptor do protótipo** (05/11/2026, pedido do dono: *"o estilo do botão de situação"*).
+   É a MESMA caixa nativa (`<input type="checkbox">`), só redesenhada: `checked`, `disabled`,
+   teclado e leitor de tela continuam de graça, e os testes que leem `.checked` seguem valendo.
+   ⚠️ A trilha tem 40×24, mas o alvo de 44px é do RÓTULO que a envolve (`.linha-interruptor`). */
+input.interruptor {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  position: relative;
+  width: 40px;
+  height: 24px;
+  margin: 0;
+  border-radius: 999px;
+  background: #808a83; /* ⚠️ ≥ 3:1 contra o branco, como a borda do campo (linha2) */
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+input.interruptor::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 0.15s ease;
+}
+input.interruptor:checked { background: var(--color-erva); }
+input.interruptor:checked::after { transform: translateX(16px); }
+input.interruptor:focus-visible { outline: 2px solid var(--color-erva); outline-offset: 2px; }
+input.interruptor:disabled { cursor: not-allowed; opacity: 0.55; }
+.linha-interruptor { display: flex; min-height: 44px; align-items: center; gap: 10px; cursor: pointer; }
+.linha-interruptor:has(input:disabled) { cursor: not-allowed; }
+@media (forced-colors: active) {
+  input.interruptor { border: 1px solid CanvasText; }
+  input.interruptor::after { background: CanvasText; }
+}
