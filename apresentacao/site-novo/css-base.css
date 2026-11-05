@@ -1,0 +1,108 @@
+:root {
+  /* 🔑 **Layout novo (protótipo aprovado pelo dono, 05/11/2026):** creme de fundo, cartões
+     brancos, o verde da logo. `aplicarMarca()` continua trocando `--erva` e `--papel` pela
+     aparência configurada da casa (Cardápio Vivo ▸ Aparência). */
+  --papel: #F5F1E8;
+  --superficie: #FFFFFF;
+  --superficie-2: #F1ECE1;
+  --tinta: #1B2620;
+  --tinta-suave: #5F685F;
+  --linha: #E6E0D2;
+  /* ⚠️ A borda de CAMPO e de botão de escolha precisa de 3:1 contra o fundo — a régua do
+     sistema. `--linha` é só para divisória. */
+  --linha-forte: #808A83;
+  --erva: #234A36;
+  --erva-clara: #E3ECE4;
+  /* O verde como TEXTO: no escuro ele clareia, senão some no fundo. */
+  --erva-texto: var(--erva);
+  --ocre-claro: #F4E6D6;
+  --ocre-tinta: #7A3F16;
+  --barro: #9A3B2E;
+  --sombra: 0 1px 2px rgba(27,38,32,.04), 0 12px 30px rgba(27,38,32,.08);
+  --raio: 18px;
+  /* 🔑 A fonte dos títulos é a da CASA (15/10/2026): a mesma do feed do Cardápio Vivo.
+     O padrão é Fraunces; `aplicarMarca()` troca pela configurada. */
+  --serif: Fraunces, Georgia, serif;
+  --sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --mola: cubic-bezier(.2, .8, .2, 1);
+  --largura: 520px;
+}
+/* ⚠️ O tema escuro vem do APARELHO: quem reserva às 22h está com o celular no
+   escuro. Só os tokens mudam — os componentes leem sempre daqui. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --papel: #12160F; --superficie: #1A1F18; --superficie-2: #232A20;
+    --tinta: #EDE7D8; --tinta-suave: #A3AC9C; --linha: #2E3529; --linha-forte: #7D8778;
+    --erva-clara: #233326; --erva-texto: #9FD0AE;
+    --ocre-claro: #2E281A; --ocre-tinta: #E5B98F;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--papel);
+  color: var(--tinta);
+  font: 400 15px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+/* 🔑 Uma coluna de celular, centrada. ⚠️ Sem `overflow: hidden`: ele mataria o `sticky`
+   das pílulas e do botão de confirmar. O espaço de baixo é o das abas. */
+.folha {
+  max-width: var(--largura); margin: 0 auto; min-height: 100dvh;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+@media (min-width: 560px) { .folha { box-shadow: 0 0 0 1px var(--linha); } }
+
+/* ---- a capa: só no início ---- */
+.capa {
+  position: relative; overflow: hidden; background: var(--erva); color: #fff;
+  border-radius: 0 0 32px 32px; padding: 16px 20px 64px;
+}
+.capa::before, .capa::after {
+  content: ""; position: absolute; border-radius: 50%; pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, .12);
+}
+.capa::before { width: 220px; height: 220px; right: -60px; top: -40px; }
+.capa::after { width: 120px; height: 120px; right: -10px; top: 10px; }
+body:not([data-tela-atual="inicio"]) .capa { display: none; }
+.capa-topo { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.capa-casa { position: relative; display: flex; align-items: center; gap: 14px; margin-top: 28px; }
+/* 🔑 O medalhão: com logo cadastrada ele vira a imagem, em fundo branco (a logo tem
+   transparência); sem ela, desenha o nome — inventar uma imagem seria pior. */
+.marca {
+  width: 64px; height: 64px; flex: none; border-radius: 50%; overflow: hidden;
+  background: rgba(255, 255, 255, .14); color: #fff; display: grid; place-content: center;
+  text-align: center; box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+}
+.marca b { display: block; font: 600 15px/1 var(--serif); }
+.marca span { display: none; }
+.marca img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.marca.com-logo { background: #FFFFFF; }
+.saudacao { margin: 0; color: rgba(255, 255, 255, .8); font-size: 13.5px; }
+.capa h1 { margin: 2px 0 0; font: 600 27px/1.1 var(--serif); letter-spacing: -.01em; color: #fff; }
+/* ⚠️ "Fechado" sozinho é uma porta na cara: a tarja diz quando abre (ver `carregarCasa`). */
+.estado {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, .14); color: #fff; font: 600 12.5px/1 var(--sans);
+  white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+.estado::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #8FD19E; }
+.estado.fechado::before { background: #F0B08C; }
+.idiomas { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, .12); }
+.idiomas button {
+  border: 0; border-radius: 999px; min-width: 44px; height: 32px; cursor: pointer;
+  font: 700 12px/1 var(--sans); background: transparent; color: rgba(255, 255, 255, .85);
+  transition: background .2s, color .2s;
+}
+.idiomas button[aria-pressed="true"] { background: #fff; color: #1B2620; }
+
+/* ---- o corpo ---- */
+.corpo { padding: 18px 18px 26px; display: flex; flex-direction: column; gap: 14px; }
+/* No início o conteúdo sobe por cima da capa, como no protótipo. */
+body[data-tela-atual="inicio"] .corpo { margin-top: -46px; position: relative; }
+.corpo h2 { font: 600 26px/1.15 var(--serif); margin: 0; letter-spacing: -.01em; }
+.sub { margin: 0; color: var(--tinta-suave); font-size: 14px; }
+.rot {
+  display: block; font-size: 12.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--tinta-suave); margin-bottom: 8px;
+}

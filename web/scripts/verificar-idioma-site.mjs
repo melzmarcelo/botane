@@ -64,7 +64,7 @@ try {
   console.log("\n1. em português, o padrão");
   checar("o seletor mostra PT · EN · DE", (await pg.$$eval("#idiomas button", (bs) => bs.map((b) => b.textContent))).join() === "PT,EN,DE");
   checar("PT marcado", await pg.$eval('#idiomas [data-idioma="pt"]', (b) => b.getAttribute("aria-pressed")) === "true");
-  checar("o botão da reserva em português", await texto(pg, "#ir-reservar") === "Reserve sua Mesa");
+  checar("o botão da reserva em português", await texto(pg, "#ir-reservar strong") === "Reserve sua Mesa");
   checar("o catálogo com o nome em português", await texto(pg, `#itens [data-catalogo="${cat.id}"]`) === NOME_CAT);
 
   console.log("\n2. trocar para inglês");
@@ -72,7 +72,7 @@ try {
   await pg.waitForSelector(`#itens [data-catalogo="${cat.id}"]`, { timeout: 15000 });
   checar("EN marcado depois de recarregar", await pg.$eval('#idiomas [data-idioma="en"]', (b) => b.getAttribute("aria-pressed")) === "true");
   checar("<html lang> acompanha", await pg.$eval("html", (h) => h.lang) === "en-GB");
-  checar("o botão da reserva em inglês", await texto(pg, "#ir-reservar") === "Book a table");
+  checar("o botão da reserva em inglês", await texto(pg, "#ir-reservar strong") === "Book a table");
   checar("o nome do catálogo vem traduzido do servidor", await texto(pg, `#itens [data-catalogo="${cat.id}"]`) === `Language ${MARCA}`);
   const estado = await texto(pg, "#estado");
   checar("a tarja de aberto/fechado em inglês", /^(Open now|Closed today|Closed · opens )/.test(estado), estado);
@@ -92,7 +92,7 @@ try {
   await pg.goto(`${SITE}/?loja=1`, { waitUntil: "networkidle2" });
   await Promise.all([pg.waitForNavigation({ waitUntil: "networkidle2" }), pg.click('#idiomas [data-idioma="de"]')]);
   await pg.waitForSelector(`#itens [data-catalogo="${cat.id}"]`, { timeout: 15000 });
-  checar("o botão da reserva em alemão", await texto(pg, "#ir-reservar") === "Tisch reservieren");
+  checar("o botão da reserva em alemão", await texto(pg, "#ir-reservar strong") === "Tisch reservieren");
   await pg.click(`#itens [data-catalogo="${cat.id}"]`);
   await pg.waitForSelector(".secao h3", { visible: true, timeout: 15000 });
   checar("a categoria com o alemão corrigido à mão", await texto(pg, ".secao h3") === "Herzhaftes");
@@ -105,7 +105,7 @@ try {
   await pg.goto(`${SITE}/?loja=1`, { waitUntil: "networkidle2" });
   await Promise.all([pg.waitForNavigation({ waitUntil: "networkidle2" }), pg.click('#idiomas [data-idioma="pt"]')]);
   await pg.waitForSelector(`#itens [data-catalogo="${cat.id}"]`, { timeout: 15000 });
-  checar("tudo em português de novo", await texto(pg, "#ir-reservar") === "Reserve sua Mesa"
+  checar("tudo em português de novo", await texto(pg, "#ir-reservar strong") === "Reserve sua Mesa"
     && await texto(pg, `#itens [data-catalogo="${cat.id}"]`) === NOME_CAT);
 
   console.log("\n5. o idioma atravessa o site e o Cardápio Vivo, nos dois sentidos");
@@ -126,7 +126,7 @@ try {
   await Promise.all([pg.waitForNavigation({ waitUntil: "networkidle2" }), pg.click("header a")]);
   await pg.waitForSelector("#idiomas button", { timeout: 15000 });
   checar("🔑 e voltar ao site MANTÉM o alemão", await pg.$eval('#idiomas [data-idioma="de"]', (b) => b.getAttribute("aria-pressed")) === "true"
-    && await texto(pg, "#ir-reservar") === "Tisch reservieren", await texto(pg, "#ir-reservar"));
+    && await texto(pg, "#ir-reservar strong") === "Tisch reservieren", await texto(pg, "#ir-reservar strong"));
   await Promise.all([pg.waitForNavigation({ waitUntil: "networkidle2" }), pg.click('#idiomas [data-idioma="pt"]')]);
 } finally {
   await navegador.close();

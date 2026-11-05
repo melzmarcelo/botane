@@ -1,0 +1,314 @@
+
+/* ===========================================================================
+   LAYOUT NOVO — protótipo aprovado pelo dono (05/11/2026)
+   ---------------------------------------------------------------------------
+   🔑 *"gostaria que fosse mais moderno e simples. Onde o cliente sinta algo moderno e com
+   fluidez"* — e depois: *"pode implementar igual ao protótipo, lembrando que podemos ter N
+   catálogos"*. Protótipo em `apresentacao/site-novo/`.
+   ⚠️ **Só a cara mudou.** Os ids, os `data-tela` e o fluxo (telefone primeiro, carrinho na
+   aba, check-in pelo QR) são os de sempre — os testes e o feed dependem deles.
+   =========================================================================== */
+button, a { -webkit-tap-highlight-color: transparent; }
+button:active, a.item:active, .porta:active, .atalho:active, .cartao-catalogo:active,
+.abas button:active { transform: scale(.97); }
+.tela[data-ativa] { animation: entra .38s var(--mola) both; }
+[data-tela="carrinho"][data-ativa] { animation: sobe .42s var(--mola) both; }
+@keyframes entra { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes sobe { from { opacity: .3; transform: translateY(48px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
+/* ⚠️ Quem pediu menos movimento ao aparelho não ganha nenhum. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  button:active, a.item:active, .porta:active, .atalho:active, .cartao-catalogo:active { transform: none; }
+}
+
+/* ---- os botões de sempre, redesenhados ---- */
+.item {
+  gap: 10px; background: var(--superficie); border: 1px solid var(--linha); border-radius: 16px;
+  padding: 14px 18px; font: 700 15.5px/1.25 var(--sans); min-height: 52px;
+  transition: transform .15s var(--mola), border-color .2s, background .2s, box-shadow .2s;
+}
+.item:hover { border-color: var(--linha-forte); }
+.item.destaque {
+  background: var(--erva); border-color: var(--erva); color: #fff;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--erva) 28%, transparent);
+}
+.item.zap svg { flex: none; }
+.voltar {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px;
+  background: var(--superficie); color: var(--tinta); font: 700 13.5px/1 var(--sans);
+}
+.voltar:hover { color: var(--tinta); box-shadow: var(--sombra); }
+.sub-tela { font-size: 14.5px; margin: 0; }
+.regras { border-radius: 16px; border: 0; font-size: 13.5px; }
+.regras.ruim { border-left: 3px solid var(--barro); }
+label.campo { font-size: 13.5px; font-weight: 600; color: var(--tinta); }
+label.campo input, label.campo select, label.campo textarea {
+  font: 400 16px/1.35 var(--sans); border: 1px solid var(--linha-forte); border-radius: 14px;
+  padding: 13px 14px; margin-top: 7px; background: var(--superficie); min-height: 50px;
+}
+.aceite input, .montar .opcao input { accent-color: var(--erva); }
+.loja-atual {
+  align-self: flex-start; background: var(--superficie); border-radius: 999px;
+  padding: 8px 14px; box-shadow: var(--sombra); color: var(--tinta);
+}
+
+/* ---- o início: as portas ---- */
+.porta {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 18px; border: 0;
+  border-radius: 22px; background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra);
+  text-align: left; cursor: pointer; font: inherit; text-decoration: none;
+  transition: transform .15s var(--mola), box-shadow .2s;
+}
+.porta:focus-visible, .atalho:focus-visible, .cartao-catalogo:focus-visible, .abas button:focus-visible,
+.dia-chip:focus-visible, .passo:focus-visible, .pilulas button:focus-visible {
+  outline: 2px solid var(--erva-texto); outline-offset: 2px;
+}
+.porta-icone {
+  width: 48px; height: 48px; border-radius: 16px; background: var(--erva); color: #fff;
+  display: flex; align-items: center; justify-content: center; flex: none;
+}
+.porta-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.porta-texto strong { font-size: 17px; font-weight: 800; }
+.porta-texto small { color: var(--tinta-suave); font-size: 13.5px; }
+.porta .seta { color: var(--tinta-suave); flex: none; }
+.porta-contato { box-shadow: none; padding: 14px 16px; border-radius: 18px; }
+.porta-contato .porta-icone { width: 40px; height: 40px; border-radius: 50%; background: var(--erva-clara); color: var(--erva-texto); }
+.porta-contato .porta-texto strong { font-size: 15px; font-weight: 700; }
+.porta-contato .porta-texto small { font-size: 12.5px; }
+
+.atalhos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.atalhos:empty { display: none; }
+.atalhos > :only-child { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center; gap: 14px; }
+.atalho {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px;
+  min-height: 128px; border: 0; border-radius: 20px; background: var(--superficie); color: var(--tinta);
+  text-align: left; cursor: pointer; font: inherit; transition: transform .15s var(--mola);
+}
+.atalho .ico { width: 40px; height: 40px; border-radius: 13px; display: flex; align-items: center; justify-content: center; }
+.atalho strong { font-size: 15.5px; font-weight: 800; line-height: 1.25; }
+.atalho .texto-atalho { display: flex; flex-direction: column; gap: 2px; }
+.atalho small { color: var(--tinta-suave); font-size: 12.5px; }
+.atalho-cardapio .ico { background: var(--ocre-claro); color: var(--ocre-tinta); }
+.atalho-fidelidade .ico { background: var(--erva-clara); color: var(--erva-texto); }
+
+.bloco-titulo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 8px; }
+.corpo .bloco-titulo h2 { font-size: 20px; }
+.ver-tudo {
+  border: 0; background: none; color: var(--erva-texto); font: 700 13.5px/1 var(--sans);
+  min-height: 44px; padding: 0 4px; cursor: pointer;
+}
+/* 🔑 A fileira dos catálogos rola de lado e para no cartão (scroll-snap). ⚠️ `contain`:
+   chegar ao fim com o dedo não arrasta a página. */
+#itens.carrossel {
+  display: flex; flex-direction: row; gap: 12px; overflow-x: auto; margin: 0 -18px; padding: 0 18px 6px;
+  scroll-snap-type: x mandatory; scroll-padding: 0 18px; scrollbar-width: none; overscroll-behavior-x: contain;
+}
+#itens.carrossel::-webkit-scrollbar { display: none; }
+.cartao-catalogo {
+  flex: none; width: 152px; display: flex; flex-direction: column; gap: 8px; padding: 0; border: 0;
+  background: none; color: var(--tinta); text-align: left; cursor: pointer; font: 700 14px/1.3 var(--sans);
+  text-decoration: none; scroll-snap-align: start; transition: transform .15s var(--mola);
+}
+.cartao-catalogo .capa-cat {
+  display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 4 / 3;
+  border-radius: 18px; overflow: hidden; background: var(--ocre-claro); color: var(--ocre-tinta);
+}
+.cartao-catalogo:nth-child(3n+2) .capa-cat { background: var(--erva-clara); color: var(--erva-texto); }
+.cartao-catalogo:nth-child(3n+3) .capa-cat { background: var(--superficie-2); color: var(--tinta-suave); }
+.cartao-catalogo .capa-cat img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Um catálogo só: o cartão ocupa a linha, com a capa larga. */
+#itens.carrossel > .cartao-catalogo:only-child { width: 100%; }
+#itens.carrossel > .cartao-catalogo:only-child .capa-cat { aspect-ratio: 16 / 7; }
+.grade-catalogos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; }
+.grade-catalogos .cartao-catalogo { width: auto; }
+
+.info-casa {
+  display: flex; gap: 10px; align-items: flex-start; margin: 4px 4px 0;
+  color: var(--tinta-suave); font-size: 13px; line-height: 1.5;
+}
+.info-casa svg { flex: none; margin-top: 2px; }
+.info-casa p { margin: 0; }
+
+/* ---- as abas de baixo ---- */
+.abas {
+  position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 25;
+  width: 100%; max-width: var(--largura); display: grid; grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr); padding: 6px 6px calc(10px + env(safe-area-inset-bottom));
+  background: var(--superficie); border-top: 1px solid var(--linha);
+}
+.abas button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border: 0; background: none; color: var(--tinta-suave); font: 700 11.5px/1.2 var(--sans);
+  cursor: pointer; padding: 4px 0; min-height: 56px; transition: color .2s;
+}
+.abas .pilula {
+  width: 56px; height: 30px; border-radius: 999px; display: flex; align-items: center;
+  justify-content: center; transition: background .25s var(--mola);
+}
+.abas button[aria-current="page"] { color: var(--erva-texto); }
+.abas button[aria-current="page"] .pilula { background: var(--erva-clara); }
+
+/* 🔑 O carrinho e o telefone são passos de um fluxo (no protótipo o carrinho sobe POR CIMA de
+   tudo): as abas saem da frente, e o botão do fim nunca fica atrás delas. */
+body[data-tela-atual="carrinho"] .abas, body[data-tela-atual="quem"] .abas { display: none; }
+html { scroll-padding-bottom: 110px; }
+
+/* A barra do carrinho sobe por cima das abas. */
+.barra-carrinho {
+  bottom: calc(88px + env(safe-area-inset-bottom)); width: min(492px, calc(100% - 28px));
+  border-radius: 18px; padding: 16px 18px; background: var(--tinta); color: var(--papel);
+  box-shadow: 0 14px 30px rgba(27, 38, 32, .3); font: 700 15px/1.2 var(--sans);
+  animation: sobe .35s var(--mola) both;
+}
+
+/* ---- a reserva ---- */
+.pessoas-linha {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--superficie); border-radius: 20px; padding: 12px 12px 12px 18px;
+}
+.pessoas-linha label { display: flex; flex-direction: column; gap: 2px; cursor: default; }
+.pessoas-linha strong { font-size: 15.5px; font-weight: 700; }
+.pessoas-linha small { font-size: 12.5px; color: var(--tinta-suave); }
+.passos-pessoas { display: flex; align-items: center; gap: 4px; flex: none; }
+.passo {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--linha-forte);
+  background: var(--superficie); color: var(--tinta); font: 500 22px/1 var(--sans); cursor: pointer;
+  transition: transform .15s var(--mola);
+}
+.passo.mais { background: var(--erva); border-color: var(--erva); color: #fff; }
+.passo:active { transform: scale(.92); }
+.pessoas-linha #pessoas {
+  width: 48px; text-align: center; font: 800 20px/1 var(--sans); color: var(--tinta);
+  border: 0; background: transparent; margin: 0; padding: 0; min-height: 44px; -moz-appearance: textfield;
+}
+.pessoas-linha #pessoas::-webkit-inner-spin-button,
+.pessoas-linha #pessoas::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.dias {
+  display: flex; gap: 8px; overflow-x: auto; margin: 0 -18px; padding: 2px 18px 8px;
+  scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.dias::-webkit-scrollbar { display: none; }
+.dia-chip {
+  flex: none; width: 64px; height: 76px; border-radius: 18px; border: 1px solid var(--linha-forte);
+  background: var(--superficie); color: var(--tinta); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; cursor: pointer; font: inherit;
+  transition: transform .15s var(--mola), background .2s, color .2s, box-shadow .2s;
+}
+.dia-chip small { font-size: 12px; font-weight: 600; }
+.dia-chip b { font-size: 22px; font-weight: 800; line-height: 1; }
+.dia-chip:active { transform: scale(.95); }
+.outro-dia { margin-top: 4px; }
+.dia-chip[aria-pressed="true"], .hora[aria-pressed="true"] {
+  background: var(--erva); border-color: var(--erva); color: #fff;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--erva) 30%, transparent);
+}
+[data-tela="reserva"] .horarios { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+[data-tela="reserva"] .horarios .vazio { grid-column: 1 / -1; }
+.hora {
+  min-height: 46px; min-width: 0; border-radius: 14px; border: 1px solid var(--linha-forte);
+  font: 700 14.5px/1 var(--sans); background: var(--superficie);
+  transition: transform .15s var(--mola), background .2s, color .2s;
+}
+.hora.texto { font: 600 14.5px/1.2 var(--sans); padding: 10px 14px; }
+/* 🔑 O confirmar fica à mão, preso acima das abas. */
+#confirmar { position: sticky; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 5; }
+.minha { border-radius: 14px; border: 0; }
+
+/* ---- as telas de "pronto" ---- */
+.selo-ok {
+  width: 88px; height: 88px; margin: 28px auto 4px; border-radius: 50%; background: var(--erva);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--erva) 30%, transparent);
+  animation: pop .5s cubic-bezier(.3, 1.6, .5, 1) .1s both;
+}
+[data-tela="pronto"] h2, [data-tela="pedido-pronto"] h2 { text-align: center; font-size: 30px; }
+.recibo b { font: 700 20px/1.25 var(--sans); }
+
+/* ---- o cardápio ---- */
+.topo-cardapio { min-height: 44px; }
+.contato-catalogo { min-height: 40px; padding: 0 14px; background: var(--superficie); border: 0; font: 700 13px/1 var(--sans); }
+.secao { background: var(--superficie); border-radius: 22px; padding: 16px; gap: 8px; }
+.secao h3 { font: 600 21px/1.2 var(--serif); }
+.capa-secao { border: 0; border-radius: 16px; margin-top: 4px; }
+.capa-secao .acessar {
+  border-radius: 999px; text-transform: none; letter-spacing: 0; font: 700 14px/1 var(--sans);
+  padding: 12px 18px; min-height: 44px; box-shadow: 0 6px 16px rgba(0, 0, 0, .18);
+}
+.pilulas {
+  display: flex; gap: 6px; overflow-x: auto; margin: 0 -18px; padding: 10px 18px;
+  position: sticky; top: 0; z-index: 4; background: var(--papel);
+  scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.pilulas:empty { display: none; }
+.pilulas::-webkit-scrollbar { display: none; }
+.pilulas button {
+  flex: none; height: 40px; padding: 0 16px; border-radius: 999px; border: 0;
+  background: var(--superficie); color: var(--tinta-suave); font: 700 14px/1 var(--sans); cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.pilulas button[aria-selected="true"] { background: var(--tinta); color: var(--papel); }
+.tira .bolha { border-color: var(--linha); }
+#pratos { display: flex; flex-direction: column; gap: 12px; }
+.grupo { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+/* 🔑 O prato vira CARTÃO: nome, descrição e preço à esquerda, a foto pequena à direita. */
+.prato {
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "l" "d" "p";
+  column-gap: 14px; padding: 14px; border: 0; border-radius: 20px; background: var(--superficie);
+}
+.prato:has(.foto) { grid-template-columns: minmax(0, 1fr) 96px; grid-template-areas: "l f" "d f" "p f"; }
+.prato .linha1 { grid-area: l; flex-direction: column; align-items: flex-start; gap: 4px; }
+.prato .nome { font: 800 15px/1.3 var(--sans); }
+.prato .preco { font: 800 15px/1.2 var(--sans); font-variant-numeric: tabular-nums; }
+.prato .desc { grid-area: d; font-size: 12.5px; line-height: 1.45; margin-top: 4px; }
+.prato .foto { grid-area: f; margin: 0; width: 96px; height: 96px; aspect-ratio: auto; border-radius: 16px; align-self: start; }
+.prato .pedir, .prato .esgotado { grid-area: p; justify-self: start; }
+.prato .pedir { justify-content: flex-start; margin-top: 10px; }
+.pedir .adicionar {
+  min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--erva);
+  color: #fff; font: 700 14px/1 var(--sans);
+}
+.contador { background: var(--erva-clara); border-radius: 999px; padding: 2px; }
+.contador button { width: 40px; height: 40px; }
+.contador button:first-child { background: var(--superficie); color: var(--erva-texto); }
+.contador b { color: var(--erva-texto); font: 800 15px/1 var(--sans); }
+.cartao-site, .capa-abertura { border: 0; border-radius: 20px; }
+.linha-carrinho { border-bottom-color: var(--linha); }
+.totais .total { font: 800 18px/1.3 var(--sans); }
+.pedido-meu { background: var(--superficie); border: 0; border-radius: 16px; }
+
+/* ---- fidelidade: o cartão verde ---- */
+.cartao-fidelidade {
+  position: relative; overflow: hidden; border-radius: 26px; background: var(--erva); color: #fff;
+  padding: 22px; display: flex; flex-direction: column; gap: 18px;
+}
+.cartao-fidelidade::after {
+  content: ""; position: absolute; right: -50px; bottom: -70px; width: 200px; height: 200px;
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, .14); pointer-events: none;
+}
+.cf-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.cf-topo small { display: block; font-size: 12.5px; opacity: .8; }
+.cf-casa { display: block; font: 600 22px/1.2 var(--serif); margin-top: 2px; }
+.cf-conta { text-align: right; font: 800 30px/1 var(--sans); }
+.cf-conta span { font-size: 16px; opacity: .75; }
+.cf-conta small { display: block; font-size: 12px; font-weight: 500; opacity: .8; margin-top: 4px; }
+.cartao-fidelidade .carimbos { padding: 0; border: 0; background: none; gap: 10px; }
+.cartao-fidelidade .carimbo { border: 2px dashed rgba(255, 255, 255, .45); color: rgba(255, 255, 255, .85); font: 700 12px/1 var(--sans); }
+.cartao-fidelidade .carimbo.feito { background: #fff; border: 0; color: var(--erva); animation: pop .45s var(--mola) both; }
+.cartao-fidelidade .carimbo.premio { border-color: #F2C879; color: #F2C879; }
+.cartao-fidelidade .falta { position: relative; text-align: left; color: #fff; font-size: 14.5px; }
+.cartao-fidelidade .falta::first-letter { text-transform: uppercase; }
+.cartao-fidelidade .falta b { display: inline; font: 800 15px/1.4 var(--sans); }
+.premio-ganho { border: 0; background: var(--ocre-claro); border-radius: 16px; padding: 14px 16px; color: var(--tinta); }
+.premio-ganho .codigo { font: 800 24px/1.1 var(--sans); letter-spacing: .14em; color: var(--ocre-tinta); }
+.premio-ganho.fora { background: var(--superficie); opacity: .75; }
+
+/* ---- o contato ---- */
+.cartao-dados { background: var(--superficie); border-radius: 20px; padding: 4px 16px; }
+.cartao-dados .dado:last-child { border-bottom: 0; }
+.dado { padding: 12px 2px; font-size: 15px; }
+.dado span { font: 700 11.5px/1.5 var(--sans); letter-spacing: .06em; margin-bottom: 2px; }
+
+/* ---- o termo e a janela de montar ---- */
+.termo { border: 0; border-radius: 22px; }
+.termo h3 { font: 600 20px/1.25 var(--serif); }

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Botané Deli e Café</title>
 <meta name="description" content="Reserve uma mesa, veja os cardápios e fale com a gente.">
-<meta name="theme-color" content="#3C4A3E">
+<meta name="theme-color" content="#234A36">
 <!-- 🔑 A prévia do link (v1.2.0): quem compartilha o site no WhatsApp ou no Instagram vê o nome,
      a frase e a logo da casa, não o endereço cru. O robô que monta a prévia NÃO roda
      JavaScript: estas linhas valem como estão, e a imagem precisa de endereço absoluto e fixo
@@ -29,7 +29,7 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%233C4A3E'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Karla:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <style>
 /* ===========================================================================
    O site do CLIENTE — reservas.botanedeliecafe.com.br
@@ -54,28 +54,42 @@
    bundle, e publica como site estático.
    =========================================================================== */
 :root {
-  --papel: #F3EFE4;
-  --superficie: #FBF9F3;
-  --superficie-2: #F7F3E9;
-  --tinta: #1B211C;
-  --tinta-suave: #5E6659;
-  --linha: #E0D8C6;
-  --erva: #3C4A3E;
-  --ocre-claro: #F6EDD8;
+  /* 🔑 **Layout novo (protótipo aprovado pelo dono, 05/11/2026):** creme de fundo, cartões
+     brancos, o verde da logo. `aplicarMarca()` continua trocando `--erva` e `--papel` pela
+     aparência configurada da casa (Cardápio Vivo ▸ Aparência). */
+  --papel: #F5F1E8;
+  --superficie: #FFFFFF;
+  --superficie-2: #F1ECE1;
+  --tinta: #1B2620;
+  --tinta-suave: #5F685F;
+  --linha: #E6E0D2;
+  /* ⚠️ A borda de CAMPO e de botão de escolha precisa de 3:1 contra o fundo — a régua do
+     sistema. `--linha` é só para divisória. */
+  --linha-forte: #808A83;
+  --erva: #234A36;
+  --erva-clara: #E3ECE4;
+  /* O verde como TEXTO: no escuro ele clareia, senão some no fundo. */
+  --erva-texto: var(--erva);
+  --ocre-claro: #F4E6D6;
+  --ocre-tinta: #7A3F16;
   --barro: #9A3B2E;
-  --sombra: 0 1px 2px rgba(27,33,28,.05), 0 10px 30px rgba(27,33,28,.08);
-  --raio: 13px;
+  --sombra: 0 1px 2px rgba(27,38,32,.04), 0 12px 30px rgba(27,38,32,.08);
+  --raio: 18px;
   /* 🔑 A fonte dos títulos é a da CASA (15/10/2026): a mesma do feed do Cardápio Vivo.
-     O padrão é a do protótipo; `aplicarMarca()` troca pela configurada. */
+     O padrão é Fraunces; `aplicarMarca()` troca pela configurada. */
   --serif: Fraunces, Georgia, serif;
+  --sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --mola: cubic-bezier(.2, .8, .2, 1);
+  --largura: 520px;
 }
 /* ⚠️ O tema escuro vem do APARELHO: quem reserva às 22h está com o celular no
    escuro. Só os tokens mudam — os componentes leem sempre daqui. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --papel: #12160F; --superficie: #1A1F18; --superficie-2: #202619;
-    --tinta: #EDE7D8; --tinta-suave: #9AA394; --linha: #2C3328;
-    --ocre-claro: #2A2517;
+    --papel: #12160F; --superficie: #1A1F18; --superficie-2: #232A20;
+    --tinta: #EDE7D8; --tinta-suave: #A3AC9C; --linha: #2E3529; --linha-forte: #7D8778;
+    --erva-clara: #233326; --erva-texto: #9FD0AE;
+    --ocre-claro: #2E281A; --ocre-tinta: #E5B98F;
   }
 }
 * { box-sizing: border-box; }
@@ -83,69 +97,71 @@ html, body { margin: 0; }
 body {
   background: var(--papel);
   color: var(--tinta);
-  font: 400 15px/1.45 Karla, system-ui, -apple-system, sans-serif;
+  font: 400 15px/1.5 var(--sans);
   -webkit-font-smoothing: antialiased;
 }
-/* O cartão central, como no protótipo: o site é um folheto, não uma página. */
+/* 🔑 Uma coluna de celular, centrada. ⚠️ Sem `overflow: hidden`: ele mataria o `sticky`
+   das pílulas e do botão de confirmar. O espaço de baixo é o das abas. */
 .folha {
-  max-width: 440px; margin: 0 auto; min-height: 100dvh;
-  background: var(--superficie); box-shadow: var(--sombra); overflow: hidden;
+  max-width: var(--largura); margin: 0 auto; min-height: 100dvh;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
-@media (min-width: 480px) {
-  body { padding: 24px 16px; }
-  .folha { min-height: 0; border: 1px solid var(--linha); border-radius: 18px; }
-}
+@media (min-width: 560px) { .folha { box-shadow: 0 0 0 1px var(--linha); } }
 
-/* ---- a capa ---- */
+/* ---- a capa: só no início ---- */
 .capa {
-  position: relative; height: 128px;
-  background:
-    radial-gradient(120% 90% at 30% 20%, #D8C9A8 0%, transparent 60%),
-    radial-gradient(110% 90% at 80% 30%, #B7C3A6 0%, transparent 55%),
-    linear-gradient(160deg, color-mix(in srgb, var(--erva) 70%, #B7C3A6), var(--erva));
+  position: relative; overflow: hidden; background: var(--erva); color: #fff;
+  border-radius: 0 0 32px 32px; padding: 16px 20px 64px;
 }
-/* 🔑 O medalhão: 92px, redondo, descendo 34px por cima da capa — é a marca da
-   casa pousando na dobra. Com logo cadastrada ele vira a imagem; sem ela,
-   desenha o nome, como o protótipo. */
+.capa::before, .capa::after {
+  content: ""; position: absolute; border-radius: 50%; pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, .12);
+}
+.capa::before { width: 220px; height: 220px; right: -60px; top: -40px; }
+.capa::after { width: 120px; height: 120px; right: -10px; top: 10px; }
+body:not([data-tela-atual="inicio"]) .capa { display: none; }
+.capa-topo { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.capa-casa { position: relative; display: flex; align-items: center; gap: 14px; margin-top: 28px; }
+/* 🔑 O medalhão: com logo cadastrada ele vira a imagem, em fundo branco (a logo tem
+   transparência); sem ela, desenha o nome — inventar uma imagem seria pior. */
 .marca {
-  position: absolute; left: 50%; bottom: -34px; transform: translateX(-50%);
-  width: 92px; height: 92px; border-radius: 50%; background: var(--erva);
-  display: grid; place-content: center; text-align: center; color: #F3EFE4;
-  border: 3px solid var(--superficie); overflow: hidden;
+  width: 64px; height: 64px; flex: none; border-radius: 50%; overflow: hidden;
+  background: rgba(255, 255, 255, .14); color: #fff; display: grid; place-content: center;
+  text-align: center; box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
 }
-.marca b { display: block; font: 300 21px/1 var(--serif); }
-.marca span {
-  font: 400 8px/1.4 "DM Mono", monospace; letter-spacing: .18em;
-  text-transform: uppercase; opacity: .8;
-}
+.marca b { display: block; font: 600 15px/1 var(--serif); }
+.marca span { display: none; }
 .marca img { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* 🔑 **Fundo BRANCO atrás da logo** (pedido do dono, 22/09/2026, olhando o site
-   no ar). A logo cadastrada tem transparência — os cantos são alfa zero —, e o
-   oliva do medalhão vazava por trás do brasão, escurecendo-o.
-   ⚠️ **Só quando HÁ logo.** Sem ela, o medalhão desenha o nome da casa em tinta
-   clara (`color: #F3EFE4`); branco sobre branco seria um círculo vazio. Por
-   isso a classe vem do JavaScript, junto com a imagem, e não da folha. */
 .marca.com-logo { background: #FFFFFF; }
+.saudacao { margin: 0; color: rgba(255, 255, 255, .8); font-size: 13.5px; }
+.capa h1 { margin: 2px 0 0; font: 600 27px/1.1 var(--serif); letter-spacing: -.01em; color: #fff; }
+/* ⚠️ "Fechado" sozinho é uma porta na cara: a tarja diz quando abre (ver `carregarCasa`). */
 .estado {
-  position: absolute; right: 10px; top: 10px; border-radius: 999px;
-  padding: 5px 10px; font: 500 11px/1 Karla, sans-serif;
-  background: rgba(20,26,22,.72); color: #F1EDE2;
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, .14); color: #fff; font: 600 12.5px/1 var(--sans);
+  white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis;
 }
-.idiomas {
-  position: absolute; left: 10px; top: 10px; display: flex; gap: 2px; padding: 3px;
-  border-radius: 999px; background: rgba(20,26,22,.72);
-}
+.estado::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #8FD19E; }
+.estado.fechado::before { background: #F0B08C; }
+.idiomas { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, .12); }
 .idiomas button {
-  border: 0; border-radius: 999px; padding: 3px 8px; cursor: pointer;
-  font: 500 11px/1 Karla, sans-serif; background: transparent; color: #F1EDE2;
+  border: 0; border-radius: 999px; min-width: 44px; height: 32px; cursor: pointer;
+  font: 700 12px/1 var(--sans); background: transparent; color: rgba(255, 255, 255, .85);
+  transition: background .2s, color .2s;
 }
-.idiomas button[aria-pressed="true"] { background: #F1EDE2; color: #1B211C; }
+.idiomas button[aria-pressed="true"] { background: #fff; color: #1B2620; }
 
 /* ---- o corpo ---- */
-.corpo { padding: 46px 20px 26px; display: flex; flex-direction: column; gap: 14px; }
-.corpo h2 { font: 400 22px/1.2 var(--serif); margin: 0; text-align: center; }
-.sub { margin: 0; text-align: center; color: var(--tinta-suave); font-size: 14px; }
-.rot { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.corpo { padding: 18px 18px 26px; display: flex; flex-direction: column; gap: 14px; }
+/* No início o conteúdo sobe por cima da capa, como no protótipo. */
+body[data-tela-atual="inicio"] .corpo { margin-top: -46px; position: relative; }
+.corpo h2 { font: 600 26px/1.15 var(--serif); margin: 0; letter-spacing: -.01em; }
+.sub { margin: 0; color: var(--tinta-suave); font-size: 14px; }
+.rot {
+  display: block; font-size: 12.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--tinta-suave); margin-bottom: 8px;
+}
+
 
 .itens { display: flex; flex-direction: column; gap: 9px; }
 /* 🔑 **Texto CENTRALIZADO e só o necessário** (pedido do dono, 21/09/2026:
@@ -160,7 +176,7 @@ body {
   width: 100%; text-align: center;
   background: var(--superficie-2); border: 1px solid var(--linha);
   border-radius: var(--raio); padding: 15px 16px;
-  font: 500 16px/1.25 Karla, sans-serif; color: var(--tinta);
+  font: 500 16px/1.25 var(--sans); color: var(--tinta);
   cursor: pointer; text-decoration: none;
   /* ⚠️ Alvo de dedo: quem usa este site está no celular, quase sempre andando. */
   min-height: 52px;
@@ -185,7 +201,7 @@ body {
 
 label.campo { display: block; font-size: 13px; color: var(--tinta-suave); }
 label.campo input {
-  width: 100%; font: 400 15px/1.3 Karla, sans-serif; color: var(--tinta);
+  width: 100%; font: 400 15px/1.3 var(--sans); color: var(--tinta);
   background: var(--superficie); border: 1px solid var(--linha);
   border-radius: 10px; padding: 10px 11px; margin-top: 5px;
 }
@@ -193,7 +209,7 @@ label.campo input:focus-visible { outline: 2px solid var(--erva); outline-offset
 /* O seletor de gênero usa a mesma caixa dos campos de texto: um <select> com a
    cara do navegador ao lado de um <input> desenhado parece defeito. */
 label.campo select {
-  width: 100%; font: 400 15px/1.3 Karla, sans-serif; color: var(--tinta);
+  width: 100%; font: 400 15px/1.3 var(--sans); color: var(--tinta);
   background: var(--superficie); border: 1px solid var(--linha);
   border-radius: 10px; padding: 10px 11px; margin-top: 5px; min-height: 43px;
 }
@@ -201,7 +217,7 @@ label.campo select:focus-visible { outline: 2px solid var(--erva); outline-offse
 /* A observação usa a mesma caixa dos outros campos. ⚠️ `resize: vertical`: na
    horizontal ela estouraria a largura da tela no celular. */
 label.campo textarea {
-  width: 100%; font: 400 15px/1.35 Karla, sans-serif; color: var(--tinta);
+  width: 100%; font: 400 15px/1.35 var(--sans); color: var(--tinta);
   background: var(--superficie); border: 1px solid var(--linha);
   border-radius: 10px; padding: 10px 11px; margin-top: 5px; resize: vertical;
 }
@@ -247,7 +263,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 .capa-secao .acessar {
   position: absolute; right: 12px; bottom: 12px;
   background: var(--erva); color: #F4F0E5; border: 0; border-radius: 999px;
-  padding: 11px 18px; font: 600 13px/1 Karla, sans-serif; cursor: pointer;
+  padding: 11px 18px; font: 600 13px/1 var(--sans); cursor: pointer;
   letter-spacing: .04em; text-transform: uppercase; min-height: 40px;
 }
 
@@ -259,7 +275,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 }
 .tira button {
   flex: none; width: 78px; background: none; border: 0; padding: 0;
-  cursor: pointer; color: var(--tinta-suave); font: 500 12px/1.25 Karla, sans-serif;
+  cursor: pointer; color: var(--tinta-suave); font: 500 12px/1.25 var(--sans);
   display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 .tira .bolha {
@@ -275,7 +291,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 .grupo { margin-top: 18px; }
 .grupo > .rot-grupo {
   display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
-  font: 600 15px/1.2 Karla, sans-serif; color: var(--tinta);
+  font: 600 15px/1.2 var(--sans); color: var(--tinta);
 }
 .grupo > .rot-grupo .bolha-pequena {
   width: 26px; height: 26px; border-radius: 50%; overflow: hidden; flex: none;
@@ -290,9 +306,9 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
    decisão daqui: forçar minúsculas por CSS quebraria siglas, e "title case"
    automático em português erra nas preposições ("Suco De Laranja"). Fica como
    a casa cadastrou. */
-.prato .nome { font: 500 15.5px/1.25 Karla, sans-serif; color: var(--tinta); }
+.prato .nome { font: 500 15.5px/1.25 var(--sans); color: var(--tinta); }
 .prato .preco {
-  font: 500 15.5px/1 "DM Mono", monospace; color: var(--tinta); white-space: nowrap;
+  font: 500 15.5px/1 var(--sans); color: var(--tinta); white-space: nowrap;
 }
 .prato .desc { margin: 3px 0 0; font-size: 13.5px; color: var(--tinta-suave); }
 .prato .foto {
@@ -319,12 +335,12 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 .cartao-site h4 { font-size: 18px; }
 .cartao-site p { color: var(--tinta-suave); }
 .cartao-site .ver-prato { margin-top: 10px; background: none; border: 0; padding: 0; cursor: pointer;
-  color: var(--erva); font: 600 14px/1 Karla, sans-serif; text-decoration: underline; }
+  color: var(--erva); font: 600 14px/1 var(--sans); text-decoration: underline; }
 /* A faixa da pré-visualização: nada daqui vai ao ar. */
 .faixa-previa { position: sticky; top: 0; z-index: 30; padding: 8px 14px; text-align: center;
-  background: #8A5A1E; color: #FFF7E8; font: 600 13px/1.3 Karla, sans-serif; }
+  background: #8A5A1E; color: #FFF7E8; font: 600 13px/1.3 var(--sans); }
 .pe-cardapio {
-  margin-top: 18px; font: 400 12px/1.5 "DM Mono", monospace;
+  margin-top: 18px; font: 400 12px/1.5 var(--sans);
   color: var(--tinta-suave); text-align: center;
 }
 .sub-tela { color: var(--tinta-suave); font-size: 14px; margin: -2px 0 2px; }
@@ -336,27 +352,27 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 .hora {
   min-height: 44px; min-width: 76px; padding: 8px 14px;
   background: var(--superficie); border: 1px solid var(--linha); border-radius: 10px;
-  font: 500 15px/1 "DM Mono", monospace; cursor: pointer; color: inherit;
+  font: 500 15px/1 var(--sans); cursor: pointer; color: inherit;
 }
 .hora:hover { border-color: var(--erva); }
 .hora[aria-pressed="true"] { background: var(--erva); border-color: var(--erva); color: #F4F0E5; }
 /* As escolhas do pedido (retirar/entrega, pagamento) usam o mesmo botão do horário, com
    a letra do texto em vez da dos números. */
-.hora.texto { font: 500 14.5px/1.2 Karla, sans-serif; }
+.hora.texto { font: 500 14.5px/1.2 var(--sans); }
 
 /* ---- o pedido pelo cardápio (101) ---- */
 .pedir { display: flex; justify-content: flex-end; margin-top: 8px; }
 .pedir .adicionar {
   min-height: 38px; padding: 6px 16px; border-radius: 999px; cursor: pointer;
   background: var(--superficie); border: 1px solid var(--erva); color: var(--erva);
-  font: 600 14px/1 Karla, sans-serif;
+  font: 600 14px/1 var(--sans);
 }
 .contador { display: inline-flex; align-items: center; gap: 4px; }
 .contador button {
   width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
-  background: var(--erva); border: 0; color: #F4F0E5; font: 600 18px/1 Karla, sans-serif;
+  background: var(--erva); border: 0; color: #F4F0E5; font: 600 18px/1 var(--sans);
 }
-.contador b { min-width: 28px; text-align: center; font: 600 16px/1 "DM Mono", monospace; }
+.contador b { min-width: 28px; text-align: center; font: 600 16px/1 var(--sans); }
 /* 🔑 142: montar o item (escolha uma opção; adicionais com mínimo e máximo). */
 .montar fieldset { border: 0; margin: 0 0 14px; padding: 0; }
 .montar legend { display: flex; justify-content: space-between; width: 100%; gap: 8px;
@@ -366,7 +382,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
   padding: 9px 0; border-top: 1px solid var(--linha); font-size: 14.5px; color: var(--tinta); }
 .montar .opcao label { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; }
 .montar .opcao input { width: 20px; height: 20px; margin: 0; accent-color: var(--erva); }
-.montar .opcao small { color: var(--tinta-suave); font-family: "DM Mono", monospace; }
+.montar .opcao small { color: var(--tinta-suave); font-family: var(--sans); }
 .montar .contador button { width: 34px; height: 34px; font-size: 16px; }
 .montar .contador button:disabled { opacity: .35; cursor: default; }
 .linha-carrinho .extras { color: var(--tinta-suave); font-size: 13px; }
@@ -377,24 +393,24 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
   width: min(420px, calc(100% - 24px)); display: flex; justify-content: space-between;
   align-items: center; gap: 10px; padding: 14px 18px; border: 0; border-radius: 999px;
   background: var(--erva); color: #F4F0E5; box-shadow: var(--sombra); cursor: pointer;
-  font: 600 15px/1.2 Karla, sans-serif;
+  font: 600 15px/1.2 var(--sans);
 }
 .linha-carrinho { padding: 10px 0; border-bottom: 1px solid var(--linha); }
 .linha-carrinho .topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .linha-carrinho input {
-  width: 100%; margin-top: 6px; font: 400 13.5px/1.3 Karla, sans-serif; color: var(--tinta);
+  width: 100%; margin-top: 6px; font: 400 13.5px/1.3 var(--sans); color: var(--tinta);
   background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px; padding: 7px 9px;
 }
 .totais { display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
 .totais p { margin: 0; display: flex; justify-content: space-between; }
-.totais .total { font: 600 18px/1.3 Karla, sans-serif; }
+.totais .total { font: 600 18px/1.3 var(--sans); }
 .pedido-meu { border: 1px solid var(--linha); border-radius: var(--raio); padding: 12px 14px;
   display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 .pedido-meu .situacao { font-weight: 600; }
 
 .voltar {
   background: none; border: 0; color: var(--tinta-suave); cursor: pointer;
-  font: 500 13px/1 Karla, sans-serif; padding: 4px 0; align-self: flex-start;
+  font: 500 13px/1 var(--sans); padding: 4px 0; align-self: flex-start;
 }
 .voltar:hover { color: var(--tinta); }
 /* 🔑 143: o botão de WhatsApp no cabeçalho do catálogo, à direita do "voltar". */
@@ -402,7 +418,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 .contato-catalogo {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
   border: 1px solid var(--linha); color: var(--tinta); text-decoration: none;
-  font: 500 13px/1 Karla, sans-serif; background: #fff;
+  font: 500 13px/1 var(--sans); background: #fff;
 }
 .contato-catalogo::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #25D366; }
 .contato-catalogo:hover { border-color: var(--tinta-suave); }
@@ -416,7 +432,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 }
 .carimbo {
   aspect-ratio: 1; border-radius: 50%; border: 2px dashed var(--linha);
-  display: grid; place-content: center; font: 500 12px/1 "DM Mono", monospace;
+  display: grid; place-content: center; font: 500 12px/1 var(--sans);
   color: var(--tinta-suave);
 }
 .carimbo.feito { background: var(--erva); border: 2px solid var(--erva); color: #F4F0E5; }
@@ -428,7 +444,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
   display: flex; flex-direction: column; gap: 4px; font-size: 13.5px;
 }
 .premio-ganho .codigo {
-  font: 500 26px/1.1 "DM Mono", monospace; letter-spacing: .18em; color: var(--tinta);
+  font: 500 26px/1.1 var(--sans); letter-spacing: .18em; color: var(--tinta);
 }
 .premio-ganho.fora { border-color: var(--linha); opacity: .6; }
 .regra-fidelidade { font-size: 13px; color: var(--tinta-suave); margin: 0; }
@@ -492,42 +508,394 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 /* Os dados de contato: rótulo em cima, valor embaixo. Não são botões. */
 .dado { margin: 0; padding: 10px 2px; border-bottom: 1px solid var(--linha); }
 .dado span {
-  display: block; font: 500 11px/1.4 "DM Mono", monospace; letter-spacing: .08em;
+  display: block; font: 500 11px/1.4 var(--sans); letter-spacing: .08em;
   text-transform: uppercase; color: var(--tinta-suave);
 }
 .dado a { color: inherit; }
 .pe {
   text-align: center; color: var(--tinta-suave);
-  font: 400 11.5px/1.6 "DM Mono", monospace; padding: 4px 0 2px;
+  font: 400 11.5px/1.6 var(--sans); padding: 4px 0 2px;
 }
 .tela { display: none; }
 .tela[data-ativa] { display: flex; flex-direction: column; gap: 14px; }
+
+/* ===========================================================================
+   LAYOUT NOVO — protótipo aprovado pelo dono (05/11/2026)
+   ---------------------------------------------------------------------------
+   🔑 *"gostaria que fosse mais moderno e simples. Onde o cliente sinta algo moderno e com
+   fluidez"* — e depois: *"pode implementar igual ao protótipo, lembrando que podemos ter N
+   catálogos"*. Protótipo em `apresentacao/site-novo/`.
+   ⚠️ **Só a cara mudou.** Os ids, os `data-tela` e o fluxo (telefone primeiro, carrinho na
+   aba, check-in pelo QR) são os de sempre — os testes e o feed dependem deles.
+   =========================================================================== */
+button, a { -webkit-tap-highlight-color: transparent; }
+button:active, a.item:active, .porta:active, .atalho:active, .cartao-catalogo:active,
+.abas button:active { transform: scale(.97); }
+.tela[data-ativa] { animation: entra .38s var(--mola) both; }
+[data-tela="carrinho"][data-ativa] { animation: sobe .42s var(--mola) both; }
+@keyframes entra { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes sobe { from { opacity: .3; transform: translateY(48px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
+/* ⚠️ Quem pediu menos movimento ao aparelho não ganha nenhum. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  button:active, a.item:active, .porta:active, .atalho:active, .cartao-catalogo:active { transform: none; }
+}
+
+/* ---- os botões de sempre, redesenhados ---- */
+.item {
+  gap: 10px; background: var(--superficie); border: 1px solid var(--linha); border-radius: 16px;
+  padding: 14px 18px; font: 700 15.5px/1.25 var(--sans); min-height: 52px;
+  transition: transform .15s var(--mola), border-color .2s, background .2s, box-shadow .2s;
+}
+.item:hover { border-color: var(--linha-forte); }
+.item.destaque {
+  background: var(--erva); border-color: var(--erva); color: #fff;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--erva) 28%, transparent);
+}
+.item.zap svg { flex: none; }
+.voltar {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px;
+  background: var(--superficie); color: var(--tinta); font: 700 13.5px/1 var(--sans);
+}
+.voltar:hover { color: var(--tinta); box-shadow: var(--sombra); }
+.sub-tela { font-size: 14.5px; margin: 0; }
+.regras { border-radius: 16px; border: 0; font-size: 13.5px; }
+.regras.ruim { border-left: 3px solid var(--barro); }
+label.campo { font-size: 13.5px; font-weight: 600; color: var(--tinta); }
+label.campo input, label.campo select, label.campo textarea {
+  font: 400 16px/1.35 var(--sans); border: 1px solid var(--linha-forte); border-radius: 14px;
+  padding: 13px 14px; margin-top: 7px; background: var(--superficie); min-height: 50px;
+}
+.aceite input, .montar .opcao input { accent-color: var(--erva); }
+.loja-atual {
+  align-self: flex-start; background: var(--superficie); border-radius: 999px;
+  padding: 8px 14px; box-shadow: var(--sombra); color: var(--tinta);
+}
+
+/* ---- o início: as portas ---- */
+.porta {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 18px; border: 0;
+  border-radius: 22px; background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra);
+  text-align: left; cursor: pointer; font: inherit; text-decoration: none;
+  transition: transform .15s var(--mola), box-shadow .2s;
+}
+.porta:focus-visible, .atalho:focus-visible, .cartao-catalogo:focus-visible, .abas button:focus-visible,
+.dia-chip:focus-visible, .passo:focus-visible, .pilulas button:focus-visible {
+  outline: 2px solid var(--erva-texto); outline-offset: 2px;
+}
+.porta-icone {
+  width: 48px; height: 48px; border-radius: 16px; background: var(--erva); color: #fff;
+  display: flex; align-items: center; justify-content: center; flex: none;
+}
+.porta-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.porta-texto strong { font-size: 17px; font-weight: 800; }
+.porta-texto small { color: var(--tinta-suave); font-size: 13.5px; }
+.porta .seta { color: var(--tinta-suave); flex: none; }
+.porta-contato { box-shadow: none; padding: 14px 16px; border-radius: 18px; }
+.porta-contato .porta-icone { width: 40px; height: 40px; border-radius: 50%; background: var(--erva-clara); color: var(--erva-texto); }
+.porta-contato .porta-texto strong { font-size: 15px; font-weight: 700; }
+.porta-contato .porta-texto small { font-size: 12.5px; }
+
+.atalhos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.atalhos:empty { display: none; }
+.atalhos > :only-child { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center; gap: 14px; }
+.atalho {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px;
+  min-height: 128px; border: 0; border-radius: 20px; background: var(--superficie); color: var(--tinta);
+  text-align: left; cursor: pointer; font: inherit; transition: transform .15s var(--mola);
+}
+.atalho .ico { width: 40px; height: 40px; border-radius: 13px; display: flex; align-items: center; justify-content: center; }
+.atalho strong { font-size: 15.5px; font-weight: 800; line-height: 1.25; }
+.atalho .texto-atalho { display: flex; flex-direction: column; gap: 2px; }
+.atalho small { color: var(--tinta-suave); font-size: 12.5px; }
+.atalho-cardapio .ico { background: var(--ocre-claro); color: var(--ocre-tinta); }
+.atalho-fidelidade .ico { background: var(--erva-clara); color: var(--erva-texto); }
+
+.bloco-titulo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 8px; }
+.corpo .bloco-titulo h2 { font-size: 20px; }
+.ver-tudo {
+  border: 0; background: none; color: var(--erva-texto); font: 700 13.5px/1 var(--sans);
+  min-height: 44px; padding: 0 4px; cursor: pointer;
+}
+/* 🔑 A fileira dos catálogos rola de lado e para no cartão (scroll-snap). ⚠️ `contain`:
+   chegar ao fim com o dedo não arrasta a página. */
+#itens.carrossel {
+  display: flex; flex-direction: row; gap: 12px; overflow-x: auto; margin: 0 -18px; padding: 0 18px 6px;
+  scroll-snap-type: x mandatory; scroll-padding: 0 18px; scrollbar-width: none; overscroll-behavior-x: contain;
+}
+#itens.carrossel::-webkit-scrollbar { display: none; }
+.cartao-catalogo {
+  flex: none; width: 152px; display: flex; flex-direction: column; gap: 8px; padding: 0; border: 0;
+  background: none; color: var(--tinta); text-align: left; cursor: pointer; font: 700 14px/1.3 var(--sans);
+  text-decoration: none; scroll-snap-align: start; transition: transform .15s var(--mola);
+}
+.cartao-catalogo .capa-cat {
+  display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 4 / 3;
+  border-radius: 18px; overflow: hidden; background: var(--ocre-claro); color: var(--ocre-tinta);
+}
+.cartao-catalogo:nth-child(3n+2) .capa-cat { background: var(--erva-clara); color: var(--erva-texto); }
+.cartao-catalogo:nth-child(3n+3) .capa-cat { background: var(--superficie-2); color: var(--tinta-suave); }
+.cartao-catalogo .capa-cat img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Um catálogo só: o cartão ocupa a linha, com a capa larga. */
+#itens.carrossel > .cartao-catalogo:only-child { width: 100%; }
+#itens.carrossel > .cartao-catalogo:only-child .capa-cat { aspect-ratio: 16 / 7; }
+.grade-catalogos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; }
+.grade-catalogos .cartao-catalogo { width: auto; }
+
+.info-casa {
+  display: flex; gap: 10px; align-items: flex-start; margin: 4px 4px 0;
+  color: var(--tinta-suave); font-size: 13px; line-height: 1.5;
+}
+.info-casa svg { flex: none; margin-top: 2px; }
+.info-casa p { margin: 0; }
+
+/* ---- as abas de baixo ---- */
+.abas {
+  position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 25;
+  width: 100%; max-width: var(--largura); display: grid; grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr); padding: 6px 6px calc(10px + env(safe-area-inset-bottom));
+  background: var(--superficie); border-top: 1px solid var(--linha);
+}
+.abas button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border: 0; background: none; color: var(--tinta-suave); font: 700 11.5px/1.2 var(--sans);
+  cursor: pointer; padding: 4px 0; min-height: 56px; transition: color .2s;
+}
+.abas .pilula {
+  width: 56px; height: 30px; border-radius: 999px; display: flex; align-items: center;
+  justify-content: center; transition: background .25s var(--mola);
+}
+.abas button[aria-current="page"] { color: var(--erva-texto); }
+.abas button[aria-current="page"] .pilula { background: var(--erva-clara); }
+
+/* 🔑 O carrinho e o telefone são passos de um fluxo (no protótipo o carrinho sobe POR CIMA de
+   tudo): as abas saem da frente, e o botão do fim nunca fica atrás delas. */
+body[data-tela-atual="carrinho"] .abas, body[data-tela-atual="quem"] .abas { display: none; }
+html { scroll-padding-bottom: 110px; }
+
+/* A barra do carrinho sobe por cima das abas. */
+.barra-carrinho {
+  bottom: calc(88px + env(safe-area-inset-bottom)); width: min(492px, calc(100% - 28px));
+  border-radius: 18px; padding: 16px 18px; background: var(--tinta); color: var(--papel);
+  box-shadow: 0 14px 30px rgba(27, 38, 32, .3); font: 700 15px/1.2 var(--sans);
+  animation: sobe .35s var(--mola) both;
+}
+
+/* ---- a reserva ---- */
+.pessoas-linha {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--superficie); border-radius: 20px; padding: 12px 12px 12px 18px;
+}
+.pessoas-linha label { display: flex; flex-direction: column; gap: 2px; cursor: default; }
+.pessoas-linha strong { font-size: 15.5px; font-weight: 700; }
+.pessoas-linha small { font-size: 12.5px; color: var(--tinta-suave); }
+.passos-pessoas { display: flex; align-items: center; gap: 4px; flex: none; }
+.passo {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--linha-forte);
+  background: var(--superficie); color: var(--tinta); font: 500 22px/1 var(--sans); cursor: pointer;
+  transition: transform .15s var(--mola);
+}
+.passo.mais { background: var(--erva); border-color: var(--erva); color: #fff; }
+.passo:active { transform: scale(.92); }
+.pessoas-linha #pessoas {
+  width: 48px; text-align: center; font: 800 20px/1 var(--sans); color: var(--tinta);
+  border: 0; background: transparent; margin: 0; padding: 0; min-height: 44px; -moz-appearance: textfield;
+}
+.pessoas-linha #pessoas::-webkit-inner-spin-button,
+.pessoas-linha #pessoas::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.dias {
+  display: flex; gap: 8px; overflow-x: auto; margin: 0 -18px; padding: 2px 18px 8px;
+  scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.dias::-webkit-scrollbar { display: none; }
+.dia-chip {
+  flex: none; width: 64px; height: 76px; border-radius: 18px; border: 1px solid var(--linha-forte);
+  background: var(--superficie); color: var(--tinta); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; cursor: pointer; font: inherit;
+  transition: transform .15s var(--mola), background .2s, color .2s, box-shadow .2s;
+}
+.dia-chip small { font-size: 12px; font-weight: 600; }
+.dia-chip b { font-size: 22px; font-weight: 800; line-height: 1; }
+.dia-chip:active { transform: scale(.95); }
+.outro-dia { margin-top: 4px; }
+.dia-chip[aria-pressed="true"], .hora[aria-pressed="true"] {
+  background: var(--erva); border-color: var(--erva); color: #fff;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--erva) 30%, transparent);
+}
+[data-tela="reserva"] .horarios { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+[data-tela="reserva"] .horarios .vazio { grid-column: 1 / -1; }
+.hora {
+  min-height: 46px; min-width: 0; border-radius: 14px; border: 1px solid var(--linha-forte);
+  font: 700 14.5px/1 var(--sans); background: var(--superficie);
+  transition: transform .15s var(--mola), background .2s, color .2s;
+}
+.hora.texto { font: 600 14.5px/1.2 var(--sans); padding: 10px 14px; }
+/* 🔑 O confirmar fica à mão, preso acima das abas. */
+#confirmar { position: sticky; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 5; }
+.minha { border-radius: 14px; border: 0; }
+
+/* ---- as telas de "pronto" ---- */
+.selo-ok {
+  width: 88px; height: 88px; margin: 28px auto 4px; border-radius: 50%; background: var(--erva);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--erva) 30%, transparent);
+  animation: pop .5s cubic-bezier(.3, 1.6, .5, 1) .1s both;
+}
+[data-tela="pronto"] h2, [data-tela="pedido-pronto"] h2 { text-align: center; font-size: 30px; }
+.recibo b { font: 700 20px/1.25 var(--sans); }
+
+/* ---- o cardápio ---- */
+.topo-cardapio { min-height: 44px; }
+.contato-catalogo { min-height: 40px; padding: 0 14px; background: var(--superficie); border: 0; font: 700 13px/1 var(--sans); }
+.secao { background: var(--superficie); border-radius: 22px; padding: 16px; gap: 8px; }
+.secao h3 { font: 600 21px/1.2 var(--serif); }
+.capa-secao { border: 0; border-radius: 16px; margin-top: 4px; }
+.capa-secao .acessar {
+  border-radius: 999px; text-transform: none; letter-spacing: 0; font: 700 14px/1 var(--sans);
+  padding: 12px 18px; min-height: 44px; box-shadow: 0 6px 16px rgba(0, 0, 0, .18);
+}
+.pilulas {
+  display: flex; gap: 6px; overflow-x: auto; margin: 0 -18px; padding: 10px 18px;
+  position: sticky; top: 0; z-index: 4; background: var(--papel);
+  scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.pilulas:empty { display: none; }
+.pilulas::-webkit-scrollbar { display: none; }
+.pilulas button {
+  flex: none; height: 40px; padding: 0 16px; border-radius: 999px; border: 0;
+  background: var(--superficie); color: var(--tinta-suave); font: 700 14px/1 var(--sans); cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.pilulas button[aria-selected="true"] { background: var(--tinta); color: var(--papel); }
+.tira .bolha { border-color: var(--linha); }
+#pratos { display: flex; flex-direction: column; gap: 12px; }
+.grupo { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+/* 🔑 O prato vira CARTÃO: nome, descrição e preço à esquerda, a foto pequena à direita. */
+.prato {
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "l" "d" "p";
+  column-gap: 14px; padding: 14px; border: 0; border-radius: 20px; background: var(--superficie);
+}
+.prato:has(.foto) { grid-template-columns: minmax(0, 1fr) 96px; grid-template-areas: "l f" "d f" "p f"; }
+.prato .linha1 { grid-area: l; flex-direction: column; align-items: flex-start; gap: 4px; }
+.prato .nome { font: 800 15px/1.3 var(--sans); }
+.prato .preco { font: 800 15px/1.2 var(--sans); font-variant-numeric: tabular-nums; }
+.prato .desc { grid-area: d; font-size: 12.5px; line-height: 1.45; margin-top: 4px; }
+.prato .foto { grid-area: f; margin: 0; width: 96px; height: 96px; aspect-ratio: auto; border-radius: 16px; align-self: start; }
+.prato .pedir, .prato .esgotado { grid-area: p; justify-self: start; }
+.prato .pedir { justify-content: flex-start; margin-top: 10px; }
+.pedir .adicionar {
+  min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--erva);
+  color: #fff; font: 700 14px/1 var(--sans);
+}
+.contador { background: var(--erva-clara); border-radius: 999px; padding: 2px; }
+.contador button { width: 40px; height: 40px; }
+.contador button:first-child { background: var(--superficie); color: var(--erva-texto); }
+.contador b { color: var(--erva-texto); font: 800 15px/1 var(--sans); }
+.cartao-site, .capa-abertura { border: 0; border-radius: 20px; }
+.linha-carrinho { border-bottom-color: var(--linha); }
+.totais .total { font: 800 18px/1.3 var(--sans); }
+.pedido-meu { background: var(--superficie); border: 0; border-radius: 16px; }
+
+/* ---- fidelidade: o cartão verde ---- */
+.cartao-fidelidade {
+  position: relative; overflow: hidden; border-radius: 26px; background: var(--erva); color: #fff;
+  padding: 22px; display: flex; flex-direction: column; gap: 18px;
+}
+.cartao-fidelidade::after {
+  content: ""; position: absolute; right: -50px; bottom: -70px; width: 200px; height: 200px;
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, .14); pointer-events: none;
+}
+.cf-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.cf-topo small { display: block; font-size: 12.5px; opacity: .8; }
+.cf-casa { display: block; font: 600 22px/1.2 var(--serif); margin-top: 2px; }
+.cf-conta { text-align: right; font: 800 30px/1 var(--sans); }
+.cf-conta span { font-size: 16px; opacity: .75; }
+.cf-conta small { display: block; font-size: 12px; font-weight: 500; opacity: .8; margin-top: 4px; }
+.cartao-fidelidade .carimbos { padding: 0; border: 0; background: none; gap: 10px; }
+.cartao-fidelidade .carimbo { border: 2px dashed rgba(255, 255, 255, .45); color: rgba(255, 255, 255, .85); font: 700 12px/1 var(--sans); }
+.cartao-fidelidade .carimbo.feito { background: #fff; border: 0; color: var(--erva); animation: pop .45s var(--mola) both; }
+.cartao-fidelidade .carimbo.premio { border-color: #F2C879; color: #F2C879; }
+.cartao-fidelidade .falta { position: relative; text-align: left; color: #fff; font-size: 14.5px; }
+.cartao-fidelidade .falta::first-letter { text-transform: uppercase; }
+.cartao-fidelidade .falta b { display: inline; font: 800 15px/1.4 var(--sans); }
+.premio-ganho { border: 0; background: var(--ocre-claro); border-radius: 16px; padding: 14px 16px; color: var(--tinta); }
+.premio-ganho .codigo { font: 800 24px/1.1 var(--sans); letter-spacing: .14em; color: var(--ocre-tinta); }
+.premio-ganho.fora { background: var(--superficie); opacity: .75; }
+
+/* ---- o contato ---- */
+.cartao-dados { background: var(--superficie); border-radius: 20px; padding: 4px 16px; }
+.cartao-dados .dado:last-child { border-bottom: 0; }
+.dado { padding: 12px 2px; font-size: 15px; }
+.dado span { font: 700 11.5px/1.5 var(--sans); letter-spacing: .06em; margin-bottom: 2px; }
+
+/* ---- o termo e a janela de montar ---- */
+.termo { border: 0; border-radius: 22px; }
+.termo h3 { font: 600 20px/1.25 var(--serif); }
+
 </style>
 </head>
-<body>
+<body data-tela-atual="inicio">
 <div class="folha">
 
+  <!-- 🔑 **Layout novo (protótipo aprovado pelo dono, 05/11/2026):** a capa verde só no
+       início, com a logo, a saudação e o nome; as outras telas abrem direto no título. -->
   <header class="capa">
-    <span class="estado" id="estado">…</span>
-    <!-- 🔑 PT · EN · DE (pedido do dono, 29/09/2026). Quem monta é o `montarSeletorDeIdioma`. -->
-    <span class="idiomas" id="idiomas" role="group" aria-label="idioma · language · Sprache"></span>
-    <div class="marca" id="marca"><b>Botané</b><span>comida de raiz</span></div>
+    <div class="capa-topo">
+      <!-- 🔑 PT · EN · DE (pedido do dono, 29/09/2026). Quem monta é o `montarSeletorDeIdioma`. -->
+      <span class="idiomas" id="idiomas" role="group" aria-label="idioma · language · Sprache"></span>
+      <span class="estado" id="estado">…</span>
+    </div>
+    <div class="capa-casa">
+      <div class="marca" id="marca"><b>Botané</b><span>comida de raiz</span></div>
+      <div>
+        <p class="saudacao" id="saudacao">Olá!</p>
+        <h1 id="nome-da-casa">Botané Deli e Café</h1>
+      </div>
+    </div>
   </header>
 
   <div class="corpo">
 
     <!-- ================= a página inicial ================= -->
     <section class="tela" data-tela="inicio" data-ativa>
-      <h2 id="nome-da-casa">Botané Deli e Café</h2>
       <!-- 🔑 A casa escolhida, e a saída para a outra. Só aparece com mais de
            uma loja no site — com uma, não há o que trocar. -->
-      <p class="sub" id="loja-atual" hidden></p>
-      <p class="sub" id="linha-dias">…</p>
-      <div class="itens" id="itens">
-        <button class="item destaque" id="ir-reservar">Reserve sua Mesa</button>
-        <!-- 🔑 Os catálogos entram AQUI, um por cardápio, e cada um abre o PDF.
-             Quem os monta é o `carregarCatalogos()`. -->
+      <p class="sub loja-atual" id="loja-atual" hidden></p>
+      <!-- 🔑 A reserva é a porta grande (protótipo, 05/11/2026): é o que a casa quer que
+           aconteça. ⚠️ O título fica num <strong> só dele — é o texto que a tradução troca. -->
+      <button class="porta porta-reserva" id="ir-reservar" type="button">
+        <span class="porta-icone"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16v14H4z M4 10h16 M9 3v4 M15 3v4"/></svg></span>
+        <span class="porta-texto"><strong>Reserve sua Mesa</strong><small>Escolha o dia, o horário e quantas pessoas</small></span>
+        <svg class="seta" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <!-- Cardápio e fidelidade lado a lado; sobrando um, ele ocupa a linha. -->
+      <div class="atalhos" id="atalhos"></div>
+      <!-- 🔑 **N catálogos** (pedido do dono, 05/11/2026): a fileira rola de lado, e
+           "Ver tudo" abre a grade com todos. Quem monta é o `carregarCatalogos()`. -->
+      <section class="bloco-catalogos" id="bloco-catalogos" aria-labelledby="t-bloco-catalogos" hidden>
+        <div class="bloco-titulo">
+          <h2 id="t-bloco-catalogos">Catálogos</h2>
+          <button type="button" class="ver-tudo" id="ver-catalogos" data-ir="catalogos" hidden>Ver tudo</button>
+        </div>
+        <div class="itens carrossel" id="itens"></div>
+      </section>
+      <button class="porta porta-contato" id="ir-contato" type="button" data-ir="contato">
+        <span class="porta-icone"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z M9 10c.5 2 2 3.5 4 4"/></svg></span>
+        <span class="porta-texto"><strong>Fale com a gente</strong><small>WhatsApp, endereço e horários</small></span>
+        <svg class="seta" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="info-casa">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z M12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/></svg>
+        <div><p id="rodape"></p><p id="linha-dias">…</p></div>
       </div>
+    </section>
+
+    <!-- ================= todos os catálogos ================= -->
+    <section class="tela" data-tela="catalogos" aria-labelledby="t-catalogos">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-catalogos">Catálogos</h2>
+      <div class="grade-catalogos" id="lista-catalogos"></div>
     </section>
 
     <!-- ================= qual casa ================= -->
@@ -623,11 +991,21 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
            "Esgotado" depende do tamanho do grupo: às 19h pode não haver mesa
            para 6 e haver para 2. Perguntar o horário primeiro faria a tela
            prometer o que o salão não tem. -->
-      <div class="dupla">
-        <label class="campo">Quantas pessoas
+      <!-- 🔑 Protótipo (05/11/2026): pessoas com − e +, o dia em botões (os próximos dias em
+           que a casa abre) e, para mais longe, o calendário. ⚠️ Os campos de sempre
+           (`#pessoas`, `#dia`) continuam sendo a fonte: os botões só os preenchem. -->
+      <div class="pessoas-linha">
+        <label for="pessoas"><strong>Quantas pessoas</strong><small>Grupos maiores, fale com a gente</small></label>
+        <span class="passos-pessoas">
+          <button type="button" class="passo" id="menos-pessoas" aria-label="Menos uma pessoa">−</button>
           <input id="pessoas" type="number" inputmode="numeric" min="1" max="20" value="2">
-        </label>
-        <label class="campo">Que dia
+          <button type="button" class="passo mais" id="mais-pessoas" aria-label="Mais uma pessoa">+</button>
+        </span>
+      </div>
+      <div>
+        <span class="rot">Que dia</span>
+        <div class="dias" id="dias" role="group" aria-label="Que dia"></div>
+        <label class="campo outro-dia">Outro dia
           <input id="dia" type="date">
         </label>
       </div>
@@ -659,6 +1037,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
          porta sem mesa. Agora há mesa — e o texto muda conforme a casa confirme
          na hora ou vá olhar depois. -->
     <section class="tela" data-tela="pronto" aria-labelledby="t-pronto">
+      <div class="selo-ok" aria-hidden="true"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
       <h2 id="t-pronto">Pronto!</h2>
       <div class="recibo" id="recibo"></div>
       <div class="regras" id="aviso-pronto"></div>
@@ -686,6 +1065,8 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
         <button class="voltar" data-ir="cardapio">‹ cardápio</button>
         <a class="contato-catalogo" target="_blank" rel="noopener" hidden>Fale conosco</a>
       </div>
+      <!-- 🔑 Protótipo (05/11/2026): as seções do cardápio em pílulas, para trocar sem voltar. -->
+      <div class="pilulas" id="pilulas-secoes" role="tablist" aria-label="seções do cardápio"></div>
       <h2 id="t-secao">Categoria</h2>
       <p class="sub-tela" id="secao-descricao"></p>
       <div class="tira" id="tira-subcategorias" role="group"
@@ -736,6 +1117,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
     </section>
 
     <section class="tela" data-tela="pedido-pronto" aria-labelledby="t-pedido-pronto">
+      <div class="selo-ok" aria-hidden="true"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
       <h2 id="t-pedido-pronto">Pedido enviado!</h2>
       <div class="recibo" id="recibo-pedido"></div>
       <div class="regras" id="aviso-pedido-pronto"></div>
@@ -760,8 +1142,15 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
       <h2 id="t-fidelidade">Seu cartão fidelidade</h2>
       <p class="sub-tela" id="sub-fidelidade"></p>
       <div class="regras" id="aviso-fidelidade" hidden></div>
-      <div class="carimbos" id="carimbos" aria-live="polite"></div>
-      <p class="falta" id="falta"></p>
+      <!-- 🔑 Protótipo (05/11/2026): o cartão verde, com a conta no canto e os selos. -->
+      <div class="cartao-fidelidade">
+        <div class="cf-topo">
+          <div><small>Cartão fidelidade</small><b class="cf-casa" id="cf-casa">Botané</b></div>
+          <div class="cf-conta" id="cf-conta"></div>
+        </div>
+        <div class="carimbos" id="carimbos" aria-live="polite"></div>
+        <p class="falta" id="falta"></p>
+      </div>
       <div id="premios-fidelidade" class="itens"></div>
       <label class="aceite" id="termo-fidelidade" hidden>
         <input type="checkbox" id="aceite-fidelidade">
@@ -789,9 +1178,16 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
       <div class="itens" id="bloco-contato"></div>
     </section>
 
-    <p class="pe" id="rodape"></p>
   </div>
 </div>
+<!-- 🔑 As abas de baixo (protótipo, 05/11/2026): o caminho de qualquer tela para as quatro
+     portas. Cada uma só aparece se a casa oferece aquilo — quem monta é `montarAbas()`. -->
+<nav class="abas" id="abas" aria-label="Principal" hidden>
+  <button type="button" data-aba="inicio" aria-current="page"><span class="pilula"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg></span><span>Início</span></button>
+  <button type="button" data-aba="cardapio" hidden><span class="pilula"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M9 8h6 M9 12h6"/></svg></span><span>Cardápio</span></button>
+  <button type="button" data-aba="reserva" hidden><span class="pilula"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16v14H4z M4 10h16 M9 3v4 M15 3v4"/></svg></span><span>Reservar</span></button>
+  <button type="button" data-aba="fidelidade" hidden><span class="pilula"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 16.4 6.7 19.1l1-5.8L3.5 9.2l5.9-.9z"/></svg></span><span>Fidelidade</span></button>
+</nav>
 <button class="barra-carrinho" id="barra-carrinho" type="button" hidden></button>
 
 <dialog class="termo montar" id="montar" aria-labelledby="t-montar">
@@ -893,6 +1289,37 @@ document.documentElement.lang = LOCALE;
 
 /* O dicionário: "frase em português": ["inglês", "alemão"]. */
 const TRADUCOES = {
+  // ---- layout novo (protótipo aprovado pelo dono, 05/11/2026)
+  "Bom dia!": ["Good morning!", "Guten Morgen!"],
+  "Boa tarde!": ["Good afternoon!", "Guten Tag!"],
+  "Boa noite!": ["Good evening!", "Guten Abend!"],
+  "Escolha o dia, o horário e quantas pessoas": ["Pick the day, the time and how many people",
+    "Wählen Sie Tag, Uhrzeit und Personenzahl"],
+  "Cardápios": ["Menus", "Speisekarten"],
+  "Catálogo": ["Menu", "Speisekarte"],
+  "Catálogos": ["Menus", "Speisekarten"],
+  "{n} catálogos": ["{n} menus", "{n} Speisekarten"],
+  "Ver tudo": ["See all", "Alle ansehen"],
+  "Cartão fidelidade": ["Loyalty card", "Treuekarte"],
+  "Veja seus selos e prêmios": ["See your stamps and rewards", "Ihre Stempel und Prämien"],
+  "Fale com a gente": ["Talk to us", "Schreiben Sie uns"],
+  "WhatsApp, endereço e horários": ["WhatsApp, address and opening hours", "WhatsApp, Adresse und Öffnungszeiten"],
+  "Conversar no WhatsApp": ["Chat on WhatsApp", "Auf WhatsApp schreiben"],
+  "Como chegar": ["Get directions", "Anfahrt"],
+  "Endereço": ["Address", "Adresse"],
+  "Horário": ["Opening hours", "Öffnungszeiten"],
+  "Principal": ["Main", "Hauptmenü"],
+  "Início": ["Home", "Start"],
+  "Reservar": ["Book", "Reservieren"],
+  "Grupos maiores, fale com a gente": ["Larger groups, talk to us", "Größere Gruppen: schreiben Sie uns"],
+  "Menos uma pessoa": ["One person fewer", "Eine Person weniger"],
+  "Mais uma pessoa": ["One more person", "Eine Person mehr"],
+  "Outro dia": ["Another day", "Anderer Tag"],
+  "Hoje": ["Today", "Heute"],
+  "Amanhã": ["Tomorrow", "Morgen"],
+  "visitas": ["visits", "Besuche"],
+  "seções do cardápio": ["menu sections", "Bereiche der Speisekarte"],
+
   // ---- capa e navegação
   "Reserve sua Mesa": ["Book a table", "Tisch reservieren"],
   "Qual casa?": ["Which location?", "Welcher Standort?"],
@@ -1291,6 +1718,9 @@ function ir(nome) {
   // ⚠️ O botão de VOLTAR do celular precisa funcionar: sem isto, quem está na
   // reserva e volta sai do site em vez de ir para o início.
   if (location.hash !== "#" + nome) history.pushState({ tela: nome }, "", "#" + nome);
+  // 🔑 Layout novo: a capa só no início (CSS lê o `data-tela`), e a aba acesa.
+  document.body.dataset.telaAtual = nome;
+  marcarAba(nome);
   atualizarBarra(nome);
 }
 document.addEventListener("click", (e) => {
@@ -1410,6 +1840,8 @@ async function carregarCasa() {
   if (casa.marca) casa.logo_url = casa.marca.logo || casa.logo_url;
   aplicarMarca(casa.marca);
   $("#nome-da-casa").textContent = casa.casa;
+  $("#cf-casa").textContent = casa.casa;
+  $("#saudacao").textContent = saudacao();
   // 🔑 **Só o nome da casa** (pedido do dono, 05/10/2026): o site deixou de ser só
   // de reservas — tem cardápio, pedido e fidelidade —, e o "— Reservas" na aba
   // dizia menos do que ele faz.
@@ -1439,6 +1871,7 @@ async function carregarCasa() {
   // dele fica.
 
   // ⚠️ **"Fechado" sozinho é uma porta na cara.** A tarja diz quando abre.
+  $("#estado").classList.toggle("fechado", !casa.aberta_agora);
   $("#estado").textContent = casa.aberta_agora
     ? "Aberto agora"
     : casa.proximo ? t("Fechado · abre {quando}", { quando: tHorario(casa.proximo) }) : "Fechado hoje";
@@ -1454,7 +1887,7 @@ async function carregarCasa() {
   $("#ir-reservar").hidden = casa.reservas_no_site === false;
   montarContato();
   montarPortaDeFidelidade();
-  montarPortaDeContato();
+  montarDias();
 }
 
 /* 🔑 **A fidelidade fica logo ACIMA do contato** (pedido do dono, 24/09/2026). Só
@@ -1462,32 +1895,192 @@ async function carregarCasa() {
 function montarPortaDeFidelidade() {
   // 🔑 144: "Mostrar Fidelidade no site" desmarcado esconde o item. ⚠️ O QR da mesa continua
   // abrindo a fidelidade (o check-in) — esconder não é desligar o programa.
-  if (!casa.fidelidade || casa.fidelidade_no_site === false) return;
+  // 🔑 Layout novo (05/11/2026): vira o ATALHO ao lado do cardápio, como no protótipo.
+  if (!casa.fidelidade || casa.fidelidade_no_site === false || $("#ir-fidelidade")) return;
   const b = document.createElement("button");
-  b.className = "item";
+  b.type = "button";
+  b.className = "atalho atalho-fidelidade";
   b.id = "ir-fidelidade";
-  b.textContent = "Fidelidade";
+  b.innerHTML = `<span class="ico">${ICONES.estrela}</span><span class="texto-atalho"><strong>Cartão fidelidade</strong><small>Veja seus selos e prêmios</small></span>`;
   b.addEventListener("click", () => abrirFidelidade());
-  $("#itens").appendChild(b);
+  $("#atalhos").appendChild(b);
 }
 
-/* 🔑 O contato é o ÚLTIMO item da lista, como no protótipo. Com número
-   cadastrado ele abre o WhatsApp direto; sem, leva à tela com o que existe. */
-function montarPortaDeContato() {
-  const zap = zapDeContato();
-  const porta = document.createElement(zap ? "a" : "button");
-  porta.className = "item";
-  if (zap) {
-    porta.href = zap;
-    porta.target = "_blank";
-    porta.rel = "noopener";
-  } else {
-    porta.dataset.ir = "contato";
-  }
-  // ⚠️ Só o rótulo: o subtítulo dizia o que o botão faz, e o botão já diz.
-  porta.textContent = "Entre em Contato";
-  $("#itens").appendChild(porta);
+/* ===========================================================================
+   LAYOUT NOVO (protótipo aprovado pelo dono, 05/11/2026)
+   =========================================================================== */
+const ICONE_ZAP = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z M9 10c.5 2 2 3.5 4 4"/></svg>`;
+const _svg = (d, n = 20) => `<svg width="${n}" height="${n}" viewBox="0 0 24 24" fill="none"
+  stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
+  aria-hidden="true"><path d="${d}"/></svg>`;
+const ICONES = {
+  estrela: _svg("M12 3l2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 16.4 6.7 19.1l1-5.8L3.5 9.2l5.9-.9z"),
+  cardapio: _svg("M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M9 8h6 M9 12h6"),
+  cardapioGrande: _svg("M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M9 8h6 M9 12h6", 30),
+  pdf: _svg("M6 3h9l4 4v14H6z M14 3v5h5 M9 13h6 M9 17h6", 30),
+};
+
+/** "Bom dia!", "Boa tarde!" ou "Boa noite!", pela hora do APARELHO de quem lê. */
+function saudacao() {
+  const h = new Date().getHours();
+  return t(h < 12 ? "Bom dia!" : h < 18 ? "Boa tarde!" : "Boa noite!");
 }
+
+/**
+ * O cartão de UM catálogo: a capa e o nome. Serve à fileira do início e à grade de "Ver tudo".
+ *
+ * ⚠️ **O texto do cartão é SÓ o nome** — a capa é decorativa (`aria-hidden`, imagem sem
+ * `alt`). É o que o leitor de tela diz e o que a tradução e os testes conferem.
+ * ⚠️ `href` preenchido = PDF aberto (link de verdade, que o celular não bloqueia como popup);
+ * sem ele, o toque passa por `abrirCatalogo` (cardápio montado, feed ou identificação).
+ */
+function cartaoDeCatalogo(c, href) {
+  const el = document.createElement(href ? "a" : "button");
+  el.className = "cartao-catalogo";
+  el.dataset.catalogo = c.id;
+  if (href) {
+    el.href = href;
+    el.target = "_blank";
+    el.rel = "noopener";
+  } else {
+    el.type = "button";
+    el.addEventListener("click", () => abrirCatalogo(c));
+  }
+  const capa = document.createElement("span");
+  capa.className = "capa-cat";
+  capa.setAttribute("aria-hidden", "true");
+  capa.innerHTML = c.capa
+    ? `<img src="${API}${esc(c.capa)}" alt="" loading="lazy">`
+    : (c.origem === "PRODUTOS" ? ICONES.cardapioGrande : ICONES.pdf);
+  el.appendChild(capa);
+  el.appendChild(document.createTextNode(c.nome));
+  return el;
+}
+
+/** O atalho "Cardápio" do início: um catálogo abre direto; vários, a grade. */
+function montarAtalhoDoCardapio() {
+  if (!catalogosDaCasa.length || $("#ir-cardapio")) return;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "atalho atalho-cardapio";
+  b.id = "ir-cardapio";
+  const n = catalogosDaCasa.length;
+  b.innerHTML = `<span class="ico">${ICONES.cardapio}</span><span class="texto-atalho"><strong>${esc(t(n > 1 ? "Cardápios" : "Cardápio"))}</strong><small>${
+      esc(n > 1 ? t("{n} catálogos", { n }) : catalogosDaCasa[0].nome)}</small></span>`;
+  b.addEventListener("click", abrirCatalogos);
+  // O cardápio vem ANTES da fidelidade, como no protótipo.
+  $("#atalhos").prepend(b);
+}
+
+/** A aba e o atalho "Cardápio": com um catálogo só, abre ele; com vários, a grade. */
+function abrirCatalogos() {
+  if (catalogosDaCasa.length === 1) {
+    const unico = $("#itens .cartao-catalogo");
+    if (unico) unico.click();
+    return;
+  }
+  ir("catalogos");
+}
+
+/**
+ * As abas de baixo: Início sempre; Cardápio, Reservar e Fidelidade só quando a casa os
+ * oferece — a mesma regra das portas do início. Com só o Início, a barra nem aparece.
+ */
+function montarAbas() {
+  const abas = $("#abas");
+  const mostra = {
+    cardapio: catalogosDaCasa.length > 0,
+    reserva: !$("#ir-reservar").hidden,
+    fidelidade: !!$("#ir-fidelidade"),
+  };
+  abas.querySelectorAll("button[data-aba]").forEach((b) => {
+    if (b.dataset.aba in mostra) b.hidden = !mostra[b.dataset.aba];
+  });
+  abas.hidden = !Object.values(mostra).some(Boolean);
+  document.body.classList.toggle("sem-abas", abas.hidden);
+  marcarAba((location.hash || "#inicio").slice(1));
+}
+
+/** Que aba acende em cada tela. "quem" (o telefone) é da porta que levou até ele. */
+const ABA_DA_TELA = {
+  inicio: "inicio", lojas: "inicio", contato: "inicio",
+  catalogos: "cardapio", cardapio: "cardapio", secao: "cardapio", carrinho: "cardapio",
+  "pedido-pronto": "cardapio", "meus-pedidos": "cardapio",
+  reserva: "reserva", pronto: "reserva", fidelidade: "fidelidade",
+};
+function marcarAba(nome) {
+  let para = null;
+  // ⚠️ `destino` é declarado mais abaixo no arquivo: no primeiro `ir()` ele ainda não existe.
+  try { para = destino; } catch { para = null; }
+  const aba = nome === "quem"
+    ? (para === "fidelidade" ? "fidelidade" : para === "reserva" ? "reserva" : "cardapio")
+    : ABA_DA_TELA[nome] || "inicio";
+  document.querySelectorAll("#abas button[data-aba]").forEach((b) =>
+    b.setAttribute("aria-current", b.dataset.aba === aba ? "page" : "false"));
+}
+
+/**
+ * Os dias em BOTÕES (protótipo): os próximos 14 dias em que a casa abre. Para mais longe
+ * fica o calendário ("Outro dia").
+ * ⚠️ Os dias de funcionamento vêm de `casa.dias` ("Ter", "Qua"…). Sem eles, todos entram —
+ * a lista de horários é quem diz se há mesa.
+ * ⚠️ O botão só PREENCHE o `#dia`: a busca e a gravação continuam lendo o campo.
+ */
+const SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+function montarDias() {
+  const caixa = $("#dias");
+  if (!caixa) return;
+  const abre = new Set(casa && casa.dias && casa.dias.length ? casa.dias : SEMANA);
+  const botoes = [];
+  for (let i = 0; botoes.length < 14 && i < 30; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    if (!abre.has(SEMANA[d.getDay()])) continue;
+    const iso = diaIso(i);
+    const rotulo = i === 0 ? t("Hoje") : i === 1 ? t("Amanhã") : t(SEMANA[d.getDay()]);
+    botoes.push(`<button type="button" class="dia-chip" data-dia="${iso}" aria-pressed="false"
+      aria-label="${esc(d.toLocaleDateString(LOCALE, { weekday: "long", day: "numeric", month: "long" }))}">
+      <small>${esc(rotulo)}</small><b>${d.getDate()}</b></button>`);
+  }
+  caixa.innerHTML = botoes.join("");
+  caixa.onclick = (e) => {
+    const b = e.target.closest(".dia-chip");
+    if (!b) return;
+    $("#dia").value = b.dataset.dia;
+    diaTocado = true;
+    buscarHorarios();
+  };
+  marcarDia();
+}
+/** Acende o botão do dia que está no campo (escolhido no calendário, nenhum acende). */
+function marcarDia() {
+  const dia = $("#dia").value;
+  let aceso = null;
+  document.querySelectorAll("#dias .dia-chip").forEach((b) => {
+    const sim = b.dataset.dia === dia;
+    b.setAttribute("aria-pressed", String(sim));
+    if (sim) aceso = b;
+  });
+  if (aceso) aceso.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+}
+
+/** As seções do cardápio em pílulas, no topo da seção — trocar sem voltar (protótipo). */
+function desenharPilulas(atual) {
+  const caixa = $("#pilulas-secoes");
+  if (!caixa || !cardapio) return;
+  if (cardapio.categorias.length < 2) { caixa.innerHTML = ""; return; }
+  caixa.innerHTML = cardapio.categorias.map((c, i) =>
+    `<button type="button" role="tab" aria-selected="${i === atual}" data-i="${i}">${esc(c.nome)}</button>`).join("");
+  caixa.onclick = (e) => {
+    const b = e.target.closest("button[data-i]");
+    if (b && Number(b.dataset.i) !== atual) abrirSecao(Number(b.dataset.i));
+  };
+  const aceso = caixa.querySelector('[aria-selected="true"]');
+  if (aceso) aceso.scrollIntoView({ block: "nearest", inline: "center" });
+}
+
 
 /**
  * A tela de contato só aparece quando NÃO há WhatsApp cadastrado — com número,
@@ -1501,7 +2094,7 @@ function montarContato() {
   const l = [];
   const zap = zapDeContato();
   if (zap) {
-    l.push(`<a class="item" href="${zap}" target="_blank" rel="noopener">WhatsApp</a>`);
+    l.push(`<a class="item destaque zap" href="${zap}" target="_blank" rel="noopener">${ICONE_ZAP}<span>Conversar no WhatsApp</span></a>`);
   } else {
     // ⚠️ **Sem número cadastrado, o site DIZ isso** em vez de mostrar um botão
     // que não leva a lugar nenhum. O número sai de Administração ▸ Empresa.
@@ -1510,11 +2103,23 @@ function montarContato() {
   }
   const linha = (rot, valor, href) => `<p class="dado"><span>${rot}</span>${href
     ? `<a href="${href}">${valor}</a>` : valor}</p>`;
-  if (casa.telefone) l.push(linha("Telefone", esc(casa.telefone), `tel:${esc(casa.telefone)}`));
-  if (casa.email) l.push(linha("E-mail", esc(casa.email), `mailto:${esc(casa.email)}`));
+  const dados = [];
   if (casa.endereco) {
-    l.push(linha("Onde estamos", esc(casa.endereco)
+    dados.push(linha("Endereço", esc(casa.endereco)
       + (casa.cidade ? " — " + esc(casa.cidade) + "/" + esc(casa.uf) : "")));
+  }
+  if ((casa.dias || []).length) {
+    dados.push(linha("Horário", esc(casa.dias.map((d) => t(d)).join(" · "))
+      + (casa.hoje ? " · " + esc(t("hoje {horas}", { horas: tHorario(casa.hoje) })) : "")));
+  }
+  if (casa.telefone) dados.push(linha("Telefone", esc(casa.telefone), `tel:${esc(casa.telefone)}`));
+  if (casa.email) dados.push(linha("E-mail", esc(casa.email), `mailto:${esc(casa.email)}`));
+  if (dados.length) l.push(`<div class="cartao-dados">${dados.join("")}</div>`);
+  // 🔑 "Como chegar" abre o mapa com o ENDEREÇO da casa — dado público, que ela cadastrou.
+  if (casa.endereco) {
+    const onde = [casa.endereco, casa.cidade, casa.uf].filter(Boolean).join(", ");
+    l.push(`<a class="item" href="https://www.google.com/maps/search/?api=1&query=${
+      encodeURIComponent(onde)}" target="_blank" rel="noopener">Como chegar</a>`);
   }
   $("#bloco-contato").innerHTML = l.join("");
 }
@@ -1532,38 +2137,24 @@ async function carregarCatalogos() {
   }
   if (!lista.length) return;
   catalogosDaCasa = lista;
-  // ⚠️ Entram DEPOIS do "Reservar" e ANTES do contato — a ordem da lista é a
-  // ordem de importância, e reservar é o que a casa quer que aconteça.
-  // ⚠️ `#ir-fidelidade` primeiro: a fidelidade fica colada no contato (pedido do dono).
-  const contato = $("#itens").querySelector(
-    "#ir-fidelidade, a.item, button.item[data-ir='contato']");
+  // 🔑 **Layout novo (05/11/2026): cada catálogo é um CARTÃO com capa**, na fileira do início
+  // e na grade de "Ver tudo" — a casa pode ter N. A capa vem do servidor (`capa`: a 1ª foto
+  // das seções ou dos produtos); sem ela, um ícone.
+  // 🔑 **Duas origens, dois destinos.** O catálogo de PDF abre o arquivo em outra aba, como
+  // sempre; o montado por produtos abre DENTRO do site. Quem decide é o servidor (`origem`).
+  // 🔑 **O que exige cadastro chega SEM conteúdo** — só o id. O cartão leva à identificação.
+  // ⚠️ O cartão tem como TEXTO só o nome: a capa é decorativa (`aria-hidden`).
+  const fileira = $("#itens"), grade = $("#lista-catalogos");
+  fileira.innerHTML = ""; grade.innerHTML = "";
   lista.forEach((c) => {
-    // 🔑 **Duas origens, dois destinos.** O catálogo de PDF abre o arquivo em
-    // outra aba, como sempre; o montado por produtos abre DENTRO do site, na
-    // tela de cardápio. Quem decide é o servidor, pelo campo `origem`.
-    // ⚠️ **O nome do catálogo, e só ele** — a data de fim e o "abrir o PDF"
-    // eram o texto que não era necessário.
-    // 🔑 **O que exige cadastro chega SEM conteúdo** — só o id. O botão leva à
-    // identificação; quem já se identificou nesta visita abre direto.
-    if (c.origem === "PRODUTOS" || c.exige_cadastro) {
-      const b = document.createElement("button");
-      b.className = "item";
-      b.textContent = c.nome;
-      b.dataset.catalogo = c.id;
-      b.addEventListener("click", () => abrirCatalogo(c));
-      if (contato) $("#itens").insertBefore(b, contato);
-      else $("#itens").appendChild(b);
-      return;
-    }
-    const a = document.createElement("a");
-    a.className = "item";
-    a.href = `${API}${c.arquivo_url}`;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.textContent = c.nome;
-    if (contato) $("#itens").insertBefore(a, contato);
-    else $("#itens").appendChild(a);
+    const pdf = !(c.origem === "PRODUTOS" || c.exige_cadastro) ? `${API}${c.arquivo_url}` : null;
+    fileira.appendChild(cartaoDeCatalogo(c, pdf));
+    grade.appendChild(cartaoDeCatalogo(c, pdf));
   });
+  $("#bloco-catalogos").hidden = false;
+  $("#t-bloco-catalogos").textContent = lista.length === 1 ? "Catálogo" : "Catálogos";
+  $("#ver-catalogos").hidden = lista.length < 3;
+  montarAtalhoDoCardapio();
 }
 
 /** Abre um catálogo pelo botão da página inicial. */
@@ -1604,19 +2195,13 @@ async function abrirCatalogo(c, { semFeed = false } = {}) {
  * seguinte já é num `<a>`, que abre sempre.
  */
 function destravarCatalogos() {
-  $("#itens").querySelectorAll("button[data-catalogo]").forEach(async (b) => {
+  document.querySelectorAll("button[data-catalogo]").forEach(async (b) => {
     const c = catalogosDaCasa.find((x) => String(x.id) === b.dataset.catalogo);
     if (!c || !c.exige_cadastro || c.origem === "PRODUTOS") return;
     try {
       const r = await pedir(`/catalogos/${c.id}/abrir`,
         { telefone: eu.telefone });
-      const a = document.createElement("a");
-      a.className = "item";
-      a.href = `${API}${r.arquivo_url}`;
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.textContent = c.nome;
-      b.replaceWith(a);
+      b.replaceWith(cartaoDeCatalogo(c, `${API}${r.arquivo_url}`));
     } catch { /* fica o botão: tocar de novo leva à identificação */ }
   });
 }
@@ -1782,6 +2367,7 @@ function abrirSecao(indice) {
   if (!c) return;
   if (aberto) { aberto.secao = indice; lembrar(); }
   $("#t-secao").textContent = c.nome;
+  desenharPilulas(indice);
   const desc = $("#secao-descricao");
   desc.textContent = c.descricao || "";
   desc.hidden = !c.descricao;
@@ -2718,9 +3304,11 @@ function desenharCartao(c) {
     `<span class="carimbo${i < c.no_cartao ? " feito" : ""}${i === total - 1 ? " premio" : ""}"
        aria-label="${t(i < c.no_cartao ? "visita {n} feita" : "visita {n}", { n: i + 1 })}">${
        i < c.no_cartao ? "✓" : i === total - 1 ? "★" : i + 1}</span>`).join("");
+  // 🔑 Protótipo (05/11/2026): a conta "6/10" no canto do cartão; embaixo, o que falta.
+  $("#cf-conta").innerHTML = `${c.no_cartao}<span>/${total}</span><small>${esc(t("visitas"))}</small>`;
+  $("#cf-conta").setAttribute("aria-label", t("{feitas} de {total}", { feitas: c.no_cartao, total }));
   $("#falta").innerHTML = c.faltam
-    ? `<b>${t("{feitas} de {total}", { feitas: c.no_cartao, total })}</b>${t(c.faltam === 1
-      ? "falta 1 visita para o prêmio" : "faltam {n} visitas para o prêmio", { n: c.faltam })}`
+    ? esc(t(c.faltam === 1 ? "falta 1 visita para o prêmio" : "faltam {n} visitas para o prêmio", { n: c.faltam }))
     : `<b>${t("Cartão completo!")}</b>`;
   const disponiveis = c.premios.filter((p) => p.status === "DISPONIVEL");
   const outros = c.premios.filter((p) => p.status !== "DISPONIVEL").slice(0, 3);
@@ -2901,6 +3489,7 @@ $("#termo").addEventListener("click", (e) => { if (e.target === e.currentTarget)
 /* ---- os horários que a casa tem livres ---- */
 let buscando = null;
 async function buscarHorarios() {
+  marcarDia();
   const dia = $("#dia").value;
   const pessoas = Number($("#pessoas").value || 0);
   const caixa = $("#horarios");
@@ -3176,6 +3765,24 @@ function mostrarLojaAtual() {
 
   $("#dia").addEventListener("change", () => { diaTocado = true; buscarHorarios(); });
   $("#pessoas").addEventListener("input", buscarHorarios);
+  // 🔑 − e + mexem no MESMO campo, e avisam como se a pessoa tivesse digitado.
+  const passo = (n) => {
+    const campo = $("#pessoas");
+    const v = Math.min(Number(campo.max) || 20, Math.max(1, (Number(campo.value) || 0) + n));
+    campo.value = v;
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  $("#menos-pessoas").addEventListener("click", () => passo(-1));
+  $("#mais-pessoas").addEventListener("click", () => passo(1));
+  $("#abas").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-aba]");
+    if (!b) return;
+    const aba = b.dataset.aba;
+    if (aba === "inicio") return ir("inicio");
+    if (aba === "reserva") return $("#ir-reservar").click();
+    if (aba === "fidelidade") return abrirFidelidade();
+    if (aba === "cardapio") return abrirCatalogos();
+  });
 
   // 🔑 **O botão da capa leva a lugares diferentes**, e quem decide é a casa:
   // aceitando reserva online, ele abre a identificação pelo telefone; não
@@ -3225,7 +3832,7 @@ function carregarLoja() {
   mostrarLojaAtual();
   const aceita = saberSeAceita();
   aceitaPronta = aceita;
-  Promise.all([carregarCasa().then(carregarCatalogos), aceita]).then(restaurarTela);
+  Promise.all([carregarCasa().then(carregarCatalogos), aceita]).then(montarAbas).then(restaurarTela);
   aceita.then(() => {
     // ⚠️ Quem não marca pelo site continua vendo o aviso de que a mesa se
     // fecha pela conversa; quem marca, não — o rodapé diria o contrário do que
@@ -3337,6 +3944,7 @@ async function restaurarTela() {
   }
   // "pronto" é o recibo de uma reserva que já foi: sem ela na memória, é o início.
   if (tela === "contato") return ir("contato");
+  if (tela === "catalogos" && catalogosDaCasa.length) return ir("catalogos");
   if (tela === "fidelidade" && casa && casa.fidelidade) return abrirFidelidade();
   if (tela && tela !== "inicio") ir("inicio");
 }

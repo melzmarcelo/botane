@@ -1543,3 +1543,34 @@ Quadro no fim do painel (`reservas/clientes/painel/aniversariantes.tsx`), dados 
   Levar ao ar = subir os mesmos quatro na tela, no sistema online (ou exportações mais novas).
 - Cobertura: `smoke_importacao_leadsfood.py` (35) e `verificar-importacao-leadsfood.mjs` (11, na
   bateria), com CSVs sintéticos (telefones `00900003…`/`00900004…`).
+
+## Site do cliente no layout novo (05/11/2026, 1.3.2)
+
+🔑 Pedido do dono: *"gostaria que fosse mais moderno e simples. Onde o cliente sinta algo moderno
+e com fluidez"*, protótipo aprovado (`apresentacao/site-novo/`, artifact
+https://claude.ai/artifact/CX9QXW8NGc1Ze8WzLHehBd) e *"pode implementar igual ao protótipo,
+lembrando que podemos ter N catálogos"*.
+- **Só a cara mudou**: ids, `data-tela`, fluxo (telefone primeiro, carrinho na aba, check-in pelo
+  QR), traduções automáticas — tudo de sempre. `apresentacao/site-novo/aplicar.py` é o script que
+  transformou o `site/index.html` antigo (com `css-base.css`, `css-novo.css`, `js-novo.js`,
+  `traducoes-novas.js`): fica como registro do que mudou, NÃO roda de novo sobre o site novo.
+- Capa verde só no início (logo, saudação pela hora do aparelho, nome, idioma e tarja); porta grande
+  "Reserve sua Mesa" (`#ir-reservar`, título num `<strong>` — o teste de idioma lê `#ir-reservar strong`);
+  atalhos Cardápio (`#ir-cardapio`) e Fidelidade (`#ir-fidelidade`); "Fale com a gente" (`#ir-contato`)
+  vai SEMPRE à tela de contato (WhatsApp grande, endereço, horário, "Como chegar" no mapa).
+- 🔑 **N catálogos**: cada um é um CARTÃO com capa (`cartaoDeCatalogo`) na fileira `#itens` (rola de lado,
+  scroll-snap) e na grade `#lista-catalogos` da tela nova `catalogos` ("Ver tudo", com 3 ou mais).
+  ⚠️ O texto do cartão é SÓ o nome (a capa é `aria-hidden`) — os testes conferem `textContent === nome`.
+  A capa vem de `/publico/{loja}/catalogos` → `capa`: 1ª foto de seção na ordem; sem, 1ª foto de prato
+  vivo; PDF = nula (ícone). Atalho/aba Cardápio: 1 catálogo abre direto; vários, a grade.
+- **Abas de baixo** (`#abas`): Início sempre; Cardápio/Reservar/Fidelidade só se a casa oferece
+  (`montarAbas`). ⚠️ Somem no carrinho e no telefone (`quem`) — o botão do fim ficava atrás delas.
+- ⚠️ **A tela atual vai no `<body data-tela-atual>`, NUNCA `data-tela`**: com `data-tela` no body, o
+  seletor `[data-tela="secao"] .voltar` dos testes passou a casar a página inteira.
+- Reserva: pessoas com − e + (mexem no MESMO `#pessoas` e disparam `input`), os próximos 14 dias em
+  que a casa abre em botões (`#dias`, de `casa.dias`) e o calendário `#dia` como "Outro dia" — os
+  botões só preenchem o campo. Seção do cardápio: as seções em pílulas (`#pilulas-secoes`). Prato em
+  cartão com foto pequena à direita. Fidelidade: cartão verde com "6/10" no canto (`#cf-conta`).
+- Movimento: telas entram deslizando, carrinho sobe, selo de "pronto" salta; `prefers-reduced-motion`
+  desliga tudo. Fonte do corpo Plus Jakarta Sans (a do sistema); títulos seguem a fonte da casa.
+- Cobertura: `verificar-site-novo.mjs` (18, na bateria) + os de sempre do site.

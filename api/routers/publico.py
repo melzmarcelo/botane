@@ -469,7 +469,20 @@ def catalogos(id_unidade: int, idioma: str | None = _IDIOMA) -> list[dict]:
                       (SELECT k.slug FROM cardapio_vivos k
                         WHERE k.id_unidade = %s AND k.id_catalogo = c.id) AS vivo_slug,
                       (SELECT k.principal FROM cardapio_vivos k
-                        WHERE k.id_unidade = %s AND k.id_catalogo = c.id) AS vivo_principal
+                        WHERE k.id_unidade = %s AND k.id_catalogo = c.id) AS vivo_principal,
+                      -- 🔑 **A capa do cartão no site** (layout novo, 05/11/2026): a 1ª foto de
+                      -- seção, na ordem do cardápio; sem nenhuma, a 1ª foto de prato vivo.
+                      coalesce(
+                        (SELECT g.foto_url FROM catalogo_categorias g
+                          WHERE g.id_catalogo = c.id AND g.foto_url IS NOT NULL
+                          ORDER BY g.ordem, g.id LIMIT 1),
+                        (SELECT coalesce(i.foto_url, p.foto_url)
+                           FROM catalogo_itens i
+                           JOIN catalogo_categorias g ON g.id = i.id_categoria
+                           LEFT JOIN produtos p ON p.id = i.id_produto
+                          WHERE g.id_catalogo = c.id AND (p.ativo OR i.tipo = 'ESCOLHA')
+                            AND coalesce(i.foto_url, p.foto_url) IS NOT NULL
+                          ORDER BY g.ordem, i.ordem, i.id LIMIT 1)) AS capa
                  FROM catalogos c
                 -- 🔑 **Visível NESTA loja** (migração 087), e não "dono é esta
                 -- loja": a casa marca em que lojas cada catálogo aparece.
@@ -507,6 +520,7 @@ def catalogos(id_unidade: int, idioma: str | None = _IDIOMA) -> list[dict]:
                     "cardapio_vivo": r["vivo_slug"] is not None,
                     "vivo": (None if r["vivo_slug"] is None else
                              {"slug": r["vivo_slug"], "principal": bool(r["vivo_principal"])}),
+                    "capa": r["capa"],
                 })
                 continue
             if not r["arquivo_url"]:
@@ -529,6 +543,8 @@ def catalogos(id_unidade: int, idioma: str | None = _IDIOMA) -> list[dict]:
                 # ⚠️ Quando termina, para o site poder dizer "até domingo". Só
                 # isso — a data de início não interessa a quem já está vendo.
                 "ate": r["publica_ate"],
+                # O PDF não tem foto: o site desenha o ícone.
+                "capa": None,
             })
         return saida
 
