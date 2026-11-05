@@ -41,10 +41,11 @@ function Numero({ rotulo, valor, sub, tom, href }: {
 }) {
   const cor = tom === "alerta" ? "text-alerta" : tom === "erro" ? "text-erro" : tom === "erva" ? "text-erva" : "";
   return (
-    <Link href={href} className="faixa-numero group min-w-0 no-underline">
-      <p className="rotulo">{rotulo}</p>
-      <p className={`mono mt-1 text-[22px] font-bold leading-none group-hover:text-erva ${cor}`}>{valor}</p>
-      {sub && <p className="mt-1 text-[12.5px] leading-snug text-suave">{sub}</p>}
+    // 🔑 Layout novo (05/11/2026): cada número é um CARTÃO de indicador, como no protótipo.
+    <Link href={href} className="faixa-numero group cartao block min-w-0 px-5 py-4 no-underline transition-colors hover:border-linha2">
+      <p className="text-[13px] font-semibold text-suave">{rotulo}</p>
+      <p className={`mono mt-2 text-[26px] font-extrabold leading-none tracking-[-0.02em] group-hover:text-erva ${cor}`}>{valor}</p>
+      {sub && <p className="mt-2 text-[12.5px] leading-snug text-suave">{sub}</p>}
     </Link>
   );
 }
@@ -118,7 +119,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
   if (!numeros.length) return null;
 
   return (
-    <section className="cartao p-4" aria-label="hoje">
+    <section aria-label="hoje">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         {dia ? (
           <div className="flex items-center gap-2">
@@ -142,7 +143,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
       <div className="faixa-hoje">{numeros}</div>
 
       {dia && (dia.canceladas > 0 || (!dia.proximo && dia.data !== hoje) || erro) && (
-        <p className="mt-3 border-t border-dashed border-linha pt-2.5 text-[12.5px] text-suave">
+        <p className="mt-3 text-[12.5px] text-suave">
           {/* ⚠️ A frase diz a CONTA: é o que faz a conferência com o PDV fechar. */}
           {dia.canceladas > 0 && (
             <>{plural(dia.canceladas, "cupom cancelado", "cupons cancelados")} no PDV, somando {reais(dia.valor_cancelado)} — lá

@@ -7,7 +7,7 @@ import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, urlArquivo } from "@/lib/api";
 import { abrirBuscaDeTelas, EVENTO_EMPRESA } from "@/lib/eventos";
 import { NOME_SISTEMA } from "@/lib/marca";
-import { INICIO, blocosDoGrupo, montarMenu, telasDisponiveis, type ItemMenu } from "@/lib/menu";
+import { INICIO, blocosDoGrupo, montarMenu, telasDisponiveis, type ItemMenu, GRUPOS_SOLTOS, SECAO_DO_GRUPO } from "@/lib/menu";
 import { Carregando } from "@/components/ui";
 import { ConviteInstalar } from "@/components/pwa";
 import { ProvedorAvisos } from "@/components/aviso-flutuante";
@@ -26,6 +26,7 @@ import Icone from "@/components/icone";
  */
 
 const CHAVE_MENU = "botane.menu";
+const CHAVE_RECOLHIDO = "botane.menu.recolhido";
 
 /**
  * A marca — e, embaixo dela, em que LOJA se está.
@@ -66,14 +67,22 @@ function Casca({ children }: { children: React.ReactNode }) {
   // Quais grupos do menu estão abertos. Fica no navegador porque é preferência
   // de quem usa: quem só mexe em estoque abre estoque uma vez e pronto.
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
+  // 🔑 **O menu recolhido em ícones** (layout novo, 05/11/2026 — o ☰ do protótipo). Só no
+  // computador; no celular o mesmo botão abre a gaveta. Preferência de quem usa: fica no navegador.
+  const [recolhido, setRecolhido] = useState(false);
 
   useEffect(() => {
     try {
       setAbertos(JSON.parse(localStorage.getItem(CHAVE_MENU) ?? "{}"));
+      setRecolhido(localStorage.getItem(CHAVE_RECOLHIDO) === "1");
     } catch {
       setAbertos({});
     }
   }, []);
+  const mudarRecolhido = (v: boolean) => {
+    setRecolhido(v);
+    try { localStorage.setItem(CHAVE_RECOLHIDO, v ? "1" : "0"); } catch { /* sem armazenamento, vale só agora */ }
+  };
 
   /**
    * Abre ou fecha um grupo.
@@ -181,6 +190,8 @@ function Casca({ children }: { children: React.ReactNode }) {
       abertos={abertos}
       alternarGrupo={alternarGrupo}
       aoNavegar={() => setAberto(false)}
+      recolhido={recolhido}
+      expandir={() => mudarRecolhido(false)}
     />
   );
 
@@ -197,7 +208,11 @@ function Casca({ children }: { children: React.ReactNode }) {
       <BarraSuperior
         marca={<Marca logo={marca.logo} nome={marca.nome} />}
         loja={daLoja}
-        aoAbrirMenu={() => setAberto(true)}
+        aoAbrirMenu={() => {
+          // No computador o ☰ recolhe/expande a lateral; no celular abre a gaveta.
+          if (window.matchMedia("(min-width: 1024px)").matches) mudarRecolhido(!recolhido);
+          else setAberto(true);
+        }}
       />
 
       {/* ⚠️ **276px, e nao 240** (15/09/2026, relatado pelo dono: *"alguns itens
@@ -206,7 +221,7 @@ function Casca({ children }: { children: React.ReactNode }) {
           para o PDV" e "Papeis e permissoes" nao cabiam. Nome de tela cortado
           obriga a pessoa a adivinhar o destino, que e o contrario do que um
           menu faz. */}
-      <div className="esqueleto lg:grid lg:grid-cols-[276px_minmax(0,1fr)]">
+      <div className={`esqueleto lg:grid ${recolhido ? "lg:grid-cols-[76px_minmax(0,1fr)]" : "lg:grid-cols-[276px_minmax(0,1fr)]"}`}>
       {aberto && (
         <div
           className="fixed inset-0 z-40 bg-tinta/35 lg:hidden"
@@ -218,7 +233,7 @@ function Casca({ children }: { children: React.ReactNode }) {
       {/* ⚠️ `top-16` e `h-[calc(100vh-4rem)]`: a barra do topo tem 64px desde a 1.3.0, e sem
           descontá-los o menu ficava com o próprio topo escondido atrás dela. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[292px] flex-col overflow-y-auto border-r border-linha bg-lateral transition-transform duration-200 lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100vh-4rem)] lg:w-auto lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[292px] flex-col overflow-y-auto border-r border-linha bg-lateral transition-transform duration-200 lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100vh-4rem)] lg:w-auto lg:translate-x-0 ${recolhido ? "menu-recolhido" : ""} ${
           aberto ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -317,6 +332,8 @@ function MenuLateral({
   abertos,
   alternarGrupo,
   aoNavegar,
+  recolhido,
+  expandir,
 }: {
   caminho: string;
   pode: (chave: string) => boolean;
@@ -328,6 +345,9 @@ function MenuLateral({
   abertos: Record<string, boolean>;
   alternarGrupo: (grupo: string, expandidoAgora: boolean) => void;
   aoNavegar: () => void;
+  /** A lateral está em ícones (computador). Clicar num grupo a expande. */
+  recolhido: boolean;
+  expandir: () => void;
 }) {
   const ambiente = { pode, enviaAoPdv, variasLojas, temReservas };
   const entradas = useMemo(
@@ -359,6 +379,7 @@ function MenuLateral({
           // aba deixava o menu por cima.
           onClick={aoNavegar}
           aria-current={ativo ? "page" : undefined}
+          title={recolhido ? item.nome : undefined}
           className={`menu-item ${ativo ? "menu-item-ativo" : ""}`}
         >
           <span className="menu-ico">
@@ -391,12 +412,16 @@ function MenuLateral({
       {/* Fora de grupo: a primeira tela não se abre com um clique a mais. */}
       {linha(INICIO)}
 
-      <div className="menu-divisor" />
-
-      {entradas.map((e) =>
-        e.tipo === "item" ? (
+      {entradas.map((e, i) => {
+        // 🔑 O título da seção nasce onde ela começa (layout novo, 05/11/2026).
+        const secao = SECAO_DO_GRUPO[e.grupo];
+        const titulo = secao && secao !== SECAO_DO_GRUPO[entradas[i - 1]?.grupo ?? ""]
+          ? <p key={`s-${secao}`} className="secao-menu">{secao}</p> : null;
+        const corpo = e.tipo === "item" ? (
           // Grupo que sobrou com um item só — ver `montarMenu`.
           linha(e.item)
+        ) : GRUPOS_SOLTOS.has(e.grupo) ? (
+          <div key={e.grupo}>{e.itens.map((it) => linha(it))}</div>
         ) : (
           <div key={e.grupo} className="mb-0.5 shrink-0">
             {/* 🔑 **O padrão é RECOLHIDO — todos.** O grupo da tela aberta já veio
@@ -415,7 +440,16 @@ function MenuLateral({
                   <button
                     type="button"
                     aria-expanded={expandido}
-                    onClick={() => alternarGrupo(e.grupo, expandido)}
+                    title={recolhido ? e.grupo : undefined}
+                    onClick={() => {
+                      // Recolhida, a lateral se abre já com o grupo aberto.
+                      if (recolhido) {
+                        expandir();
+                        if (!expandido) alternarGrupo(e.grupo, false);
+                        return;
+                      }
+                      alternarGrupo(e.grupo, expandido);
+                    }}
                     className={`menu-grupo ${temAtivo ? "menu-grupo-ativo" : ""}`}
                   >
                     <span className="menu-ico">
@@ -475,8 +509,9 @@ function MenuLateral({
               );
             })()}
           </div>
-        ),
-      )}
+        );
+        return titulo ? [titulo, corpo] : corpo;
+      })}
     </nav>
   );
 }

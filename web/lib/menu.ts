@@ -440,6 +440,20 @@ export const MENU: GrupoMenu[] = [
  */
 export const INICIO: ItemMenu = { href: "/", nome: "Início", icone: "casa" };
 
+/**
+ * 🔑 **As seções do menu** (layout novo — protótipo aprovado em 05/11/2026: OPERAÇÃO, GESTÃO,
+ * ANÁLISE, SISTEMA). ⚠️ A ORDEM dos grupos continua a do dono (28/09/2026, conferida pela
+ * bateria): as seções só dão título a trechos seguidos dela.
+ */
+export const SECAO_DO_GRUPO: Record<string, string> = {
+  Cadastros: "Operação", Compras: "Operação", Vendas: "Operação", Estoque: "Operação",
+  CMV: "Gestão", "Precificação": "Gestão", "Portal de Clientes": "Gestão", Etiquetas: "Gestão",
+  "Análise": "Análise",
+  "Administração": "Sistema",
+};
+/** Grupo cujos itens vão SOLTOS sob o título da seção (o protótipo: Relatórios e Estúdio BI). */
+export const GRUPOS_SOLTOS = new Set(["Análise"]);
+
 export type Ambiente = {
   pode: (chave: string) => boolean;
   /** Dica de interface: item de menu para recurso desligado é porta que não leva a nada. */

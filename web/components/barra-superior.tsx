@@ -74,9 +74,11 @@ export default function BarraSuperior({
       className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-linha bg-superficie/95 px-4 backdrop-blur-sm sm:px-6"
     >
       <button
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-linha2 bg-superficie lg:hidden"
+        // 🔑 1.3.0: o ☰ do protótipo, em todo tamanho — no computador recolhe a lateral em ícones.
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] hover:bg-superficie2"
         onClick={aoAbrirMenu}
         aria-label="Abrir menu"
+        title="Recolher ou abrir o menu"
       >
         <span className="flex flex-col gap-[3px]">
           <span className="block h-[2px] w-4 bg-tinta" />
@@ -107,6 +109,18 @@ export default function BarraSuperior({
         </span>
       )}
 
+      {/* Ajuda e alertas à mão, como no protótipo (continuam também no menu do usuário). */}
+      <Link href="/ajuda" aria-label="Ajuda" title="Ajuda"
+            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-suave hover:bg-superficie2 hover:text-tinta sm:flex">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+             strokeLinejoin="round" aria-hidden><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14 M12 17.5h.01" /></svg>
+      </Link>
+      <Link href="/alertas" aria-label="Alertas" title="Alertas"
+            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-suave hover:bg-superficie2 hover:text-tinta sm:flex">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+             strokeLinejoin="round" aria-hidden><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z M10 20a2 2 0 0 0 4 0" /></svg>
+      </Link>
+
       <div className="relative shrink-0" ref={caixa}>
         <button
           type="button"
@@ -120,8 +134,9 @@ export default function BarraSuperior({
           </span>
           {/* O nome some no celular: 32 caracteres ao lado do avatar empurram a
               marca para fora. O avatar continua sendo o alvo. */}
-          <span className="hidden max-w-[180px] truncate text-[14px] font-semibold sm:block">
-            {eu.nome}
+          <span className="hidden max-w-[180px] flex-col items-start leading-tight sm:flex">
+            <span className="max-w-full truncate text-[13.5px] font-bold">{eu.nome}</span>
+            <span className="max-w-full truncate text-[12px] text-suave">{eu.papeis[0] ?? ""}</span>
           </span>
           <svg viewBox="0 0 10 6" aria-hidden className="h-[6px] w-[10px] shrink-0 text-suave">
             <path

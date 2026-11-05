@@ -44,6 +44,24 @@ protótipo navegável (artifact `https://claude.ai/artifact/Jvq2Pku1vEjUVy8DQxeQ
   - Também em **Fichas** (colunas de custo só para `fichas.custos`, via `useMemo`), **Patrimônio** e
     **Portal de Clientes ▸ Clientes** — sem ordenar (o servidor delas não tem `ORDENS` ainda).
   - ⏳ Faltam as listas em `<li>` com grade fixa (Notas, Vendas): pedem reescrita para tabela.
+- **Mais perto do protótipo (05/11/2026, pedido do dono: *"algumas coisas ainda não estão iguais
+  ao protótipo… os dashboards, o menu, entre outros"*):**
+  - **Início**: saudação com as ações à direita (Painel de vendas, Nova análise); a faixa do dia
+    virou CARTÕES de indicador (mesmas classes `.faixa-hoje`/`a.faixa-numero` e o mesmo
+    `section[aria-label="hoje"]`, que a bateria procura); "Faturamento por dia" (7/14/30 dias, do
+    `/vendas/painel`, terminando no dia da faixa) ao lado de "Precisa de atenção" (agora em blocos com
+    o número num selo colorido); Atalhos (por permissão) ao lado de "Mais vendidos no dia"
+    (`_inicio/vendas-dias.tsx`). Período, listas do dia, custo por setor e a casa continuam abaixo.
+  - **Menu**: títulos de seção OPERAÇÃO / GESTÃO / ANÁLISE / SISTEMA (`SECAO_DO_GRUPO` em
+    `lib/menu.ts`). ⚠️ A ORDEM dos grupos ficou a do dono de 28/09 (a bateria confere): as seções
+    só dão título a trechos seguidos. O grupo Análise vai solto (`GRUPOS_SOLTOS`). Filhos com texto
+    menor e ícone pequeno — ⚠️ o ícone FICA (a bateria exige ícone em toda linha do menu).
+  - **☰ recolhe a lateral em ícones** no computador (`menu-recolhido`, 76 px, guardado em
+    `botane.menu.recolhido`); clicar num grupo recolhido expande e abre o grupo. No celular o mesmo
+    botão abre a gaveta (o `aria-label="Abrir menu"` é o que a bateria usa).
+  - Barra do topo com Ajuda e Alertas em ícones e o papel embaixo do nome.
+  - O rótulo acima do título de toda tela virou caminho ("Cadastros ›") por CSS
+    (`header p.rotulo:has(+ h1)`), sem mexer tela a tela.
 - **Fase 3 (feita): a tela única de Relatórios** (`relatorios/`): catálogo do servidor por área
   (`GRUPOS` em `exportacao_catalogo.py`; relatório sem área cai em "Outros" e a `smoke_bi` reprova),
   os campos de filtro são os MESMOS da janela de imprimir (`CamposDoRelatorio`, extraído de

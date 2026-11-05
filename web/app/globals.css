@@ -337,6 +337,34 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 
   .menu-divisor { height: 1px; background: var(--color-linha); margin: 10px 6px; }
 
+  /* 🔑 Layout novo (05/11/2026): os títulos de seção do protótipo (OPERAÇÃO, GESTÃO…). */
+  .secao-menu {
+    padding: 16px 10px 6px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #66706a;
+  }
+  /* Os filhos de um grupo: texto menor e mais claro, ícone pequeno — a hierarquia do protótipo. */
+  .menu-filhos .menu-item { font-size: 13.8px; color: var(--color-suave); }
+  .menu-filhos .menu-item:hover { color: var(--color-tinta); }
+  .menu-filhos .menu-item-ativo { color: var(--color-erva); }
+  .menu-filhos .menu-ico { opacity: 0.75; }
+  .menu-filhos .menu-ico svg { width: 15px; height: 15px; }
+  /* A lateral recolhida em ícones (o ☰ no computador). */
+  @media (min-width: 1024px) {
+    .menu-recolhido .menu-item > span:not(.menu-ico),
+    .menu-recolhido .menu-grupo > span:not(.menu-ico),
+    .menu-recolhido .menu-grupo > svg,
+    .menu-recolhido .menu-filhos,
+    .menu-recolhido .secao-menu { display: none; }
+    .menu-recolhido .menu-item,
+    .menu-recolhido .menu-grupo { justify-content: center; padding-left: 0; padding-right: 0; }
+    .menu-recolhido nav { padding-left: 10px; padding-right: 10px; }
+  }
+
   /* ---- o rótulo, a dica e o erro de um campo ----
      🔑 **O rótulo saiu do `.rotulo`** (15/09/2026, protótipo aprovado). Ele era
      a MESMA classe do olho de seção, do cabeçalho de tabela e da legenda de
@@ -899,18 +927,18 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 /* ---- a tela inicial (protótipo aprovado em 29/09/2026) ----
    A faixa "Hoje": colunas lado a lado no computador, separadas por um fio; duas ou três
    por linha no celular e no tablet, sem o fio (que ficaria torto na quebra de linha). */
+/* 🔑 Layout novo (05/11/2026): a faixa do dia é uma fileira de CARTÕES de indicador, como no
+   protótipo — duas por linha no celular, três no tablet e todas numa linha no computador. */
 .faixa-hoje {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 12px;
+  gap: 12px;
 }
 @media (min-width: 768px) {
-  .faixa-hoje { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .faixa-hoje { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 }
 @media (min-width: 1280px) {
-  .faixa-hoje { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0; }
-  .faixa-hoje > .faixa-numero { padding-inline: 14px; border-left: 1px solid var(--color-linha); }
-  .faixa-hoje > .faixa-numero:first-child { padding-left: 0; border-left: 0; }
+  .faixa-hoje { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 }
 
 /* O período: quatro colunas no computador, com o fio entre elas; duas no celular. */
@@ -988,3 +1016,18 @@ select.etiqueta-loja { appearance: auto; }
   font: inherit; color: inherit; cursor: pointer;
 }
 .ordenar-coluna:hover { color: var(--color-tinta); }
+
+/* 🔑 Layout novo (05/11/2026): o rótulo logo acima do título da tela vira o CAMINHO do protótipo
+   ("Cadastros ›"), em caixa normal — vale para o `CabecalhoTela` e para as telas que escrevem o
+   cabeçalho à mão, sem tocar em cada uma. */
+header p.rotulo:has(+ h1) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-suave);
+}
+header p.rotulo:has(+ h1)::after { content: "›"; font-size: 15px; line-height: 1; color: #8a938c; }
