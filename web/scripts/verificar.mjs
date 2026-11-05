@@ -3349,7 +3349,19 @@ try {
     razaoComLinks.produtos > 0, razaoComLinks);
   checar("e o documento leva à origem (nota, venda, contagem ou remessa)",
     razaoComLinks.origem.length > 0, razaoComLinks);
-  if (razaoComLinks.origem[0]) {
+  // ⚠️ **Pula a venda que já não existe** (05/11/2026): os smokes de documento (prêmio, motivo,
+  // consumo interno) apagam a venda de teste e o movimento dela fica — o razão é append-only.
+  // Na base de casa o link mais recente às vezes era um desses órfãos, e a checagem caía em
+  // "Venda não encontrada" sem que nada estivesse errado na tela.
+  let origemViva = null;
+  for (const h of razaoComLinks.origem) {
+    const venda = h.match(/^\/vendas\/(\d+)/);
+    if (venda && (await api("GET", `/vendas/${venda[1]}`, null, token)).status !== 200) continue;
+    origemViva = h;
+    break;
+  }
+  if (origemViva) razaoComLinks.origem[0] = origemViva;
+  if (origemViva) {
     await p.evaluate((h) => document.querySelector(`a.link-registro[href="${h}"]`)?.click(),
       razaoComLinks.origem[0]);
     await p.waitForFunction((h) => location.pathname === h, { timeout: 20000 },
@@ -7611,11 +7623,12 @@ try {
     Number(normas.bordaCampo) >= 3, normas);
   checar("e a etiqueta de 11px passa dos 4,5 da WCAG 1.4.3",
     normas.etiquetaTexto === null || Number(normas.etiquetaTexto) >= 4.5, normas);
-  // 🔑 A divisao que o estudo propos: sem-serifa no dado, serifada na prosa.
-  checar("a celula da tabela esta na familia de LEITURA, nao na serifada",
-    /Inter/i.test(normas.celula) && !/Newsreader/i.test(normas.celula), normas.celula);
-  checar("e a prosa continua serifada — a voz da casa",
-    /Newsreader/i.test(normas.prosa), normas.prosa);
+  // 🔑 1.3.0 (layout novo, 05/11/2026): UMA familia so, a Plus Jakarta Sans, no dado e na
+  // prosa. A serifada (Newsreader) e a Inter sairam junto com a Bricolage.
+  checar("a celula da tabela esta na familia do layout novo (Plus Jakarta Sans)",
+    /Plus Jakarta Sans/i.test(normas.celula) && !/Newsreader/i.test(normas.celula), normas.celula);
+  checar("e a prosa tambem — uma voz so no sistema",
+    /Plus Jakarta Sans/i.test(normas.prosa) && !/Newsreader/i.test(normas.prosa), normas.prosa);
   await foto(p, "44-normas-ux");
 
   // 🔑 **O cabecalho nao pode ESMAGAR o titulo** (15/09/2026, relatado pelo
@@ -11023,6 +11036,7 @@ try {
     hora: /Por hora do cupom/.test(document.querySelector("main")?.innerText ?? ""),
     produtos: document.querySelectorAll("#painel-vendas-produtos tbody tr").length,
     baixar: [...document.querySelectorAll("main button")].some((b) => b.textContent?.trim() === "Imprimir"),
+    graficoHora: !!document.querySelector('svg[aria-label="faturado por hora do cupom"]'),
     eixoHora: [...document.querySelectorAll('svg[aria-label="faturado por hora do cupom"] text')]
       .map((t) => t.textContent ?? "").filter((t) => t.startsWith("R$")),
   }));
@@ -11037,7 +11051,9 @@ try {
     telaPainel.vazio || (telaPainel.numeros.includes("Mesmo dia, semana passada")
       && !telaPainel.numeros.includes("Média por dia")), telaPainel.numeros);
   checar("e o eixo do gráfico por hora vem em R$",
-    telaPainel.vazio || !telaPainel.hora || telaPainel.eixoHora.length >= 2, telaPainel.eixoHora);
+    // ⚠️ Só quando há o gráfico (05/11/2026): num dia só de documentos lançados à mão não há hora
+    // de cupom — o quadro existe e diz isso, sem barras. Exigir o eixo ali reprovava um dia vazio.
+    telaPainel.vazio || !telaPainel.graficoHora || telaPainel.eixoHora.length >= 2, telaPainel.eixoHora);
 
   // Trocar para MÊS: a URL leva o recorte, e a evolução aparece.
   await p.click('[data-modo="mes"]').catch(() => {});
@@ -11128,7 +11144,8 @@ for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mj
                        "verificar-catalogo-previa.mjs", "verificar-whatsapps.mjs", "verificar-sessao-sem-conexao.mjs",
                        "verificar-portal-no-site.mjs", "verificar-plano-de-acao.mjs",
                        "verificar-painel-reservas.mjs", "verificar-importacao-leadsfood.mjs",
-                       "verificar-premio-documento.mjs", "verificar-paineis-leadsfood.mjs"]) {
+                       "verificar-premio-documento.mjs", "verificar-paineis-leadsfood.mjs",
+                       "verificar-grade-produtos.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {

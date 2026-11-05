@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import Icone from "@/components/icone";
+import { abrirBuscaDeTelas } from "@/lib/eventos";
 import { useSessao } from "@/lib/sessao";
 
 /**
@@ -69,7 +71,7 @@ export default function BarraSuperior({
   return (
     <header
       id="barra-superior"
-      className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-linha bg-superficie/95 px-4 backdrop-blur-sm sm:px-6"
+      className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-linha bg-superficie/95 px-4 backdrop-blur-sm sm:px-6"
     >
       <button
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-linha2 bg-superficie lg:hidden"
@@ -83,7 +85,18 @@ export default function BarraSuperior({
         </span>
       </button>
 
-      <div className="min-w-0 flex-1">{marca}</div>
+      <div className="min-w-0 flex-1 lg:w-[252px] lg:flex-none">{marca}</div>
+
+      {/* 🔑 1.3.0: a busca de telas no topo, como no protótipo aprovado (no celular ela fica na
+          gaveta do menu). ⚠️ O `id="menu-busca"` mora aqui agora: é por ele que a bateria acha
+          o botão que abre a mesma busca do Ctrl+K. */}
+      <div className="hidden min-w-0 flex-1 lg:flex">
+        <button type="button" id="menu-busca" className="busca-topo" onClick={abrirBuscaDeTelas}>
+          <Icone nome="lupa" tamanho={17} />
+          <span className="min-w-0 flex-1 truncate">Buscar telas…</span>
+          <span className="menu-tecla">Ctrl K</span>
+        </button>
+      </div>
 
       {/* ⚠️ Visível também no celular: com várias lojas, a etiqueta é o seletor — é o único
           lugar de trocar de loja. */}
@@ -100,14 +113,14 @@ export default function BarraSuperior({
           aria-haspopup="menu"
           aria-expanded={aberto}
           onClick={() => setAberto((a) => !a)}
-          className="flex items-center gap-2 rounded-full border border-linha2 py-1 pl-1 pr-2.5 hover:bg-superficie2 sm:pr-3"
+          className="flex items-center gap-2.5 rounded-xl py-1 pl-1 pr-2 hover:bg-superficie2 sm:pr-2.5"
         >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-erva-claro text-[12px] font-bold text-erva">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-erva-claro text-[12.5px] font-extrabold text-erva">
             {iniciais || "?"}
           </span>
           {/* O nome some no celular: 32 caracteres ao lado do avatar empurram a
               marca para fora. O avatar continua sendo o alvo. */}
-          <span className="hidden max-w-[180px] truncate text-[14px] font-medium sm:block">
+          <span className="hidden max-w-[180px] truncate text-[14px] font-semibold sm:block">
             {eu.nome}
           </span>
           <svg viewBox="0 0 10 6" aria-hidden className="h-[6px] w-[10px] shrink-0 text-suave">

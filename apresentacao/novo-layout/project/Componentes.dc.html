@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Componentes do layout</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2E6A4F}a:hover{color:#1F4C38}
+.k *{box-sizing:border-box}
+.k .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:10px;border:1px solid transparent;font-family:inherit;font-size:14px;font-weight:600;background:transparent;color:#1C2420;cursor:pointer}
+.k .pri{background:#2E6A4F;color:#fff;box-shadow:0 1px 2px rgba(20,40,30,.18)}
+.k .sec{background:#fff;border-color:#E3E6E0}
+.k .fan{color:#58625B}
+.k .sm{height:34px;padding:0 12px;font-size:13px;border-radius:9px}
+.k .campo{height:42px;width:100%;border:1px solid #E3E6E0;border-radius:10px;padding:0 12px;font-family:inherit;font-size:14px;color:#1C2420;background:#fff}
+.k .rot{display:block;font-size:12.5px;font-weight:600;color:#58625B;margin-bottom:6px}
+.k .pill{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700}
+.k .t{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#58625B;margin:0 0 14px}
+.k .cartao{background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:24px}
+</style>
+</helmet>
+<div class="k" style="width: 1280px; height: 1180px; background: #F4F5F2; padding: 48px; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #1C2420; display: flex; flex-direction: column; gap: 24px;">
+  <div>
+    <h1 style="margin: 0 0 6px; font-size: 32px; font-weight: 800; letter-spacing: -.02em;">Componentes do layout</h1>
+    <p style="margin: 0; color: #58625B; font-size: 15px;">Uma base só para todas as telas: as mesmas cores, os mesmos cantos e os mesmos controles.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px;">
+    <section class="cartao">
+      <h2 class="t">Cores</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;">
+        <div><div style="height: 64px; border-radius: 12px; background: #2E6A4F;"></div><div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Destaque</div><div style="font-size: 12px; color: #58625B;">#2E6A4F</div></div>
+        <div><div style="height: 64px; border-radius: 12px; background: #E4EEE8;"></div><div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Destaque claro</div><div style="font-size: 12px; color: #58625B;">seleção, menu ativo</div></div>
+        <div><div style="height: 64px; border-radius: 12px; background: #F4F5F2; border: 1px solid #E3E6E0;"></div><div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Fundo</div><div style="font-size: 12px; color: #58625B;">#F4F5F2</div></div>
+        <div><div style="height: 64px; border-radius: 12px; background: #fff; border: 1px solid #E3E6E0;"></div><div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Superfície</div><div style="font-size: 12px; color: #58625B;">#FFFFFF</div></div>
+        <div><div style="height: 64px; border-radius: 12px; background: #1C2420;"></div><div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Texto</div><div style="font-size: 12px; color: #58625B;">#1C2420</div></div>
+        <div><div style="height: 64px; border-radius: 12px; background: #58625B;"></div><div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Texto suave</div><div style="font-size: 12px; color: #58625B;">#58625B</div></div>
+        <div><div style="height: 64px; border-radius: 12px; background: #FDEFD8;"></div><div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Atenção</div><div style="font-size: 12px; color: #58625B;">texto #8A4B06</div></div>
+        <div><div style="height: 64px; border-radius: 12px; background: #E3ECF7;"></div><div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Informação</div><div style="font-size: 12px; color: #58625B;">texto #1F4C80</div></div>
+      </div>
+    </section>
+
+    <section class="cartao">
+      <h2 class="t">Tipografia · Plus Jakarta Sans</h2>
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; align-items: baseline; gap: 16px;"><span style="width: 90px; font-size: 12px; color: #58625B;">Título 28</span><span style="font-size: 28px; font-weight: 800; letter-spacing: -.02em;">Produtos</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px;"><span style="width: 90px; font-size: 12px; color: #58625B;">Seção 16</span><span style="font-size: 16px; font-weight: 700;">Faturamento por dia</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px;"><span style="width: 90px; font-size: 12px; color: #58625B;">Texto 14</span><span style="font-size: 14px;">Itens de venda, insumos e produzidos da casa.</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px;"><span style="width: 90px; font-size: 12px; color: #58625B;">Rótulo 12,5</span><span style="font-size: 12.5px; font-weight: 600; color: #58625B;">Preço de venda (R$)</span></div>
+        <div style="display: flex; align-items: baseline; gap: 16px;"><span style="width: 90px; font-size: 12px; color: #58625B;">Número 26</span><span style="font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;">R$ 8.412,00</span></div>
+      </div>
+    </section>
+
+    <section class="cartao">
+      <h2 class="t">Botões</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px;">
+        <button type="button" class="btn pri">Salvar</button>
+        <button type="button" class="btn sec">Imprimir</button>
+        <button type="button" class="btn fan">Cancelar</button>
+        <button type="button" class="btn sec" aria-label="Editar" style="width: 40px; padding: 0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg></button>
+        <button type="button" class="btn pri" disabled="{{ true }}" style="opacity: .45; cursor: not-allowed;">Desabilitado</button>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+        <button type="button" class="btn pri sm">Atualizar</button>
+        <button type="button" class="btn sec sm">Gerar planilha</button>
+        <button type="button" class="btn fan sm">Limpar</button>
+      </div>
+      <p style="margin: 16px 0 0; font-size: 13px; color: #58625B; line-height: 1.55;">Um botão principal por tela, sempre à direita do cabeçalho. Relatório usa “Imprimir” e “Gerar planilha”, nunca “Baixar”.</p>
+    </section>
+
+    <section class="cartao">
+      <h2 class="t">Campos</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;">
+        <div><label class="rot" for="c1">Normal</label><input id="c1" class="campo" value="Pão de fermentação natural"></div>
+        <div><label class="rot" for="c2">Com foco</label><input id="c2" class="campo" value="16,00" style="border-color: #2E6A4F; box-shadow: 0 0 0 3px rgba(46,106,79,.18);"></div>
+        <div><label class="rot" for="c3">Com erro</label><input id="c3" class="campo" value="" style="border-color: #B42318;"><div style="font-size: 12.5px; color: #B42318; font-weight: 600; margin-top: 6px;">Informe o preço de venda</div></div>
+        <div><label class="rot" for="c4">Só leitura</label><input id="c4" class="campo" value="74,4%" readonly="{{ true }}" style="background: #F6F7F4; color: #58625B;"></div>
+      </div>
+    </section>
+
+    <section class="cartao">
+      <h2 class="t">Situações</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px;">
+        <span class="pill" style="background: #E3F1E8; color: #1F5A3B;">Ativo</span>
+        <span class="pill" style="background: #EDEEEC; color: #4E5651;">Inativo</span>
+        <span class="pill" style="background: #FDEFD8; color: #8A4B06;">Abaixo do mínimo</span>
+        <span class="pill" style="background: #E3ECF7; color: #1F4C80;">Aguardando</span>
+      </div>
+      <h2 class="t">Abas e alternâncias</h2>
+      <div style="display: flex; gap: 24px; border-bottom: 1px solid #E3E6E0; margin-bottom: 18px;">
+        <span style="height: 40px; display: inline-flex; align-items: center; font-weight: 600; color: #2E6A4F; border-bottom: 2px solid #2E6A4F;">Geral</span>
+        <span style="height: 40px; display: inline-flex; align-items: center; font-weight: 600; color: #58625B;">Preço e custo</span>
+        <span style="height: 40px; display: inline-flex; align-items: center; font-weight: 600; color: #58625B;">Estoque</span>
+      </div>
+      <div style="display: inline-flex; padding: 3px; border-radius: 10px; background: #ECEFEA; gap: 2px;">
+        <span style="height: 30px; padding: 0 12px; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08);">Confortável</span>
+        <span style="height: 30px; padding: 0 12px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; color: #58625B;">Compacta</span>
+      </div>
+    </section>
+
+    <section class="cartao" style="padding: 0; overflow: hidden;">
+      <div style="padding: 24px 24px 12px;"><h2 class="t" style="margin: 0;">Linha de grid</h2></div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13.5px;">
+        <thead><tr style="background: #FAFBF9;"><th style="text-align: left; font-size: 12px; color: #58625B; padding: 12px 24px; border-bottom: 1px solid #E3E6E0;">Produto ↑</th><th style="text-align: right; font-size: 12px; color: #58625B; padding: 12px 14px; border-bottom: 1px solid #E3E6E0;">Preço</th><th style="text-align: right; font-size: 12px; color: #58625B; padding: 12px 24px; border-bottom: 1px solid #E3E6E0;">Estoque</th></tr></thead>
+        <tbody>
+          <tr><td style="padding: 13px 24px; border-bottom: 1px solid #EEF0EC; font-weight: 600;">Croissant de manteiga</td><td style="padding: 13px 14px; border-bottom: 1px solid #EEF0EC; text-align: right; font-variant-numeric: tabular-nums;">R$ 12,90</td><td style="padding: 13px 24px; border-bottom: 1px solid #EEF0EC; text-align: right; color: #8A4B06; font-weight: 700; font-variant-numeric: tabular-nums;">12 UN</td></tr>
+          <tr style="background: #F0F5F2;"><td style="padding: 13px 24px; font-weight: 600;">Café espresso</td><td style="padding: 13px 14px; text-align: right; font-variant-numeric: tabular-nums;">R$ 7,50</td><td style="padding: 13px 24px; text-align: right; font-variant-numeric: tabular-nums;">410 DOSE</td></tr>
+        </tbody>
+      </table>
+      <p style="margin: 0; padding: 14px 24px 22px; font-size: 13px; color: #58625B; line-height: 1.55;">Números alinhados à direita, com algarismos de mesma largura. Linha selecionada em destaque claro e alerta em âmbar, com o valor em negrito.</p>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

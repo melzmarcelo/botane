@@ -28,6 +28,14 @@ def limpar(cur) -> None:
                     WHERE c.telefone LIKE %s""", (PREFIXO + "%",))
     ids = [r["id"] for r in cur.fetchall()]
     if ids:
+        # ⚠️ O movimento de estoque da baixa sai junto (05/11/2026). Sem isto ficava no razão um
+        # movimento apontando para venda apagada, e o link dele levava a "Venda não encontrada".
+        # Mesma exceção deliberada ao append-only de `tests/limpar_rastro.py`: rastro de TESTE.
+        cur.execute("""DELETE FROM movimento_lotes WHERE id_movimento IN (
+                         SELECT id FROM estoque_movimentos
+                          WHERE origem_tipo = 'VENDA' AND origem_id = ANY(%s))""", (ids,))
+        cur.execute("DELETE FROM estoque_movimentos WHERE origem_tipo = 'VENDA' AND origem_id = ANY(%s)",
+                    (ids,))
         cur.execute("DELETE FROM venda_itens WHERE id_venda = ANY(%s)", (ids,))
         cur.execute("DELETE FROM vendas WHERE id = ANY(%s)", (ids,))
     # Selos e prêmios penduram no cliente com ON DELETE CASCADE.

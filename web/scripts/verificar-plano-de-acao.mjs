@@ -91,6 +91,9 @@ try {
   ls = await linhas(p);
   const org = linhaDe(ls, "Otávio Roteiro");
   checar("o organizador aparece com os grupos e as pessoas", !!org && /2\s*grupos/.test(org.texto) && /21\s*pessoas/.test(org.texto), org?.texto);
+  // A URL vem com atraso de propósito (useEstadoNaUrl, 300 ms): com a máquina carregada, a espera
+  // fixa de 500 ms não bastou na bateria de 05/11/2026 — espera-se a própria URL.
+  await p.waitForFunction(() => location.search.includes("lista=organizadores"), { timeout: 5000 }).catch(() => {});
   checar("a lista escolhida vai para a URL", p.url().includes("lista=organizadores"), p.url());
   await p.evaluate(() => [...document.querySelectorAll("main button")].find((b) => b.textContent.includes("adormecidos para convidar"))?.click());
   await esperar(500);

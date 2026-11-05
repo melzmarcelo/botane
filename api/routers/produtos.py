@@ -201,6 +201,27 @@ def _gravar_fornecedores(cur, id_produto: int, lista) -> None:
         )
 
 
+# A coluna do grid → a expressão do ORDER BY. ⚠️ O texto vem DAQUI, nunca da requisição: o que
+# a tela manda é só a chave, e chave desconhecida cai na ordem de sempre (por nome).
+ORDENS = {
+    "codigo": "lower(p.codigo)",
+    "nome": "lower(p.nome)",
+    "tipo": "p.tipo",
+    "categoria": "lower(c.nome)",
+    "setor": "lower(s.nome)",
+    "unidade": "p.um_estoque",
+    "preco": "preco_venda",
+    "situacao": "p.status",
+}
+
+
+def _ordem(ordem: str | None, direcao: str) -> str:
+    expr = ORDENS.get(ordem or "")
+    if not expr:
+        return ""
+    return f"{expr} {'DESC' if direcao == 'desc' else 'ASC'} NULLS LAST, "
+
+
 @router.get("", response_model=list[ProdutoResumo])
 def listar(
     busca: str | None = Query(default=None, max_length=80),
@@ -235,6 +256,11 @@ def listar(
     # `false` é o avesso (29/10/2026, auditoria): o rascunho que ninguém está tocando,
     # candidato a arquivar. Ausente = sem recorte.
     em_uso: bool | None = None,
+    # 🔑 **Ordenar pelo cabeçalho do grid** (layout novo, fase 2 — 05/11/2026). A lista é
+    # paginada, então quem ordena é o servidor: ordenar a página no navegador mostraria os 20
+    # primeiros por nome reordenados, e não os 20 mais caros. ⚠️ Só as chaves de `ORDENS`.
+    ordem: str | None = Query(default=None, max_length=20),
+    direcao: str = Query(default="asc", pattern="^(asc|desc)$"),
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
@@ -276,8 +302,9 @@ def listar(
                     OR lower(coalesce(p.nome_curto, '')) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%')
                     OR coalesce(p.codigo_barras, '') LIKE '%%' || %s || '%%')
-             ORDER BY p.ativo DESC, lower(p.nome)
-            """.replace("__EM_USO__", produtos_em_uso.EM_USO.format(u="%s")),
+             ORDER BY p.ativo DESC, __ORDEM__ lower(p.nome)
+            """.replace("__EM_USO__", produtos_em_uso.EM_USO.format(u="%s"))
+               .replace("__ORDEM__", _ordem(ordem, direcao)),
             # ⚠️ A loja vai PRIMEIRO: o `%s` dela está na lista do SELECT, que
             # vem antes do WHERE. Parâmetro posicional é assim — a ordem do SQL
             # é a ordem da tupla.

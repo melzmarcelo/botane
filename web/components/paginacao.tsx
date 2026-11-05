@@ -29,12 +29,12 @@ export const POR_PAGINA_PADRAO = 20;
 const chaveGuardada = (nome: string) => `botane:porPagina:${nome}`;
 
 /**
- * A barra do topo (`sticky`, 56px) mais uma folga.
+ * A barra do topo (`sticky`, 64px desde a 1.3.0) mais uma folga.
  *
  * ⚠️ Sem descontá-la, o título do bloco para DEBAIXO dela ao rolar — e o que a
  * pessoa vê depois de virar a página é uma tabela começando do nada.
  */
-const ALTURA_DA_BARRA = 72;
+const ALTURA_DA_BARRA = 80;
 
 export type Paginacao = ReturnType<typeof usePaginacao>;
 
@@ -246,7 +246,7 @@ export function Paginacao({
   // vista. `.cartao` é o `<section>` que embrulha cada bloco do sistema — na
   // tela cheia ele traz o título e os filtros junto, que é onde se quer estar.
   //
-  // ⚠️ **A barra do topo é `sticky` e tem 56px.** Parar exatamente no topo do
+  // ⚠️ **A barra do topo é `sticky` e tem 64px** (56 até a 1.3.0). Parar exatamente no topo do
   // cartão esconderia o título dele atrás dela — foi o que a primeira versão
   // fez, com `scrollIntoView`, que não aceita deslocamento. Por isso a conta é
   // feita à mão, com folga.

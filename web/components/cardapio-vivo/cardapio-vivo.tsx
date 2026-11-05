@@ -29,7 +29,9 @@ import { idiomaDoNavegador, nomeRestricao, textos } from "./textos";
 const FONTES: Record<string, { familia: string; url?: string }> = {
   FRAUNCES: { familia: "Fraunces, Georgia, serif",
               url: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&display=swap" },
-  NEWSREADER: { familia: "'Newsreader', Georgia, serif" },
+  // ⚠️ Desde o layout novo (1.3.0) o sistema não carrega mais a Newsreader: ela vem daqui.
+  NEWSREADER: { familia: "'Newsreader', Georgia, serif",
+                url: "https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" },
   PLAYFAIR: { familia: "'Playfair Display', Georgia, serif",
               url: "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&display=swap" },
   LORA: { familia: "'Lora', Georgia, serif",

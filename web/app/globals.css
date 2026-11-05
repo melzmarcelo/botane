@@ -1,25 +1,34 @@
 @import "tailwindcss";
 
-/* Identidade do Botane — a mesma da apresentação: papel com viés verde,
-   verde-erva como acento, latão para números e rótulos. */
+/* Identidade do Botane.
+   🔑 **Layout novo (1.3.0, 05/11/2026, pedido do dono: "um layout único e mais moderno e
+   suave", protótipo aprovado em `apresentacao/novo-layout/`).** O papel deixou o viés verde
+   forte (#dee6d3) por um neutro claro, o cartão ficou branco puro, as linhas mais leves e a
+   letra virou uma só: Plus Jakarta Sans. O verde-erva continua o acento.
+   ⚠️ O que é norma NÃO afrouxou: a borda de campo segue acima de 3,0 (WCAG 1.4.11), o texto
+   suave acima de 4,5 e o botão com 44px — o protótipo tinha bordas de 1,2 e botão de 40. */
 @theme {
   /* O papel é o fundo da página; a superfície é o cartão que pousa sobre ele.
      A distância entre os dois é o que faz o cartão existir — com os dois quase
      brancos, a tela virava uma folha só e a hierarquia sumia. */
-  --color-papel: #dee6d3;
-  --color-superficie: #fcfdfa;
-  --color-superficie2: #edf0e7;
-  --color-tinta: #14201a;
-  --color-suave: #5d6c61;
-  --color-linha: #d8ded0;
+  --color-papel: #f4f5f2;
+  --color-superficie: #ffffff;
+  --color-superficie2: #f1f3ef;
+  /* O fundo do menu lateral: um degrau acima do papel, abaixo do cartão. */
+  --color-lateral: #fafbf9;
+  --color-tinta: #1c2420;
+  --color-suave: #58625b;
+  --color-linha: #e3e6e0;
   /* ⚠️ **Escurecida de #bfc8b6 em 14/09/2026.** Ela é a borda de campo e de
      botão, e a WCAG 1.4.11 pede contraste 3,0 para a fronteira de um elemento
      de interface — a antiga dava **1,69**: a linha que diz "aqui é um campo
      onde se digita" quase não existia para quem enxerga pouco.
      🔑 **A primeira tentativa (#9aa78e) também NÃO passou** — deu 2,48, e quem
      avisou foi a guarda da bateria, não o olho. Esta dá 4,09 sobre o cartão e
-     3,25 sobre o papel, passando nos dois fundos em que um campo aparece. */
-  --color-linha2: #748069;
+     3,25 sobre o papel, passando nos dois fundos em que um campo aparece.
+     🔑 **1.3.0: #808a83**, mais suave para o layout novo e ainda dentro da norma: 3,57 sobre o
+     cartão, 3,26 sobre o papel novo e 3,20 sobre a `superficie2`. */
+  --color-linha2: #808a83;
   /* 🔑 **O sublinhado do nome do registro tem cor PRÓPRIA**, e isto apareceu ao
      escurecer a borda: as duas coisas usavam `linha2`, e são trabalhos
      opostos. A borda do campo precisa de CONTRASTE (a norma pede 3,0 para
@@ -49,15 +58,17 @@
   --color-erro-claro: #f7e7e4;
   --color-alerta-claro: #f6ecd9;
 
-  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  /* 🔑 1.3.0: UMA família para título, controle, dado e prosa — a Plus Jakarta Sans. As três
+     de antes (Bricolage, Inter e Newsreader) faziam cada tipo de texto falar com uma voz. */
+  --font-display: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
   /* 🔑 **A família do dado denso** (14/09/2026, pedido do dono: *"deixando com
      letras amigáveis e bonitas… a funcionalidade mais simples no dia a dia"*).
      A serifada era o padrão do `body`, e com isso carregava as CÉLULAS das
      tabelas: vinte linhas de nome de produto em serifada, negrito e sublinhado
      ao mesmo tempo. Ela continua — mas onde é boa, que é a frase que se LÊ.
      ⚠️ Título, campo e botão já eram Bricolage; isto muda o corpo, não eles. */
-  --font-leitura: "Inter", "Segoe UI", system-ui, sans-serif;
-  --font-corpo: "Newsreader", Georgia, serif;
+  --font-leitura: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+  --font-corpo: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
 }
 
@@ -66,7 +77,7 @@ body {
   background: var(--color-papel);
   color: var(--color-tinta);
   font-family: var(--font-leitura);
-  font-size: 16px;
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -83,7 +94,7 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
    sem-serifa, e no mesmo corpo ela parece menor do que é. */
 .prosa {
   font-family: var(--font-corpo);
-  font-size: 1.03em;
+  line-height: 1.6;
 }
 
 /* 🔑 **O título de tela, num lugar só** (14/09/2026).
@@ -97,7 +108,7 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 .titulo {
   font-family: var(--font-display);
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.02em;
 }
@@ -106,10 +117,12 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 }
 
 /* ---- peças reaproveitadas em todas as telas ---- */
+/* 1.3.0: sem-serifa em negrito, como o título de seção do menu (era a mono de 10,5px). */
 .rotulo {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.1em;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-suave);
 }
@@ -191,6 +204,36 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     cursor: pointer;
   }
   .menu-busca:hover { border-color: var(--color-erva); color: var(--color-erva); }
+  /* 🔑 1.3.0: no computador a busca mora na BARRA DO TOPO, como no protótipo — um campo
+     largo, de fundo cinza-claro; a da lateral fica para a gaveta do celular. */
+  .busca-topo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 520px;
+    height: 40px;
+    padding: 0 10px 0 12px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: var(--color-papel);
+    color: var(--color-suave);
+    font-family: var(--font-display);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .busca-topo:hover { border-color: var(--color-linha2); background: var(--color-superficie); }
+  .busca-topo .menu-tecla {
+    border: 1px solid var(--color-linha);
+    border-radius: 6px;
+    padding: 2px 6px;
+    background: var(--color-superficie);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 11px;
+  }
   .menu-tecla {
     margin-left: auto;
     font-family: var(--font-mono);
@@ -213,23 +256,26 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
        (WCAG 2.5.5). */
     min-height: 44px;
     font-family: var(--font-display);
-    font-size: 15px;
+    font-size: 14.5px;
     font-weight: 500;
-    letter-spacing: -0.004em;
-    color: var(--color-tinta);
+    color: #38423c;
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
-  .menu-item:hover { background: var(--color-superficie2); }
+  .menu-item:hover { background: #edf0eb; }
   .menu-ico { display: grid; place-items: center; flex: 0 0 18px; color: var(--color-suave); }
   .menu-item-ativo {
     background: var(--color-erva-claro);
-    font-weight: 600;
+    font-weight: 700;
     color: var(--color-erva);
   }
   .menu-item-ativo .menu-ico { color: var(--color-erva); }
   /* A marca do item aberto é uma BARRA, não só a cor de fundo: com os grupos
      recolhidos, a pílula sozinha se perde entre os títulos. Feita com
      `::before` para não empurrar o texto quando aparece. */
+  /* 1.3.0: a pílula clara com o texto em negrito já marca o item; a barra saiu, como no
+     protótipo (`display: none` para as regras de posição abaixo continuarem inofensivas). */
   .menu-item-ativo::before {
+    display: none;
     content: "";
     position: absolute;
     left: 0;
@@ -250,15 +296,15 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     min-height: 44px;
     text-align: left;
     font-family: var(--font-display);
-    font-size: 13.5px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--color-suave);
+    font-size: 14.5px;
+    font-weight: 500;
+    color: #38423c;
     cursor: pointer;
+    transition: background-color 0.15s ease;
   }
-  .menu-grupo:hover { background: var(--color-superficie2); }
+  .menu-grupo:hover { background: #edf0eb; }
   /* "Você está aqui" com o grupo recolhido: o título é a única pista que sobra. */
-  .menu-grupo-ativo { color: var(--color-erva); }
+  .menu-grupo-ativo { color: var(--color-erva); font-weight: 700; }
   .menu-grupo-ativo .menu-ico { color: var(--color-erva); }
   /* Quantas telas esperam lá dentro. Sem isto, abrir um grupo é sempre uma
      surpresa — e o grupo de uma tela só nem existe mais (ver `montarMenu`). */
@@ -496,10 +542,14 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 .campo-toque {
   padding: 12px 12px;
 }
+/* 1.3.0: o foco é um halo suave na cor do acento, como no protótipo; o contorno some só
+   porque o halo o substitui (continua visível e com contraste). */
+.campo { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.campo:hover:not(:disabled):not(:focus) { border-color: #6b756e; }
 .campo:focus {
-  outline: 2px solid var(--color-erva);
-  outline-offset: 1px;
+  outline: none;
   border-color: var(--color-erva);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-erva) 22%, transparent);
 }
 /* 🔑 **O campo ERRADO passa a ter cara de errado** (15/09/2026, protótipo
    aprovado). Antes, o erro de um campo não tinha onde morar: saía no balão
@@ -514,7 +564,7 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   border-width: 1.5px;
   background: color-mix(in srgb, var(--color-erro-claro) 45%, var(--color-superficie));
 }
-.campo[aria-invalid="true"]:focus { outline-color: var(--color-erro); }
+.campo[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-erro) 20%, transparent); }
 .campo:disabled { background: var(--color-superficie2); color: var(--color-suave); }
 /* 🔑 **4px de raio é canto vivo disfarçado.** A tela é feita de caixas — cartão,
    aviso, etiqueta, botão, campo —, e num raio tão curto todas elas leem como
@@ -523,13 +573,13 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
    ⚠️ A sombra é DUPLA e quase invisível de propósito: uma linha de 1px logo
    abaixo, que separa do fundo, e um halo largo e muito claro, que dá a altura.
    Sombra única e escura faria a tela parecer um site de 2012. */
+/* 🔑 1.3.0: 16px de raio e sombra de um fio só. Com o papel neutro e o cartão branco, a
+   borda leve já separa um do outro; o halo largo de antes pesava no layout suave. */
 .cartao {
   border: 1px solid var(--color-linha);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--color-superficie);
-  box-shadow:
-    0 1px 2px rgba(20, 32, 26, 0.04),
-    0 10px 28px -18px rgba(20, 32, 26, 0.22);
+  box-shadow: 0 1px 2px rgba(20, 32, 26, 0.04);
 }
 
 /* ---- o balão de recado ----
@@ -590,25 +640,28 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     border-radius: 10px;
     border: 1px solid transparent;
     cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   }
+  .btn:focus-visible { outline: 2px solid var(--color-erva); outline-offset: 2px; }
   /* Para linha de tabela e barra de filtro, onde 44px empurram o resto da tela
      para baixo. ⚠️ Continua acima dos 24×24 que a norma exige como mínimo. */
   .btn-pequeno { min-height: 36px; padding: 8px 14px; font-size: 13px; }
 
-  .btn-primario { background: var(--color-erva); color: #fff; }
+  .btn-primario { background: var(--color-erva); color: #fff; box-shadow: 0 1px 2px rgba(20, 40, 30, 0.18); }
   .btn-primario:hover { background: #24563c; }
+  /* 1.3.0: o secundário é branco com borda leve e escurece no hover, sem virar verde —
+     verde fica para o que é a ação da tela. */
   .btn-secundario {
     background: var(--color-superficie);
     border-color: var(--color-linha2);
     color: var(--color-tinta);
   }
-  .btn-secundario:hover { border-color: var(--color-erva); color: var(--color-erva); }
+  .btn-secundario:hover { background: #f7f8f5; border-color: #5f6a62; }
   /* O terciário é ação de verdade sem peso visual: "ver movimentos", "voltar
      para a lista". Ele tem ÁREA e responde ao ponteiro — é o que o separa de um
      link solto no meio do texto. */
-  .btn-terciario { background: transparent; border-color: transparent; color: var(--color-erva); }
-  .btn-terciario:hover { background: var(--color-erva-claro); }
+  .btn-terciario { background: transparent; border-color: transparent; color: var(--color-suave); }
+  .btn-terciario:hover { background: #eceFea; color: var(--color-tinta); }
   /* 🔑 **O de risco tem cara de risco, e mesmo assim não é vermelho cheio.**
      Botão sólido vermelho atrai o clique justamente onde ele não deve ser
      atraído; a borda e a tinta bastam para dizer "aqui se apaga alguma coisa". */
@@ -759,17 +812,19 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 .tabela { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .tabela th {
   text-align: left;
-  padding: 9px 14px;
-  background: var(--color-superficie2);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  padding: 12px 14px;
+  background: var(--color-lateral);
+  /* 1.3.0: cabeçalho em sem-serifa de 12px, negrito, em caixa normal (era mono maiúscula). */
+  font-family: var(--font-display);
+  font-size: 12px;
   color: var(--color-suave);
-  font-weight: 500;
+  font-weight: 700;
   white-space: nowrap;
+  border-bottom: 1px solid var(--color-linha);
 }
-.tabela td { padding: 10px 14px; border-top: 1px solid var(--color-linha); vertical-align: middle; }
+.tabela td { padding: 12px 14px; border-top: 1px solid #eef0ec; vertical-align: middle; }
+.tabela tbody tr:first-child td { border-top: 0; }
+.tabela tbody tr:hover td { background: #f8faf7; }
 
 /* 🔑 **Tabela de DIGITAR que empilha no celular** (auditoria de 29/10/2026). Em Vendas ▸
    Lançar, a linha do item tinha produto, quantidade, valor e total lado a lado: no celular
@@ -807,7 +862,9 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   }
   .tabela-empilha td:empty { display: none; }
 }
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* 1.3.0: o número fica na família do texto, com algarismos de mesma largura — a mono de
+   antes fazia cada valor parecer código. A mono de verdade (`--font-mono`) fica para código. */
+.mono { font-family: var(--font-leitura); font-variant-numeric: tabular-nums; }
 
 /* ---- impressão: o Ctrl+P do painel vira o PDF que vai para o contador ---- */
 @media print {
@@ -881,3 +938,53 @@ select.etiqueta-loja { appearance: auto; }
    cardápio era o que mais denunciava "dois sistemas". */
 .cv-corpo { font-family: Karla, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
 .cv-mono { font-family: "DM Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+/* ---- o grid configurável (layout novo, fase 2 — 05/11/2026) ----
+   As peças de `components/grade-configuravel.tsx`: visões salvas, densidade, o botão Colunas e o
+   cabeçalho que ordena. Mesmo desenho do protótipo aprovado (`apresentacao/novo-layout/`). */
+.tabela-compacta td { padding-top: 7px; padding-bottom: 7px; }
+.contador-grade {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px;
+  background: var(--color-superficie2); color: var(--color-suave);
+  font-size: 11.5px; font-weight: 700;
+}
+.seg-grade { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: #eceFea; }
+.seg-grade button {
+  min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent;
+  font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--color-suave);
+}
+.seg-grade button[aria-pressed="true"] { background: var(--color-superficie); color: var(--color-tinta); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.seg-grade button:focus-visible,
+.visao-grade:focus-visible,
+.ordenar-coluna:focus-visible,
+.seta-coluna:focus-visible { outline: 2px solid var(--color-erva); outline-offset: 2px; }
+.visao-grade {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px;
+  border: 1px solid transparent; border-radius: 999px; background: transparent;
+  font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--color-suave);
+}
+.visao-grade:hover { background: #eceFea; color: var(--color-tinta); }
+.visao-grade[aria-pressed="true"] {
+  background: var(--color-superficie); border-color: var(--color-linha); color: var(--color-tinta);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.visao-grade-item { display: inline-flex; align-items: center; }
+.visao-grade-item .visao-grade { padding-right: 6px; }
+.visao-grade-x {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+  margin-left: -4px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--color-suave); font-size: 16px; line-height: 1;
+}
+.visao-grade-x:hover { background: var(--color-erro-claro); color: var(--color-erro); }
+.seta-coluna {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--color-suave);
+}
+.seta-coluna:hover:not(:disabled) { background: #eceFea; color: var(--color-tinta); }
+.seta-coluna:disabled { opacity: 0.35; cursor: default; }
+.ordenar-coluna {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent;
+  font: inherit; color: inherit; cursor: pointer;
+}
+.ordenar-coluna:hover { color: var(--color-tinta); }

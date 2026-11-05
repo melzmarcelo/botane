@@ -3,6 +3,51 @@
 > Extraído do CLAUDE.md original (seções "O que já existe" e "Armadilhas já pagas").
 > Consultar antes de mexer nesta área do sistema.
 
+## Layout novo (1.3.0, 05/11/2026) — fase 1: a base visual
+
+🔑 **Pedido do dono:** *"gostaria de ter um layout único e mais moderno e suave"*, depois de um
+protótipo navegável (artifact `https://claude.ai/artifact/Jvq2Pku1vEjUVy8DQxeQyh`, arquivos em
+`apresentacao/novo-layout/`) → *"ficou muito bom, pode implementar igual ao protótipo"*.
+- **Fase 1 (feita): a base**, que muda todas as telas de uma vez, sem mexer nas telas:
+  - tokens em `globals.css`: papel `#f4f5f2` (era o verde `#dee6d3`), cartão `#ffffff`,
+    `superficie2 #f1f3ef`, `linha #e3e6e0`, `linha2 #808a83`, e o token novo `--color-lateral #fafbf9`
+    (fundo do menu e do cabeçalho de tabela);
+  - **uma família só, Plus Jakarta Sans** (`--font-display`, `--font-leitura` e `--font-corpo`).
+    Saíram Bricolage, Inter e Newsreader. A IBM Plex Mono continua carregada para código, mas
+    `.mono` agora é a Jakarta com `tabular-nums`. ⚠️ A Newsreader do Cardápio Vivo passou a ter
+    `url` própria em `FONTES` (antes vinha da folha do sistema);
+  - `.rotulo` e `<th>`: sem-serifa em negrito (o rótulo segue em maiúsculas de 11px, o `<th>` em
+    caixa normal de 12px); cartão com raio de 16 e sombra de um fio; foco do campo como halo;
+    secundário branco que escurece no hover; terciário cinza;
+  - menu: a pílula clara com negrito marca o item (a barra à esquerda saiu); seta do grupo na ponta;
+  - barra do topo com 64px e a **busca no topo** (`.busca-topo`, `id="menu-busca"`); a da lateral
+    ficou só para a gaveta do celular (`lg:hidden`). ⚠️ Mudou a altura: `top-16`/`calc(100vh-4rem)`
+    no menu e `ALTURA_DA_BARRA = 80` em `paginacao.tsx`;
+  - conteúdo até 1360px (era 1180);
+  - login em duas metades (o painel verde só a partir de `lg`).
+- ⚠️ **O que é norma NÃO seguiu o protótipo**: lá a borda do campo dava 1,2:1 e o botão 40px. Aqui
+  a borda segue ≥ 3,0 (WCAG 1.4.11, a bateria confere), o botão 44px e o campo 16px (zoom do iPhone).
+- **Fase 2 (feita em Produtos): o grid configurável** — `components/grade-configuravel.tsx`:
+  `useGrade(nome, COLUNAS)` + `<VisoesDaGrade>`, `<DensidadeGrade>`, `<BotaoColunas>` e
+  `<CabecalhoOrdenavel>`. Preferência POR USUÁRIO no servidor: tabela `preferencias_usuario`
+  (migração 148), `GET/PUT/DELETE /preferencias/{chave}` (`routers/preferencias.py`, só
+  autenticação — cada um só a sua, como `/auth/me`; chave validada, teto de 32 KB), `lib/preferencias.ts`.
+  - A visão guarda a URL SEM `p`/`pp` + colunas + densidade; "Padrão" limpa filtros e colunas.
+  - Coluna `fixa` (o nome) não esconde nem sai do lugar; coluna nova no código entra sozinha na
+    posição padrão (`mesclarOrdem`).
+  - **Ordenar é do servidor** (a lista é paginada): `/produtos?ordem=&direcao=`, com as chaves numa
+    lista fechada (`ORDENS` em `routers/produtos.py`); chave desconhecida cai na ordem de sempre.
+  - ⚠️ "Coluna vazia some" (regra de 14/09) agora só vale enquanto a pessoa NÃO personalizou
+    (`g.personalizado`): escolheu Setor, o Setor aparece mesmo vazio.
+  - ⚠️ `direcao=asc` é o padrão e por isso NÃO vai para a URL (a bateria quase reprovou por isso).
+  - Cobertura: `smoke_preferencias.py` (15) e `verificar-grade-produtos.mjs` (18, na bateria).
+  - ⏳ Levar às outras listas (notas, vendas, movimentos, fichas…): cada uma precisa das COLUNAS
+    e, para ordenar, de um `ORDENS` no router dela.
+- ⏳ **Próximas fases, do protótipo** (não começadas):
+  3. a tela única de Relatórios (catálogo dos padrão, filtros e prévia em folha);
+  4. o Estúdio BI (fontes, ligações e campos, só administrador). ⚠️ Precisa de backend próprio com
+     fontes e ligações numa LISTA BRANCA e SQL montado pelo servidor; nada de SQL vindo da tela.
+
 ## O que já existe
 
 - 🔑 **Plural da casa: `plural(n, "item", "itens")` e `concorda(n, um, varios)`** em

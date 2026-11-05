@@ -21,6 +21,23 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import CabecalhoTela from "@/components/cabecalho-tela";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { plural, concorda } from "@/lib/numeros";
+import {
+  BotaoColunas, CabecalhoOrdenavel, type ColunaGrade, DensidadeGrade, useGrade, VisoesDaGrade,
+} from "@/components/grade-configuravel";
+
+/** 🔑 As colunas do grid (layout novo, fase 2 — 05/11/2026). A chave é a mesma de `ORDENS`
+ * em `api/routers/produtos.py`, que é quem ordena. */
+const COLUNAS: ColunaGrade[] = [
+  { chave: "codigo", rotulo: "Código" },
+  { chave: "nome", rotulo: "Produto", fixa: true },
+  { chave: "tipo", rotulo: "Tipo" },
+  { chave: "categoria", rotulo: "Categoria" },
+  { chave: "setor", rotulo: "Setor" },
+  { chave: "unidade", rotulo: "Un." },
+  { chave: "preco", rotulo: "Preço" },
+  { chave: "situacao", rotulo: "Situação", padrao: false },
+];
+const SITUACAO: Record<string, string> = { ATIVO: "Aprovado", RASCUNHO: "Rascunho", ARQUIVADO: "Arquivado" };
 
 type Contagem = { total: number; por_tipo: Record<string, number>; rascunhos: number; inativos: number };
 
@@ -51,6 +68,10 @@ export default function PaginaProdutos() {
   // 🔑 **A situacao**: rascunho e o que ainda nao foi revisado, e "aprovado" e
   // o vocabulario da casa para o produto ja revisado (`status = ATIVO`).
   const [situacao, setSituacao] = useEstadoNaUrl<string>("situacao", "");
+  // A ordem do cabeçalho (vazia = a de sempre: ativos primeiro, por nome). Vai na URL e nas visões.
+  const [ordem, setOrdem] = useEstadoNaUrl<string>("ordem", "", { atraso: 0 });
+  const [direcao, setDirecao] = useEstadoNaUrl<string>("direcao", "asc", { atraso: 0 });
+  const g = useGrade("produtos", COLUNAS);
   const [erro, setErro] = useState("");
   // 🔑 **Selecao para alteracao multipla** (09/09/2026, pedido do dono).
   // ⚠️ Vive FORA da lista: virar a pagina nao pode perder o que ja foi
@@ -59,7 +80,7 @@ export default function PaginaProdutos() {
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const [alterando, setAlterando] = useState(false);
   const pag = usePaginacao("produtos", {
-    filtros: [busca, tipo, idCategoria, ativacao, situacao],
+    filtros: [busca, tipo, idCategoria, ativacao, situacao, ordem, direcao],
   });
 
   const carregar = useCallback(async () => {
@@ -90,6 +111,10 @@ export default function PaginaProdutos() {
         q.set("status", "RASCUNHO");
         q.set("em_uso", "false");
       } else if (situacao) q.set("status", situacao);
+      if (ordem) {
+        q.set("ordem", ordem);
+        q.set("direcao", direcao);
+      }
       const r = await api.listar<ProdutoResumo>(`/produtos?${q}`);
       setLista(r.itens);
       pag.setTotal(r.total);
@@ -97,7 +122,7 @@ export default function PaginaProdutos() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, busca, tipo, idCategoria, ativacao, situacao,
+  }, [pag.pronto, busca, tipo, idCategoria, ativacao, situacao, ordem, direcao,
       pag.offset, pag.porPagina]);
 
   useEffect(() => {
@@ -128,10 +153,50 @@ export default function PaginaProdutos() {
       const v = campo(p);
       return v !== null && v !== undefined && v !== "";
     });
-  const temCategoria = nas((p) => p.categoria);
-  const temSetor = nas((p) => p.setor);
-  const temUnidade = nas((p) => p.um_estoque);
-  const temPreco = nas((p) => p.preco_venda);
+  // ⚠️ 1.3.0: a coluna vazia só some enquanto a pessoa NÃO escolheu as colunas. Escolheu
+  // "Setor" no painel, o Setor aparece — mesmo vazio —, senão o botão pareceria quebrado.
+  const vazia = (campo: (p: ProdutoResumo) => unknown) => !g.personalizado && !nas(campo);
+  const VAZIAS: Record<string, boolean> = {
+    categoria: vazia((p) => p.categoria),
+    setor: vazia((p) => p.setor),
+    unidade: vazia((p) => p.um_estoque),
+    preco: vazia((p) => p.preco_venda),
+  };
+  const colunas = g.visiveis.filter((c) => !VAZIAS[c.chave]);
+  const ordenar = (k: string) => {
+    if (ordem === k) setDirecao(direcao === "asc" ? "desc" : "asc");
+    else {
+      setOrdem(k);
+      setDirecao("asc");
+    }
+  };
+  const celula = (p: ProdutoResumo, k: string) => {
+    switch (k) {
+      case "codigo": return <td key={k} className="mono whitespace-nowrap text-[13px]">{p.codigo}</td>;
+      case "nome": return (
+        <td key={k}>
+          <Link href={`/produtos/${p.id}`} className="link-registro">{p.nome}</Link>
+          <span className="ml-2 inline-flex gap-1">
+            {p.status === "RASCUNHO" && <Etiqueta cor="alerta">rascunho</Etiqueta>}
+            {p.producao_propria && <Etiqueta cor="erva">ficha</Etiqueta>}
+            {!p.controla_estoque && <Etiqueta>sem estoque</Etiqueta>}
+          </span>
+        </td>
+      );
+      case "tipo": return <td key={k}>{nomeTipo(p.tipo)}</td>;
+      case "categoria": return <td key={k} className="text-suave">{p.categoria ?? "—"}</td>;
+      case "setor": return <td key={k} className="text-suave">{p.setor ?? "—"}</td>;
+      case "unidade": return <td key={k} className="mono">{p.um_estoque ?? "—"}</td>;
+      case "preco": return <td key={k} className="num">{p.preco_venda ? reais(Number(p.preco_venda)) : "—"}</td>;
+      case "situacao": return (
+        <td key={k}>
+          <Etiqueta cor={p.status === "RASCUNHO" ? "alerta" : undefined}>{SITUACAO[p.status] ?? p.status}</Etiqueta>
+          {!p.ativo && <span className="ml-1"><Etiqueta cor="alerta">inativo</Etiqueta></span>}
+        </td>
+      );
+      default: return <td key={k} />;
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -243,6 +308,9 @@ export default function PaginaProdutos() {
           tiverem unidade de estoque e fator de conversão.
         </Aviso>
       )}
+
+      {/* 🔑 As visões salvas de cada pessoa (filtros + colunas), como no protótipo. */}
+      <VisoesDaGrade g={g} />
 
       <Cartao>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -357,8 +425,13 @@ export default function PaginaProdutos() {
               ))}
             </ul>
 
+            {/* A densidade e as colunas: só no computador, onde há grid (no celular são cartões). */}
+            <div className="mb-3 hidden items-center justify-end gap-2 md:flex">
+              <DensidadeGrade g={g} />
+              <BotaoColunas g={g} />
+            </div>
             <div className="hidden grid-rolante md:block">
-              <table className="tabela">
+              <table className={`tabela ${g.compacta ? "tabela-compacta" : ""}`}>
                 <thead>
                   <tr>
                     {podeEditar && (
@@ -381,23 +454,11 @@ export default function PaginaProdutos() {
                         />
                       </th>
                     )}
-                    <th>Código</th>
-                    <th>Produto</th>
-                    <th>Tipo</th>
-                    {/* 🔑 **Coluna vazia não custa largura** (14/09/2026). Nesta
-                        base, categoria, setor, unidade e preço vinham em branco
-                        em quase toda linha — cinco colunas de travessão comendo
-                        40% da tela para não dizer nada.
-                        ⚠️ **E a regra é do DADO, não uma decisão fixa**: a coluna
-                        some só quando está vazia em TODA a página, e volta
-                        sozinha assim que existir um valor. Arrancá-la de vez
-                        seria otimizar para o resíduo da importação do Omie, que
-                        é passageiro; a casa que preenche o cadastro continua
-                        vendo tudo. */}
-                    {temCategoria && <th>Categoria</th>}
-                    {temSetor && <th>Setor</th>}
-                    {temUnidade && <th>Un.</th>}
-                    {temPreco && <th className="num">Preço</th>}
+                    {colunas.map((c) => (
+                      <CabecalhoOrdenavel key={c.chave} rotulo={c.rotulo} num={c.chave === "preco"}
+                                          ativo={ordem === c.chave} direcao={direcao === "desc" ? "desc" : "asc"}
+                                          aoOrdenar={() => ordenar(c.chave)} />
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -418,26 +479,7 @@ export default function PaginaProdutos() {
                           />
                         </td>
                       )}
-                      <td className="mono text-[13px]">{p.codigo}</td>
-                      <td>
-                        <Link href={`/produtos/${p.id}`} className="link-registro">
-                          {p.nome}
-                        </Link>
-                        <span className="ml-2 inline-flex gap-1">
-                          {p.status === "RASCUNHO" && <Etiqueta cor="alerta">rascunho</Etiqueta>}
-                          {p.producao_propria && <Etiqueta cor="erva">ficha</Etiqueta>}
-                          {!p.controla_estoque && <Etiqueta>sem estoque</Etiqueta>}
-                        </span>
-                      </td>
-                      <td>{nomeTipo(p.tipo)}</td>
-                      {temCategoria && <td className="text-suave">{p.categoria ?? "—"}</td>}
-                      {temSetor && <td className="text-suave">{p.setor ?? "—"}</td>}
-                      {temUnidade && <td className="mono">{p.um_estoque ?? "—"}</td>}
-                      {temPreco && (
-                        <td className="num">
-                          {p.preco_venda ? reais(Number(p.preco_venda)) : "—"}
-                        </td>
-                      )}
+                      {colunas.map((c) => celula(p, c.chave))}
                     </tr>
                   ))}
                 </tbody>

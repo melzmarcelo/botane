@@ -215,10 +215,10 @@ function Casca({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ⚠️ `top-14` e `h-[calc(100vh-3.5rem)]`: a barra do topo tem 56px, e sem
+      {/* ⚠️ `top-16` e `h-[calc(100vh-4rem)]`: a barra do topo tem 64px desde a 1.3.0, e sem
           descontá-los o menu ficava com o próprio topo escondido atrás dela. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[292px] flex-col overflow-y-auto border-r border-linha bg-superficie transition-transform duration-200 lg:sticky lg:top-14 lg:z-auto lg:h-[calc(100vh-3.5rem)] lg:w-auto lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[292px] flex-col overflow-y-auto border-r border-linha bg-lateral transition-transform duration-200 lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100vh-4rem)] lg:w-auto lg:translate-x-0 ${
           aberto ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -248,7 +248,7 @@ function Casca({ children }: { children: React.ReactNode }) {
           formulário nasce embaixo da navegação — e o defeito só apareceria no
           telefone, que é onde ninguém testa primeiro. */}
       <main className="min-w-0 px-4 py-6 pb-28 sm:px-6 lg:px-10 lg:py-9 lg:pb-14">
-        <div className="mx-auto max-w-[1180px]">
+        <div className="mx-auto max-w-[1360px]">
           {/* 🔑 **A fronteira de Suspense que o `useSearchParams` exige.**
               As listas guardam filtro, página e "por página" na URL — é o que
               faz o voltar do navegador restaurar tudo.
@@ -378,7 +378,9 @@ function MenuLateral({
       {/* 🔑 **A busca abre o menu inteiro em três teclas.** Ela não desfaz a
           regra dos grupos recolhidos: torna-a irrelevante, porque quem sabe
           para onde vai deixa de navegar pela árvore. */}
-      <button type="button" id="menu-busca" className="menu-busca" onClick={abrirBuscaDeTelas}>
+      {/* 🔑 1.3.0: no computador a busca foi para a barra do topo (`BarraSuperior`, que
+          leva o `id="menu-busca"`); esta fica para a gaveta do celular. */}
+      <button type="button" className="menu-busca lg:hidden" onClick={abrirBuscaDeTelas}>
         <Icone nome="lupa" tamanho={16} />
         <span>Buscar tela…</span>
         {/* ⚠️ Só no ponteiro: no telefone não há `Ctrl`, e anunciar um atalho
@@ -423,7 +425,7 @@ function MenuLateral({
                     <svg
                       viewBox="0 0 10 6"
                       aria-hidden="true"
-                      className={`ml-1.5 h-[6px] w-[10px] shrink-0 opacity-70 transition-transform duration-200 ${
+                      className={`ml-auto h-[6px] w-[10px] shrink-0 opacity-70 transition-transform duration-200 ${
                         expandido ? "" : "-rotate-90"
                       }`}
                     >
@@ -454,7 +456,7 @@ function MenuLateral({
                             <svg
                               viewBox="0 0 10 6"
                               aria-hidden="true"
-                              className={`ml-1.5 h-[6px] w-[10px] shrink-0 opacity-70 transition-transform duration-200 ${
+                              className={`ml-auto h-[6px] w-[10px] shrink-0 opacity-70 transition-transform duration-200 ${
                                 aberto ? "" : "-rotate-90"
                               }`}
                             >
