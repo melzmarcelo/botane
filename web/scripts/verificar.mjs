@@ -6365,6 +6365,11 @@ try {
   // errando.
   const marcaG = String(Date.now()).slice(-5);
   const gruposCriados = [];
+  // ⚠️ Rodada interrompida (memória, parada à mão) não chega ao aoTerminar e deixa o grupo de
+  // teste com um tipo livre. Três sobras tomaram todos os tipos e o smoke_grupos_cmv perdeu a
+  // linha "Sem grupo" (05/11/2026). As sobras saem ANTES de começar.
+  for (const g of (await api("GET", "/cmv/grupos", null, token)).dados ?? [])
+    if (/^Teste tela \d{5}$/.test(g.nome)) await api("DELETE", `/cmv/grupos/${g.id}`, null, token);
   aoTerminar.push(async () => {
     for (const id of gruposCriados) await api("DELETE", `/cmv/grupos/${id}`, null, token);
   });
