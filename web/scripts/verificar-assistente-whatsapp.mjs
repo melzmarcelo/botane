@@ -76,6 +76,14 @@ try {
   await digitar(p, 'input[aria-label="número do assistente"]', NUMERO);
   await digitar(p, 'input[aria-label="Phone number ID"]', PNID);
   await digitar(p, 'input[aria-label="chave secreta"]', SEGREDO);
+  // 155: o bom dia — ligado, a seção mostra o horário, os dias e o texto do modelo para a Meta.
+  if (!(await p.$eval('input[aria-label="ligar o bom dia"]', (c) => c.checked)))
+    await p.click('input[aria-label="ligar o bom dia"]');
+  await p.waitForSelector('#bomdia-assistente input[aria-label="horário do bom dia"]', { timeout: 5000 }).catch(() => {});
+  checar("ligado o bom dia, aparecem horário, dias e o texto do modelo para cadastrar na Meta",
+    !!(await p.$('#bomdia-assistente input[aria-label="horário do bom dia"]'))
+      && (await p.$$('#bomdia-assistente [data-dia]')).length === 7
+      && (await p.$eval("#bomdia-assistente", (d) => d.textContent.includes("{{1}}") && d.textContent.includes("Ver pendências"))));
   await p.$eval("#salvar-assistente", (b) => b.click());
   await esperar(1200);
   const gravado = (await api("GET", "/assistente/config", undefined, token)).dados;
@@ -123,6 +131,13 @@ try {
   await p.waitForSelector('[data-vinculado="true"]', { timeout: 10000 }).catch(() => {});
   checar("a tela passa a mostrar o telefone vinculado",
     await p.evaluate(() => document.querySelector('[data-vinculado="true"]')?.textContent.includes("+55 (47)")));
+  await p.waitForSelector("#bomdia-perfil", { timeout: 5000 }).catch(() => {});
+  checar("vinculado e com o bom dia da casa ligado, o Perfil oferece receber (desmarcado)",
+    await p.$eval('#bomdia-perfil input', (c) => !c.checked).catch(() => false));
+  await p.click('#bomdia-perfil input');
+  await esperar(800);
+  checar("marcar liga o bom dia da pessoa",
+    (await api("GET", "/assistente/vinculo", undefined, token)).dados?.bom_dia === true);
 
   console.log("\n3. desvincular");
   await p.evaluate(() => [...document.querySelectorAll("#assistente-whatsapp button")]
@@ -139,7 +154,10 @@ try {
     phone_number_id: antes.phone_number_id, waba_id: antes.waba_id, api_versao: antes.api_versao,
     token: "", app_secret: "", modelo: antes.modelo, limite_diario: antes.limite_diario,
     transcricao_provedor: antes.transcricao_provedor ?? "", transcricao_modelo: antes.transcricao_modelo ?? "",
-    transcricao_chave: "" }, token);
+    transcricao_chave: "", bom_dia_ligado: antes.bom_dia?.ligado ?? false,
+    bom_dia_hora: antes.bom_dia?.hora ?? "07:00", bom_dia_dias: antes.bom_dia?.dias ?? [1, 2, 3, 4, 5, 6],
+    bom_dia_so_com_pendencia: antes.bom_dia?.so_com_pendencia ?? true,
+    bom_dia_modelo: "", bom_dia_idioma: "" }, token);
   if (antes.segredo_configurado) console.log("  ⚠️ havia chave secreta do assistente: cole a verdadeira de novo em Integrações");
   if (vinculoAntes?.vinculado) console.log("  ⚠️ o admin tinha WhatsApp vinculado antes: vincule de novo em Perfil");
 }

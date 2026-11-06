@@ -137,7 +137,8 @@ Peças novas:
 4. **Gravação com confirmação** ✅ *1.3.8 (migração 154)*: produzir da agenda e produção avulsa,
    com prévia do sistema e botão Confirmar (permissão própria). Etiqueta e saída/perda ficam para
    depois, pela mesma trilha.
-5. **Bom dia proativo** (opcional): às 7h, modelo aprovado "Bom dia, {{1}}! Hoje: {{2}}" para
+5. **Bom dia proativo** ✅ *1.3.9 (migração 155)* — com a contagem da agenda e os botões "Ver
+   pendências" / "Parar o bom dia"; casa liga em Integrações, cada pessoa no Perfil. Era (opcional): às 7h, modelo aprovado "Bom dia, {{1}}! Hoje: {{2}}" para
    quem ligou a opção — é a única parte com custo de mensagem.
 
 Cada etapa com suíte de fumaça em modo simulado (o `whatsapp.py` já tem modo simulado; a

@@ -25,6 +25,10 @@ export type VinculoAssistente = {
   codigo_expira_em: string | null;
   /** Nulo enquanto o número da casa não estiver ligado. */
   assistente: NumeroDoAssistente | null;
+  /** 155: a pessoa escolheu receber o bom dia? */
+  bom_dia: boolean;
+  /** Nulo quando a casa não ligou o bom dia. Dias na ISO (1 = segunda … 7 = domingo). */
+  bom_dia_casa: { hora: string; dias: number[] } | null;
 };
 
 export type CodigoAssistente = VinculoAssistente & {
@@ -57,6 +61,8 @@ export type ConfigAssistente = {
   transcricao_modelo: string;
   transcricao_chave_configurada: boolean;
   provedores_transcricao: { id: "openai" | "groq"; nome: string; modelo: string }[];
+  /** 155: o bom dia da casa, com o texto do modelo para cadastrar na Meta. */
+  bom_dia: BomDiaDaCasa & { texto_do_modelo: string; botoes: string[] };
 };
 
 export type GravarConfigAssistente = {
@@ -75,10 +81,27 @@ export type GravarConfigAssistente = {
   transcricao_modelo: string;
   /** Em branco = mantém a guardada. */
   transcricao_chave: string;
+  bom_dia_ligado: boolean;
+  bom_dia_hora: string;
+  bom_dia_dias: number[];
+  bom_dia_so_com_pendencia: boolean;
+  bom_dia_modelo: string;
+  bom_dia_idioma: string;
+};
+
+export type BomDiaDaCasa = {
+  ligado: boolean;
+  hora: string;
+  dias: number[];
+  so_com_pendencia: boolean;
+  modelo: string;
+  idioma: string;
 };
 
 export const vinculoAssistente = () => api.get<VinculoAssistente>("/assistente/vinculo");
 export const gerarCodigoAssistente = () => api.post<CodigoAssistente>("/assistente/vinculo/codigo", {});
+export const bomDiaAssistente = (ligado: boolean) =>
+  api.put<VinculoAssistente & { message: string }>("/assistente/vinculo/bom-dia", { ligado });
 export const desvincularAssistente = () =>
   api.delete<VinculoAssistente & { message: string }>("/assistente/vinculo");
 

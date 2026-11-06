@@ -970,3 +970,28 @@ Aí ele retorna: para hoje precisa produzir 10 pães. Aí posso solicitar a rece
   `smoke_assistente_conversa.py` (22, ajustada: admin recebe as 2 de produção).
 - ⏳ Próximas ferramentas candidatas (mesma trilha: entra em `GRAVAVEIS` + um ramo em `resumo`):
   etiqueta, perda/saída de estoque. Não testado contra Meta/Anthropic reais.
+
+## Assistente no WhatsApp — etapa 5: o bom dia (migração 155, 1.3.9, 06/11/2026)
+- ⚠️ **Mensagem que o sistema INICIA é sempre MODELO aprovado** (fora da janela de 24 h não há
+  texto livre) e variável de modelo não aceita quebra de linha. Por isso o bom dia é curto —
+  "Bom dia, {{1}}! Hoje você tem {{2}} na agenda de produção." — com dois botões de resposta
+  rápida, `BOMDIA:VER` e `BOMDIA:PARAR` (`services/assistente_bomdia.py`). É a única mensagem do
+  assistente que a Meta cobra.
+- 🔑 **A contagem é do sistema, sem o Claude**: `agenda_producao` de cada loja que a pessoa vê,
+  pela rota, com a credencial dela (linhas de hoje + atrasadas). Sem permissão de agenda numa loja,
+  ela não conta. 🔑 **O detalhe é sob demanda**: "Ver pendências" volta como `type: button` no
+  webhook, abre a janela de 24 h e vira a pergunta "Quais são as minhas pendências de hoje?" ao
+  Claude (conta no limite diário). "Parar o bom dia" desliga `usuario_whatsapp.bom_dia`.
+- **Quem recebe**: a casa liga em Integrações ▸ Assistente ▸ Bom dia (hora, dias ISO 1–7, "só com
+  pendência", nome e idioma do modelo — o texto vem pronto para cadastrar) E a pessoa liga no
+  Perfil (`PUT /assistente/vinculo/bom-dia`; desligado por padrão: ninguém recebe sem pedir).
+  Precisa de usuário ativo, vinculado e com `integracao.whatsapp_assistente`.
+- **Quando**: `varrer` roda em toda volta do laço do WhatsApp e só age da hora marcada até DUAS
+  horas depois (o contêiner que reinicia às 7h10 manda; o que reinicia à tarde não). 🔑 Uma vez por
+  dia: `usuario_whatsapp.bom_dia_em` é reivindicado num UPDATE com `SKIP LOCKED` ANTES de contar —
+  vale também para quem foi pulado por não ter pendência.
+- `assistente_mensagens.modelo` (nome, idioma, variáveis, payloads) → `_payload` monta o
+  `template` com `components` body + `button quick_reply`.
+- Teste: `smoke_assistente_bomdia.py` (19) chama `varrer(agora=…)` NO PRÓPRIO processo (importa o
+  `main` para registrar o app) com hora fingida, e configura a hora seis horas longe da real para
+  o laço da API não mandar junto. `verificar-assistente-whatsapp.mjs` (16).

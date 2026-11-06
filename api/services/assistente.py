@@ -103,6 +103,8 @@ def conexao(cur) -> dict:
         # ⚠️ Só para os testes (Meta e transcrição falsas); ignorados fora de DEBUG.
         "url_meta": cfg.get("url_meta") or "",
         "url_transcricao": cfg.get("url_transcricao") or "",
+        # 155: o bom dia (ver `assistente_bomdia.configuracao`).
+        **{k: cfg.get(k) for k in _CHAVES_BOM_DIA},
         "cred": segredos.decifrar(l["credenciais"]) if l and l["credenciais"] else {},
         "ultimo_status": (l or {}).get("ultimo_status"),
         "ultima_mensagem": (l or {}).get("ultima_mensagem"),
@@ -122,9 +124,11 @@ def _gravar_linha(cur, ativa: bool, modo: str, config: dict, cred: dict) -> None
         (SERVICO, ativa, modo, segredos.cifrar(cred) if cred else None, json.dumps(config)))
 
 
+_CHAVES_BOM_DIA = ("bom_dia_ligado", "bom_dia_hora", "bom_dia_dias", "bom_dia_so_com_pendencia",
+                   "bom_dia_modelo", "bom_dia_idioma")
 _CHAVES_CONFIG = ("numero", "phone_number_id", "waba_id", "api_versao", "verify_token", "modelo",
                   "limite_diario", "url_api", "transcricao_provedor", "transcricao_modelo",
-                  "url_meta", "url_transcricao")
+                  "url_meta", "url_transcricao") + _CHAVES_BOM_DIA
 
 
 def _config_de(c: dict) -> dict:
@@ -156,7 +160,16 @@ def configuracao(cur, url_publica: str) -> dict:
         "transcricao_chave_configurada": bool(c["cred"].get("transcricao_chave")),
         "provedores_transcricao": [{"id": k, "nome": v["nome"], "modelo": v["modelo"]}
                                    for k, v in _transcricao().PROVEDORES.items()],
+        # 155: o bom dia, com o texto do modelo pronto para a casa cadastrar na Meta.
+        "bom_dia": _bom_dia().configuracao(c) | {
+            "texto_do_modelo": _bom_dia().TEXTO_DO_MODELO,
+            "botoes": [b["titulo"] for b in _bom_dia().BOTOES]},
     }
+
+
+def _bom_dia():
+    from services import assistente_bomdia
+    return assistente_bomdia
 
 
 def _transcricao():
@@ -214,7 +227,12 @@ def salvar(cur, body) -> None:
         "transcricao_modelo": (body.transcricao_modelo or "").strip(),
         "url_meta": c["url_meta"] if body.url_meta is None else body.url_meta.strip(),
         "url_transcricao": (c["url_transcricao"] if body.url_transcricao is None
-                            else body.url_transcricao.strip())}, cred)
+                            else body.url_transcricao.strip()),
+        "bom_dia_ligado": body.bom_dia_ligado, "bom_dia_hora": body.bom_dia_hora,
+        "bom_dia_dias": sorted(set(body.bom_dia_dias)),
+        "bom_dia_so_com_pendencia": body.bom_dia_so_com_pendencia,
+        "bom_dia_modelo": (body.bom_dia_modelo or "").strip(),
+        "bom_dia_idioma": (body.bom_dia_idioma or "").strip()}, cred)
 
 
 def do_assistente(cur, phone_number_id: str | None) -> dict | None:
@@ -253,7 +271,22 @@ def estado(cur, ctx) -> dict:
         "codigo_pendente": pendente,
         "codigo_expira_em": v["codigo_expira_em"].isoformat() if pendente else None,
         "assistente": _numero_para_chamar(cur),
+        # 155: a escolha da pessoa, e se a casa mandou ligar o bom dia (e a que horas).
+        "bom_dia": bool(v.get("bom_dia")),
+        "bom_dia_casa": _bom_dia_da_casa(cur),
     }
+
+
+def _bom_dia_da_casa(cur) -> dict | None:
+    cfg = _bom_dia().configuracao(conexao(cur))
+    return {"hora": cfg["hora"], "dias": cfg["dias"]} if cfg["ligado"] else None
+
+
+def definir_bom_dia(cur, ctx, ligado: bool) -> None:
+    cur.execute("UPDATE usuario_whatsapp SET bom_dia = %s WHERE id_usuario = %s AND wa_id IS NOT NULL",
+                (ligado, ctx.id_usuario))
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Vincule o seu WhatsApp antes.")
 
 
 def gerar_codigo(cur, ctx) -> dict:
@@ -300,12 +333,14 @@ def desvincular(cur, ctx) -> bool:
 
 # ---------------------------------------------------------------- a fila e o envio
 def responder(cur, chave: str, fone: str, texto: str, id_usuario: int | None = None,
-              botoes: list[dict] | None = None) -> bool:
-    """Põe a resposta na fila. `botoes` (154): [{id, titulo}] — sai como mensagem interativa."""
+              botoes: list[dict] | None = None, modelo: dict | None = None) -> bool:
+    """Põe a resposta na fila. `botoes` (154): [{id, titulo}] — sai como mensagem interativa.
+    `modelo` (155): {nome, idioma, variaveis, botoes} — sai como MODELO aprovado da Meta."""
     cur.execute(
-        """INSERT INTO assistente_mensagens (chave, id_usuario, telefone, texto, botoes)
-           VALUES (%s, %s, %s, %s, %s) ON CONFLICT (chave) DO NOTHING RETURNING id""",
-        (chave[:120], id_usuario, fone, texto, json.dumps(botoes) if botoes else None))
+        """INSERT INTO assistente_mensagens (chave, id_usuario, telefone, texto, botoes, modelo)
+           VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (chave) DO NOTHING RETURNING id""",
+        (chave[:120], id_usuario, fone, texto, json.dumps(botoes) if botoes else None,
+         json.dumps(modelo) if modelo else None))
     return cur.fetchone() is not None
 
 
@@ -313,6 +348,17 @@ def _payload(msg: dict) -> dict:
     """Texto livre, ou — com botões — a mensagem interativa da Meta (até 3 botões de resposta;
     corpo até 1024 caracteres, título até 20). As duas valem dentro da janela de 24 h."""
     base = {"messaging_product": "whatsapp", "to": msg["telefone"]}
+    if msg.get("modelo"):
+        # 155: o bom dia. ⚠️ O payload de cada botão de resposta rápida é o que volta no webhook.
+        m = msg["modelo"]
+        componentes = [{"type": "body", "parameters": [{"type": "text", "text": str(v)}
+                                                       for v in m.get("variaveis") or []]}]
+        for i, carga in enumerate(m.get("botoes") or []):
+            componentes.append({"type": "button", "sub_type": "quick_reply", "index": str(i),
+                                "parameters": [{"type": "payload", "payload": carga}]})
+        return base | {"type": "template", "template": {
+            "name": m["nome"], "language": {"code": m.get("idioma") or "pt_BR"},
+            "components": componentes}}
     if not msg.get("botoes"):
         return base | {"type": "text", "text": {"body": msg["texto"]}}
     return base | {"type": "interactive", "interactive": {
@@ -361,7 +407,7 @@ def processar_fila(limite: int = 20) -> int:
     """Envia o que venceu. Chamado logo depois do webhook (a resposta não espera o laço) e, de
     reserva, pelo laço do WhatsApp a cada 30 s. ⚠️ `SKIP LOCKED`: nunca a mesma duas vezes."""
     with get_cursor() as cur:
-        cur.execute("""SELECT id, telefone, texto, tentativas, botoes FROM assistente_mensagens
+        cur.execute("""SELECT id, telefone, texto, tentativas, botoes, modelo FROM assistente_mensagens
                         WHERE status = 'FILA' AND agendada_para <= now()
                         ORDER BY agendada_para, id LIMIT %s FOR UPDATE SKIP LOCKED""", (limite,))
         msgs = [dict(r) for r in cur.fetchall()]
@@ -486,6 +532,14 @@ def receber(cur, msg: dict) -> int:
     nome, id_u = _primeiro(quem["nome"]), quem["id_usuario"]
     botao = ((msg.get("interactive") or {}).get("button_reply") or {}).get("id") \
         if tipo == "interactive" else None
+    if tipo == "button" and str((msg.get("button") or {}).get("payload") or "").startswith("BOMDIA:"):
+        # 155: o botão do modelo do bom dia. "Ver" vira a pergunta das pendências; "Parar" desliga.
+        frase = _bom_dia().tocou(cur, id_u, msg["button"]["payload"])
+        if frase:
+            responder(cur, chave, fone, frase, id_u)
+        elif _tem_permissao(cur, id_u) and not _no_limite(cur, id_u, fone, nome):
+            _conversa().guardar_pergunta(cur, id_u, _bom_dia().PERGUNTA, chave)
+        return 1
     if botao and botao.startswith("ACAO:"):
         # 154: o toque em Confirmar / Cancelar. A ação tem de ser desta pessoa (confere lá dentro).
         from services import assistente_acoes

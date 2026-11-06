@@ -5,6 +5,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Cartao } from "@/components/ui";
 import * as assist from "@/lib/assistente";
 import AudioDoAssistente from "./assistente-audio";
+import BomDiaDoAssistente from "./assistente-bomdia";
 
 /**
  * O número do assistente no WhatsApp — UM, da casa toda (etapa 1, migração 151).
@@ -22,6 +23,9 @@ const vazio = (c: assist.ConfigAssistente): assist.GravarConfigAssistente => ({
   modelo: c.modelo, limite_diario: c.limite_diario,
   transcricao_provedor: c.transcricao_provedor, transcricao_modelo: c.transcricao_modelo,
   transcricao_chave: "",
+  bom_dia_ligado: c.bom_dia.ligado, bom_dia_hora: c.bom_dia.hora, bom_dia_dias: c.bom_dia.dias,
+  bom_dia_so_com_pendencia: c.bom_dia.so_com_pendencia, bom_dia_modelo: c.bom_dia.modelo,
+  bom_dia_idioma: c.bom_dia.idioma,
 });
 
 export default function AssistenteWhatsappConfig() {
@@ -176,6 +180,8 @@ export default function AssistenteWhatsappConfig() {
         </div>
 
         <AudioDoAssistente cfg={cfg} form={form} mudar={mudar} />
+
+        <BomDiaDoAssistente cfg={cfg} form={form} mudar={mudar} />
 
         <div className="rounded-[10px] bg-[var(--color-superficie2)] p-3 text-[13px]">
           <p className="mb-2 font-semibold">Na Meta, em WhatsApp → Configuração → Webhook, informe:</p>

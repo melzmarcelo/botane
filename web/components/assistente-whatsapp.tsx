@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Cartao, Etiqueta } from "@/components/ui";
 import {
+  bomDiaAssistente,
   desvincularAssistente,
   gerarCodigoAssistente,
   vinculoAssistente,
@@ -69,6 +70,20 @@ export default function AssistenteWhatsapp() {
     }
   }
 
+  // 155: a pessoa escolhe receber o bom dia (a casa diz se ele existe e a que horas).
+  async function alternarBomDia(ligado: boolean) {
+    setOcupado(true);
+    try {
+      const r = await bomDiaAssistente(ligado);
+      setEstado(r);
+      aviso.sucesso(r.message);
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível mudar o bom dia");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   const semNumero = estado && !estado.assistente;
 
   return (
@@ -92,6 +107,20 @@ export default function AssistenteWhatsapp() {
               <Etiqueta>nenhum WhatsApp vinculado</Etiqueta>
             )}
           </div>
+        )}
+
+        {estado?.vinculado && estado.bom_dia_casa && (
+          <label className="flex items-start gap-3" id="bomdia-perfil">
+            <input type="checkbox" className="mt-1" checked={estado.bom_dia} disabled={ocupado}
+                   aria-label="receber o bom dia" onChange={(e) => void alternarBomDia(e.target.checked)} />
+            <span className="text-[14px]">
+              Receber o bom dia às {estado.bom_dia_casa.hora}
+              <span className="block text-[13px] text-suave">
+                Uma mensagem curta com quantos itens você tem na agenda de produção, e o botão
+                “Ver pendências” para o assistente detalhar.
+              </span>
+            </span>
+          </label>
         )}
 
         {semNumero && (

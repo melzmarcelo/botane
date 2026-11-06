@@ -22,7 +22,7 @@ entregue.
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes`, `preco_custo`, `custo_referencia` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `contagem_parcelas`, `transferencias`, `duas_lojas`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `venda_consumo_interno`, `venda_motivo`, `vendas_motivos`, `consumo_pessoa`, `receber`, `pdv_legal`, `rotulos_cabem` |
-| [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `assistente_whatsapp`, `assistente_conversa`, `assistente_audio`, `assistente_lancar`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo`, `erros` |
+| [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `assistente_whatsapp`, `assistente_conversa`, `assistente_audio`, `assistente_lancar`, `assistente_bomdia`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo`, `erros` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `cmv_conferencia`, `grupos_cmv`, `ciclos`, `relatorios` |
 | [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao`, `cardapio_vivo`, `cardapio_pedido`, `cardapio_testes` |
 | [Etiquetas](#etiquetas) | `docs/memoria/etiquetas.md` | `etiquetas` |
@@ -124,7 +124,7 @@ técnica de "ser uma integração".
 Empresa, lojas, parâmetros, integrações e usuários.
 
 - **Rotas:** `empresa.py`, `usuarios.py`, `tokens_api.py`, `oauth.py`, `mcp.py`, `papeis.py`, `autenticacao.py`, `omie.py`, `email_config.py`, `historico.py`, `inicio.py`, `assistente.py`
-- **Serviços:** `services/omie/`, `agenda_integracao.py`, `email.py`, `segredos.py`, `senhas.py`, `oauth.py`, `mcp_ferramentas.py`, `assistente.py`, `assistente_conversa.py`, `transcricao.py`, `assistente_acoes.py`
+- **Serviços:** `services/omie/`, `agenda_integracao.py`, `email.py`, `segredos.py`, `senhas.py`, `oauth.py`, `mcp_ferramentas.py`, `assistente.py`, `assistente_conversa.py`, `transcricao.py`, `assistente_acoes.py`, `assistente_bomdia.py`
 - **Telas:** `empresa/`, `lojas/`, `usuarios/`, `papeis/`, `integracoes/`, `perfil/`, `auditoria/`, `trocar-senha/`
 - **Permissões:** `admin.empresa`, `admin.unidades`, `admin.usuarios`, `admin.papeis`, `admin.integracoes`, `admin.auditoria`, `integracao.omie`, `integracao.pdv`, `integracao.claude`, `integracao.whatsapp_assistente`, `integracao.whatsapp_lancar`
 
@@ -146,7 +146,9 @@ Integrações ▸ Assistente e compartilhado entre as lojas. Desde a etapa 2 (mi
 responde consultas com as ferramentas de LEITURA do conector, como o próprio usuário. Desde a etapa 3
 (migração 153) também ouve áudio, transcrito pela OpenAI ou pela Groq (`transcricao.py`). Na etapa 4
 (migração 154) lança produção, só depois do botão Confirmar numa prévia do sistema
-(`assistente_acoes.py`, permissão `integracao.whatsapp_lancar`). Por enquanto só reconhece quem escreve; as etapas seguintes vão usar as mesmas
+(`assistente_acoes.py`, permissão `integracao.whatsapp_lancar`). E na etapa 5 (migração 155)
+manda um "bom dia" (modelo aprovado da Meta) com a contagem da agenda, para quem pediu no Perfil
+(`assistente_bomdia.py`). Por enquanto só reconhece quem escreve; as etapas seguintes vão usar as mesmas
 ferramentas do conector. Estudo em `docs/assistente-whatsapp-estudo.md`.
 
 ## CMV
