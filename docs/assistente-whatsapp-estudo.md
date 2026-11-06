@@ -132,7 +132,8 @@ Peças novas:
 2. **Só leitura por texto** ✅ *1.3.6 (migração 152)*: pendências, receita, saldo, vendas de
    ontem, com as 96 ferramentas de leitura do conector, em todas as lojas do usuário. Sem gravar
    nada. Modelo e limite diário em Integrações ▸ Assistente.
-3. **Áudio**: transcrição.
+3. **Áudio** ✅ *1.3.7 (migração 153)*: transcrição pela OpenAI ou pela Groq (mesmo formato de API,
+   escolha em Integrações ▸ Assistente); a resposta mostra o que foi ouvido.
 4. **Gravação com confirmação**: produzir da agenda, produção avulsa, etiqueta, saída/perda.
 5. **Bom dia proativo** (opcional): às 7h, modelo aprovado "Bom dia, {{1}}! Hoje: {{2}}" para
    quem ligou a opção — é a única parte com custo de mensagem.

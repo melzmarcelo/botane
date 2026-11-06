@@ -32,7 +32,7 @@ import httpx
 from config import DEBUG
 from database import get_cursor
 from relogio import agora_da_casa
-from services import assistente, mcp_ferramentas, traducao
+from services import assistente, mcp_ferramentas, transcricao, traducao
 
 log = logging.getLogger("botane.assistente")
 
@@ -104,13 +104,18 @@ def configuracao(cur) -> dict:
 
 
 # ---------------------------------------------------------------- o webhook
-def guardar_pergunta(cur, id_usuario: int, texto: str, id_meta: str) -> bool:
-    """A pergunta entra como PENDENTE. Devolve False se a Meta já tinha mandado essa mesma."""
+def guardar_pergunta(cur, id_usuario: int, texto: str, id_meta: str,
+                     midia_id: str | None = None) -> bool:
+    """A pergunta entra como PENDENTE. Devolve False se a Meta já tinha mandado essa mesma.
+
+    153: com `midia_id` é um ÁUDIO — nasce com o texto "[áudio]", trocado pela transcrição.
+    """
     cur.execute(
-        """INSERT INTO assistente_conversa (id_usuario, papel, texto, id_meta, status)
-           VALUES (%s, 'usuario', %s, %s, 'PENDENTE')
+        """INSERT INTO assistente_conversa (id_usuario, papel, texto, id_meta, status, midia_id,
+                                            de_audio)
+           VALUES (%s, 'usuario', %s, %s, 'PENDENTE', %s, %s)
            ON CONFLICT (id_meta) DO NOTHING RETURNING id""",
-        (id_usuario, texto[:4000], id_meta[:120]))
+        (id_usuario, texto[:4000], id_meta[:120], midia_id, bool(midia_id)))
     return cur.fetchone() is not None
 
 
@@ -156,7 +161,8 @@ def _pegar_lote() -> list[dict] | None:
         r = cur.fetchone()
         if not r:
             return None
-        cur.execute("""SELECT id, id_usuario, texto, tentativas FROM assistente_conversa
+        cur.execute("""SELECT id, id_usuario, texto, tentativas, de_audio, midia_id, transcrito_em
+                         FROM assistente_conversa
                         WHERE id_usuario = %s AND status = 'PENDENTE'
                         ORDER BY criada_em, id FOR UPDATE SKIP LOCKED""", (r["id_usuario"],))
         lote = [dict(x) for x in cur.fetchall()]
@@ -185,29 +191,85 @@ def _responder_lote(lote: list[dict]) -> None:
             "cadastra em Integrações ▸ Tradução."), id_usuario=id_usuario, fone=quem["wa_id"])
         return
 
-    pergunta = "\n".join(x["texto"] for x in lote)
+    try:
+        ouvido = _transcrever_audios(lote)
+    except transcricao.Definitivo as e:
+        _adiar_ou_desistir(lote, ids, quem, e, definitivo=True, resposta=str(e))
+        return
+    except transcricao.Temporario as e:
+        _adiar_ou_desistir(lote, ids, quem, e, definitivo=False, resposta=(
+            "Não consegui ouvir o áudio agora — o serviço está ocupado. Tente de novo em alguns "
+            "minutos, ou escreva."))
+        return
+    if not any(x["texto"].strip() for x in lote):
+        _fechar(ids, "RESPONDIDA", resposta="Não consegui entender o áudio. Pode repetir ou "
+                                            "escrever?", id_usuario=id_usuario, fone=quem["wa_id"])
+        return
+    if ouvido:
+        contexto += " [Parte da pergunta veio de ÁUDIO transcrito: pode ter erro de transcrição.]"
+    pergunta = "\n".join(x["texto"] for x in lote if x["texto"].strip())
     try:
         texto, uso = asyncio.run(_conversar(cfg, quem, historico, contexto, pergunta))
     except _Temporario as e:
-        tentativas = max(x["tentativas"] for x in lote) + 1
-        if tentativas < TENTATIVAS:
-            with get_cursor() as cur:
-                cur.execute("""UPDATE assistente_conversa
-                                  SET status = 'PENDENTE', tentativas = %s, erro = %s,
-                                      tentar_apos = now() + %s * interval '20 seconds',
-                                      atualizada_em = now()
-                                WHERE id = ANY(%s)""", (tentativas, str(e)[:500], tentativas, ids))
-            return
-        _fechar(ids, "ERRO", erro=str(e), id_usuario=id_usuario, fone=quem["wa_id"],
-                resposta="Não consegui responder agora — o serviço está ocupado. Tente de novo "
-                         "em alguns minutos.")
+        _adiar_ou_desistir(lote, ids, quem, e, definitivo=False, resposta=(
+            "Não consegui responder agora — o serviço está ocupado. Tente de novo em alguns "
+            "minutos."))
         return
     except _Definitivo as e:
         _fechar(ids, "ERRO", erro=str(e), id_usuario=id_usuario, fone=quem["wa_id"],
                 resposta="Não consegui responder: a configuração do assistente tem um problema. "
                          "Avise quem administra o sistema.")
         return
+    if ouvido:
+        # 🔑 Mostra o que ouviu: a pessoa confere se foi entendida — e, quando vier a gravação
+        # pelo WhatsApp, é o que impede lançar "10 pães" que eram "12".
+        texto = _caber(f"🎤 _Ouvi: “{' / '.join(ouvido)}”_\n\n{texto}")
     _fechar(ids, "RESPONDIDA", resposta=texto, uso=uso, id_usuario=id_usuario, fone=quem["wa_id"])
+
+
+def _transcrever_audios(lote: list[dict]) -> list[str]:
+    """Troca o "[áudio]" de cada áudio do lote pelo texto dele. Devolve o que foi ouvido.
+
+    ⚠️ Gravado na hora, áudio por áudio: se o segundo falhar e o lote voltar para nova tentativa,
+    o primeiro não é baixado nem cobrado de novo (`transcrito_em`).
+    """
+    audios = [x for x in lote if x["de_audio"]]
+    if not audios:
+        return []
+    with get_cursor() as cur:
+        c = assistente.conexao(cur)
+    cfg = transcricao.configuracao(c)
+    ouvido = []
+    for x in audios:
+        if x["transcrito_em"] is None:
+            if not cfg["ligada"]:
+                raise transcricao.Definitivo("A transcrição de áudio foi desligada. Escreva, por favor.")
+            dados, mime = transcricao.baixar_da_meta(c, x["midia_id"])
+            x["texto"] = transcricao.transcrever(cfg, dados, mime)
+            with get_cursor() as cur:
+                cur.execute("""UPDATE assistente_conversa SET texto = %s, transcrito_em = now(),
+                                      atualizada_em = now() WHERE id = %s""",
+                            (x["texto"], x["id"]))
+        if x["texto"].strip():
+            ouvido.append(x["texto"].strip())
+    return ouvido
+
+
+def _adiar_ou_desistir(lote: list[dict], ids: list[int], quem: dict, erro: Exception, *,
+                       definitivo: bool, resposta: str) -> None:
+    """Falha temporária volta a PENDENTE (até TENTATIVAS); a definitiva — ou a temporária que
+    esgotou as tentativas — responde a frase e encerra."""
+    tentativas = max(x["tentativas"] for x in lote) + 1
+    if not definitivo and tentativas < TENTATIVAS:
+        with get_cursor() as cur:
+            cur.execute("""UPDATE assistente_conversa
+                              SET status = 'PENDENTE', tentativas = %s, erro = %s,
+                                  tentar_apos = now() + %s * interval '20 seconds',
+                                  atualizada_em = now()
+                            WHERE id = ANY(%s)""", (tentativas, str(erro)[:500], tentativas, ids))
+        return
+    _fechar(ids, "ERRO", erro=str(erro), id_usuario=lote[0]["id_usuario"], fone=quem["wa_id"],
+            resposta=resposta)
 
 
 def _fechar(ids: list[int], status: str, *, erro: str | None = None, resposta: str | None = None,

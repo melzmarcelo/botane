@@ -41,7 +41,11 @@ def salvar_config(body: ConfigAssistente, ctx: Contexto = Depends(_CONFIGURAR)) 
                             depois={"ativa": body.ativa, "modo": body.modo, "numero": body.numero,
                                     "phone_number_id": body.phone_number_id,
                                     "token_trocado": bool((body.token or "").strip()),
-                                    "segredo_trocado": bool((body.app_secret or "").strip())})
+                                    "segredo_trocado": bool((body.app_secret or "").strip()),
+                                    "modelo": body.modelo, "limite_diario": body.limite_diario,
+                                    "transcricao_provedor": body.transcricao_provedor,
+                                    "transcricao_chave_trocada": bool(
+                                        (body.transcricao_chave or "").strip())})
         return servico.configuracao(cur, API_URL_PUBLICA) | {"message": "Assistente gravado."}
 
 

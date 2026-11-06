@@ -97,6 +97,12 @@ def conexao(cur) -> dict:
         "limite_diario": int(cfg.get("limite_diario") or 0),
         # ⚠️ Só para os testes (uma Anthropic falsa); ignorado fora de DEBUG.
         "url_api": cfg.get("url_api") or "",
+        # 153: a transcrição do áudio (provedor openai/groq; a chave fica nas credenciais).
+        "transcricao_provedor": cfg.get("transcricao_provedor") or "",
+        "transcricao_modelo": cfg.get("transcricao_modelo") or "",
+        # ⚠️ Só para os testes (Meta e transcrição falsas); ignorados fora de DEBUG.
+        "url_meta": cfg.get("url_meta") or "",
+        "url_transcricao": cfg.get("url_transcricao") or "",
         "cred": segredos.decifrar(l["credenciais"]) if l and l["credenciais"] else {},
         "ultimo_status": (l or {}).get("ultimo_status"),
         "ultima_mensagem": (l or {}).get("ultima_mensagem"),
@@ -117,7 +123,8 @@ def _gravar_linha(cur, ativa: bool, modo: str, config: dict, cred: dict) -> None
 
 
 _CHAVES_CONFIG = ("numero", "phone_number_id", "waba_id", "api_versao", "verify_token", "modelo",
-                  "limite_diario", "url_api")
+                  "limite_diario", "url_api", "transcricao_provedor", "transcricao_modelo",
+                  "url_meta", "url_transcricao")
 
 
 def _config_de(c: dict) -> dict:
@@ -143,7 +150,18 @@ def configuracao(cur, url_publica: str) -> dict:
         "modelo": c["modelo"], "modelo_padrao": _conversa().MODELO_PADRAO,
         "limite_diario": c["limite_diario"] or _conversa().LIMITE_DIARIO_PADRAO,
         "chave_anthropic": bool(_traducao_chave(cur)),
+        # 153: o áudio. A chave da transcrição nunca volta — só "configurada".
+        "transcricao_provedor": c["transcricao_provedor"],
+        "transcricao_modelo": c["transcricao_modelo"],
+        "transcricao_chave_configurada": bool(c["cred"].get("transcricao_chave")),
+        "provedores_transcricao": [{"id": k, "nome": v["nome"], "modelo": v["modelo"]}
+                                   for k, v in _transcricao().PROVEDORES.items()],
     }
+
+
+def _transcricao():
+    from services import transcricao
+    return transcricao
 
 
 def _conversa():
@@ -174,6 +192,11 @@ def salvar(cur, body) -> None:
         cred["token"] = body.token.strip()
     if (body.app_secret or "").strip():
         cred["app_secret"] = body.app_secret.strip()
+    if (body.transcricao_chave or "").strip():
+        cred["transcricao_chave"] = body.transcricao_chave.strip()
+    provedor = body.transcricao_provedor or ""
+    if provedor and provedor not in _transcricao().PROVEDORES:
+        raise HTTPException(status_code=422, detail="Provedor de transcrição desconhecido.")
     if body.ativa and not numero:
         raise HTTPException(status_code=400, detail="Informe o número do assistente antes de ligar.")
     if body.ativa and body.modo == "real" and not (pnid and cred.get("token")):
@@ -186,7 +209,12 @@ def salvar(cur, body) -> None:
         "modelo": (body.modelo or "").strip(),
         "limite_diario": body.limite_diario,
         # ⚠️ Mandado em branco, mantém (a tela não tem o campo: é dos testes).
-        "url_api": c["url_api"] if body.url_api is None else body.url_api.strip()}, cred)
+        "url_api": c["url_api"] if body.url_api is None else body.url_api.strip(),
+        "transcricao_provedor": provedor,
+        "transcricao_modelo": (body.transcricao_modelo or "").strip(),
+        "url_meta": c["url_meta"] if body.url_meta is None else body.url_meta.strip(),
+        "url_transcricao": (c["url_transcricao"] if body.url_transcricao is None
+                            else body.url_transcricao.strip())}, cred)
 
 
 def do_assistente(cur, phone_number_id: str | None) -> dict | None:
@@ -446,16 +474,31 @@ def receber(cur, msg: dict) -> int:
     if not _tem_permissao(cur, id_u):
         responder(cur, chave, fone, f"Olá, {nome}. Seu usuário não tem o assistente liberado — "
                                     "fale com o administrador.", id_u)
+    elif tipo == "audio":
+        # 153: o áudio vira pergunta como o texto; a transcrição acontece depois do 200.
+        midia = (msg.get("audio") or {}).get("id")
+        if not _transcricao().configuracao(conexao(cur))["ligada"]:
+            responder(cur, chave, fone, f"{nome}, ainda não consigo ouvir áudio — falta configurar "
+                                        "a transcrição em Integrações ▸ Assistente. Por enquanto, "
+                                        "escreva, por favor.", id_u)
+        elif midia and not _no_limite(cur, id_u, fone, nome):
+            _conversa().guardar_pergunta(cur, id_u, "[áudio]", chave, midia_id=midia)
     elif tipo != "text" or not texto:
-        responder(cur, chave, fone, f"Olá, {nome}! Por enquanto só entendo mensagens de texto.", id_u)
-    else:
+        responder(cur, chave, fone, f"Olá, {nome}! Entendo texto e áudio — foto, figurinha e "
+                                    "documento ainda não.", id_u)
+    elif not _no_limite(cur, id_u, fone, nome):
         # 152: a pergunta fica guardada e o Claude responde logo depois do 200 do webhook.
-        conversa = _conversa()
-        limite = conversa.configuracao(cur)["limite_diario"]
-        if conversa.perguntas_hoje(cur, id_u) >= limite:
-            responder(cur, f"limite:{fone}:{agora_da_casa().date()}", fone,
-                      f"{nome}, você chegou ao limite de {limite} perguntas por hoje. Amanhã eu volto "
-                      "a responder — ou peça a quem administra o sistema para aumentar o limite.", id_u)
-        else:
-            conversa.guardar_pergunta(cur, id_u, texto, chave)
+        _conversa().guardar_pergunta(cur, id_u, texto, chave)
     return 1
+
+
+def _no_limite(cur, id_u: int, fone: str, nome: str) -> bool:
+    """Chegou ao limite de perguntas do dia? Então avisa (uma vez por dia) e diz que sim."""
+    conversa = _conversa()
+    limite = conversa.configuracao(cur)["limite_diario"]
+    if conversa.perguntas_hoje(cur, id_u) < limite:
+        return False
+    responder(cur, f"limite:{fone}:{agora_da_casa().date()}", fone,
+              f"{nome}, você chegou ao limite de {limite} perguntas por hoje. Amanhã eu volto a "
+              "responder — ou peça a quem administra o sistema para aumentar o limite.", id_u)
+    return True

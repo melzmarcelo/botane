@@ -81,6 +81,15 @@ try {
   const gravado = (await api("GET", "/assistente/config", undefined, token)).dados;
   checar("salvar grava o número ligado, em modo simulado, com a chave secreta",
     gravado.ativa && gravado.modo === "simulado" && gravado.numero === NUMERO && gravado.segredo_configurado, gravado);
+  checar("o áudio começa sem serviço de transcrição, sem pedir chave",
+    (await p.$eval('#audio-assistente select[aria-label="serviço de transcrição"]', (s) => s.value)) === ""
+      && !(await p.$('#audio-assistente input[aria-label="chave da transcrição"]')));
+  await p.select('#audio-assistente select[aria-label="serviço de transcrição"]', "groq");
+  await p.waitForSelector('#audio-assistente input[aria-label="chave da transcrição"]', { timeout: 5000 }).catch(() => {});
+  checar("escolhido o Groq, pede a chave e sugere o modelo dele",
+    await p.$eval('#audio-assistente input[aria-label="modelo da transcrição"]', (i) => i.placeholder === "whisper-large-v3-turbo")
+      .catch(() => false));
+  await p.select('#audio-assistente select[aria-label="serviço de transcrição"]', "");
   checar("a conversa mostra modelo, limite por dia e de onde vem a chave da Anthropic",
     !!(await p.$('#conversa-assistente input[aria-label="modelo"]'))
       && !!(await p.$('#conversa-assistente input[aria-label="limite por dia"]'))
@@ -128,7 +137,9 @@ try {
   await api("DELETE", "/assistente/vinculo", undefined, token);
   await api("PUT", "/assistente/config", { ativa: antes.ativa, modo: antes.modo, numero: antes.numero,
     phone_number_id: antes.phone_number_id, waba_id: antes.waba_id, api_versao: antes.api_versao,
-    token: "", app_secret: "", modelo: antes.modelo, limite_diario: antes.limite_diario }, token);
+    token: "", app_secret: "", modelo: antes.modelo, limite_diario: antes.limite_diario,
+    transcricao_provedor: antes.transcricao_provedor ?? "", transcricao_modelo: antes.transcricao_modelo ?? "",
+    transcricao_chave: "" }, token);
   if (antes.segredo_configurado) console.log("  ⚠️ havia chave secreta do assistente: cole a verdadeira de novo em Integrações");
   if (vinculoAntes?.vinculado) console.log("  ⚠️ o admin tinha WhatsApp vinculado antes: vincule de novo em Perfil");
 }

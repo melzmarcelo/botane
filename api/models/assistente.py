@@ -5,6 +5,10 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+# Os serviços falsos dos testes moram sempre em 127.0.0.1.
+_LOCAL = r"^(http://127\.0\.0\.1:\d+(/[\w/.-]*)?)?$"
+
+
 class ConfigAssistente(BaseModel):
     """O número do assistente — UM, da casa toda — e a conexão dele com a Meta.
 
@@ -22,4 +26,11 @@ class ConfigAssistente(BaseModel):
     modelo: str | None = Field(default=None, max_length=60, pattern=r"^(claude-[a-z0-9.-]+)?$")
     limite_diario: int = Field(default=40, ge=1, le=500)
     # ⚠️ Só para os testes: o endereço de uma Anthropic falsa. Ignorado fora de DEBUG.
-    url_api: str | None = Field(default=None, max_length=200, pattern=r"^(http://127\.0\.0\.1:\d+/[\w/]*)?$")
+    url_api: str | None = Field(default=None, max_length=200, pattern=_LOCAL)
+    # 153: a transcrição do áudio. Provedor em branco = não ouve áudio. Chave em branco = mantém.
+    transcricao_provedor: Literal["", "openai", "groq"] = ""
+    transcricao_modelo: str | None = Field(default=None, max_length=60, pattern=r"^[\w.-]*$")
+    transcricao_chave: str | None = Field(default=None, max_length=300)
+    # ⚠️ Só para os testes: Meta e transcrição falsas. Ignorados fora de DEBUG.
+    url_meta: str | None = Field(default=None, max_length=200, pattern=_LOCAL)
+    url_transcricao: str | None = Field(default=None, max_length=200, pattern=_LOCAL)

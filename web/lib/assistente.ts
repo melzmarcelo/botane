@@ -52,6 +52,11 @@ export type ConfigAssistente = {
   limite_diario: number;
   /** A chave da Anthropic é a da Tradução: aqui só se diz se existe. */
   chave_anthropic: boolean;
+  /** 153: o áudio. Provedor vazio = não ouve áudio. A chave nunca volta. */
+  transcricao_provedor: "" | "openai" | "groq";
+  transcricao_modelo: string;
+  transcricao_chave_configurada: boolean;
+  provedores_transcricao: { id: "openai" | "groq"; nome: string; modelo: string }[];
 };
 
 export type GravarConfigAssistente = {
@@ -66,6 +71,10 @@ export type GravarConfigAssistente = {
   app_secret: string;
   modelo: string;
   limite_diario: number;
+  transcricao_provedor: "" | "openai" | "groq";
+  transcricao_modelo: string;
+  /** Em branco = mantém a guardada. */
+  transcricao_chave: string;
 };
 
 export const vinculoAssistente = () => api.get<VinculoAssistente>("/assistente/vinculo");

@@ -268,7 +268,7 @@ checar("texto: vira pergunta ao assistente, que responde (152)",
        (ultima["texto"] or "").startswith("ok: quais minhas pendências"), ultima)
 webhook(mensagem(FONE_DONO, tipo="audio"))
 ultima = respostas(FONE_DONO)[-1]
-checar("áudio: avisa que por enquanto só entende texto", "só entendo" in (ultima["texto"] or ""),
+checar("áudio sem a transcrição configurada: avisa que ainda não ouve (153)", "ainda não consigo ouvir áudio" in (ultima["texto"] or ""),
        ultima)
 mid = respostas(FONE_DONO)[-1]["id"]
 with get_cursor() as cur:

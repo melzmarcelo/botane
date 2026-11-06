@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Cartao } from "@/components/ui";
 import * as assist from "@/lib/assistente";
+import AudioDoAssistente from "./assistente-audio";
 
 /**
  * O número do assistente no WhatsApp — UM, da casa toda (etapa 1, migração 151).
@@ -19,6 +20,8 @@ const vazio = (c: assist.ConfigAssistente): assist.GravarConfigAssistente => ({
   ativa: c.ativa, modo: c.modo, numero: c.numero, phone_number_id: c.phone_number_id,
   waba_id: c.waba_id, api_versao: c.api_versao, token: "", app_secret: "",
   modelo: c.modelo, limite_diario: c.limite_diario,
+  transcricao_provedor: c.transcricao_provedor, transcricao_modelo: c.transcricao_modelo,
+  transcricao_chave: "",
 });
 
 export default function AssistenteWhatsappConfig() {
@@ -169,6 +172,8 @@ export default function AssistenteWhatsappConfig() {
             aparecem no histórico das lojas.
           </p>
         </div>
+
+        <AudioDoAssistente cfg={cfg} form={form} mudar={mudar} />
 
         <div className="rounded-[10px] bg-[var(--color-superficie2)] p-3 text-[13px]">
           <p className="mb-2 font-semibold">Na Meta, em WhatsApp → Configuração → Webhook, informe:</p>

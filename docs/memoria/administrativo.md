@@ -911,3 +911,30 @@ Aí ele retorna: para hoje precisa produzir 10 pães. Aí posso solicitar a rece
   usar a falsa), `verificar-assistente-whatsapp.mjs` (11).
 - ⏳ Não testado contra a Anthropic real (a base local não tem chave). Primeira conversa de
   verdade: conferir no `uso` da fala do assistente se `cache_lido` sobe a partir da 2ª pergunta.
+
+## Assistente no WhatsApp — etapa 3: o áudio (migração 153, 1.3.7, 06/11/2026)
+🔑 **Pedido do dono:** *"pela manhã mando um áudio ou um texto para este número…"*.
+- ⚠️ **A API do Claude não recebe áudio** (conferido na referência em 06/11/2026): a nota de voz
+  é transcrita por um serviço à parte. 🔑 **OpenAI e Groq falam o MESMO formato**
+  (`POST {base}/audio/transcriptions`, multipart `file` + `model` + `language=pt`), então
+  `services/transcricao.py` é um cliente só, e a casa escolhe o provedor em Integrações ▸
+  Assistente ▸ Áudio (`assistente-audio.tsx`). Modelos padrão: `gpt-4o-mini-transcribe` (OpenAI),
+  `whisper-large-v3-turbo` (Groq). Chave em `credenciais.transcricao_chave` (cifrada, nunca volta).
+- **Fluxo**: o webhook guarda o áudio como pergunta (`texto = "[áudio]"`, `de_audio`, `midia_id`) —
+  ou, sem transcrição configurada, responde na hora "ainda não consigo ouvir áudio". Depois do 200,
+  `_transcrever_audios` baixa da Meta em DOIS passos (`GET /{versao}/{midia_id}` → URL temporária →
+  `GET` da URL, os dois com o token do número do assistente), transcreve e grava o texto na hora
+  (`transcrito_em`: a nova tentativa não baixa nem cobra de novo o que já ouviu).
+- 🔑 **A resposta começa por "🎤 _Ouvi: “…”_"** — a pessoa confere se foi entendida; na etapa 4 é o
+  que impede lançar "10 pães" que eram "12". O Claude recebe no contexto que a pergunta veio de
+  áudio transcrito (pode ter erro).
+- ⚠️ **O áudio não é guardado**: os bytes vivem só na memória. Vai, sim, ao provedor — a tela diz.
+- Erros: transcrição vazia → "não consegui entender, repita ou escreva"; mídia que a Meta não
+  entrega mais (404) e arquivo acima de 8 MB → frase definitiva; 429/5xx/rede da Meta ou do
+  provedor → volta a PENDENTE (3 tentativas); 4xx do provedor → "configuração da transcrição".
+  Foto, figurinha, documento → "entendo texto e áudio". Áudio conta no limite diário.
+- Testes contra Meta e transcrição FALSAS (`tests/falsos_assistente.py`), pela config `url_meta` /
+  `url_transcricao` — **só com DEBUG**, como o `url_api` da Anthropic.
+- Cobertura: `smoke_assistente_audio.py` (17), `smoke_assistente_whatsapp.py` (35),
+  `smoke_assistente_conversa.py` (22), `verificar-assistente-whatsapp.mjs` (13).
+- ⏳ Não testado contra Meta, OpenAI ou Groq reais.
