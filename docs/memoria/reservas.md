@@ -1370,6 +1370,9 @@ automaticamente e receber os devidos retornos."* Desfaz a decisão 2 da 143 (con
   base local (corrigido).
 - ⚠️ Os modelos de mensagem são da conta (WABA): número em outra conta precisa dos modelos lá.
 - Cobertura: `smoke_whatsapp.py` (56, com a seção 8c de vários números) e `verificar-whatsapps.mjs` (13).
+- 🔑 **151: o webhook também atende o número do ASSISTENTE** (da casa, em `integracoes`, não da
+  loja): `whatsapp.receber` desvia o que é dele para `services/assistente.py`, com o segredo dele.
+  Ver `administrativo.md`, seção do assistente.
 
 ## Reservas e Fidelidade visíveis no site (migração 144, 1.1.157, 30/10/2026)
 🔑 **Pedido do dono:** *"nas configurações das reservas, criar uma opção se as reservas vão estar

@@ -6,6 +6,7 @@ import Omie from "./omie";
 import PdvLegal from "./pdv-legal";
 import EmailSmtp from "./email-smtp";
 import TraducaoClaude from "./traducao-claude";
+import AssistenteWhatsappConfig from "./assistente-whatsapp";
 import Duplicados from "./duplicados";
 import ExplicaTela from "@/components/explica-tela";
 
@@ -26,7 +27,7 @@ import ExplicaTela from "@/components/explica-tela";
  * primeira que ela PODE — senão alguém cai numa aba vazia sem entender por quê.
  */
 
-type Aba = "omie" | "pdv" | "email" | "traducao" | "outros";
+type Aba = "omie" | "pdv" | "email" | "traducao" | "assistente" | "outros";
 
 const ABAS: { id: Aba; nome: string; chaves: string[]; explica: string }[] = [
   {
@@ -56,6 +57,13 @@ const ABAS: { id: Aba; nome: string; chaves: string[]; explica: string }[] = [
     chaves: ["admin.integracoes"],
     explica:
       "A chave da Anthropic que traduz o cardápio do site para inglês e alemão. Sem ela, o site mostra o português.",
+  },
+  {
+    id: "assistente",
+    nome: "Assistente",
+    chaves: ["admin.integracoes"],
+    explica:
+      "O número de WhatsApp pelo qual os funcionários conversam com o sistema. Um só para a casa toda: cada pessoa vê o que o usuário dela vê, em todas as suas lojas.",
   },
   {
     id: "outros",
@@ -112,6 +120,7 @@ export default function PaginaIntegracoes() {
       {aba === "pdv" && <PdvLegal />}
       {aba === "email" && <EmailSmtp />}
       {aba === "traducao" && <TraducaoClaude />}
+      {aba === "assistente" && <AssistenteWhatsappConfig />}
       {aba === "outros" && <Duplicados />}
     </div>
   );

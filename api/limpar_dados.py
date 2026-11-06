@@ -120,6 +120,8 @@ OPERACAO = [
     "fidelidade_checkins", "fidelidade_premios", "fidelidade_solicitacoes",
     # O histórico do WhatsApp (099) é operação; os avisos da loja são configuração.
     "whatsapp_mensagens",
+    # A fila das respostas do assistente (151) — conversa, não cadastro.
+    "assistente_mensagens",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]

@@ -11,7 +11,7 @@ dela. O token e o segredo nunca voltam na resposta.
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 
 import auditoria
 from config import API_URL_PUBLICA
@@ -128,8 +128,15 @@ def verificar(request: Request) -> Response:
 
 
 @publico.post("/webhook")
-async def receber(request: Request) -> dict:
-    """Estados das mensagens e respostas dos clientes. ⚠️ Assinatura conferida no serviço."""
+async def receber(request: Request, tarefas: BackgroundTasks) -> dict:
+    """Estados das mensagens e respostas dos clientes. ⚠️ Assinatura conferida no serviço.
+
+    🔑 151: as respostas do assistente saem DEPOIS do 200 (a Meta quer resposta rápida), sem
+    esperar os 30 s do laço — é uma conversa, e quem escreveu está olhando o celular.
+    """
     corpo = await request.body()
     with get_cursor() as cur:
-        return servico.receber(cur, corpo, request.headers.get("X-Hub-Signature-256"))
+        feito = servico.receber(cur, corpo, request.headers.get("X-Hub-Signature-256"))
+    from services import assistente
+    tarefas.add_task(assistente.processar_fila)
+    return feito

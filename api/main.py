@@ -42,6 +42,7 @@ from database import BancoOcupado, close_pool, get_cursor, init_pool
 from db_updater import run_migrations
 from routers import (
     ajustes,
+    assistente,
     alertas,
     autenticacao,
     bi,
@@ -99,7 +100,7 @@ from seguranca import PREFIXO_TOKEN_API, hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.3.4"
+VERSAO = "1.3.5"
 
 
 def conferir_segredo() -> None:
@@ -533,6 +534,7 @@ app.include_router(pedidos.router)
 app.include_router(traducao.router)
 app.include_router(precificacao.router)
 app.include_router(preferencias.router)
+app.include_router(assistente.router)
 app.include_router(bi.router)
 # 🔑 Patrimônio (139, 27/10/2026): os bens, a plaqueta e a manutenção.
 app.include_router(patrimonio.router)

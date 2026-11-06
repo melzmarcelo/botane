@@ -829,3 +829,46 @@ virou espelho do principal, mantido por `services/whatsapps_da_loja.gravar` — 
 Desde a 146 (1.1.162) a lista mora na aba WhatsApp da loja (`lojas/[id]/whatsapp/numeros.tsx`), com a
 conexão de cada número com a Meta (ver `reservas.md`); o cadastro só aponta para lá e não grava números. O uso pelo catálogo (número escolhido e
 botão de contato) está em [`catalogos.md`](catalogos.md#vários-whatsapps-por-loja-o-número-do-catálogo-e-o-entre-em-contato-migração-143-11156-30102026).
+
+## Assistente no WhatsApp — etapa 1: o número da casa e o vínculo do telefone (migração 151, 1.3.5, 06/11/2026)
+🔑 **Pedido do dono:** *"no meu usuário vou vincular o meu número de telefone. Aí pela manhã mando
+um áudio ou um texto para este número de WhatsApp … pedindo quais as minhas pendências para hoje
+… confirmo a produção e o sistema já lança."* Estudo e as 5 etapas em
+[`docs/assistente-whatsapp-estudo.md`](../assistente-whatsapp-estudo.md). Esta etapa só prova o
+cano: reconhece quem escreve e responde "olá".
+- 🔑 **UM número, da CASA, não da loja.** Dono, antes do commit: *"este número poderia ser
+  compartilhado entre lojas. Pois eu posso ter acesso às duas lojas, e quando pergunto o que tenho
+  de pendência, poderia encontrar coisas de duas lojas."* ⚠️ **A 1ª versão punha o número na loja
+  (`unidade_whatsapps.assistente`) — foi desfeita antes de promover**, e a 151 dropa a coluna para
+  limpar a base de quem a rodou. Quem decide o que a pessoa vê é o USUÁRIO, nunca o número.
+- **A conexão** mora em `integracoes` (`servico = 'WHATSAPP_ASSISTENTE'`, `id_unidade` nulo, como
+  Tradução e e-mail): `ativa`, `modo`, `config` (numero, phone_number_id, waba_id, api_versao,
+  verify_token) e `credenciais` cifradas (token, app_secret — nunca voltam; em branco mantém).
+  Tela Integrações ▸ Assistente (`integracoes/assistente-whatsapp.tsx`), `admin.integracoes`.
+  ⚠️ O `phone_number_id` de um número de LOJA é recusado (422): o assistente tem número só dele.
+- **Mesmo webhook das lojas** (`/publico/whatsapp/webhook`): `whatsapp.receber` olha primeiro
+  `assistente.do_assistente(pnid)` e, se for, confere a assinatura com o segredo DO ASSISTENTE e
+  desvia mensagens e estados para `services/assistente.py`. O GET aceita também o verify_token dele.
+- 🔑 **Fila própria, `assistente_mensagens`, fora de `whatsapp_mensagens`** — aquela é o histórico
+  de UMA loja, que o admin da loja lê; a conversa do funcionário vai trazer receita e pendência
+  dele. `chave` única = id da mensagem da Meta (reenvio do webhook não responde duas vezes).
+  Sai logo depois do 200 (`BackgroundTasks` no router do webhook) e, de reserva, no `laco` do
+  WhatsApp. Simulado → SIMULADA; desligado → CANCELADA; estados da Meta só avançam.
+- **O vínculo** (`usuario_whatsapp`, um por usuário): Perfil ▸ Assistente no WhatsApp gera um
+  código de 8 caracteres (15 min, só o sha256 no banco, em claro só na resposta do POST; 409 se o
+  número da casa não está ligado); a pessoa manda `BOTANE <código>` do próprio WhatsApp (o link
+  wa.me já leva o texto). 🔑 **O que fica é o `from` da Meta (`wa_id`), NUNCA o telefone
+  digitado**: prova a posse e evita o nono dígito, que a Meta às vezes tira do celular
+  brasileiro. Gerar código novo não desfaz o vínculo atual.
+- O mesmo `wa_id` provado por outro usuário **muda de dono** (aparelho trocou de mãos) — auditoria
+  `assistente_whatsapp / vincular` com `tirado_do_usuario`.
+- A cada mensagem: usuário ATIVO e permissão `integracao.whatsapp_assistente` (nasce com quem tem
+  `admin.usuarios`, como a do Claude). Número desconhecido: UMA resposta por dia (chave
+  `desconhecido:<fone>:<data>`), sem dizer nada de ninguém.
+- Rotas `routers/assistente.py`: `GET/PUT /assistente/config`, `GET/DELETE /assistente/vinculo`,
+  `POST /assistente/vinculo/codigo`. Perfil: `components/assistente-whatsapp.tsx`; service
+  `lib/assistente.ts`. `assistente_mensagens` em `OPERACAO` do `limpar_dados`.
+- Cobertura: `smoke_assistente_whatsapp.py` (35) e `verificar-assistente-whatsapp.mjs` (10, na bateria).
+- ⏳ Próximo: contratar o número virtual (operadoras no estudo), ligar na Meta e configurar em
+  Integrações; etapa 2 = consultas por texto com o Claude + `mcp_ferramentas`, com o contexto de
+  TODAS as lojas do usuário.

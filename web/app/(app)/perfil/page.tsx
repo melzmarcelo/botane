@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import ExplicaTela from "@/components/explica-tela";
 import ChavesDeAcesso from "@/components/chaves-de-acesso";
+import AssistenteWhatsapp from "@/components/assistente-whatsapp";
 import { URL_CONECTOR, minhasChaves } from "@/lib/tokens-api";
 
 /**
@@ -117,6 +118,9 @@ export default function PaginaPerfil() {
           </div>
         </form>
       </Cartao>
+
+      {/* 151: o assistente pelo WhatsApp, só para quem tem a permissão dele. */}
+      {pode("integracao.whatsapp_assistente") && <AssistenteWhatsapp />}
 
       {/* 🔑 Só para quem pode conectar o Claude (`integracao.claude`). Mesmo sem
           a permissão a pessoa poderia ter uma chave gerada pelo administrador —

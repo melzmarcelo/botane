@@ -588,6 +588,9 @@ async def laco(parar: asyncio.Event) -> None:
                 _ultima_varredura = agora
                 await asyncio.to_thread(_varrer_com_cursor)
             await asyncio.to_thread(processar_fila)
+            # 151: de reserva — a resposta do assistente costuma sair logo após o webhook.
+            from services import assistente
+            await asyncio.to_thread(assistente.processar_fila)
         except Exception as e:  # noqa: BLE001
             await asyncio.to_thread(erros.registrar, "whatsapp", e)
 
@@ -603,7 +606,11 @@ def verificar_webhook(cur, token: str | None) -> bool:
     if not token:
         return False
     cur.execute("SELECT 1 FROM unidade_whatsapps WHERE verify_token = %s", (token,))
-    return cur.fetchone() is not None
+    if cur.fetchone():
+        return True
+    # 151: o número do assistente (da casa) pode estar num app da Meta só dele.
+    from services import assistente
+    return assistente.token_de_verificacao(cur, token)
 
 
 def _loja_do_numero(cur, phone_number_id: str | None) -> tuple[int, dict] | None:
@@ -643,7 +650,19 @@ def receber(cur, corpo: bytes, assinatura: str | None) -> dict:
     for entrada in dados.get("entry") or []:
         for mudanca in entrada.get("changes") or []:
             valor = mudanca.get("value") or {}
-            achado = _loja_do_numero(cur, (valor.get("metadata") or {}).get("phone_number_id"))
+            pnid = (valor.get("metadata") or {}).get("phone_number_id")
+            # 🔑 151: o número do assistente é da CASA, não de loja — mesmo webhook, outro dono.
+            from services import assistente
+            ass = assistente.do_assistente(cur, pnid)
+            if ass:
+                if not assinatura_valida(corpo, assinatura, ass["cred"].get("app_secret")):
+                    raise HTTPException(status_code=403, detail="Assinatura inválida.")
+                for st in valor.get("statuses") or []:
+                    feito["estados"] += assistente.estado_da_meta(cur, st)
+                for msg in valor.get("messages") or []:
+                    feito["respostas"] += assistente.receber(cur, msg)
+                continue
+            achado = _loja_do_numero(cur, pnid)
             if not achado:
                 continue
             id_unidade, integ = achado
