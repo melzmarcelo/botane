@@ -282,6 +282,7 @@ def lancar(
     lote: str | None = None,
     validade=None,
     pode_retroativo: bool = False,
+    aceita_inativo: bool = False,
     _lotes_espelho: list | None = None,
 ) -> dict:
     """Grava UM movimento e devolve o que ficou. Quantidade sempre positiva."""
@@ -329,17 +330,22 @@ def lancar(
     # presa e a contagem sem como fechar. Saída e estorno idem: é assim que se
     # esvazia o saldo de um absorvido e que se desfaz um lançamento errado.
     # O que não pode é a COMPRA nova entrar num cadastro que ninguém mais usa.
+    # 🔑 **`aceita_inativo`** (pedido do dono, 06/11/2026): quem confere a nota pode
+    # confirmar a entrada num produto só DESATIVADO. ⚠️ O absorvido de fusão segue
+    # recusado mesmo assim — o destino dele é o sobrevivente.
     if tipo == "ENTRADA_NF" and not produto["ativo"]:
         cur.execute("SELECT codigo, nome FROM produtos WHERE id = ("
                     "SELECT fundido_em FROM produtos WHERE id = %s)", (id_produto,))
         destino = cur.fetchone()
-        para_onde = (f" Este cadastro foi fundido em {destino['codigo']} — "
-                     f"{destino['nome']}; a entrada é lá." if destino else
-                     " Reative o cadastro ou aponte o item para o que está em uso.")
-        raise HTTPException(
-            status_code=400,
-            detail=f"{produto['nome']} está arquivado e não recebe entrada.{para_onde}",
-        )
+        if destino or not aceita_inativo:
+            para_onde = (f" Este cadastro foi fundido em {destino['codigo']} — "
+                         f"{destino['nome']}; a entrada é lá." if destino else
+                         " Reative o cadastro, aponte o item para o que está em uso ou "
+                         "confirme a entrada mesmo inativo.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"{produto['nome']} está inativo e não recebe entrada.{para_onde}",
+            )
 
     par = _parametros(cur, id_unidade)
     if id_local is None:

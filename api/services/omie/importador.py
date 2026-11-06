@@ -637,7 +637,7 @@ def estornar_lancamento(cur, id_nota: int, id_usuario: int, *, na_data_original:
 
 
 def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
-                pode_retroativo: bool = False) -> dict:
+                pode_retroativo: bool = False, aceitar_inativos: bool = False) -> dict:
     """Transforma a nota em movimento de estoque. Só com tudo conciliado."""
     # 🔑 **`FOR UPDATE`, senão a guarda de "já lançada" não guarda.** Dois
     # cliques no botão de lançar leem a nota ABERTA os dois, passam os dois pela
@@ -706,6 +706,28 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
                     "não significa nada."),
         )
 
+    # 🔑 **Produto INATIVO entra só com confirmação** (pedido do dono, 06/11/2026:
+    # *"caso quiser, pode dar entrada mesmo inativado"*). Sem a marca, a recusa
+    # nomeia todos de uma vez — quem confere decide numa ida.
+    # ⚠️ **Absorvido de FUSÃO nunca**, nem confirmado: a compra iria para o cadastro
+    # morto, fora da ficha e do custo do sobrevivente. Esse a trava de
+    # `estoque.lancar` recusa e diz para onde ir.
+    cur.execute(
+        """SELECT DISTINCT p.codigo, p.nome FROM nota_itens i
+             JOIN produtos p ON p.id = i.id_produto
+            WHERE i.id_nota = %s AND NOT i.ignorado AND NOT p.ativo AND p.fundido_em IS NULL""",
+        (id_nota,),
+    )
+    inativos = [f"{r['nome']} ({r['codigo']})" for r in cur.fetchall()]
+    if inativos and not aceitar_inativos:
+        mostra = ", ".join(inativos[:3])
+        resto = f" e mais {len(inativos) - 3}" if len(inativos) > 3 else ""
+        raise HTTPException(
+            status_code=409,
+            detail=(f"{len(inativos)} produto(s) desta nota estão inativos: {mostra}{resto}. "
+                    "Confirme para dar entrada mesmo assim, ou reative o cadastro."),
+        )
+
     # `id_local_padrao` vem junto: o local é do PRODUTO. Uma nota traz congelado
     # e seco na mesma folha, e um local só para a nota inteira obrigaria a
     # lançar duas vezes ou a aceitar o sorvete no estoque seco. O local da nota
@@ -744,6 +766,7 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
             lote=item["lote_nf"],
             validade=item["validade_nf"],
             pode_retroativo=pode_retroativo,
+            aceita_inativo=aceitar_inativos,
         )
         lancados += 1
         valor += dec(r["custo_total"])

@@ -68,6 +68,28 @@
   nos itens (`vTotalDescontos` é a soma dos `vDesconto`). Migrações 024 e 025 consertam o que
   entrou antes; nota já lançada precisa de estorno + novo lançamento.
 
+- 🔑 **Nota com produto INATIVO: achar, avisar e entrar só confirmado** (1.3.3, 06/11/2026,
+  pedido do dono: *"quando vem um produto desativado em alguma nota ele não encontra … o
+  usuário não entende por que o produto não foi criado … caso quiser, pode dar entrada mesmo
+  inativado"*). A cascata continua sem casar nota nova com inativo (degraus 2 a 4 filtram
+  `AND ativo`), mas `vinculo.inativo_que_casa` procura o mesmo item SEM o filtro (código do
+  Omie, EAN, código no fornecedor) e o `GET /notas/{id}` devolve `inativo_encontrado` na linha
+  pendente. A tela mostra *"Encontrado no cadastro, mas inativo"* e **usar mesmo inativo**
+  (vincula com `aprender=false`: o código do fornecedor NÃO passa a apontar para o inativo, a
+  próxima nota avisa de novo). Linha ligada a inativo ganha a etiqueta "produto inativo".
+  - **Lançar recusa (409) nomeando os inativos** sem `aceitar_inativos`; a tela abre a
+    confirmação listando-os e manda a marca. `estoque.lancar(aceita_inativo=True)` deixa
+    passar ENTRADA_NF em inativo — o cadastro continua inativo.
+  - ⚠️ **Absorvido de FUSÃO nunca**, nem confirmado (`fundido_em`): nem é oferecido, e a trava
+    de `estoque.lancar` segue recusando e apontando o principal.
+  - ⚠️ O lote (`notas_lote`) não passa a marca: nota com inativo fica recusada lá e se lança
+    pela tela, com a confirmação.
+  - ⚠️ O degrau 1 (de-para confirmado em `codigos_externos`) não filtra `ativo`: item assim já
+    chega LIGADO ao inativo — antes morria no lançamento com 400, agora pede confirmação.
+  - Cobertura: `smoke_nota_produto_inativo.py` (14) e `verificar-nota-produto-inativo.mjs` (7).
+    ⚠️ No teste de tela, o clique na última linha da tabela cai na barra fixa do rodapé —
+    clicar pelo elemento depois de `scrollIntoView`.
+
 - 🔑 **Nota apontando para cadastro ARQUIVADO: trava, prévia e botão único** (migração 063,
   10/09/2026, relatado pelo dono). Depois de uma fusão sobram notas apontando para o absorvido.
   🔑 **A linha que parte o problema é o RAZÃO, e o dono confirmou de que lado o caso dele

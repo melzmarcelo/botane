@@ -70,6 +70,9 @@ class VincularRequest(BaseModel):
 
 class LancarRequest(BaseModel):
     id_local: int | None = None
+    # 🔑 Dar entrada mesmo em produto INATIVO (pedido do dono, 06/11/2026). Sem a
+    # marca o lançamento recusa e nomeia os inativos; com ela, entram.
+    aceitar_inativos: bool = False
 
 
 class AtualizarAbertasRequest(BaseModel):
@@ -686,6 +689,9 @@ def obter(id_nota: int,
                       -- alerta "completar cadastro" do início continua sendo a
                       -- rede — mas ele avisa a casa, não esta nota.
                       p.status AS produto_status,
+                      -- Produto INATIVO na linha: a tela avisa, e lançar pede
+                      -- confirmação (`aceitar_inativos`).
+                      p.ativo AS produto_ativo, p.fundido_em AS produto_fundido_em,
                       s.nome AS sugestao_nome,
                       -- Para onde ESTE item vai: o local do produto, ou o da
                       -- nota como reserva. A tela mostra antes de lançar, senão
@@ -752,6 +758,16 @@ def obter(id_nota: int,
                     # sempre toca ninguém escuta.
                     item["fator_diverge"] = abs(float(declarado) - float(usado)) > (
                         float(usado) * 0.005)
+        # 🔑 **O produto existe, mas está INATIVO** (pedido do dono, 06/11/2026). A
+        # cascata não casa nota nova com cadastro inativo — e calada deixava o item
+        # pendente sem dizer por quê. A linha pendente passa a mostrar quem ela
+        # acharia; usar ou não é escolha de quem confere.
+        for item in itens:
+            item["inativo_encontrado"] = None
+            if not item.get("id_produto") and not item.get("ignorado"):
+                item["inativo_encontrado"] = vinculo_omie.inativo_que_casa(
+                    cur, item.get("codigo_omie"), item.get("codigo_barras"),
+                    item.get("codigo_fornecedor"), nota.get("id_fornecedor"))
         nota["itens"] = itens
     return nota
 
@@ -1023,7 +1039,8 @@ def lancar(id_nota: int, body: LancarRequest,
     _conferir_loja_da_nota(ctx, id_nota)
     with get_cursor() as cur:
         r = importador.lancar_nota(cur, id_nota, ctx.id_usuario, body.id_local,
-                                   ctx.pode("estoque.retroativo"))
+                                   ctx.pode("estoque.retroativo"),
+                                   aceitar_inativos=body.aceitar_inativos)
         auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "lancar", depois=r)
     aviso = motor_estoque.aviso_fora_de_ordem(len(r.get("fora_de_ordem") or []))
     return r | {"message": f"{r['itens_lancados']} item(ns) lançado(s) no estoque"

@@ -58,6 +58,7 @@ export default function PaginaNota() {
    * navegador tem fonte de sistema, botao em ingles e nenhum lugar para
    * explicar o que a acao faz. */
   const [substituindo, setSubstituindo] = useState<ItemNota | null>(null);
+  const [confirmandoInativos, setConfirmandoInativos] = useState(false);
   const [escolha, setEscolha] = useState<Record<number, string>>({});
   const [rotuloEscolhido, setRotuloEscolhido] = useState<Record<number, string>>({});
   /** Linhas já vinculadas que estão sendo TROCADAS — a mesma busca do pendente,
@@ -91,8 +92,8 @@ export default function PaginaNota() {
    * certo quando o código é daquele produto, errado quando o fornecedor mandou outra
    * coisa uma vez. Com `false`, só esta linha muda (e o item guarda a marca).
    */
-  async function vincular(item: ItemNota, aprender = true) {
-    const id_produto = Number(escolha[item.id]);
+  async function vincular(item: ItemNota, aprender = true, idProduto?: number) {
+    const id_produto = idProduto ?? Number(escolha[item.id]);
     if (!id_produto) return;
     setOcupado(true);
     try {
@@ -165,12 +166,28 @@ export default function PaginaNota() {
     }
   }
 
-  async function lancar() {
+  /** Produtos INATIVOS ligados à nota (os fundidos ficam de fora: esses o servidor
+   *  recusa sempre e diz para onde ir). */
+  const inativos = (nota?.itens ?? []).filter(
+    (i) => i.id_produto && !i.ignorado && i.produto_ativo === false && !i.produto_fundido_em,
+  );
+
+  /**
+   * 🔑 **Entrada em produto inativo, só confirmada** (pedido do dono, 06/11/2026:
+   * *"caso quiser, pode dar entrada mesmo inativado"*). A caixa lista quais são, e
+   * só então a nota vai com `aceitar_inativos`.
+   */
+  async function lancar(aceitarInativos = false) {
+    if (inativos.length && !aceitarInativos) {
+      setConfirmandoInativos(true);
+      return;
+    }
+    setConfirmandoInativos(false);
     setOcupado(true);
     try {
       const r = await api.post<{ itens_lancados: number; valor: number }>(
         `/notas/${id}/lancar`,
-        {},
+        { aceitar_inativos: aceitarInativos },
       );
       aviso.sucesso(
         `${plural(r.itens_lancados, "item", "itens")} no estoque, ${reais(Number(r.valor))} — o custo médio de ` +
@@ -294,7 +311,7 @@ export default function PaginaNota() {
           {!lancada && !cancelada && !naoEncontrada && pode("compras.lancar") && (
             <button
               className="btn btn-primario"
-              onClick={lancar}
+              onClick={() => void lancar()}
               aria-busy={ocupado} disabled={ocupado || !!pendentes.length}
               title={pendentes.length ? "Há item sem produto vinculado" : undefined}
             >
@@ -501,6 +518,17 @@ export default function PaginaNota() {
                           {i.produto_status === "RASCUNHO" && (
                             <Etiqueta cor="alerta">rascunho — completar cadastro</Etiqueta>
                           )}
+                          {/* 🔑 Produto INATIVO na linha (06/11/2026): entra no
+                              estoque só se quem lança confirmar. */}
+                          {i.produto_ativo === false && (
+                            <span data-produto-inativo={i.id}>
+                              <Etiqueta cor="alerta">
+                                {i.produto_fundido_em
+                                  ? "inativo (fundido) — troque pelo principal"
+                                  : "produto inativo"}
+                              </Etiqueta>
+                            </span>
+                          )}
                           {/* A escolha que não ensinou nada se anuncia: senão quem
                               conferir a próxima nota não entende por que ela veio
                               pendente de novo. */}
@@ -535,6 +563,40 @@ export default function PaginaNota() {
                               hoje está em <b className="font-medium">{i.produto}</b> — escolha
                               o certo
                             </span>
+                          )}
+                          {/* 🔑 **O produto existe, mas está INATIVO** (pedido do
+                              dono, 06/11/2026: *"o usuário não entende por que o
+                              produto não foi criado e a nota está faltando o
+                              item"*). A cascata não casa nota nova com cadastro
+                              inativo; a linha agora diz quem ela acharia, e
+                              usar mesmo assim é um clique. */}
+                          {i.inativo_encontrado && !trocando[i.id] && (
+                            <div
+                              className="rounded-md border border-alerta/40 px-2.5 py-1.5 text-[12.5px]"
+                              data-inativo-encontrado={i.id}
+                            >
+                              <span className="block">
+                                Encontrado no cadastro, mas <b>inativo</b>:{" "}
+                                <b className="font-medium">
+                                  {i.inativo_encontrado.nome} ({i.inativo_encontrado.codigo})
+                                </b>
+                              </span>
+                              <button
+                                type="button"
+                                className="link-acao"
+                                data-acao="usar-inativo"
+                                disabled={ocupado}
+                                // ⚠️ Só nesta nota (`aprender=false`): o código do
+                                // fornecedor não passa a apontar para um cadastro
+                                // inativo — a próxima nota avisa de novo.
+                                onClick={() =>
+                                  void vincular(i, false, i.inativo_encontrado!.id)
+                                }
+                                title="vincula só esta linha a este produto; ao lançar, a nota pede confirmação para dar entrada nele"
+                              >
+                                usar mesmo inativo
+                              </button>
+                            </div>
                           )}
                           <BuscaCadastro
                             fonte={PRODUTOS}
@@ -609,7 +671,14 @@ export default function PaginaNota() {
                           </span>
                         </div>
                       ) : (
-                        <Etiqueta cor="alerta">pendente</Etiqueta>
+                        <span className="flex flex-col items-start gap-1">
+                          <Etiqueta cor="alerta">pendente</Etiqueta>
+                          {i.inativo_encontrado && (
+                            <span className="text-[12px] text-suave">
+                              {i.inativo_encontrado.nome} está inativo no cadastro
+                            </span>
+                          )}
+                        </span>
                       )}
                     </td>
                     {/* Cada item vai para o local do CADASTRO do produto: a
@@ -726,6 +795,32 @@ export default function PaginaNota() {
           <p className="mt-3 text-[13.5px] text-suave">
             Cada entrada ganha uma contrapartida no razão e o custo médio volta a ser
             recalculado. Nada se apaga: os dois movimentos ficam à vista.
+          </p>
+        </Confirmacao>
+      )}
+
+      {confirmandoInativos && (
+        <Confirmacao
+          titulo="Dar entrada em produto inativo?"
+          rotuloConfirmar="Lançar mesmo assim"
+          ocupado={ocupado}
+          aoCancelar={() => setConfirmandoInativos(false)}
+          aoConfirmar={() => void lancar(true)}
+        >
+          <p>
+            {inativos.length === 1 ? "Este produto está inativo" : "Estes produtos estão inativos"}{" "}
+            no cadastro:
+          </p>
+          <ul className="mt-2 list-disc pl-5" data-lista-inativos>
+            {inativos.map((i) => (
+              <li key={i.id}>
+                <b>{i.produto}</b> ({i.codigo_produto})
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-[13.5px] text-suave">
+            A mercadoria entra no estoque deles e o cadastro continua inativo. Se voltou a
+            ser comprado, o melhor é reativá-lo em Produtos.
           </p>
         </Confirmacao>
       )}

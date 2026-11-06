@@ -124,3 +124,41 @@ def gravar_apelido_ean(cur, id_produto: int, ean: str, descricao: str | None,
                    confirmado_por = EXCLUDED.confirmado_por, confirmado_em = now()""",
         (SISTEMA_EAN, str(ean)[:60], id_produto, (descricao or "")[:200] or None, id_usuario),
     )
+
+
+def inativo_que_casa(cur, codigo_omie: str | None, ean: str | None,
+                     codigo_fornecedor: str | None, id_fornecedor: int | None) -> dict | None:
+    """O produto INATIVO que este item da nota acharia, se estivesse ativo.
+
+    🔑 **Pedido do dono (06/11/2026):** *"quando vem um produto desativado em alguma
+    nota ele não encontra … o usuário não entende por que o produto não foi criado e a
+    nota está faltando o item"*. A cascata filtra `AND ativo` de propósito — nota nova
+    não ressuscita cadastro sozinha —, mas calada ela deixava o item pendente sem dizer
+    que o produto EXISTE. Aqui só se ACHA e se conta; vincular continua sendo escolha
+    de quem confere.
+
+    ⚠️ **Só inativo que NÃO foi fundido.** O absorvido de uma fusão tem dono vivo, e os
+    apelidos já levam a nota até ele; oferecê-lo seria pôr a compra no cadastro morto.
+    Mesmos degraus da cascata, sem o filtro: código do Omie, EAN, código no fornecedor.
+    """
+    tentativas = []
+    if codigo_omie:
+        tentativas.append(("codigo_omie = %s", (str(codigo_omie),)))
+    if ean:
+        tentativas.append(("codigo_barras = %s", (str(ean),)))
+    if codigo_fornecedor and id_fornecedor:
+        tentativas.append((
+            """id IN (SELECT id_produto FROM produto_fornecedor
+                       WHERE id_fornecedor = %s AND lower(codigo_no_fornecedor) = lower(%s))""",
+            (id_fornecedor, codigo_fornecedor)))
+    for onde, args in tentativas:
+        cur.execute(
+            f"""SELECT id, codigo, nome FROM produtos
+                 WHERE NOT ativo AND fundido_em IS NULL AND controla_estoque AND {onde}
+                 ORDER BY id DESC LIMIT 1""",
+            args,
+        )
+        achado = cur.fetchone()
+        if achado:
+            return dict(achado)
+    return None

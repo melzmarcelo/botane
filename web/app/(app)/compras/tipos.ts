@@ -39,6 +39,12 @@ export type ItemNota = {
    *  feito a partir da própria nota: entra no estoque, mas ainda não tem
    *  unidade nem fator conferidos — e quem confere a nota é quem sabe os dois. */
   produto_status: string | null;
+  /** `false` = o produto ligado está INATIVO: lançar pede confirmação. */
+  produto_ativo: boolean | null;
+  codigo_produto?: string | null;
+  produto_fundido_em: number | null;
+  /** Linha pendente cujo produto EXISTE, mas inativo (pedido do dono, 06/11/2026). */
+  inativo_encontrado: { id: number; codigo: string; nome: string } | null;
   um_estoque: string | null;
   local_destino: string | null;
   sugestao_produto: number | null;
