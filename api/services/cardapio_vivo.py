@@ -515,6 +515,9 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
             # "A partir de": o menor preço das opções. Sem nenhum preço, sem preço.
             precos = [o["preco"] for o in opcoes if o["preco"] is not None]
             preco = min(precos) if precos else None
+            # 🔑 150: embalagem que não se cobra — sem preço no cartão.
+            if any(o["nao_cobrar"] for o in escolhas[l["id_item"]]):
+                preco = None
         itens.append({
             "id": l["id_item"], "id_categoria": l["id_categoria"],
             "id_subcategoria": l["id_subcategoria"],
@@ -527,6 +530,10 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
             "adicionais": adicionais.get(l["id_produto"], []) if l["id_produto"] else [],
             # 🔑 142: nulo = prato comum; lista = o cliente escolhe UMA antes de seguir.
             "escolhas": opcoes,
+            # 🔑 150: a opção escolhida não é cobrada (a embalagem da cesta): a tela esconde o
+            # preço dela e a mostra marcada e travada, fora do mínimo/máximo dos itens.
+            "nao_cobrar": l["tipo"] == "ESCOLHA" and any(
+                o["nao_cobrar"] for o in escolhas[l["id_item"]]),
         })
     return {"categorias": categorias, "itens": itens,
             "restricoes": [{"chave": k, "nome": v} for k, v in RESTRICOES.items()]}

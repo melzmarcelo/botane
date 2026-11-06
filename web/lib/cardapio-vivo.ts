@@ -40,6 +40,8 @@ export type ItemFeed = {
   adicionais: GrupoAdicionalFeed[];
   /** 142: nulo = prato comum; lista = o cliente escolhe UMA antes de seguir. */
   escolhas?: OpcaoDeEscolha[] | null;
+  /** 150: a opção escolhida (a embalagem da cesta) não é cobrada — preço escondido. */
+  nao_cobrar?: boolean;
 };
 
 export type SecaoFeed = {

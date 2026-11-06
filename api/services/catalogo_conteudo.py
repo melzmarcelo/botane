@@ -88,9 +88,10 @@ def opcoes_de_escolha(cur, id_unidade: int, itens: list[int]) -> dict[int, list[
         f"""SELECT e.id_item, e.id, e.id_produto, e.rotulo, e.rotulo_en, e.rotulo_de, e.ordem,
                    p.nome AS produto, coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS vitrine,
                    p.nome_catalogo_en, p.nome_catalogo_de, p.ativo, p.foto_url,
-                   {_preco_vigente('p.id')} AS preco
+                   {_preco_vigente('p.id')} AS preco, ci.nao_cobrar
               FROM catalogo_item_escolhas e
               JOIN produtos p ON p.id = e.id_produto
+              JOIN catalogo_itens ci ON ci.id = e.id_item
              WHERE e.id_item = ANY(%(i)s)
              ORDER BY e.ordem, e.id""",  # noqa: S608 - SQL fixo
         {"u": id_unidade, "i": itens})
@@ -98,6 +99,12 @@ def opcoes_de_escolha(cur, id_unidade: int, itens: list[int]) -> dict[int, list[
     for r in cur.fetchall():
         d = dict(r)
         d["nome"] = (d["rotulo"] or "").strip() or d["vitrine"]
+        # 🔑 150: item que NÃO cobra a opção (a embalagem da cesta, 06/11/2026). O preço vira
+        # zero AQUI, na fonte que o feed, o site e o pedido leem — uma regra só, e nenhum
+        # deles consegue cobrar por engano. `preco_produto` guarda o de verdade para o cadastro.
+        d["preco_produto"] = d["preco"]
+        if d["nao_cobrar"]:
+            d["preco"] = 0
         saida.setdefault(d.pop("id_item"), []).append(d)
     return saida
 
@@ -149,7 +156,7 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
         f"""SELECT i.id, i.id_categoria, i.id_subcategoria, i.id_produto, i.ordem,
                   i.destaque, (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado,
                   CASE WHEN (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) THEN i.esgotado_ate END AS esgotado_ate,
-                  i.objetivo, i.margem_nivel, i.tipo,
+                  i.objetivo, i.margem_nivel, i.tipo, i.nao_cobrar,
                   -- 🔑 142: o item de ESCOLHA não tem produto — nome, descrição e foto
                   -- são dele, e ele vale como ativo (quem sai de linha são as opções).
                   coalesce(p.nome, i.nome) AS produto, p.codigo,
@@ -167,7 +174,9 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
                   -- feed (loja → casa). A linha do editor mostra o prato como
                   -- ele sai, e preço errado ali é preço errado no cardápio.
                   -- O item de escolha mostra o MENOR das opções ("a partir de").
-                  CASE WHEN i.tipo = 'ESCOLHA' THEN
+                  -- 150: embalagem que não se cobra = sem preço, como o cliente vê.
+                  CASE WHEN i.tipo = 'ESCOLHA' AND i.nao_cobrar THEN NULL
+                       WHEN i.tipo = 'ESCOLHA' THEN
                       (SELECT min({_preco_vigente('e.id_produto')}) FROM catalogo_item_escolhas e
                          JOIN produtos ep ON ep.id = e.id_produto AND ep.ativo
                         WHERE e.id_item = i.id)
@@ -534,10 +543,11 @@ def criar_escolha(cur, id_unidade: int, id_categoria: int, dados: dict) -> dict:
     _lugar(cur, id_unidade, id_categoria, id_sub)
     nome = dados["nome"].strip()
     cur.execute(
-        """INSERT INTO catalogo_itens (id_categoria, id_subcategoria, tipo, nome, descricao, ordem)
-           VALUES (%s, %s, 'ESCOLHA', %s, %s, %s) RETURNING id""",
+        """INSERT INTO catalogo_itens (id_categoria, id_subcategoria, tipo, nome, descricao, ordem,
+                                       nao_cobrar)
+           VALUES (%s, %s, 'ESCOLHA', %s, %s, %s, %s) RETURNING id""",
         (id_categoria, id_sub, nome, (dados.get("descricao") or "").strip() or None,
-         _fim_da_lista(cur, id_categoria, id_sub)),
+         _fim_da_lista(cur, id_categoria, id_sub), bool(dados.get("nao_cobrar"))),
     )
     id_item = cur.fetchone()["id"]
     _gravar_opcoes(cur, id_item, dados["opcoes"])
@@ -548,7 +558,8 @@ def _item(cur, id_unidade: int, id_item: int) -> dict:
     """O item, se for desta loja. Nome do produto ou o do item de escolha."""
     cur.execute(
         """SELECT i.id, i.tipo, i.id_produto, i.id_categoria, i.id_subcategoria, i.foto_url,
-                  i.nome AS nome_item, i.descricao, c.id_catalogo, coalesce(p.nome, i.nome) AS nome
+                  i.nome AS nome_item, i.descricao, i.nao_cobrar, c.id_catalogo,
+                  coalesce(p.nome, i.nome) AS nome
              FROM catalogo_itens i
              LEFT JOIN produtos p ON p.id = i.id_produto
              JOIN catalogo_categorias c ON c.id = i.id_categoria
@@ -574,10 +585,12 @@ def atualizar_escolha(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
     """Nome, descrição e a lista de opções do item de escolha — a lista inteira."""
     atual = _item_de_escolha(cur, id_unidade, id_item)
     nome = dados["nome"].strip()
-    cur.execute("UPDATE catalogo_itens SET nome = %s, descricao = %s WHERE id = %s",
-                (nome, (dados.get("descricao") or "").strip() or None, id_item))
+    cur.execute("UPDATE catalogo_itens SET nome = %s, descricao = %s, nao_cobrar = %s WHERE id = %s",
+                (nome, (dados.get("descricao") or "").strip() or None,
+                 bool(dados.get("nao_cobrar")), id_item))
     _gravar_opcoes(cur, id_item, dados["opcoes"])
-    return {"id": id_item, "antes": {"nome": atual["nome_item"], "descricao": atual["descricao"]},
+    return {"id": id_item, "antes": {"nome": atual["nome_item"], "descricao": atual["descricao"],
+                                     "nao_cobrar": atual["nao_cobrar"]},
             "message": f'"{nome}" atualizado.'}
 
 

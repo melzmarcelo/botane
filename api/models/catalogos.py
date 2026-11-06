@@ -203,6 +203,9 @@ class EscolhaCreate(BaseModel):
     descricao: str | None = Field(default=None, max_length=2000)
     id_subcategoria: int | None = None
     opcoes: list[OpcaoDaEscolha] = Field(min_length=2, max_length=30)
+    # 🔑 150 (pedido do dono, 06/11/2026): a opção escolhida (a embalagem da cesta) sai de
+    # graça — preço escondido, e no pedido entra a R$ 0.
+    nao_cobrar: bool = False
 
 
 class ItemLugar(BaseModel):

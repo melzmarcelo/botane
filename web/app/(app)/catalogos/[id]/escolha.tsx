@@ -115,6 +115,28 @@ export function EditorDeOpcoes({ opcoes, aoMudar, podeEditar }: {
 }
 
 /** Criar um item de escolha na seção. */
+/**
+ * 🔑 150 (pedido do dono, 06/11/2026): "Monte sua cesta" com a embalagem DE GRAÇA. O preço
+ * dela some do cartão e da escolha, e ela aparece marcada e travada na lista dos itens.
+ */
+function NaoCobrar({ valor, aoMudar, podeEditar, id }: {
+  valor: boolean; aoMudar: (v: boolean) => void; podeEditar: boolean; id: string;
+}) {
+  return (
+    <label className="linha-interruptor flex items-start gap-3 text-[14px]">
+      <input type="checkbox" role="switch" className="interruptor mt-0.5" id={id}
+             checked={valor} disabled={!podeEditar} onChange={(e) => aoMudar(e.target.checked)} />
+      <span>
+        <b className="font-medium">Não cobrar a opção escolhida</b>
+        <span className="block text-[12.5px] text-suave">
+          Para a embalagem da cesta: o preço dela não aparece e o cliente paga só os itens. Na
+          lista dos itens ela vem marcada, sem poder desmarcar, e não conta no mínimo e máximo.
+        </span>
+      </span>
+    </label>
+  );
+}
+
 export function JanelaEscolha({ idCategoria, idSubcategoria, onde, aoFechar, aoCriar }: {
   idCategoria: number; idSubcategoria: number | null; onde: string;
   aoFechar: () => void; aoCriar: (id: number) => Promise<void>;
@@ -123,6 +145,7 @@ export function JanelaEscolha({ idCategoria, idSubcategoria, onde, aoFechar, aoC
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
   const [opcoes, setOpcoes] = useState<OpcaoNaTela[]>([]);
+  const [naoCobrar, setNaoCobrar] = useState(false);
   const [gravando, setGravando] = useState(false);
   const pronto = nome.trim() && opcoes.length >= 2;
 
@@ -131,7 +154,7 @@ export function JanelaEscolha({ idCategoria, idSubcategoria, onde, aoFechar, aoC
     try {
       const r = await cat.criarEscolha(idCategoria, {
         nome: nome.trim(), descricao: descricao.trim() || null, id_subcategoria: idSubcategoria,
-        opcoes: paraGravar(opcoes),
+        opcoes: paraGravar(opcoes), nao_cobrar: naoCobrar,
       });
       aviso.sucesso(r.message);
       aoFechar();
@@ -169,6 +192,7 @@ export function JanelaEscolha({ idCategoria, idSubcategoria, onde, aoFechar, aoC
           <span className="rotulo">Opções</span>
           <div className="mt-1.5"><EditorDeOpcoes opcoes={opcoes} aoMudar={setOpcoes} podeEditar /></div>
         </div>
+        <NaoCobrar valor={naoCobrar} aoMudar={setNaoCobrar} podeEditar id="escolha-nao-cobrar" />
       </div>
     </Modal>
   );
@@ -181,16 +205,19 @@ export function SecaoDaEscolha({ item: i, podeEditar, podeProduto, aoMudar }: {
   const aviso = useAviso();
   const doServidor = (): OpcaoNaTela[] => (i.escolhas ?? []).map((o) => ({
     id_produto: o.id_produto, produto: o.produto, rotulo: o.rotulo ?? "", ativo: o.ativo,
-    preco: o.preco === null ? null : Number(o.preco),
+    // 150: o preço do PRODUTO, mesmo com a embalagem não cobrada (lá ela entra a zero).
+    preco: (o.preco_produto ?? o.preco) === null ? null : Number(o.preco_produto ?? o.preco),
   }));
   const [nome, setNome] = useState(i.produto);
   const [descricao, setDescricao] = useState(i.informacao_adicional ?? "");
   const [opcoes, setOpcoes] = useState<OpcaoNaTela[]>(doServidor);
+  const [naoCobrar, setNaoCobrar] = useState(!!i.nao_cobrar);
   const [gravando, setGravando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const falhou = (e: unknown, padrao: string) => aviso.erro(e instanceof Error ? e.message : padrao);
 
   const mudou = nome.trim() !== i.produto || descricao.trim() !== (i.informacao_adicional ?? "")
+    || naoCobrar !== !!i.nao_cobrar
     || JSON.stringify(paraGravar(opcoes)) !== JSON.stringify(paraGravar(doServidor()));
 
   async function gravar() {
@@ -198,6 +225,7 @@ export function SecaoDaEscolha({ item: i, podeEditar, podeProduto, aoMudar }: {
     try {
       const r = await cat.atualizarEscolha(i.id, {
         nome: nome.trim(), descricao: descricao.trim() || null, opcoes: paraGravar(opcoes),
+        nao_cobrar: naoCobrar,
       });
       await aoMudar();
       aviso.sucesso(r.message);
@@ -274,6 +302,7 @@ export function SecaoDaEscolha({ item: i, podeEditar, podeProduto, aoMudar }: {
         <span className="rotulo">Opções</span>
         <div className="mt-1.5"><EditorDeOpcoes opcoes={opcoes} aoMudar={setOpcoes} podeEditar={podeEditar} /></div>
       </div>
+      <NaoCobrar valor={naoCobrar} aoMudar={setNaoCobrar} podeEditar={podeEditar} id="escolha-nao-cobrar-gaveta" />
       {podeEditar && (
         <div className="flex justify-end">
           <button type="button" className="btn btn-primario" id="escolha-salvar" aria-busy={gravando}

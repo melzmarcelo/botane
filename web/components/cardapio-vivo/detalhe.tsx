@@ -39,6 +39,15 @@ export default function Detalhe({ item, t, idioma, aoFechar, aoAdicionar, aoEsco
   const grupos = useMemo(() => (item.escolhas ? (opcao?.adicionais ?? []) : item.adicionais),
     [item.escolhas, item.adicionais, opcao]);
   const base = item.escolhas ? (opcao?.preco ?? null) : item.preco;
+  const fixa = item.nao_cobrar && opcao ? (
+    <label data-embalagem={opcao.id} className="flex items-center justify-between gap-3 px-4 py-3 font-semibold">
+      <span className="flex items-center gap-3">
+        <input type="checkbox" checked disabled readOnly className="h-5 w-5 accent-[var(--cv-principal)]" />
+        {opcao.nome}
+      </span>
+      <span className="text-sm font-normal opacity-75">{t.incluso}</span>
+    </label>
+  ) : null;
 
   const escolherOpcao = (id: number) => {
     if (id !== idOpcao) { setIdOpcao(id); setMarcados({}); aoEscolher?.(); }
@@ -119,14 +128,21 @@ export default function Detalhe({ item, t, idioma, aoFechar, aoAdicionar, aoEsco
                              className="h-5 w-5 accent-[var(--cv-principal)]" />
                       {o.nome}
                     </span>
-                    {o.preco !== null && <span className="text-sm tabular-nums opacity-75">{moeda(o.preco)}</span>}
+                    {o.preco !== null && !item.nao_cobrar && (
+                      <span className="text-sm tabular-nums opacity-75">{moeda(o.preco)}</span>
+                    )}
                   </label>
                 ))}
               </div>
             </fieldset>
           )}
 
-          {grupos.map((g) => (
+          {/* 🔑 150 (pedido do dono, 06/11/2026): a embalagem que não se cobra vem MARCADA e
+              TRAVADA no topo dos itens; não se desmarca e não conta no mínimo/máximo. */}
+          {fixa && !grupos.length && (
+            <div className="mt-5 rounded-2xl border border-current/15">{fixa}</div>
+          )}
+          {grupos.map((g, gi) => (
             <fieldset key={g.id} className="mt-5">
               <legend className="flex w-full items-baseline justify-between text-sm font-semibold">
                 <span>{g.nome}</span>
@@ -135,6 +151,7 @@ export default function Detalhe({ item, t, idioma, aoFechar, aoAdicionar, aoEsco
                 </span>
               </legend>
               <div className="mt-2 divide-y divide-current/10 rounded-2xl border border-current/15">
+                {gi === 0 && fixa}
                 {g.opcoes.map((o) => {
                   const marcado = marcados[g.id]?.includes(o.id) ?? false;
                   if (g.permite_repetir) {

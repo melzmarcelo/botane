@@ -29,6 +29,7 @@ const T = {
     escolha: (min: number, max: number) =>
       min === max ? `Escolha ${min}` : min > 0 ? `Escolha de ${min} a ${max}` : `Até ${max}`,
     obrigatorio: "obrigatório",
+    incluso: "incluso",
     escolhaUma: "Escolha uma opção",
     aPartirDe: "a partir de",
     quantidade: "Quantidade",
@@ -111,6 +112,7 @@ const T = {
     escolha: (min: number, max: number) =>
       min === max ? `Choose ${min}` : min > 0 ? `Choose ${min} to ${max}` : `Up to ${max}`,
     obrigatorio: "required",
+    incluso: "included",
     escolhaUma: "Choose one",
     aPartirDe: "from",
     quantidade: "Quantity",
@@ -192,6 +194,7 @@ const T = {
     escolha: (min: number, max: number) =>
       min === max ? `Wählen Sie ${min}` : min > 0 ? `Wählen Sie ${min} bis ${max}` : `Bis zu ${max}`,
     obrigatorio: "Pflicht",
+    incluso: "inklusive",
     escolhaUma: "Bitte wählen",
     aPartirDe: "ab",
     quantidade: "Menge",

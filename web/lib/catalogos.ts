@@ -159,6 +159,8 @@ export type OpcaoDoItem = {
   id: number; id_produto: number; produto: string; vitrine: string;
   /** O que o cliente lê ("Branco"). Nulo = o nome de vitrine do produto. */
   rotulo: string | null; nome: string; ativo: boolean; preco: number | null;
+  /** 150: o preço do produto mesmo quando o item não cobra a opção (`preco` vem zero). */
+  preco_produto?: number | null;
 };
 
 export type ItemDoCatalogo = {
@@ -196,6 +198,8 @@ export type ItemDoCatalogo = {
   preco: number | null;
   /** 142: as opções, só no item de escolha. */
   escolhas?: OpcaoDoItem[];
+  /** 150: a opção escolhida (a embalagem da cesta) sai de graça. */
+  nao_cobrar?: boolean;
 };
 
 export type Secao = {
@@ -304,6 +308,7 @@ export const vincularProduto = (
 export type GravarEscolha = {
   nome: string; descricao: string | null; id_subcategoria?: number | null;
   opcoes: { id_produto: number; rotulo: string | null }[];
+  nao_cobrar?: boolean;
 };
 
 export const criarEscolha = (idCategoria: number, corpo: GravarEscolha) =>

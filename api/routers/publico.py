@@ -702,6 +702,9 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
             "destaque": l["destaque"], "esgotado": l["esgotado"],
             # 🔑 142: nulo = prato comum; lista = o cliente escolhe UMA (o produto que vai).
             "escolhas": None,
+            # 🔑 150: a opção escolhida (a embalagem da cesta) não é cobrada — o site esconde
+            # o preço dela e a mostra marcada e travada na lista dos itens.
+            "nao_cobrar": bool(opcoes[l["id_item"]].get("nao_cobrar")),
         }
         escolhas = opcoes[l["id_item"]]["escolhas"]
         if escolhas is not None:
@@ -711,6 +714,8 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
                                 for o in escolhas]
             precos = [o["preco"] for o in item["escolhas"] if o["preco"] is not None]
             item["preco"] = min(precos) if precos else None  # "a partir de"
+            if item["nao_cobrar"]:
+                item["preco"] = None  # sem preço no cartão: o valor sai dos itens escolhidos
         if l["id_subcategoria"] is None:
             cat["itens"].append(item)
             continue

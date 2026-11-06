@@ -993,6 +993,25 @@ e os itens em linhas (a cesta NÃO é KIT — kit tem composição fixa).
   script de edição em ARQUIVO, ou Edit.
 - Cobertura: `smoke_item_de_escolha.py` (40) e `web/scripts/verificar-item-de-escolha.mjs` (19,
   na bateria do navegador).
+- 🔑 **"Não cobrar a opção escolhida" — a embalagem da cesta de graça** (migração 150, 1.3.4,
+  06/11/2026, pedido do dono: *"opção de Não cobrar o item, aí este preço não é apresentado … a
+  embalagem selecionada já vir marcada, não podendo desmarcar, e este item não contabiliza no
+  mínimo e máximo"*; perguntado, *"não cobra, a embalagem sai de graça"*).
+  `catalogo_itens.nao_cobrar`. **O preço vira zero NA FONTE** (`opcoes_de_escolha`), que o feed,
+  o site e o pedido leem — nenhum deles consegue cobrar por engano; `preco_produto` guarda o de
+  verdade para a gaveta do cadastro. A linha do pedido continua indo ("Item · Opção", R$ 0), para
+  o PDV lançar a embalagem.
+  - O item sai com `nao_cobrar` e **`preco` nulo** no site, na mesa e na linha do editor (sem
+    "a partir de"). ⚠️ O site só desenhava o botão de pedir com preço: a condição passou a aceitar
+    `nao_cobrar`. O feed não dependia do preço.
+  - Na montagem (site `#montar` e `detalhe.tsx`), as opções saem sem preço e a escolhida aparece
+    **marcada e travada no topo do primeiro grupo** (`[data-embalagem]`, "incluso"). É só
+    desenho: a embalagem não é adicional, então já não contava no mínimo/máximo.
+  - ⚠️ `smoke_publico` confere a lista EXATA de chaves do item: campo novo no item público entra
+    lá também. ⚠️ Salvar o item de escolha regrava as opções (DELETE + INSERT): os ids mudam.
+  - Cadastro: chave "Não cobrar a opção escolhida" (`NaoCobrar` em `escolha.tsx`, interruptor),
+    na janela de criar e na gaveta. Cobertura: `smoke_escolha_nao_cobrar.py` (15) e
+    `verificar-cesta-nao-cobrar.mjs` (15).
 
 ## Catálogo simples com abertura e cartões, e a aba Pré-visualização (1.1.155, 30/10/2026)
 

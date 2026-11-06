@@ -383,6 +383,9 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 .montar .opcao label { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; }
 .montar .opcao input { width: 20px; height: 20px; margin: 0; accent-color: var(--erva); }
 .montar .opcao small { color: var(--tinta-suave); font-family: var(--sans); }
+/* 150: a embalagem que não se cobra — marcada e travada, sem parecer desabilitada à toa. */
+.montar .opcao.fixa label { cursor: default; font-weight: 600; }
+.montar .opcao.fixa input:disabled { opacity: 1; }
 .montar .contador button { width: 34px; height: 34px; font-size: 16px; }
 .montar .contador button:disabled { opacity: .35; cursor: default; }
 .linha-carrinho .extras { color: var(--tinta-suave); font-size: 13px; }
@@ -1479,6 +1482,7 @@ const TRADUCOES = {
   "a partir de": ["from", "ab"],
   "Escolha uma opção": ["Choose one", "Bitte wählen"],
   "obrigatório": ["required", "Pflicht"],
+  "incluso": ["included", "inklusive"],
   "Escolha {n}": ["Choose {n}", "Wählen Sie {n}"],
   "Escolha de {a} a {b}": ["Choose {a} to {b}", "Wählen Sie {a} bis {b}"],
   "Até {n}": ["Up to {n}", "Bis zu {n}"],
@@ -2324,7 +2328,8 @@ function desenharPrato(item) {
     el.insertAdjacentHTML("beforeend", `<span class="esgotado">${esc(t("Esgotado"))}</span>`);
     return el;
   }
-  if (podePedir() && item.preco !== null && item.preco !== undefined && item.id) {
+  // 🔑 150: a cesta que não cobra a embalagem vem SEM preço no cartão, e se pede igual.
+  if (podePedir() && ((item.preco !== null && item.preco !== undefined) || item.nao_cobrar) && item.id) {
     const caixa = document.createElement("div");
     caixa.className = "pedir";
     caixa.dataset.chave = String(item.id);
@@ -2677,13 +2682,19 @@ function desenharMontar() {
     html += `<fieldset><legend>${esc(t("Escolha uma opção"))}<small>${esc(t("obrigatório"))}</small></legend>${
       item.escolhas.map((o) => `<div class="opcao"><label><input type="radio" name="montar-opcao" data-opcao="${o.id}"
         ${montando.opcao === o.id ? "checked" : ""}> ${esc(o.nome)}</label>
-        <small>${o.preco !== null ? "R$ " + dinheiro(o.preco) : ""}</small></div>`).join("")}</fieldset>`;
+        <small>${o.preco !== null && !item.nao_cobrar ? "R$ " + dinheiro(o.preco) : ""}</small></div>`).join("")}</fieldset>`;
   }
-  grupos.forEach((g) => {
+  // 🔑 150 (pedido do dono, 06/11/2026): a embalagem que não se cobra aparece MARCADA e
+  // TRAVADA no topo dos itens — não se desmarca e não conta no mínimo/máximo (não é adicional).
+  const fixa = item.nao_cobrar && opcao
+    ? `<div class="opcao fixa" data-embalagem="${opcao.id}"><label><input type="checkbox" checked disabled>
+        ${esc(opcao.nome)}</label><small>${esc(t("incluso"))}</small></div>` : "";
+  if (fixa && !grupos.length) html += `<fieldset>${fixa}</fieldset>`;
+  grupos.forEach((g, gi) => {
     const ja = marcados[g.id] || [];
     const faixa = g.minimo === g.maximo ? t("Escolha {n}", { n: g.minimo })
       : g.minimo > 0 ? t("Escolha de {a} a {b}", { a: g.minimo, b: g.maximo }) : t("Até {n}", { n: g.maximo });
-    html += `<fieldset><legend>${esc(g.nome)}<small>${esc(faixa)}</small></legend>${g.opcoes.map((o) => {
+    html += `<fieldset><legend>${esc(g.nome)}<small>${esc(faixa)}</small></legend>${gi === 0 ? fixa : ""}${g.opcoes.map((o) => {
       const n = ja.filter((x) => x === o.id).length;
       const preco = o.preco ? `+ R$ ${dinheiro(o.preco)}` : "";
       if (g.permite_repetir) {
