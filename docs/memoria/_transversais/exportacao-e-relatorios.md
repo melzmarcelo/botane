@@ -340,3 +340,17 @@ relatório (`GRUPOS`), a rota `GET /exportar/{relatorio}/dados` devolve a prévi
 `montar` do arquivo), e os campos de filtro viraram uma peça só (`CamposDoRelatorio`). O Estúdio BI
 (`services/bi.py`) monta relatórios personalizados a partir de uma lista branca, e imprime pelo
 mesmo `_render` daqui. ⚠️ Relatório novo no catálogo precisa de uma entrada em `GRUPOS`.
+
+- 🔑 **"Prévia" na janela de Imprimir de cada tela** (1.3.10, 06/11/2026, pedido do dono: *"na
+  impressão dos relatórios em suas respectivas telas, adicionar a opção Prévia. Selecionando, na
+  janela de filtros irá mostrar os dados do relatório, e no topo o botão de imprimir com as opções PDF
+  ou Planilha"*). Terceiro cartão no "Formato" (`data-formato="previa"`): a janela alarga (1180px),
+  a folha vem embaixo dos filtros pelo MESMO `GET /exportar/{rel}/dados` da tela de Relatórios e
+  refaz a cada filtro (respiro de 450 ms); no topo, grudado (`sticky -top-5`, o -5 compensa o `p-5`
+  do miolo do Modal), o botão **Imprimir ▾** com PDF e Planilha. Na prévia a janela NÃO fecha depois
+  de imprimir (a pessoa pode querer o outro formato). PDF acima do teto fica desabilitado no menu.
+  - A folha mudou para `components/folha-relatorio.tsx` (`Folha`, `FolhaDosDados`, tipo
+    `DadosDoRelatorio`) — uma cópia só para a tela de Relatórios e para a janela.
+  - ⚠️ O avulso (folha de UM registro: produto, inventário, ficha) não tem prévia: não está no
+    catálogo e não tem `/dados`.
+  - Cobertura: `verificar-inicio-personalizado.mjs` parte 2.

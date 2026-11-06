@@ -1199,6 +1199,13 @@ def atualizar_do_omie(id_nota: int,
                             depois={"valor_total": r["valor_depois"], "itens": r["itens"],
                                     "cancelada": r["cancelada"]},
                             id_unidade=id_unidade)
+        # 🔑 **Recebida no Omie → lançada aqui, na hora** (pedido do dono, 06/11/2026:
+        # *"quando é recebida novamente no Omie, deve ser atualizado o status dela no
+        # botane"*). Com "lançar notas recebidas" ligado, a releitura que traz a marca
+        # lança a nota pelas MESMAS regras da busca (quem assina, período, conversão a
+        # conferir) — antes só a busca completa lançava, e no ar ela roda uma vez por dia.
+        # Cancelada não entra: a seleção é só de IMPORTADA/CONCILIADA.
+        auto = importador.lancar_as_recebidas_seguro(cur, id_unidade, [id_nota])
 
     # 🔑 Cancelada no Omie: é a única coisa que importa dizer, e vem na frente.
     if r["cancelada"]:
@@ -1206,17 +1213,28 @@ def atualizar_do_omie(id_nota: int,
             "Esta nota está CANCELADA no Omie. Ela saiu da fila de conciliação e não "
             "entra no estoque.")}
 
+    if auto and auto.get("lancadas"):
+        return r | {"mudou": True, "lancada": True, "message": (
+            f"Nota atualizada e RECEBIDA no Omie: lançada no estoque "
+            f"({auto['itens']} item(ns), R$ {float(auto['valor']):.2f}).")}
+    # Recebida, mas presa (item sem produto, conversão a conferir…): a frase diz por quê.
+    fora = (auto or {}).get("fora") or []
+    presa = fora[0]["motivo"] if fora else None
+
     # ⚠️ A frase DIZ se algo mudou. "Nota atualizada" depois de uma releitura que
     # não mudou nada faria a pessoa procurar a diferença que não existe.
     mudou = abs(r["valor_depois"] - r["valor_antes"]) >= 0.01
-    return r | {"mudou": mudou, "message": (
+    frase = (
         f"Nota atualizada: R$ {r['valor_antes']:.2f} → R$ {r['valor_depois']:.2f}"
         f", {r['itens']} item(ns)"
         + (f", {r['vinculos_preservados']} vínculo(s) preservado(s)"
            if r["vinculos_preservados"] else "")
         if mudou else
         f"A nota no Omie está igual à daqui — nada mudou ({r['itens']} item(ns))."
-    )}
+    )
+    if presa:
+        frase += f" Está recebida no Omie, mas não lançou sozinha: {presa}"
+    return r | {"mudou": mudou, "nao_lancada": presa, "message": frase}
 
 
 @router.get("/arquivados/previa")

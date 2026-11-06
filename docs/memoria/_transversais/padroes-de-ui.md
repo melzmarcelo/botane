@@ -949,3 +949,26 @@ precisam é só de um teto de altura.
     atalhos fixados e a marca no topo FICARAM. A etiqueta aparece também no celular — é o único
     lugar de trocar de loja ali.
 
+
+- 🔑 **O Início de CADA UM** (1.3.10, 06/11/2026, pedido do dono: *"permitir configuração no
+  dashboard, assim o usuário pode configurar a sua tela inicial como achar melhor, com os dados que
+  preferir e a posição que preferir. Gravar isto por usuário"*). Sem migração: grava em
+  `preferencias_usuario` (148), chave `painel:inicio`, `{versao, blocos: [{id, largura, oculto}],
+  indicadores_ocultos}` (`_inicio/layout.ts`). Onze quadros; largura ⅓ ½ ⅔ inteira numa grade só
+  de 12 colunas. "Personalizar" (`_inicio/personalizar.tsx`) põe moldura com puxador (arrastar), setas,
+  largura e Ocultar; bandeja dos ocultos; Restaurar o padrão; nada grava antes de Salvar.
+  - ⚠️ O layout diz o que a pessoa QUER ver, não o que PODE: quadro sem dado some ao desenhar, e
+    `larguras` estica o último da linha para não sobrar buraco (é o que substituiu as regras de
+    "sem dinheiro, a casa sobe para o lado da atenção").
+  - ⚠️ Quadro novo nascido depois de alguém salvar entra no FIM, visível (`normalizar`).
+  - ⚠️ `indicadores_ocultos` NULO = nunca escolheu: vale a regra antiga (etiquetas na faixa só de quem
+    não vê dinheiro). Escolheu, vale exatamente o que marcou.
+  - ⚠️ Enquanto edita, o conteúdo do quadro não recebe clique (`pointer-events-none`): cada número é
+    link, e arrastar não pode navegar.
+  - Perdeu-se de propósito o "atenção primeiro no celular": a ordem agora é a da pessoa.
+- 🔑 **Valor grande ENCOLHE só quando não cabe** (`components/valor-que-cabe.tsx`, 1.3.10, pedido do
+  dono: *"dependendo do monitor, o valor faturado e ticket médio do dashboard está estourando o
+  quadrado"*). Nasce no tamanho cheio (26px na faixa, 21px no período) e reduz na proporção exata do
+  que passou, medido de novo com `ResizeObserver`. ⚠️ Tentou-se antes fonte por largura do cartão
+  (`cqi`): cabia, mas deixava "77" minúsculo em seis colunas. Cobertura: parte 1 de
+  `verificar-inicio-personalizado.mjs` (1024 a 1920px).

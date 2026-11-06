@@ -63,3 +63,31 @@ export function folhaDoBI(colunas: ColunaBI[], linhas: (string | number | null)[
     linhas: linhas.map((l) => l.map((v, i) => formatar(v, colunas[i].formato))),
   };
 }
+
+/** O que `GET /exportar/{rel}/dados` devolve: as primeiras linhas, já formatadas como no PDF. */
+export type DadosDoRelatorio = {
+  titulo: string; colunas: { chave: string; rotulo: string }[]; linhas: string[][];
+  total: number; resumo: [string, string][]; inicio: string | null; fim: string | null;
+};
+
+const NUMERO = /^-?[\d.]+(,\d+)?%?$/;
+
+/**
+ * A folha de um relatório do CATÁLOGO — a mesma na tela de Relatórios e na prévia da janela de
+ * Imprimir de cada tela (pedido do dono, 06/11/2026). Coluna em que todo valor é número alinha à
+ * direita.
+ */
+export function FolhaDosDados({ dados }: { dados: DadosDoRelatorio }) {
+  const num = dados.colunas.map((_, i) => dados.linhas.length > 0
+    && dados.linhas.every((l) => !l[i] || NUMERO.test(l[i])));
+  const data = (iso: string | null) => (iso ?? "").split("-").reverse().join("/");
+  return (
+    <Folha titulo={dados.titulo}
+           subtitulo={dados.inicio ? `${data(dados.inicio)} a ${data(dados.fim)}` : undefined}
+           colunas={dados.colunas.map((c, i) => ({ rotulo: c.rotulo, num: num[i] }))}
+           linhas={dados.linhas} resumo={dados.resumo}
+           rodape={dados.total > dados.linhas.length
+             ? `Mostrando as primeiras ${dados.linhas.length.toLocaleString("pt-BR")} de ${dados.total.toLocaleString("pt-BR")} linhas. O arquivo sai com todas.`
+             : `${dados.total.toLocaleString("pt-BR")} linha(s).`} />
+  );
+}

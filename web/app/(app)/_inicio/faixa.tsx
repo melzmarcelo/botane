@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import ValorQueCabe from "@/components/valor-que-cabe";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 import { inteiro, plural } from "@/lib/numeros";
 
+import type { IdIndicador } from "./layout";
 import type { Dia, Painel } from "./tipos";
 
 /**
@@ -44,13 +46,25 @@ function Numero({ rotulo, valor, sub, tom, href }: {
     // 🔑 Layout novo (05/11/2026): cada número é um CARTÃO de indicador, como no protótipo.
     <Link href={href} className="faixa-numero group cartao block min-w-0 px-5 py-4 no-underline transition-colors hover:border-linha2">
       <p className="text-[13px] font-semibold text-suave">{rotulo}</p>
-      <p className={`mono mt-2 text-[26px] font-extrabold leading-none tracking-[-0.02em] group-hover:text-erva ${cor}`}>{valor}</p>
+      {/* ⚠️ A fonte acompanha a LARGURA do cartão (pedido do dono, 06/11/2026: "dependendo do
+          monitor, o valor faturado e ticket médio estão estourando o quadrado"): com seis cartões
+          numa linha, "R$ 12.345,67" a 26px fixos passava da borda. */}
+      <ValorQueCabe maximo={26} className={`faixa-valor mono mt-2 font-extrabold leading-none tracking-[-0.02em] group-hover:text-erva ${cor}`}>{valor}</ValorQueCabe>
       {sub && <p className="mt-2 text-[12.5px] leading-snug text-suave">{sub}</p>}
     </Link>
   );
 }
 
-export default function FaixaHoje({ p }: { p: Painel }) {
+// A chave de cada cartão e o indicador que ela é, para a escolha de cada um (06/11/2026).
+const INDICADOR: Record<string, IdIndicador> = {
+  v: "vendas", f: "faturado", t: "ticket", p: "pedidos", m: "mesas", pr: "producao", e: "etiquetas",
+};
+
+/**
+ * `ocultos`: os indicadores que a pessoa tirou (tela personalizada). `null` = nunca escolheu, e
+ * vale a regra de sempre (etiquetas só para quem não vê dinheiro).
+ */
+export default function FaixaHoje({ p, ocultos = null }: { p: Painel; ocultos?: IdIndicador[] | null }) {
   const [dia, setDia] = useState<Dia | null>(p.dia);
   const [indo, setIndo] = useState(false);
   const [erro, setErro] = useState("");
@@ -111,12 +125,17 @@ export default function FaixaHoje({ p }: { p: Painel }) {
   }
   // 🔑 As etiquetas entram na faixa de quem NÃO vê dinheiro (a cozinha): para quem vê, a
   // faixa já tem seis números, e as etiquetas estão nos alertas e em "A casa".
-  if (!dia && p.etiquetas) {
+  // ⚠️ Quem ESCOLHEU (tela personalizada) vê as etiquetas mesmo vendo dinheiro.
+  if (p.etiquetas && (ocultos ? !ocultos.includes("etiquetas") : !dia)) {
     numeros.push(<Numero key="e" rotulo="Etiquetas" valor={inteiro(p.etiquetas.vencidas)} href="/etiquetas/painel"
       tom={p.etiquetas.vencidas ? "erro" : undefined}
       sub={`vencidas · ${p.etiquetas.hoje} vencem hoje`} />);
   }
-  if (!numeros.length) return null;
+  const visiveis = numeros.filter((n) => {
+    const k = (n as React.ReactElement).key;
+    return !(k && ocultos?.includes(INDICADOR[String(k)]));
+  });
+  if (!visiveis.length) return null;
 
   return (
     <section aria-label="hoje">
@@ -140,7 +159,7 @@ export default function FaixaHoje({ p }: { p: Painel }) {
         {dia && <Link href="/vendas" className="link-acao text-[13px]">ver as vendas ›</Link>}
       </div>
 
-      <div className="faixa-hoje">{numeros}</div>
+      <div className="faixa-hoje">{visiveis}</div>
 
       {dia && (dia.canceladas > 0 || (!dia.proximo && dia.data !== hoje) || erro) && (
         <p className="mt-3 text-[12.5px] text-suave">

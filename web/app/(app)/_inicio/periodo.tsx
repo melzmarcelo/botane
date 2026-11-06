@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import ValorQueCabe from "@/components/valor-que-cabe";
 import { reais } from "@/lib/cadastros";
 import { pct } from "@/lib/numeros";
 
@@ -23,10 +24,10 @@ function Coluna({ rotulo, valor, sub, tom, href, children }: {
   return (
     <Link href={href} className="periodo-coluna group min-w-0 no-underline">
       <p className="rotulo">{rotulo}</p>
-      {/* ⚠️ 18px, não 22: "R$ 1.142.446,49" em quatro colunas estourava a coluna (medido na
-          foto da tela com a base de desenvolvimento). */}
-      <p className={`mono mt-1 whitespace-nowrap text-[18px] font-bold leading-none tracking-tight group-hover:text-erva 2xl:text-[21px] ${
-        tom === "alerta" ? "text-alerta" : tom === "erro" ? "text-erro" : ""}`}>{valor}</p>
+      {/* ⚠️ "R$ 1.142.446,49" em quatro colunas estourava a coluna: o valor nasce em 21px e encolhe
+          só quando não cabe (06/11/2026, `ValorQueCabe`). */}
+      <ValorQueCabe maximo={21} className={`periodo-valor mono mt-1 font-bold leading-none tracking-tight group-hover:text-erva ${
+        tom === "alerta" ? "text-alerta" : tom === "erro" ? "text-erro" : ""}`}>{valor}</ValorQueCabe>
       <p className="mt-1 text-[12.5px] leading-snug text-suave">{sub}</p>
       {children}
     </Link>

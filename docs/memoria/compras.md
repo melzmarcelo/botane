@@ -538,3 +538,21 @@
     ⚠️ O estorno do recebimento desfeito NÃO olha o corte.
   - Resposta: `desfeitas` (botão, agenda e a tela de integração listam). Cobertura:
     `smoke_notas_recebidas.py` 4–4i (55) e `verificar-opcoes-notas-omie.mjs` (5).
+- 🔑 **Recebida de novo no Omie → LANÇADA aqui, também pelo botão da nota** (1.3.10, 06/11/2026,
+  pedido do dono: *"quando uma nota … é lançada, e estornada no Omie, ela retorna para conciliada no
+  botane. Mas quando é recebida novamente no Omie, deve ser atualizado o status dela no botane"*).
+  Visto no ar: a NF 11739 (#797) relida pelo "Atualizar do Omie" às 15:16 com `cRecebido S` ficou
+  CONCILIADA e foi lançada à mão sete segundos depois — o botão da nota só relia, e quem lançava era a
+  busca completa, que no ar roda UMA vez por dia (19h).
+  - `POST /notas/{id}/atualizar-do-omie` chama `lancar_as_recebidas_seguro(cur, id_unidade, [id])`
+    depois da releitura: com "lançar notas recebidas" ligado, a recebida é lançada na hora pelas
+    MESMAS regras (assina `agenda_id_usuario`, período fechado recusa, conversão a conferir fica).
+    A resposta ganha `lancada: true` e a frase diz; presa, `nao_lancada` com o motivo. Desligada, nada.
+  - ⚠️ **A nota que já foi lançada aqui não olha o CORTE** (`EXISTS` movimento `origem_tipo='NOTA'`
+    dela): o estorno do recebimento desfeito nunca olhou, e sem isso a nota de antes do corte
+    estornada sozinha nunca mais voltava sozinha.
+  - Cobertura: `smoke_notas_recebidas.py` 4j e 4k (61 no total). A prova de que a 4j pega: tirando a
+    exceção do corte, ela cai.
+  - ⚠️ A #777 (NF 358317, estornada sozinha em 27/10, 80→40) ainda respondia `cRecebido N`, etapa 40
+    ao ser relida em 06/11 15:17 — e foi lançada à mão. Se lá ela estava recebida, o Omie não estava
+    dizendo; vale conferir no Omie.

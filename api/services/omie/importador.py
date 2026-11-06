@@ -1396,7 +1396,7 @@ def _lembrar_aguardando(cur, id_unidade: int, inicio: date, mais_antiga: date | 
     )
 
 
-def lancar_as_recebidas(cur, id_unidade: int) -> dict | None:
+def lancar_as_recebidas(cur, id_unidade: int, ids: list[int] | None = None) -> dict | None:
     """Lança no estoque as notas RECEBIDAS no Omie — a opção "lançar notas recebidas".
 
     🔑 Pedido do dono (23/10/2026): *"ao puxar uma nota recebida, já fazer o
@@ -1424,6 +1424,13 @@ def lancar_as_recebidas(cur, id_unidade: int) -> dict | None:
     configurou, e assim vale igual pelo botão, pela agenda e pela releitura das
     abertas. É a regra da 034 para a agenda. Sem ninguém ali, não lança — movimento
     de estoque sem dono é o que a 034 recusou.
+    🔑 **`ids` restringe a uma nota** — o botão "Atualizar do Omie" DENTRO da nota
+    (pedido do dono, 06/11/2026: *"quando é recebida novamente no Omie, deve ser
+    atualizado o status dela no botane"*). Até aqui só a busca completa lançava, e no ar
+    ela roda uma vez por dia: a nota relida como recebida ficava CONCILIADA até a noite.
+    🔑 **A nota que JÁ FOI lançada aqui (e estornada) não olha o corte.** O estorno do
+    recebimento desfeito nunca olhou; sem esta exceção, a nota de antes do corte
+    estornada sozinha nunca mais voltava ao estoque sozinha.
     """
     opcoes = _opcoes_de_notas(cur, id_unidade)
     if not opcoes["lancar_recebidas"]:
@@ -1438,8 +1445,11 @@ def lancar_as_recebidas(cur, id_unidade: int) -> dict | None:
         """SELECT id, bruto FROM notas_entrada
             WHERE id_unidade = %s AND origem = 'OMIE'
               AND status IN ('IMPORTADA', 'CONCILIADA')
-              AND (%s::date IS NULL OR coalesce(data_entrada, data_emissao) >= %s)""",
-        (id_unidade, opcoes["lancar_recebidas_corte"], opcoes["lancar_recebidas_corte"]),
+              AND (%s::int[] IS NULL OR id = ANY(%s::int[]))
+              AND (%s::date IS NULL OR coalesce(data_entrada, data_emissao) >= %s
+                   OR EXISTS (SELECT 1 FROM estoque_movimentos m
+                               WHERE m.origem_tipo = 'NOTA' AND m.origem_id = notas_entrada.id))""",
+        (id_unidade, ids, ids, opcoes["lancar_recebidas_corte"], opcoes["lancar_recebidas_corte"]),
     )
     ids = [r["id"] for r in cur.fetchall()
            if mapeadores.situacao_no_omie(_como_dict(r["bruto"]))["recebida"] is True]
@@ -2724,7 +2734,7 @@ def sincronizar_completo(cur, id_unidade: int, cliente: ClienteOmie,
     return r
 
 
-def lancar_as_recebidas_seguro(cur, id_unidade: int) -> dict | None:
+def lancar_as_recebidas_seguro(cur, id_unidade: int, ids: list[int] | None = None) -> dict | None:
     """`lancar_as_recebidas` com ponto de retorno — o que a busca e a releitura chamam.
 
     ⚠️ Falhar aqui não pode levar junto as notas que acabaram de entrar ou de ser
@@ -2733,7 +2743,7 @@ def lancar_as_recebidas_seguro(cur, id_unidade: int) -> dict | None:
     """
     cur.execute("SAVEPOINT lancar_recebidas")
     try:
-        r = lancar_as_recebidas(cur, id_unidade)
+        r = lancar_as_recebidas(cur, id_unidade, ids)
         cur.execute("RELEASE SAVEPOINT lancar_recebidas")
         return r
     except Exception as e:  # noqa: BLE001

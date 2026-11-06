@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import BuscaCadastro from "@/components/busca-cadastro";
+import { type DadosDoRelatorio, FolhaDosDados } from "@/components/folha-relatorio";
 import FiltroMultiplo from "@/components/filtro-multiplo";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Modal } from "@/components/ui";
@@ -379,7 +380,11 @@ function Dialogo({
   );
   const [erro, setErro] = useState("");
   const [valores, setValores] = useState<ValoresIniciais>(iniciais);
-  const [formato, setFormato] = useState<"csv" | "pdf">(formatoPadrao ?? "csv");
+  const [formato, setFormato] = useState<"csv" | "pdf" | "previa">(formatoPadrao ?? "csv");
+  const [dados, setDados] = useState<DadosDoRelatorio | null>(null);
+  const [erroDados, setErroDados] = useState("");
+  const [montando, setMontando] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [contando, setContando] = useState(false);
   const [baixando, setBaixando] = useState(false);
@@ -428,21 +433,46 @@ function Dialogo({
     return () => clearTimeout(t);
   }, [rel, query, avulso]);
 
-  async function baixar() {
+  // 🔑 **A prévia na própria janela** (pedido do dono, 06/11/2026: *"adicionar a opção Prévia.
+  // Selecionando, na janela de filtros irá mostrar os dados do relatório, e no topo o botão de
+  // imprimir com as opções PDF ou Planilha"*). É o mesmo `GET /dados` da tela de Relatórios — o
+  // mesmo `montar` do arquivo, então a folha e o PDF não discordam. Refaz a cada filtro, com o
+  // mesmo respiro da contagem.
+  useEffect(() => {
+    if (!rel || avulso || formato !== "previa") return;
+    setMontando(true);
+    const t = setTimeout(() => {
+      api
+        .get<DadosDoRelatorio>(`/exportar/${rel.chave}/dados${query}`)
+        .then((d) => {
+          setDados(d);
+          setErroDados("");
+        })
+        .catch((e) => setErroDados(e instanceof Error ? e.message : "Falha ao montar a prévia."))
+        .finally(() => setMontando(false));
+    }, 450);
+    return () => clearTimeout(t);
+  }, [rel, query, avulso, formato]);
+
+  const emPrevia = formato === "previa";
+
+  async function baixar(qual: "csv" | "pdf") {
     if (!rel) return;
+    setMenu(false);
     setBaixando(true);
     try {
       // A extensão vai no CAMINHO: é ela que decide o formato, e assim a URL
       // que gerou o arquivo nunca discorda do arquivo.
-      const caminho = `/exportar/${rel.chave}.${formato}${query}`;
+      const caminho = `/exportar/${rel.chave}.${qual}${query}`;
       // ⚠️ `api.abrir` abre a aba ANTES do primeiro `await` — ainda dentro do clique,
       // senão o navegador a bloqueia como popup.
-      if (formato === "pdf") await api.abrir(caminho);
+      if (qual === "pdf") await api.abrir(caminho);
       else await api.baixar(caminho);
       aviso.sucesso(
-        formato === "pdf" ? "PDF aberto numa aba nova." : "Planilha gerada.",
+        qual === "pdf" ? "PDF aberto numa aba nova." : "Planilha gerada.",
       );
-      aoFechar();
+      // Na prévia a janela fica aberta: a pessoa pode querer o outro formato do mesmo recorte.
+      if (!emPrevia) aoFechar();
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Falha ao gerar o arquivo.");
     } finally {
@@ -451,13 +481,14 @@ function Dialogo({
   }
 
   const naoCabeNoPdf = formato === "pdf" && previa && !previa.cabe_no_pdf;
+  const pdfBarrado = !!previa && !previa.cabe_no_pdf;
 
   return (
     <Modal
       titulo={rel ? `Imprimir — ${rel.rotulo}` : "Imprimir"}
       descricao={rel?.descricao}
       aoFechar={aoFechar}
-      largura="680px"
+      largura={emPrevia ? "1180px" : "680px"}
       /* ⚠️ Fora da rolagem: com cinco filtros a janela passa da altura da tela,
          e um botão de imprimir que rolou para fora da vista é um botão que não
          existe. A contagem fica ao lado dele porque é o número que se olha
@@ -475,16 +506,18 @@ function Dialogo({
           </p>
           <div className="flex gap-2">
             <button type="button" className="btn btn-secundario" onClick={aoFechar}>
-              Cancelar
+              {emPrevia ? "Fechar" : "Cancelar"}
             </button>
-            <button
-              type="button"
-              className="btn btn-primario"
-              onClick={() => void baixar()}
-              disabled={baixando || !!naoCabeNoPdf || !!erro}
-            >
-              {baixando ? "Gerando…" : formato === "pdf" ? "Imprimir PDF" : "Gerar planilha"}
-            </button>
+            {!emPrevia && (
+              <button
+                type="button"
+                className="btn btn-primario"
+                onClick={() => void baixar(formato === "pdf" ? "pdf" : "csv")}
+                disabled={baixando || !!naoCabeNoPdf || !!erro}
+              >
+                {baixando ? "Gerando…" : formato === "pdf" ? "Imprimir PDF" : "Gerar planilha"}
+              </button>
+            )}
           </div>
         </div>
       }
@@ -495,6 +528,56 @@ function Dialogo({
         <Carregando />
       ) : (
         <div className="flex flex-col gap-5">
+          {emPrevia && (
+            /* ⚠️ No TOPO e grudado nele: a folha é longa, e o botão de imprimir não pode rolar
+               para fora da vista. */
+            <div
+              data-barra-previa
+              className="sticky -top-5 z-10 -mx-5 -mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-linha bg-superficie px-5 py-3"
+            >
+              <p className="text-[13.5px] text-suave">
+                {montando ? "montando a prévia…" : "A prévia acompanha os filtros abaixo."}
+              </p>
+              <div className="relative">
+                <button
+                  type="button"
+                  id="previa-imprimir"
+                  className="btn btn-primario"
+                  aria-haspopup="menu"
+                  aria-expanded={menu}
+                  disabled={baixando || !!erro}
+                  onClick={() => setMenu((m) => !m)}
+                >
+                  {baixando ? "Gerando…" : "Imprimir"}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                {menu && (
+                  <div role="menu"
+                       className="absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-lg border border-linha2 bg-superficie shadow-lg">
+                    <button type="button" role="menuitem" data-imprimir="pdf" disabled={pdfBarrado}
+                            className="block w-full px-4 py-2.5 text-left hover:bg-superficie2 disabled:opacity-50"
+                            onClick={() => void baixar("pdf")}>
+                      <span className="block font-semibold">PDF</span>
+                      <span className="block text-[12.5px] text-suave">
+                        {pdfBarrado
+                          ? `acima de ${previa!.maximo_pdf.toLocaleString("pt-BR")} linhas: use a planilha`
+                          : "abre numa aba para imprimir"}
+                      </span>
+                    </button>
+                    <button type="button" role="menuitem" data-imprimir="csv"
+                            className="block w-full border-t border-linha px-4 py-2.5 text-left hover:bg-superficie2"
+                            onClick={() => void baixar("csv")}>
+                      <span className="block font-semibold">Planilha</span>
+                      <span className="block text-[12.5px] text-suave">gera o arquivo para o Excel</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {!rel.filtros.length ? (
             <p className="text-[14px] text-suave">Este relatório sai inteiro, sem recorte.</p>
           ) : (
@@ -504,7 +587,7 @@ function Dialogo({
 
           <div>
             <span className="rotulo">Formato</span>
-            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <div className={`mt-2 grid gap-3 ${avulso ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
               {(
                 [
                   {
@@ -517,11 +600,20 @@ function Dialogo({
                     nome: "PDF",
                     diz: "Para ler, imprimir ou mandar ao contador. Não se edita.",
                   },
+                  {
+                    id: "previa" as const,
+                    nome: "Prévia",
+                    diz: "Mostra os dados aqui; de cima se imprime em PDF ou planilha.",
+                  },
                 ]
-              ).map((op) => (
+              )
+                // ⚠️ O avulso (a folha de UM registro) não está no catálogo e não tem `/dados`.
+                .filter((op) => !(avulso && op.id === "previa"))
+                .map((op) => (
                 <button
                   key={op.id}
                   type="button"
+                  data-formato={op.id}
                   aria-pressed={formato === op.id}
                   onClick={() => setFormato(op.id)}
                   className={`rounded border p-3 text-left transition-colors ${
@@ -548,6 +640,20 @@ function Dialogo({
               milhares de páginas que ninguém abre. Estreite o filtro ou gere a planilha,
               que não tem teto.
             </Aviso>
+          )}
+
+          {emPrevia && (
+            <div className="-mx-5 -mb-5 border-t border-linha" data-previa-dados aria-busy={montando}>
+              {erroDados ? (
+                <div className="p-5"><Aviso tipo="erro">{erroDados}</Aviso></div>
+              ) : dados ? (
+                <div className={montando ? "opacity-60 transition-opacity" : undefined}>
+                  <FolhaDosDados dados={dados} />
+                </div>
+              ) : (
+                <div className="p-5"><Carregando /></div>
+              )}
+            </div>
           )}
 
         </div>

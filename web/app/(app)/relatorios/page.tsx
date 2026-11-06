@@ -14,7 +14,7 @@ import { executarBI, relatoriosBI, type RelatorioBI, type ResultadoBI } from "@/
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { useSessao } from "@/lib/sessao";
 
-import Folha, { folhaDoBI } from "./folha";
+import Folha, { type DadosDoRelatorio as Dados, FolhaDosDados, folhaDoBI } from "@/components/folha-relatorio";
 
 /**
  * 🔑 **A tela única de Relatórios** (layout novo, fase 3 — 05/11/2026, pedido do dono: *"relatórios
@@ -26,13 +26,6 @@ import Folha, { folhaDoBI } from "./folha";
  * ⚠️ A prévia só roda no clique: o razão inteiro de um ano custa segundos, e abrir a tela não pode
  * disparar isso. O relatório escolhido vai na URL (`?r=`), para o link abrir o mesmo.
  */
-
-type Dados = {
-  titulo: string; colunas: { chave: string; rotulo: string }[]; linhas: string[][];
-  total: number; resumo: [string, string][]; inicio: string | null; fim: string | null;
-};
-
-const NUMERO = /^-?[\d.]+(,\d+)?%?$/;
 
 export default function PaginaRelatorios() {
   const { pode } = useSessao();
@@ -162,8 +155,6 @@ function RelatorioPadrao({ rel, aviso }: { rel: RelatorioDoServidor; aviso: Avis
       aviso.erro(e instanceof Error ? e.message : "Falha ao gerar o arquivo");
     }
   };
-  const num = dados ? dados.colunas.map((_, i) => dados.linhas.length > 0
-    && dados.linhas.every((l) => !l[i] || NUMERO.test(l[i]))) : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -179,13 +170,7 @@ function RelatorioPadrao({ rel, aviso }: { rel: RelatorioDoServidor; aviso: Avis
       </Cartao>
       {dados && (
         <section className="cartao overflow-hidden p-0">
-          <Folha titulo={dados.titulo}
-                 subtitulo={dados.inicio ? `${dados.inicio.split("-").reverse().join("/")} a ${(dados.fim ?? "").split("-").reverse().join("/")}` : undefined}
-                 colunas={dados.colunas.map((c, i) => ({ rotulo: c.rotulo, num: num[i] }))}
-                 linhas={dados.linhas} resumo={dados.resumo}
-                 rodape={dados.total > dados.linhas.length
-                   ? `Mostrando as primeiras ${dados.linhas.length.toLocaleString("pt-BR")} de ${dados.total.toLocaleString("pt-BR")} linhas. O arquivo sai com todas.`
-                   : `${dados.total.toLocaleString("pt-BR")} linha(s).`} />
+          <FolhaDosDados dados={dados} />
         </section>
       )}
     </div>

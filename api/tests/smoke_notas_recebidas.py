@@ -480,6 +480,51 @@ def vigia(cur, id_unidade):
            (inicio, motivo))
 
 
+def desfeito_antes_do_corte(cur, id_unidade):
+    """🔑 06/11/2026, pedido do dono: *"quando é recebida novamente no Omie, deve ser atualizado
+    o status dela no botane"*. A nota de ANTES do corte, lançada e estornada sozinha, volta ao
+    estoque quando recebida de novo — o estorno nunca olhou o corte, e a volta também não olha."""
+    quando = HOJE - timedelta(days=12)
+    opcoes(cur, id_unidade, lancar=True)
+    importador.sincronizar_completo(
+        cur, id_unidade, OmieDeMentira([recebimento("26", "S", PRODUTO, quando, etapa="80")]),
+        USUARIO, 15, None, catalogo=False)
+    checar("recebida, é lançada", nota_de(cur, "26")["status"] == "LANCADA", nota_de(cur, "26"))
+    # O corte passa a ser DEPOIS da nota, e o recebimento é desfeito lá.
+    cur.execute("""UPDATE integracoes SET lancar_recebidas_corte = %s
+                    WHERE id_unidade = %s AND servico = 'OMIE'""", (HOJE - timedelta(days=5), id_unidade))
+    detalhe_n = {int(f"88{marca}26"): recebimento("26", "N", PRODUTO, quando, etapa="40")}
+    importador.sincronizar_completo(
+        cur, id_unidade, OmieDeMentira([recebimento("26", "N", PRODUTO, quando, na_lista=False, etapa="40")],
+                                       detalhe_n), USUARIO, 15, None, catalogo=False)
+    checar("desfeito, volta à conferência mesmo antes do corte",
+           nota_de(cur, "26")["status"] in ("CONCILIADA", "IMPORTADA"), nota_de(cur, "26"))
+    detalhe_s = {int(f"88{marca}26"): recebimento("26", "S", PRODUTO, quando, etapa="80")}
+    r = importador.sincronizar_completo(
+        cur, id_unidade, OmieDeMentira([recebimento("26", "S", PRODUTO, quando, na_lista=False, etapa="80")],
+                                       detalhe_s), USUARIO, 15, None, catalogo=False)
+    checar("recebida de novo, volta a LANÇADA apesar do corte",
+           nota_de(cur, "26")["status"] == "LANCADA", (nota_de(cur, "26"), r.get("lancamento_automatico")))
+
+
+def lancar_so_esta(cur, id_unidade):
+    """🔑 06/11/2026: o "Atualizar do Omie" DENTRO da nota lança só ela (`ids`), na hora — antes
+    só a busca completa lançava, e no ar ela roda uma vez por dia."""
+    opcoes(cur, id_unidade, lancar=True)
+    # Duas recebidas gravadas sem lançar (como a releitura de uma nota deixa).
+    a, _ = importador.gravar_nota(cur, id_unidade, mapeadores.recebimento_de_nfe(
+        recebimento("27", "S", PRODUTO)), recebimento("27", "S", PRODUTO))
+    b, _ = importador.gravar_nota(cur, id_unidade, mapeadores.recebimento_de_nfe(
+        recebimento("28", "S", PRODUTO)), recebimento("28", "S", PRODUTO))
+    r = importador.lancar_as_recebidas_seguro(cur, id_unidade, [a])
+    checar("com `ids`, lança a nota pedida", nota_de(cur, "27")["status"] == "LANCADA", (r, nota_de(cur, "27")))
+    checar("e só ela", nota_de(cur, "28")["status"] != "LANCADA", nota_de(cur, "28"))
+    opcoes(cur, id_unidade, lancar=False)
+    checar("com a opção desligada, `ids` não lança nada",
+           importador.lancar_as_recebidas_seguro(cur, id_unidade, [b]) is None
+           and nota_de(cur, "28")["status"] != "LANCADA")
+
+
 cenario("\n2. desligada, a busca traz tudo", desligada_traz_tudo)
 cenario("\n3. somente recebidas", so_recebidas)
 cenario("\n3b. a janela alcança a que espera recebimento", janela_alcanca_a_que_espera)
@@ -492,6 +537,8 @@ cenario("\n4f. desfeito em período fechado", desfeito_em_periodo_fechado)
 cenario("\n4g. opção desligada: a etapa não custa", desligada_etapa_nao_custa)
 cenario("\n4h. a vigia de 30 dias", vigia)
 cenario("\n4i. o corte de data", corte_de_data)
+cenario("\n4j. desfeito antes do corte, recebido de novo", desfeito_antes_do_corte)
+cenario("\n4k. o Atualizar da nota lança só ela", lancar_so_esta)
 
 
 def chamar(metodo, caminho, corpo=None, token=None):
