@@ -123,6 +123,7 @@ OPERACAO = [
     # A fila das respostas do assistente (151) — conversa, não cadastro.
     "assistente_mensagens",
     "assistente_conversa",
+    "assistente_acoes",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]

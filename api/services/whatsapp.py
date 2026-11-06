@@ -590,7 +590,8 @@ async def laco(parar: asyncio.Event) -> None:
                 await asyncio.to_thread(_limpar_assistente)
             await asyncio.to_thread(processar_fila)
             # 151: de reserva — a resposta do assistente costuma sair logo após o webhook.
-            from services import assistente, assistente_conversa
+            from services import assistente, assistente_acoes, assistente_conversa
+            await asyncio.to_thread(assistente_acoes.processar_confirmadas)
             await asyncio.to_thread(assistente_conversa.processar_pendentes)
             await asyncio.to_thread(assistente.processar_fila)
         except Exception as e:  # noqa: BLE001

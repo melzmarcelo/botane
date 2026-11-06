@@ -134,7 +134,9 @@ Peças novas:
    nada. Modelo e limite diário em Integrações ▸ Assistente.
 3. **Áudio** ✅ *1.3.7 (migração 153)*: transcrição pela OpenAI ou pela Groq (mesmo formato de API,
    escolha em Integrações ▸ Assistente); a resposta mostra o que foi ouvido.
-4. **Gravação com confirmação**: produzir da agenda, produção avulsa, etiqueta, saída/perda.
+4. **Gravação com confirmação** ✅ *1.3.8 (migração 154)*: produzir da agenda e produção avulsa,
+   com prévia do sistema e botão Confirmar (permissão própria). Etiqueta e saída/perda ficam para
+   depois, pela mesma trilha.
 5. **Bom dia proativo** (opcional): às 7h, modelo aprovado "Bom dia, {{1}}! Hoje: {{2}}" para
    quem ligou a opção — é a única parte com custo de mensagem.
 

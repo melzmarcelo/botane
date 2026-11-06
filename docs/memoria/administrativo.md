@@ -938,3 +938,35 @@ Aí ele retorna: para hoje precisa produzir 10 pães. Aí posso solicitar a rece
 - Cobertura: `smoke_assistente_audio.py` (17), `smoke_assistente_whatsapp.py` (35),
   `smoke_assistente_conversa.py` (22), `verificar-assistente-whatsapp.mjs` (13).
 - ⏳ Não testado contra Meta, OpenAI ou Groq reais.
+
+## Assistente no WhatsApp — etapa 4: lançar produção com botão (migração 154, 1.3.8, 06/11/2026)
+🔑 **Pedido do dono:** *"depois posso confirmar a produção e o sistema já lança e coloca em estoque"*.
+- 🔑 **O Claude nunca grava.** Para quem tem `integracao.whatsapp_lancar` (nasce com
+  `admin.usuarios`), ele recebe também `produzir_da_agenda` e `produzir` (`GRAVAVEIS` em
+  `services/assistente_acoes.py`) e um trecho fixo de sistema (`PODE_LANCAR`; quem não tem recebe
+  `SO_CONSULTA` e só as de leitura — dois textos e duas listas FIXOS, dois caches). Chamar uma
+  delas NÃO chama a rota: `_propor` monta a prévia e cria a ação PENDENTE (`assistente_acoes`).
+- 🔑 **A prévia é do SISTEMA**: `assistente_acoes.resumo` lê `item_da_agenda` /
+  `necessario_para_produzir` com os MESMOS argumentos (e a mesma `id_loja`) — produto, quantidade,
+  "Entra em", o que sai do estoque e o que falta. Vai numa mensagem SÓ DELA, interativa, com os
+  botões "✅ Confirmar" / "❌ Cancelar" (`ACAO:CONFIRMAR:<id>`; título ≤ 20, corpo ≤ 1024), depois
+  do texto do Claude. O que a pessoa confirma é a prévia, não o que o Claude escreveu.
+- **O toque** chega como `interactive.button_reply` e `assistente.receber` o entrega a
+  `assistente_acoes.tocou_botao`, que confere: a ação é DESTA pessoa (o id do botão é só um
+  número), está PENDENTE e não venceu (10 min). Cancelar responde na hora; confirmar marca
+  CONFIRMADA e responde "Lançando…" (a chave da resposta é o id do toque: reenvio não confirma
+  duas vezes). `processar_confirmadas` (tarefa do webhook + laço) lança com `SKIP LOCKED` e grava
+  EXECUTADA/ERRO + resultado; a frase final vai ao WhatsApp E à conversa (o Claude sabe na
+  próxima pergunta). 403 vira "você não tem permissão para lançar essa produção".
+- Uma pendente por pessoa: proposta nova expira a anterior; duas propostas na mesma resposta → a
+  segunda volta erro ao Claude. Pergunta que falha no meio expira a ação que tinha preparado.
+- 🔑 **Auditoria `origem = whatsapp`**: o lançamento usa um JWT com `origem` ASSINADA
+  (`criar_access_token(..., origem="whatsapp")`) e o cabeçalho `X-Origem-Assistente`; o middleware
+  do `main` só marca se o token, decodificado, trouxer a marca — o cabeçalho sozinho não marca
+  nada. `mcp_ferramentas.chamar` ganhou `cabecalhos_extra`.
+- "Sim" por escrito NÃO confirma: o Claude, no máximo, propõe de novo (novos botões).
+- Ações somem em 30 dias (`assistente_acoes.limpar`); `assistente_acoes` em `OPERACAO`.
+- Cobertura: `smoke_assistente_lancar.py` (23, estoque de verdade com produtos de teste),
+  `smoke_assistente_conversa.py` (22, ajustada: admin recebe as 2 de produção).
+- ⏳ Próximas ferramentas candidatas (mesma trilha: entra em `GRAVAVEIS` + um ramo em `resumo`):
+  etiqueta, perda/saída de estoque. Não testado contra Meta/Anthropic reais.

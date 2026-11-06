@@ -190,8 +190,10 @@ p1 = FALSA.pedidos[0] if FALSA.pedidos else {}
 nomes = {t["name"] for t in p1.get("tools") or []}
 from services import mcp_ferramentas  # noqa: E402
 leitura = {f.nome for f in mcp_ferramentas.FERRAMENTAS if not f.grava}
-checar("o Claude recebe exatamente as ferramentas de LEITURA do conector",
-       nomes == leitura and "produzir" not in nomes, (len(nomes), len(leitura)))
+# 154: o admin tem `integracao.whatsapp_lancar`, então recebe também as duas de produção (que só
+# PROPÕEM — ver smoke_assistente_lancar). Nenhuma outra de gravação.
+checar("o Claude recebe as ferramentas de LEITURA do conector, e de gravação só as de produção",
+       nomes == leitura | {"produzir_da_agenda", "produzir"}, (len(nomes), len(leitura)))
 checar("as ferramentas vão em ordem estável (o cache depende disso)",
        [t["name"] for t in p1.get("tools") or []] == sorted(nomes))
 checar("o sistema é fixo e marcado para cache",
@@ -230,8 +232,9 @@ checar("e a resposta sai", (r2.get("texto") or "").startswith("ok: e para amanh�
 
 print("\n4. o que não pode")
 r3 = perguntar("pode gravar a produção")
-checar("ferramenta que grava não é chamada: volta como erro ao Claude",
-       "RESULTADO (erro): A ferramenta produzir não está disponível" in (r3.get("texto") or ""), r3)
+# 154: `produzir` sem argumentos: a prévia nem se monta, nada é proposto nem gravado.
+checar("ferramenta que grava não é chamada: sem argumentos, volta como erro ao Claude",
+       "RESULTADO (erro): Não deu para preparar o lançamento" in (r3.get("texto") or ""), r3)
 r4 = perguntar("recuse isto")
 checar("recusa da API vira uma frase educada", (r4.get("texto") or "").startswith("Não posso ajudar"), r4)
 

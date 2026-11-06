@@ -102,9 +102,13 @@ def conferir_credenciais(email: str, senha: str) -> dict:
 # ---------------------------------------------------------------- token
 
 
-def criar_access_token(id_usuario: int, email: str) -> tuple[str, int]:
+def criar_access_token(id_usuario: int, email: str, origem: str | None = None) -> tuple[str, int]:
+    """`origem` (154): vai ASSINADA no token — é o que deixa a auditoria marcar "whatsapp" sem
+    confiar num cabeçalho que qualquer um escreveria."""
     expira = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRY_MIN)
     payload = {"sub": str(id_usuario), "email": email, "exp": expira}
+    if origem:
+        payload["origem"] = origem
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256"), JWT_EXPIRY_MIN * 60
 
 

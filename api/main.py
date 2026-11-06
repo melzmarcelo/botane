@@ -89,7 +89,7 @@ from routers import (
     usuarios,
     vendas,
 )
-from seguranca import PREFIXO_TOKEN_API, hash_senha
+from seguranca import PREFIXO_TOKEN_API, decodificar_token, hash_senha
 
 # 🔑 **A versão é UMA linha, e o último número conta as PROMOÇÕES.** `1.1.xx`:
 # `xx` sobe a cada `main → producao` que vai ao ar, e mais nada — não é contagem
@@ -100,7 +100,7 @@ from seguranca import PREFIXO_TOKEN_API, hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.3.7"
+VERSAO = "1.3.8"
 
 
 def conferir_segredo() -> None:
@@ -350,8 +350,16 @@ async def _marcar_pedido_de_total(request, chamar_o_resto):
     # sem o `reset`, uma chamada de chave deixaria a marca na tarefa e a
     # requisição seguinte, de gente, sairia como se fosse do Claude.
     autorizacao = request.headers.get("Authorization", "")
-    de_onde = auditoria.origem_do_pedido.set(
-        "claude" if autorizacao.startswith("Bearer " + PREFIXO_TOKEN_API) else None)
+    origem = "claude" if autorizacao.startswith("Bearer " + PREFIXO_TOKEN_API) else None
+    # 154: o assistente do WhatsApp lança com um JWT que traz `origem` ASSINADA. O cabeçalho só
+    # diz "olhe o token" — sozinho não marca nada, e um token sem a marca não vira whatsapp.
+    if origem is None and request.headers.get("X-Origem-Assistente") and autorizacao.startswith("Bearer "):
+        try:
+            if decodificar_token(autorizacao[7:]).get("origem") == "whatsapp":
+                origem = "whatsapp"
+        except Exception:  # noqa: BLE001 — token ruim: a dependência da rota recusa adiante
+            pass
+    de_onde = auditoria.origem_do_pedido.set(origem)
     try:
         return await chamar_o_resto(request)
     finally:

@@ -2385,7 +2385,8 @@ def _query(valores: dict[str, Any]) -> dict[str, str]:
     return q
 
 
-async def chamar(app, credencial: str, nome: str, args: dict[str, Any] | None) -> str:
+async def chamar(app, credencial: str, nome: str, args: dict[str, Any] | None,
+                 cabecalhos_extra: dict[str, str] | None = None) -> str:
     """Executa a ferramenta na própria API, com a credencial de quem pediu.
 
     🔑 **Por dentro, sem rede**: `httpx.ASGITransport` entrega o pedido ao app no
@@ -2398,7 +2399,8 @@ async def chamar(app, credencial: str, nome: str, args: dict[str, Any] | None) -
         raise ErroFerramenta(f"Ferramenta desconhecida: {nome}")
     caminho, resto = _caminho(f, args or {})
     id_loja = resto.pop("id_loja", None)
-    cabecalhos = {"Authorization": f"Bearer {credencial}", "Accept": "application/json"}
+    cabecalhos = {"Authorization": f"Bearer {credencial}", "Accept": "application/json",
+                  **(cabecalhos_extra or {})}
     if id_loja is not None:
         cabecalhos["X-Unidade"] = str(id_loja)
 

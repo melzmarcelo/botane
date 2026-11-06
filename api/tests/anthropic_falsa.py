@@ -8,11 +8,13 @@ da internet. Os pedidos ficam em `pedidos` para a suíte conferir o que foi mand
 O roteiro, pela última fala do usuário:
 - tem resultado de ferramenta → responde "RESULTADO: <começo do resultado>";
 - "agenda" → pede `agenda_producao`; "gravar" → pede `produzir` (que grava);
+- "lance agenda N" → `produzir_da_agenda` da linha N; "produza P Q" → `produzir` do produto P;
 - "ocupado" → 529 (sobrecarga); "recuse" → stop_reason refusal;
 - o resto → "ok: <a fala>".
 """
 
 import json
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -64,6 +66,14 @@ class AnthropicFalsa:
             return 529, {"type": "error", "error": {"type": "overloaded_error", "message": "x"}}
         if "recuse" in fala:
             return 200, {"content": [], "stop_reason": "refusal", "usage": self._uso()}
+        # 154: os lançamentos — "lance agenda 12" e "produza 34 10" (produto 34, 10 unidades).
+        m = re.search(r"lance agenda (\d+)", fala)
+        if m:
+            return 200, self._usar("produzir_da_agenda", {"id_agenda": int(m.group(1))})
+        m = re.search(r"produza (\d+) ([\d.]+)", fala)
+        if m:
+            return 200, self._usar("produzir", {"id_produto": int(m.group(1)),
+                                                "quantidade": float(m.group(2))})
         for gatilho, ferramenta in (("agenda", "agenda_producao"), ("gravar", "produzir")):
             if gatilho in fala:
                 return 200, {"content": [{"type": "text", "text": "Vou ver."},
@@ -71,6 +81,11 @@ class AnthropicFalsa:
                                           "name": ferramenta, "input": {}}],
                              "stop_reason": "tool_use", "usage": self._uso()}
         return 200, self._texto("ok: " + ultima.split("\n\n", 1)[-1][:200])
+
+    def _usar(self, ferramenta: str, entrada: dict) -> dict:
+        return {"content": [{"type": "tool_use", "id": f"tu_{len(self.pedidos)}",
+                             "name": ferramenta, "input": entrada}],
+                "stop_reason": "tool_use", "usage": self._uso()}
 
     def _texto(self, t: str) -> dict:
         return {"content": [{"type": "text", "text": t}], "stop_reason": "end_turn",

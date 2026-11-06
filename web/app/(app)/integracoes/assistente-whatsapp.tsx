@@ -167,9 +167,11 @@ export default function AssistenteWhatsappConfig() {
             </Campo>
           </div>
           <p className="text-[13px] text-suave prosa">
-            Nesta versão o assistente só consulta, com as mesmas permissões e lojas de cada pessoa:
-            pendências, receitas, estoque, vendas. As conversas ficam guardadas por 30 dias e não
-            aparecem no histórico das lojas.
+            O assistente consulta com as mesmas permissões e lojas de cada pessoa: pendências,
+            receitas, estoque, vendas. Lançar produção pelo WhatsApp é para quem tiver a permissão
+            “Lançar produção pelo assistente do WhatsApp” (em Papéis) — e só depois de a pessoa tocar
+            em Confirmar na prévia. As conversas ficam guardadas por 30 dias e não aparecem no
+            histórico das lojas.
           </p>
         </div>
 

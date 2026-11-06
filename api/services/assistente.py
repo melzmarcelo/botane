@@ -299,12 +299,26 @@ def desvincular(cur, ctx) -> bool:
 
 
 # ---------------------------------------------------------------- a fila e o envio
-def responder(cur, chave: str, fone: str, texto: str, id_usuario: int | None = None) -> bool:
+def responder(cur, chave: str, fone: str, texto: str, id_usuario: int | None = None,
+              botoes: list[dict] | None = None) -> bool:
+    """Põe a resposta na fila. `botoes` (154): [{id, titulo}] — sai como mensagem interativa."""
     cur.execute(
-        """INSERT INTO assistente_mensagens (chave, id_usuario, telefone, texto)
-           VALUES (%s, %s, %s, %s) ON CONFLICT (chave) DO NOTHING RETURNING id""",
-        (chave[:120], id_usuario, fone, texto))
+        """INSERT INTO assistente_mensagens (chave, id_usuario, telefone, texto, botoes)
+           VALUES (%s, %s, %s, %s, %s) ON CONFLICT (chave) DO NOTHING RETURNING id""",
+        (chave[:120], id_usuario, fone, texto, json.dumps(botoes) if botoes else None))
     return cur.fetchone() is not None
+
+
+def _payload(msg: dict) -> dict:
+    """Texto livre, ou — com botões — a mensagem interativa da Meta (até 3 botões de resposta;
+    corpo até 1024 caracteres, título até 20). As duas valem dentro da janela de 24 h."""
+    base = {"messaging_product": "whatsapp", "to": msg["telefone"]}
+    if not msg.get("botoes"):
+        return base | {"type": "text", "text": {"body": msg["texto"]}}
+    return base | {"type": "interactive", "interactive": {
+        "type": "button", "body": {"text": msg["texto"][:1024]},
+        "action": {"buttons": [{"type": "reply", "reply": {"id": b["id"], "title": b["titulo"][:20]}}
+                               for b in msg["botoes"][:3]]}}}
 
 
 def _enviar_um(cur, msg: dict, c: dict) -> None:
@@ -320,8 +334,7 @@ def _enviar_um(cur, msg: dict, c: dict) -> None:
     url = f"https://graph.facebook.com/{c['api_versao']}/{c['phone_number_id']}/messages"
     try:
         r = httpx.post(url, timeout=15, headers={"Authorization": f"Bearer {c['cred'].get('token')}"},
-                       json={"messaging_product": "whatsapp", "to": msg["telefone"], "type": "text",
-                             "text": {"body": msg["texto"]}})
+                       json=_payload(msg))
         dados = r.json() if r.content else {}
         if r.status_code >= 400:
             raise RuntimeError((dados.get("error") or {}).get("message") or f"HTTP {r.status_code}")
@@ -348,7 +361,7 @@ def processar_fila(limite: int = 20) -> int:
     """Envia o que venceu. Chamado logo depois do webhook (a resposta não espera o laço) e, de
     reserva, pelo laço do WhatsApp a cada 30 s. ⚠️ `SKIP LOCKED`: nunca a mesma duas vezes."""
     with get_cursor() as cur:
-        cur.execute("""SELECT id, telefone, texto, tentativas FROM assistente_mensagens
+        cur.execute("""SELECT id, telefone, texto, tentativas, botoes FROM assistente_mensagens
                         WHERE status = 'FILA' AND agendada_para <= now()
                         ORDER BY agendada_para, id LIMIT %s FOR UPDATE SKIP LOCKED""", (limite,))
         msgs = [dict(r) for r in cur.fetchall()]
@@ -455,8 +468,8 @@ def receber(cur, msg: dict) -> int:
         if novo:
             responder(cur, chave, fone,
                       f"Pronto, {_primeiro(novo['nome'])}! Este WhatsApp agora está ligado ao seu "
-                      "usuário no Botané. Em breve vou responder suas pendências, receitas e "
-                      "lançar produção por aqui.", novo["id_usuario"])
+                      "usuário no Botané. Pode me perguntar por texto ou áudio: suas pendências "
+                      "de hoje, uma receita, o estoque.", novo["id_usuario"])
             return 1
 
     cur.execute("""SELECT v.id_usuario, u.nome FROM usuario_whatsapp v
@@ -471,6 +484,23 @@ def receber(cur, msg: dict) -> int:
                   "abra Perfil ▸ Assistente no WhatsApp.")
         return 1
     nome, id_u = _primeiro(quem["nome"]), quem["id_usuario"]
+    botao = ((msg.get("interactive") or {}).get("button_reply") or {}).get("id") \
+        if tipo == "interactive" else None
+    if botao and botao.startswith("ACAO:"):
+        # 154: o toque em Confirmar / Cancelar. A ação tem de ser desta pessoa (confere lá dentro).
+        from services import assistente_acoes
+        if not (_tem_permissao(cur, id_u) and assistente_acoes.pode_lancar(cur, id_u)):
+            responder(cur, chave, fone, f"{nome}, seu usuário não pode mais lançar pelo WhatsApp. "
+                                        "Nada foi lançado.", id_u)
+            return 1
+        frase = assistente_acoes.tocou_botao(cur, id_u, botao)
+        if frase:
+            responder(cur, chave, fone, frase, id_u)
+        else:
+            # Confirmou: o lançamento roda logo depois do 200 (`processar_confirmadas`). A chave
+            # marca a mensagem como tratada, para o reenvio da Meta não confirmar duas vezes.
+            responder(cur, chave, fone, "Lançando…", id_u)
+        return 1
     if not _tem_permissao(cur, id_u):
         responder(cur, chave, fone, f"Olá, {nome}. Seu usuário não tem o assistente liberado — "
                                     "fale com o administrador.", id_u)

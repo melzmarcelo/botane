@@ -32,7 +32,7 @@ import httpx
 from config import DEBUG
 from database import get_cursor
 from relogio import agora_da_casa
-from services import assistente, mcp_ferramentas, transcricao, traducao
+from services import assistente, assistente_acoes, mcp_ferramentas, transcricao, traducao
 
 log = logging.getLogger("botane.assistente")
 
@@ -52,6 +52,11 @@ GUARDAR_DIAS = 30
 # mudar a ordem a cada chamada invalidaria o cache.
 _FERRAMENTAS = sorted((f for f in mcp_ferramentas.FERRAMENTAS if not f.grava), key=lambda f: f.nome)
 _PERMITIDAS = {f.nome for f in _FERRAMENTAS}
+# 154: as de gravação que o WhatsApp pode PROPOR (nunca executar sem o botão) — só para quem tem
+# `integracao.whatsapp_lancar`. Ordem estável também: são duas listas fixas, dois caches.
+_GRAVAVEIS = sorted((mcp_ferramentas.POR_NOME[n] for n in assistente_acoes.GRAVAVEIS),
+                    key=lambda f: f.nome)
+_FERRAMENTAS_COM_LANCAR = sorted(_FERRAMENTAS + _GRAVAVEIS, key=lambda f: f.nome)
 
 # Modelos que aceitam o `fallbacks: "default"` (refaz em outro modelo quando a segurança recusa).
 _COM_FALLBACK = ("claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1")
@@ -84,9 +89,25 @@ o resto, só se for urgente.
 uma quantidade, use necessario_para_produzir: ele já calcula os ingredientes e diz o que falta.
 - Datas no formato AAAA-MM-DD nas ferramentas; para a pessoa, DD/MM.
 - Erro 403 quer dizer que o funcionário não tem permissão para aquilo — diga isso, sem rodeio.
-- Nesta versão você SÓ CONSULTA. Não lança produção, não mexe em estoque nem grava nada. Se \
-pedirem, diga que lançar pelo WhatsApp chega em breve e mostre o que seria lançado.
-- Se a pergunta não tiver a ver com a casa, responda em uma frase e volte ao trabalho."""
+- Se a pergunta não tiver a ver com a casa, responda em uma frase e volte ao trabalho.
+"""
+
+# ⚠️ Dois textos FIXOS (e não um com variável): cada um é cacheado inteiro.
+SO_CONSULTA = """\
+- Este funcionário SÓ CONSULTA pelo WhatsApp: você não lança produção, não mexe em estoque nem \
+grava nada. Se ele pedir, diga que lançar pelo WhatsApp precisa ser liberado por quem administra \
+o sistema, e mostre o que seria lançado."""
+
+PODE_LANCAR = """\
+- Este funcionário pode LANÇAR PRODUÇÃO pelo WhatsApp: produzir_da_agenda (cumprir uma linha da \
+agenda) e produzir (produção avulsa pela ficha). Quando ele pedir para lançar, chame a ferramenta \
+com os argumentos certos — o sistema NÃO grava na hora: monta a prévia e manda para ele os botões \
+Confirmar e Cancelar. Só o toque em Confirmar lança.
+- Depois de chamar, NUNCA diga que foi lançado. Diga em uma frase o que vai ser lançado e que é só \
+tocar em Confirmar. Uma proposta por vez.
+- Se faltar informação (qual produto, quanto, qual linha da agenda), pergunte antes. Se a \
+quantidade não estiver clara, pergunte — principalmente quando a pergunta veio de áudio.
+- Ele não lança outras coisas pelo WhatsApp (estoque, notas, cadastros): diga que isso é pela tela."""
 
 
 # ---------------------------------------------------------------- a configuração
@@ -208,14 +229,17 @@ def _responder_lote(lote: list[dict]) -> None:
     if ouvido:
         contexto += " [Parte da pergunta veio de ÁUDIO transcrito: pode ter erro de transcrição.]"
     pergunta = "\n".join(x["texto"] for x in lote if x["texto"].strip())
+    turno: dict = {}
     try:
-        texto, uso = asyncio.run(_conversar(cfg, quem, historico, contexto, pergunta))
+        texto, uso = asyncio.run(_conversar(cfg, quem, historico, contexto, pergunta, turno))
     except _Temporario as e:
+        _expirar_acao(turno)
         _adiar_ou_desistir(lote, ids, quem, e, definitivo=False, resposta=(
             "Não consegui responder agora — o serviço está ocupado. Tente de novo em alguns "
             "minutos."))
         return
     except _Definitivo as e:
+        _expirar_acao(turno)
         _fechar(ids, "ERRO", erro=str(e), id_usuario=id_usuario, fone=quem["wa_id"],
                 resposta="Não consegui responder: a configuração do assistente tem um problema. "
                          "Avise quem administra o sistema.")
@@ -224,7 +248,16 @@ def _responder_lote(lote: list[dict]) -> None:
         # 🔑 Mostra o que ouviu: a pessoa confere se foi entendida — e, quando vier a gravação
         # pelo WhatsApp, é o que impede lançar "10 pães" que eram "12".
         texto = _caber(f"🎤 _Ouvi: “{' / '.join(ouvido)}”_\n\n{texto}")
-    _fechar(ids, "RESPONDIDA", resposta=texto, uso=uso, id_usuario=id_usuario, fone=quem["wa_id"])
+    _fechar(ids, "RESPONDIDA", resposta=texto, uso=uso, id_usuario=id_usuario, fone=quem["wa_id"],
+            acao=turno.get("acao"))
+
+
+def _expirar_acao(turno: dict) -> None:
+    """A pergunta não chegou ao fim: a ação que ela tinha preparado não pode ficar no ar."""
+    if turno.get("acao"):
+        with get_cursor() as cur:
+            cur.execute("""UPDATE assistente_acoes SET status = 'EXPIRADA', atualizada_em = now()
+                            WHERE id = %s AND status = 'PENDENTE'""", (turno["acao"]["id"],))
 
 
 def _transcrever_audios(lote: list[dict]) -> list[str]:
@@ -273,7 +306,8 @@ def _adiar_ou_desistir(lote: list[dict], ids: list[int], quem: dict, erro: Excep
 
 
 def _fechar(ids: list[int], status: str, *, erro: str | None = None, resposta: str | None = None,
-            uso: dict | None = None, id_usuario: int | None = None, fone: str | None = None) -> None:
+            uso: dict | None = None, id_usuario: int | None = None, fone: str | None = None,
+            acao: dict | None = None) -> None:
     with get_cursor() as cur:
         cur.execute("""UPDATE assistente_conversa SET status = %s, erro = %s, atualizada_em = now()
                         WHERE id = ANY(%s)""", (status, (erro or "")[:500] or None, ids))
@@ -283,6 +317,12 @@ def _fechar(ids: list[int], status: str, *, erro: str | None = None, resposta: s
                         (id_usuario, resposta, json.dumps(uso) if uso else None))
             id_resp = cur.fetchone()["id"]
             assistente.responder(cur, f"conversa:{id_resp}", fone, resposta, id_usuario)
+            if acao:
+                # 🔑 154: a prévia do SISTEMA, com os botões, numa mensagem só dela — é ela que a
+                # pessoa confirma, não o texto do Claude.
+                assistente.responder(cur, f"acao:{acao['id']}:botoes", fone,
+                                     f"Confirma o lançamento?\n\n{acao['previa']}", id_usuario,
+                                     botoes=assistente_acoes.botoes(acao["id"]))
     if resposta:
         assistente.processar_fila()
 
@@ -339,17 +379,18 @@ class _Definitivo(Exception):
     """Não adianta repetir (chave inválida, pedido recusado pela API)."""
 
 
-def _corpo(cfg: dict, casa: str, mensagens: list[dict]) -> dict:
+def _corpo(cfg: dict, casa: str, mensagens: list[dict], lanca: bool = False) -> dict:
     modelo = cfg["modelo"]
     corpo = {
         "model": modelo,
         "max_tokens": 16000,
         # 🔑 Sistema estável + breakpoint de cache: ferramentas e sistema (renderizados antes das
         # mensagens) saem do cache a partir da segunda pergunta.
-        "system": [{"type": "text", "text": SISTEMA.format(casa=casa),
+        "system": [{"type": "text",
+                    "text": SISTEMA.format(casa=casa) + (PODE_LANCAR if lanca else SO_CONSULTA),
                     "cache_control": {"type": "ephemeral"}}],
         "tools": [{"name": f.nome, "description": f.descricao, "input_schema": f.esquema()}
-                  for f in _FERRAMENTAS],
+                  for f in (_FERRAMENTAS_COM_LANCAR if lanca else _FERRAMENTAS)],
         "messages": mensagens,
     }
     if not modelo.startswith(_SEM_EFFORT):
@@ -373,20 +414,26 @@ def _pedir(cliente: httpx.AsyncClient, cfg: dict, corpo: dict):
 
 
 async def _conversar(cfg: dict, quem: dict, historico: list[dict], contexto: str,
-                     pergunta: str) -> tuple[str, dict]:
+                     pergunta: str, turno: dict | None = None) -> tuple[str, dict]:
+    """`turno` (154): o que esta pergunta produziu além do texto — `acao` (id e prévia) quando o
+    Claude propôs um lançamento."""
+    turno = turno if turno is not None else {}
     with get_cursor() as cur:
         casa = assistente_casa(cur)
+        lanca = assistente_acoes.pode_lancar(cur, int(quem["id"]))
+    turno["lanca"] = lanca
     mensagens = historico + [{"role": "user", "content": f"{contexto}\n\n{pergunta}".strip()}]
     from seguranca import criar_access_token
     # 🔑 A credencial é do PRÓPRIO usuário, de vida curta: cada ferramenta passa pela mesma
     # conferência de permissão e loja de um pedido da tela.
     credencial, _ = criar_access_token(int(quem["id"]), quem["email"])
+    turno["credencial"], turno["id_usuario"] = credencial, int(quem["id"])
     uso = {"modelo": cfg["modelo"], "voltas": 0, "entrada": 0, "saida": 0, "cache_lido": 0,
            "cache_criado": 0, "ferramentas": []}
     async with httpx.AsyncClient(timeout=120) as cliente:
         for _ in range(MAX_VOLTAS):
             try:
-                r = await _pedir(cliente, cfg, _corpo(cfg, casa, mensagens))
+                r = await _pedir(cliente, cfg, _corpo(cfg, casa, mensagens, lanca))
             except httpx.HTTPError as e:
                 raise _Temporario(f"rede: {e}") from e
             if r.status_code == 429 or r.status_code >= 500:
@@ -416,22 +463,25 @@ async def _conversar(cfg: dict, quem: dict, historico: list[dict], contexto: str
                 if b.get("type") != "tool_use":
                     continue
                 uso["ferramentas"].append(b.get("name"))
-                resultados.append(await _executar(credencial, b))
+                resultados.append(await _executar(turno, b))
             mensagens.append({"role": "user", "content": resultados})
     return ("A pergunta ficou grande demais para responder de uma vez. Tente algo mais "
             "específico — uma loja, um produto ou um dia."), uso
 
 
-async def _executar(credencial: str, bloco: dict) -> dict:
+async def _executar(turno: dict, bloco: dict) -> dict:
     nome, args = bloco.get("name"), bloco.get("input") or {}
     base = {"type": "tool_result", "tool_use_id": bloco.get("id")}
+    credencial = turno["credencial"]
+    if _APP is None:
+        return base | {"is_error": True, "content": "O sistema ainda está subindo; tente de novo."}
+    if nome in assistente_acoes.GRAVAVEIS and turno.get("lanca"):
+        return base | await _propor(turno, nome, args)
     if nome not in _PERMITIDAS:
         # ⚠️ Pedido de ferramenta que grava (ou inventada): nada é chamado.
         return base | {"is_error": True, "content": (
-            f"A ferramenta {nome} não está disponível pelo WhatsApp: nesta versão o assistente "
-            "só consulta.")}
-    if _APP is None:
-        return base | {"is_error": True, "content": "O sistema ainda está subindo; tente de novo."}
+            f"A ferramenta {nome} não está disponível pelo WhatsApp para este funcionário: aqui "
+            "ele só consulta.")}
     try:
         texto = await mcp_ferramentas.chamar(_APP, credencial, nome, args)
     except mcp_ferramentas.ErroFerramenta as e:
@@ -443,6 +493,30 @@ async def _executar(credencial: str, bloco: dict) -> dict:
         texto = (texto[:LIMITE_RESULTADO] + f"\n…[CORTADO: {len(texto)} caracteres. Refaça com "
                  "filtro, período menor ou limite menor.]")
     return base | {"content": texto}
+
+
+async def _propor(turno: dict, nome: str, args: dict) -> dict:
+    """154: em vez de gravar, a prévia + a ação pendente. O Claude fica sabendo que é só o botão."""
+    if turno.get("acao"):
+        return {"is_error": True, "content": "Já há um lançamento esperando o botão nesta resposta. "
+                                             "Proponha um de cada vez."}
+
+    async def ler(n: str, a: dict) -> str:
+        return await mcp_ferramentas.chamar(_APP, turno["credencial"], n, a)
+
+    try:
+        previa = await assistente_acoes.resumo(ler, nome, args)
+    except mcp_ferramentas.ErroFerramenta as e:
+        return {"is_error": True, "content": f"Não deu para preparar o lançamento: {e}"}
+    except (KeyError, ValueError, TypeError) as e:
+        return {"is_error": True, "content": f"Argumentos incompletos para {nome}: {e}"}
+    with get_cursor() as cur:
+        id_acao = assistente_acoes.criar(cur, turno["id_usuario"], nome, args, previa)
+    turno["acao"] = {"id": id_acao, "previa": previa}
+    return {"content": (
+        "PREPARADO, NÃO LANÇADO. O funcionário vai receber esta prévia com os botões Confirmar e "
+        f"Cancelar, logo depois da sua resposta:\n{previa}\n\nResponda em uma frase o que vai ser "
+        "lançado e que é só tocar em Confirmar. Não diga que já foi lançado.")}
 
 
 def _caber(texto: str) -> str:
@@ -464,3 +538,4 @@ def limpar(cur) -> None:
                 (GUARDAR_DIAS,))
     cur.execute("DELETE FROM assistente_mensagens WHERE criada_em < now() - %s * interval '1 day'",
                 (GUARDAR_DIAS,))
+    assistente_acoes.limpar(cur)
