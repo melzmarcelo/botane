@@ -872,3 +872,42 @@ cano: reconhece quem escreve e responde "olá".
 - ⏳ Próximo: contratar o número virtual (operadoras no estudo), ligar na Meta e configurar em
   Integrações; etapa 2 = consultas por texto com o Claude + `mcp_ferramentas`, com o contexto de
   TODAS as lojas do usuário.
+
+## Assistente no WhatsApp — etapa 2: a conversa, só consulta (migração 152, 1.3.6, 06/11/2026)
+🔑 **Pedido do dono:** *"pela manhã mando um texto pedindo quais as minhas pendências para hoje.
+Aí ele retorna: para hoje precisa produzir 10 pães. Aí posso solicitar a receita…"*.
+- **Fluxo**: o webhook só GUARDA a pergunta (`assistente_conversa`, PENDENTE, `id_meta` único) e
+  devolve 200; a tarefa do webhook (`BackgroundTasks`) e, de reserva, o `laco` do WhatsApp chamam
+  `assistente_conversa.processar_pendentes`, que pega UM usuário por vez (`FOR UPDATE SKIP LOCKED`
+  → PROCESSANDO; preso há 5 min volta a PENDENTE) e junta as pendentes dele numa pergunta só.
+- **O Claude** (`services/assistente_conversa.py`, HTTP direto como a Tradução — sem o SDK
+  `anthropic`, por causa do `requirements.txt` preso): recebe as **96 ferramentas de LEITURA** do
+  conector (`mcp_ferramentas.FERRAMENTAS` sem `grava`), em ordem estável, e cada uma é chamada
+  por dentro (`mcp_ferramentas.chamar`, com o app registrado no `main` via `registrar_app`) com
+  um **JWT de vida curta do próprio usuário** — permissão, loja e setor são os da tela.
+  🔑 Ferramenta de gravação pedida mesmo assim volta `is_error` sem chamar nada (etapa 4).
+- **Cache**: sistema FIXO com `cache_control` (ferramentas + sistema saem do cache da 2ª pergunta
+  em diante). ⚠️ Data, nome e lojas do usuário vão NA MENSAGEM (`_contexto`), nunca no sistema —
+  qualquer byte variável ali invalida o cache.
+- **Modelo**: padrão `claude-opus-5-5`, configurável em Integrações ▸ Assistente (o
+  `claude-haiku-5-5` custa ~40× menos). `output_config.effort = "low"` (exceto modelos antigos que
+  não aceitam); `fallbacks: "default"` + `anthropic-beta: server-side-fallback-2026-07-01` só para
+  Opus 5.5/5, Sonnet 5.5 e Fable 5.1. `stop_reason == "refusal"` é olhado ANTES do conteúdo.
+  No laço o conteúdo do Claude volta INTEIRO; entre perguntas o histórico vai só em texto
+  (12 falas, 3 horas, alternando e começando pelo usuário).
+- **Chave**: a da Anthropic da casa, a MESMA da Tradução (`traducao._config`). Sem ela, a resposta
+  diz onde cadastrar. 429/5xx/rede → volta a PENDENTE com `tentar_apos` (3 tentativas); 4xx →
+  ERRO com aviso de configuração.
+- **Limite por pessoa por dia** (`limite_diario`, padrão 40): passou, avisa uma vez por dia e não
+  chama o Claude. Resposta cortada em 3.900 caracteres (WhatsApp corta em 4.096); resultado de
+  ferramenta em 20 mil.
+- ⚠️ **Reenvio da Meta**: `assistente.receber` ignora mensagem cujo id já está na fila de respostas
+  OU na conversa — o código de vínculo reenviado virava pergunta ao Claude (achado na suíte).
+- Conversa e fila somem em 30 dias (`assistente_conversa.limpar`, na varredura de 10 min do laço).
+- 🔑 **Testes contra uma Anthropic FALSA** (`tests/anthropic_falsa.py`), apontada pela config
+  `url_api` — que **só vale com DEBUG** (e o modelo Pydantic só aceita `http://127.0.0.1:porta/`).
+  ⚠️ Toda suíte que faz funcionário vinculado mandar TEXTO precisa da falsa, senão chama a API real.
+- Cobertura: `smoke_assistente_conversa.py` (22), `smoke_assistente_whatsapp.py` (35, passou a
+  usar a falsa), `verificar-assistente-whatsapp.mjs` (11).
+- ⏳ Não testado contra a Anthropic real (a base local não tem chave). Primeira conversa de
+  verdade: conferir no `uso` da fala do assistente se `cache_lido` sobe a partir da 2ª pergunta.

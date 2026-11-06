@@ -18,3 +18,8 @@ class ConfigAssistente(BaseModel):
     api_versao: str | None = Field(default=None, max_length=10, pattern=r"^(v\d+\.\d+)?$")
     token: str | None = Field(default=None, max_length=600)
     app_secret: str | None = Field(default=None, max_length=120)
+    # 152: a conversa. Modelo em branco = o padrão (claude-opus-5-5).
+    modelo: str | None = Field(default=None, max_length=60, pattern=r"^(claude-[a-z0-9.-]+)?$")
+    limite_diario: int = Field(default=40, ge=1, le=500)
+    # ⚠️ Só para os testes: o endereço de uma Anthropic falsa. Ignorado fora de DEBUG.
+    url_api: str | None = Field(default=None, max_length=200, pattern=r"^(http://127\.0\.0\.1:\d+/[\w/]*)?$")

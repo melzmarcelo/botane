@@ -24,6 +24,7 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "tests")
 
 import comum  # noqa: E402,F401  (saída que não morre em cp1252)
+from anthropic_falsa import AnthropicFalsa  # noqa: E402
 from database import get_cursor, init_pool  # noqa: E402
 from seguranca import hash_senha  # noqa: E402
 
@@ -103,12 +104,16 @@ with get_cursor() as cur:
 def _devolver():
     with get_cursor() as cur:
         cur.execute("DELETE FROM assistente_mensagens WHERE criada_em >= %s", (INICIO,))
+        cur.execute("DELETE FROM assistente_conversa WHERE id_usuario = ANY(%s) AND criada_em >= %s",
+                    ([ID_ADMIN, ID_SEM], INICIO))
         cur.execute("DELETE FROM usuario_whatsapp WHERE id_usuario = ANY(%s)", ([ID_ADMIN, ID_SEM],))
         cur.execute("DELETE FROM integracoes WHERE servico = 'WHATSAPP_ASSISTENTE' AND id_unidade IS NULL")
         for linha in (CONEXAO_ANTES, ):
             if linha:
+                from psycopg2.extras import Json
                 cur.execute(f"INSERT INTO integracoes ({', '.join(linha)}) VALUES "
-                            f"({', '.join(['%s'] * len(linha))})", list(linha.values()))
+                            f"({', '.join(['%s'] * len(linha))})",
+                            [Json(v) if isinstance(v, dict) else v for v in linha.values()])
         if VINCULO_ANTES:
             v = VINCULO_ANTES
             cur.execute(f"INSERT INTO usuario_whatsapp ({', '.join(v)}) VALUES "
@@ -161,9 +166,14 @@ def vinculo(id_usuario):
         return dict(r) if r else {}
 
 
+# ⚠️ 152: texto de quem está vinculado vira pergunta ao Claude — aqui, sempre a Anthropic FALSA.
+FALSA = AnthropicFalsa()
+atexit.register(FALSA.fechar)
+
+
 def config(**kw):
     corpo = {"ativa": True, "modo": "simulado", "numero": NUMERO_ASS, "phone_number_id": PNID,
-             "api_versao": "v21.0", "app_secret": SEGREDO} | kw
+             "api_versao": "v21.0", "app_secret": SEGREDO, "url_api": FALSA.url} | kw
     return chamar("PUT", "/assistente/config", corpo, token)
 
 
@@ -247,9 +257,15 @@ with get_cursor() as cur:
     checar("a auditoria registra o vínculo", cur.fetchone() is not None)
 
 print("\n4. quem está vinculado é reconhecido")
+antes_ = len(respostas(FONE_DONO))
 webhook(mensagem(FONE_DONO, "quais minhas pendências hoje?"))
+for _ in range(30):
+    if len(respostas(FONE_DONO)) > antes_:
+        break
+    time.sleep(0.3)
 ultima = respostas(FONE_DONO)[-1]
-checar("texto: responde pelo nome", "Reconheci você" in (ultima["texto"] or ""), ultima)
+checar("texto: vira pergunta ao assistente, que responde (152)",
+       (ultima["texto"] or "").startswith("ok: quais minhas pendências"), ultima)
 webhook(mensagem(FONE_DONO, tipo="audio"))
 ultima = respostas(FONE_DONO)[-1]
 checar("áudio: avisa que por enquanto só entende texto", "só entendo" in (ultima["texto"] or ""),

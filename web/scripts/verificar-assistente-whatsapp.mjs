@@ -81,6 +81,10 @@ try {
   const gravado = (await api("GET", "/assistente/config", undefined, token)).dados;
   checar("salvar grava o número ligado, em modo simulado, com a chave secreta",
     gravado.ativa && gravado.modo === "simulado" && gravado.numero === NUMERO && gravado.segredo_configurado, gravado);
+  checar("a conversa mostra modelo, limite por dia e de onde vem a chave da Anthropic",
+    !!(await p.$('#conversa-assistente input[aria-label="modelo"]'))
+      && !!(await p.$('#conversa-assistente input[aria-label="limite por dia"]'))
+      && (await p.$eval("#conversa-assistente", (d) => d.textContent.includes("Tradução"))));
   checar("a chave secreta volta como “configurada”, nunca o valor",
     await p.$eval('input[aria-label="chave secreta"]', (i) => i.value === "" && i.placeholder.includes("•")));
 
@@ -124,7 +128,7 @@ try {
   await api("DELETE", "/assistente/vinculo", undefined, token);
   await api("PUT", "/assistente/config", { ativa: antes.ativa, modo: antes.modo, numero: antes.numero,
     phone_number_id: antes.phone_number_id, waba_id: antes.waba_id, api_versao: antes.api_versao,
-    token: "", app_secret: "" }, token);
+    token: "", app_secret: "", modelo: antes.modelo, limite_diario: antes.limite_diario }, token);
   if (antes.segredo_configurado) console.log("  ⚠️ havia chave secreta do assistente: cole a verdadeira de novo em Integrações");
   if (vinculoAntes?.vinculado) console.log("  ⚠️ o admin tinha WhatsApp vinculado antes: vincule de novo em Perfil");
 }

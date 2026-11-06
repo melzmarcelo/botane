@@ -137,6 +137,8 @@ async def receber(request: Request, tarefas: BackgroundTasks) -> dict:
     corpo = await request.body()
     with get_cursor() as cur:
         feito = servico.receber(cur, corpo, request.headers.get("X-Hub-Signature-256"))
-    from services import assistente
+    from services import assistente, assistente_conversa
+    # 152: primeiro o Claude responde as perguntas guardadas; depois a fila sai.
+    tarefas.add_task(assistente_conversa.processar_pendentes)
     tarefas.add_task(assistente.processar_fila)
     return feito

@@ -100,7 +100,7 @@ from seguranca import PREFIXO_TOKEN_API, hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.3.5"
+VERSAO = "1.3.6"
 
 
 def conferir_segredo() -> None:
@@ -535,6 +535,9 @@ app.include_router(traducao.router)
 app.include_router(precificacao.router)
 app.include_router(preferencias.router)
 app.include_router(assistente.router)
+# 152: o assistente do WhatsApp chama as ferramentas do conector por dentro, neste mesmo app.
+from services import assistente_conversa as _assistente_conversa  # noqa: E402
+_assistente_conversa.registrar_app(app)
 app.include_router(bi.router)
 # 🔑 Patrimônio (139, 27/10/2026): os bens, a plaqueta e a manutenção.
 app.include_router(patrimonio.router)

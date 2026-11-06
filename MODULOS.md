@@ -22,7 +22,7 @@ entregue.
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes`, `preco_custo`, `custo_referencia` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `contagem_parcelas`, `transferencias`, `duas_lojas`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `venda_consumo_interno`, `venda_motivo`, `vendas_motivos`, `consumo_pessoa`, `receber`, `pdv_legal`, `rotulos_cabem` |
-| [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `assistente_whatsapp`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo`, `erros` |
+| [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `assistente_whatsapp`, `assistente_conversa`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo`, `erros` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `cmv_conferencia`, `grupos_cmv`, `ciclos`, `relatorios` |
 | [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao`, `cardapio_vivo`, `cardapio_pedido`, `cardapio_testes` |
 | [Etiquetas](#etiquetas) | `docs/memoria/etiquetas.md` | `etiquetas` |
@@ -124,7 +124,7 @@ técnica de "ser uma integração".
 Empresa, lojas, parâmetros, integrações e usuários.
 
 - **Rotas:** `empresa.py`, `usuarios.py`, `tokens_api.py`, `oauth.py`, `mcp.py`, `papeis.py`, `autenticacao.py`, `omie.py`, `email_config.py`, `historico.py`, `inicio.py`, `assistente.py`
-- **Serviços:** `services/omie/`, `agenda_integracao.py`, `email.py`, `segredos.py`, `senhas.py`, `oauth.py`, `mcp_ferramentas.py`, `assistente.py`
+- **Serviços:** `services/omie/`, `agenda_integracao.py`, `email.py`, `segredos.py`, `senhas.py`, `oauth.py`, `mcp_ferramentas.py`, `assistente.py`, `assistente_conversa.py`
 - **Telas:** `empresa/`, `lojas/`, `usuarios/`, `papeis/`, `integracoes/`, `perfil/`, `auditoria/`, `trocar-senha/`
 - **Permissões:** `admin.empresa`, `admin.unidades`, `admin.usuarios`, `admin.papeis`, `admin.integracoes`, `admin.auditoria`, `integracao.omie`, `integracao.pdv`, `integracao.claude`, `integracao.whatsapp_assistente`
 
@@ -142,7 +142,8 @@ memória do módulo.
 
 🔑 **Assistente no WhatsApp** (migração 151, etapa 1 de 5): o funcionário vincula o próprio
 WhatsApp em Perfil (código mandado do aparelho) e fala com UM número da casa, configurado em
-Integrações ▸ Assistente e compartilhado entre as lojas. Por enquanto só reconhece quem escreve; as etapas seguintes vão usar as mesmas
+Integrações ▸ Assistente e compartilhado entre as lojas. Desde a etapa 2 (migração 152) o Claude
+responde consultas com as ferramentas de LEITURA do conector, como o próprio usuário. Por enquanto só reconhece quem escreve; as etapas seguintes vão usar as mesmas
 ferramentas do conector. Estudo em `docs/assistente-whatsapp-estudo.md`.
 
 ## CMV

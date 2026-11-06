@@ -587,12 +587,20 @@ async def laco(parar: asyncio.Event) -> None:
             if not _ultima_varredura or agora - _ultima_varredura > timedelta(minutes=10):
                 _ultima_varredura = agora
                 await asyncio.to_thread(_varrer_com_cursor)
+                await asyncio.to_thread(_limpar_assistente)
             await asyncio.to_thread(processar_fila)
             # 151: de reserva — a resposta do assistente costuma sair logo após o webhook.
-            from services import assistente
+            from services import assistente, assistente_conversa
+            await asyncio.to_thread(assistente_conversa.processar_pendentes)
             await asyncio.to_thread(assistente.processar_fila)
         except Exception as e:  # noqa: BLE001
             await asyncio.to_thread(erros.registrar, "whatsapp", e)
+
+
+def _limpar_assistente() -> None:
+    from services import assistente_conversa
+    with get_cursor() as cur:
+        assistente_conversa.limpar(cur)
 
 
 def _varrer_com_cursor() -> None:

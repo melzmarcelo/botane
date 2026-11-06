@@ -18,6 +18,7 @@ import * as assist from "@/lib/assistente";
 const vazio = (c: assist.ConfigAssistente): assist.GravarConfigAssistente => ({
   ativa: c.ativa, modo: c.modo, numero: c.numero, phone_number_id: c.phone_number_id,
   waba_id: c.waba_id, api_versao: c.api_versao, token: "", app_secret: "",
+  modelo: c.modelo, limite_diario: c.limite_diario,
 });
 
 export default function AssistenteWhatsappConfig() {
@@ -137,6 +138,36 @@ export default function AssistenteWhatsappConfig() {
                    placeholder={cfg.segredo_configurado ? "••••••••" : ""}
                    value={form.app_secret} onChange={(e) => mudar("app_secret", e.target.value)} />
           </Campo>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-linha pt-4" id="conversa-assistente">
+          <p className="text-[14px] font-semibold">A conversa (Claude)</p>
+          {cfg.chave_anthropic ? (
+            <p className="text-[13.5px] text-suave">
+              Usa a chave da Anthropic cadastrada em Integrações ▸ Tradução. O custo vai para essa conta.
+            </p>
+          ) : (
+            <Aviso tipo="erro">
+              Sem a chave da Anthropic o assistente não responde perguntas. Cadastre-a em
+              Integrações ▸ Tradução — é a mesma para os dois.
+            </Aviso>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo rotulo="Modelo" dica={`Em branco: ${cfg.modelo_padrao}. O claude-haiku-5-5 custa bem menos e responde mais rápido.`}>
+              <input className="campo mono" value={form.modelo} placeholder={cfg.modelo_padrao}
+                     aria-label="modelo" onChange={(e) => mudar("modelo", e.target.value)} />
+            </Campo>
+            <Campo rotulo="Perguntas por pessoa, por dia" dica="Um teto de custo: passou dele, o assistente avisa e para até o dia seguinte.">
+              <input className="campo" type="number" min={1} max={500} value={form.limite_diario}
+                     aria-label="limite por dia"
+                     onChange={(e) => mudar("limite_diario", Math.max(1, Number(e.target.value) || 1))} />
+            </Campo>
+          </div>
+          <p className="text-[13px] text-suave prosa">
+            Nesta versão o assistente só consulta, com as mesmas permissões e lojas de cada pessoa:
+            pendências, receitas, estoque, vendas. As conversas ficam guardadas por 30 dias e não
+            aparecem no histórico das lojas.
+          </p>
         </div>
 
         <div className="rounded-[10px] bg-[var(--color-superficie2)] p-3 text-[13px]">

@@ -75,7 +75,7 @@ export default function AssistenteWhatsapp() {
     <Cartao
       className="max-w-[560px]"
       titulo="Assistente no WhatsApp"
-      descricao="Converse com o sistema pelo seu WhatsApp — um número só, para todas as suas lojas, com as suas permissões. Por enquanto ele só confirma que reconhece você; consultas e lançamentos chegam nas próximas versões."
+      descricao="Pergunte pelo WhatsApp: suas pendências do dia, uma receita, o estoque, as vendas — de todas as suas lojas, com as suas permissões. Por enquanto ele só consulta; lançar produção chega em breve."
     >
       <div className="flex flex-col gap-4" id="assistente-whatsapp">
         {erro && <Aviso tipo="erro">{erro}</Aviso>}

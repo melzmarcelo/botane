@@ -92,6 +92,11 @@ def conexao(cur) -> dict:
         "numero": cfg.get("numero") or "", "phone_number_id": cfg.get("phone_number_id") or "",
         "waba_id": cfg.get("waba_id") or "", "api_versao": cfg.get("api_versao") or API_VERSAO_PADRAO,
         "verify_token": cfg.get("verify_token") or "",
+        # 152: a conversa — o modelo do Claude e quantas perguntas por pessoa por dia.
+        "modelo": (cfg.get("modelo") or "").strip(),
+        "limite_diario": int(cfg.get("limite_diario") or 0),
+        # ⚠️ Só para os testes (uma Anthropic falsa); ignorado fora de DEBUG.
+        "url_api": cfg.get("url_api") or "",
         "cred": segredos.decifrar(l["credenciais"]) if l and l["credenciais"] else {},
         "ultimo_status": (l or {}).get("ultimo_status"),
         "ultima_mensagem": (l or {}).get("ultima_mensagem"),
@@ -111,15 +116,21 @@ def _gravar_linha(cur, ativa: bool, modo: str, config: dict, cred: dict) -> None
         (SERVICO, ativa, modo, segredos.cifrar(cred) if cred else None, json.dumps(config)))
 
 
+_CHAVES_CONFIG = ("numero", "phone_number_id", "waba_id", "api_versao", "verify_token", "modelo",
+                  "limite_diario", "url_api")
+
+
+def _config_de(c: dict) -> dict:
+    return {k: c[k] for k in _CHAVES_CONFIG}
+
+
 def configuracao(cur, url_publica: str) -> dict:
     """A aba da tela. ⚠️ O token e o segredo NUNCA voltam — só "configurado"."""
     c = conexao(cur)
     if not c["verify_token"]:
         # O token de verificação do webhook nasce na primeira visita: a casa o cola na Meta.
         c["verify_token"] = secrets.token_urlsafe(18)
-        _gravar_linha(cur, c["ativa"], c["modo"],
-                      {k: c[k] for k in ("numero", "phone_number_id", "waba_id", "api_versao",
-                                         "verify_token")}, c["cred"])
+        _gravar_linha(cur, c["ativa"], c["modo"], _config_de(c), c["cred"])
     return {
         "ativa": c["ativa"], "modo": c["modo"], "numero": c["numero"],
         "phone_number_id": c["phone_number_id"], "waba_id": c["waba_id"],
@@ -128,7 +139,21 @@ def configuracao(cur, url_publica: str) -> dict:
         "token_configurado": bool(c["cred"].get("token")),
         "segredo_configurado": bool(c["cred"].get("app_secret")),
         "ultimo_status": c["ultimo_status"], "ultima_mensagem": c["ultima_mensagem"],
+        # 152: a conversa. A chave da Anthropic é a da Tradução — aqui só se diz se existe.
+        "modelo": c["modelo"], "modelo_padrao": _conversa().MODELO_PADRAO,
+        "limite_diario": c["limite_diario"] or _conversa().LIMITE_DIARIO_PADRAO,
+        "chave_anthropic": bool(_traducao_chave(cur)),
     }
+
+
+def _conversa():
+    from services import assistente_conversa
+    return assistente_conversa
+
+
+def _traducao_chave(cur) -> str:
+    from services import traducao
+    return traducao._config(cur).get("chave") or ""
 
 
 def salvar(cur, body) -> None:
@@ -157,7 +182,11 @@ def salvar(cur, body) -> None:
     _gravar_linha(cur, body.ativa, body.modo, {
         "numero": numero, "phone_number_id": pnid, "waba_id": (body.waba_id or "").strip(),
         "api_versao": (body.api_versao or "").strip() or API_VERSAO_PADRAO,
-        "verify_token": c["verify_token"] or secrets.token_urlsafe(18)}, cred)
+        "verify_token": c["verify_token"] or secrets.token_urlsafe(18),
+        "modelo": (body.modelo or "").strip(),
+        "limite_diario": body.limite_diario,
+        # ⚠️ Mandado em branco, mantém (a tela não tem o campo: é dos testes).
+        "url_api": c["url_api"] if body.url_api is None else body.url_api.strip()}, cred)
 
 
 def do_assistente(cur, phone_number_id: str | None) -> dict | None:
@@ -384,6 +413,15 @@ def receber(cur, msg: dict) -> int:
     tipo = msg.get("type")
     texto = ((msg.get("text") or {}).get("body") or "").strip() if tipo == "text" else ""
 
+    # ⚠️ **Reenvio da Meta: a mensagem já tratada não volta a ser tratada, por caminho nenhum.**
+    # O código de vínculo reenviado chegava depois de a pessoa já estar vinculada e virava uma
+    # pergunta ao Claude ("Olá! botane K7XM…").
+    cur.execute("""SELECT 1 FROM assistente_mensagens WHERE chave = %s
+                   UNION ALL SELECT 1 FROM assistente_conversa WHERE id_meta = %s LIMIT 1""",
+                (chave, chave))
+    if cur.fetchone():
+        return 0
+
     if texto:
         novo = _verificar_codigo(cur, texto, fone)
         if novo:
@@ -408,10 +446,16 @@ def receber(cur, msg: dict) -> int:
     if not _tem_permissao(cur, id_u):
         responder(cur, chave, fone, f"Olá, {nome}. Seu usuário não tem o assistente liberado — "
                                     "fale com o administrador.", id_u)
-    elif tipo != "text":
+    elif tipo != "text" or not texto:
         responder(cur, chave, fone, f"Olá, {nome}! Por enquanto só entendo mensagens de texto.", id_u)
     else:
-        responder(cur, chave, fone,
-                  f"Olá, {nome}! Reconheci você. O assistente ainda está sendo preparado: logo vou "
-                  "responder suas pendências, receitas e lançar produção por aqui.", id_u)
+        # 152: a pergunta fica guardada e o Claude responde logo depois do 200 do webhook.
+        conversa = _conversa()
+        limite = conversa.configuracao(cur)["limite_diario"]
+        if conversa.perguntas_hoje(cur, id_u) >= limite:
+            responder(cur, f"limite:{fone}:{agora_da_casa().date()}", fone,
+                      f"{nome}, você chegou ao limite de {limite} perguntas por hoje. Amanhã eu volto "
+                      "a responder — ou peça a quem administra o sistema para aumentar o limite.", id_u)
+        else:
+            conversa.guardar_pergunta(cur, id_u, texto, chave)
     return 1

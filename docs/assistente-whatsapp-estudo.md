@@ -129,7 +129,9 @@ Peças novas:
    verdade*: número da casa em Integrações ▸ Assistente; Perfil ▸ Assistente no WhatsApp com código;
    webhook reconhece o funcionário e responde "olá, Fulano". Detalhes em
    `docs/memoria/administrativo.md`.
-2. **Só leitura por texto**: pendências, receita, saldo, vendas de ontem. Sem gravar nada.
+2. **Só leitura por texto** ✅ *1.3.6 (migração 152)*: pendências, receita, saldo, vendas de
+   ontem, com as 96 ferramentas de leitura do conector, em todas as lojas do usuário. Sem gravar
+   nada. Modelo e limite diário em Integrações ▸ Assistente.
 3. **Áudio**: transcrição.
 4. **Gravação com confirmação**: produzir da agenda, produção avulsa, etiqueta, saída/perda.
 5. **Bom dia proativo** (opcional): às 7h, modelo aprovado "Bom dia, {{1}}! Hoje: {{2}}" para

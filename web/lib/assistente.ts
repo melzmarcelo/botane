@@ -46,6 +46,12 @@ export type ConfigAssistente = {
   segredo_configurado: boolean;
   ultimo_status: string | null;
   ultima_mensagem: string | null;
+  /** 152: a conversa. Em branco = `modelo_padrao`. */
+  modelo: string;
+  modelo_padrao: string;
+  limite_diario: number;
+  /** A chave da Anthropic é a da Tradução: aqui só se diz se existe. */
+  chave_anthropic: boolean;
 };
 
 export type GravarConfigAssistente = {
@@ -58,6 +64,8 @@ export type GravarConfigAssistente = {
   /** Em branco = mantém o que já está gravado. */
   token: string;
   app_secret: string;
+  modelo: string;
+  limite_diario: number;
 };
 
 export const vinculoAssistente = () => api.get<VinculoAssistente>("/assistente/vinculo");
