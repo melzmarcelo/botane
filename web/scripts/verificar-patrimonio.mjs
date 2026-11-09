@@ -88,9 +88,25 @@ try {
 
   console.log("\n2. a ficha e a manutenção");
   await p.goto(`${WEB}/patrimonio/${bem.id}`, { waitUntil: "networkidle2" });
-  await p.waitForSelector("#manutencao-registrar", { timeout: 20000 }).catch(() => {});
+  await p.waitForSelector("#bem-faixa", { timeout: 20000 }).catch(() => {});
   const cab = await p.evaluate(() => document.querySelector("main header")?.innerText ?? "");
   checar("o cabeçalho traz o código e 'Vencida'", cab.includes(bem.codigo) && /Vencida/.test(cab), cab);
+  // 🔑 156 (09/11/2026): a ficha em abas, com os quatro números numa faixa acima.
+  const abasDaFicha = await p.evaluate(() => ({
+    faixa: document.querySelector("#bem-faixa")?.innerText ?? "",
+    abas: [...document.querySelectorAll('[role="tablist"] [role="tab"]')].map((b) => b.textContent?.trim()),
+    plaqueta: !!document.querySelector("#bem-plaqueta-previa svg rect"),
+  }));
+  checar("a faixa mostra garantia, próxima preventiva, última manutenção e custo acumulado",
+    ["Garantia", "Próxima preventiva", "Última manutenção", "Custo acumulado"].every((t) => abasDaFicha.faixa.includes(t)), abasDaFicha.faixa);
+  checar("as cinco abas", ["Dados do bem", "Garantia", "Preventiva", "Manutenções", "Custos"]
+    .every((t) => abasDaFicha.abas.some((a) => a?.startsWith(t))), abasDaFicha.abas);
+  checar("a aba Dados do bem mostra a prévia da plaqueta com o QR", abasDaFicha.plaqueta);
+  // O botão do cabeçalho leva à aba Manutenções, no formulário.
+  await p.click("#bem-registrar-manutencao");
+  await p.waitForSelector("#manutencao-registrar", { timeout: 15000 }).catch(() => {});
+  checar("'Registrar manutenção' abre a aba Manutenções e põe ?aba= no endereço",
+    !!(await p.$("#manutencao-registrar")) && p.url().includes("aba=manutencoes"), p.url());
   await p.select("#manutencao-tipo", "PREVENTIVA");
   await p.$eval("#manutencao-descricao", (e) => { e.value = ""; });
   await p.type("#manutencao-descricao", "limpeza e calibração");
@@ -103,6 +119,12 @@ try {
   }));
   checar("registrar a preventiva de hoje põe 'Em dia'", /Em dia/.test(depois.cab), depois.cab);
   checar("e o histórico mostra o registro", depois.hist.includes("limpeza e calibração"), depois.hist);
+  checar("e marca a de hoje como recente", /recente/.test(depois.hist), depois.hist);
+  await p.click("#aba-custos");
+  await p.waitForSelector("#custos-extrato", { timeout: 15000 }).catch(() => {});
+  const custos = await p.evaluate(() => document.querySelector("#custos-extrato")?.innerText ?? "");
+  checar("a aba Custos traz o extrato com a preventiva e o saldo acumulado",
+    /Preventiva/.test(custos) && /Saldo acumulado/i.test(custos), custos);
 
   console.log("\n3. novo bem");
   await p.goto(`${WEB}/patrimonio/novo`, { waitUntil: "networkidle2" });

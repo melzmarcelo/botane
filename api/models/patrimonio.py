@@ -74,6 +74,10 @@ class Manutencao(BaseModel):
     executado_por: str | None = Field(default=None, max_length=120)
     custo: float | None = Field(default=None, ge=0, le=99_999_999)
     descricao: str | None = Field(default=None, max_length=500)
+    # 156 — o que gerou a visita e se a garantia cobriu (os acionamentos da garantia são
+    # estas linhas, não um cadastro à parte).
+    causa: str | None = Field(default=None, max_length=120)
+    coberta_garantia: bool = False
     # 🔑 A situação do bem DEPOIS da visita: a corretiva que consertou devolve o bem ao
     # uso no mesmo gesto — senão ele ficaria "em manutenção" até alguém lembrar.
     situacao_depois: Situacao | None = None

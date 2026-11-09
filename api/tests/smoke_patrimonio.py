@@ -228,6 +228,48 @@ try:
     checar("apagar a preventiva de hoje volta a última para a anterior (30 dias)",
            st == 200 and d["ultima_preventiva"] == str(hoje - timedelta(days=30)), d["ultima_preventiva"])
 
+    print("\n3b. a ficha em abas (156): causa, garantia, custos, agenda e plaqueta")
+    st, r = chamar("POST", f"/patrimonio/{id_bem}/manutencoes",
+                   {"tipo": "CORRETIVA", "data": str(hoje - timedelta(days=1)), "custo": 0,
+                    "causa": "parou de gelar", "coberta_garantia": True,
+                    "descricao": "troca da placa pela autorizada"}, token=token)
+    checar("a corretiva grava o que gerou e que a garantia cobriu", st == 201, (st, r))
+    st, d = chamar("GET", f"/patrimonio/{id_bem}", token=token)
+    m0 = d["manutencoes"][0]
+    checar("e o detalhe devolve os dois campos",
+           m0["causa"] == "parou de gelar" and m0["coberta_garantia"] is True, m0)
+    checar("sem dizer, a garantia NÃO cobriu",
+           all(m["coberta_garantia"] is False for m in d["manutencoes"][1:]), d["manutencoes"])
+    checar("garantia daqui a 100 dias: ATIVA, com os dias contados",
+           d["status_garantia"] == "ATIVA" and d["garantia_dias"] == 100, d["status_garantia"])
+    c = d["custos"]
+    checar("custos: compra 15.000, preventivas 0, reparos 350, total 15.350 e 2,3% da compra",
+           c["compra"] == 15000 and c["preventivas"] == 0 and c["corretivas"] == 350
+           and c["total"] == 15350 and c["manutencao_pct"] == 2.3, c)
+    checar("o extrato começa na compra e acumula até o total, do mais velho ao mais novo",
+           c["extrato"][0]["o_que"] == "Compra" and c["extrato"][-1]["saldo"] == 15350
+           and [l["data"] for l in c["extrato"][1:]] == sorted(l["data"] for l in c["extrato"][1:]),
+           c["extrato"])
+    checar("a agenda traz 4 visitas, a primeira é a próxima preventiva",
+           len(d["agenda_preventiva"]) == 4 and d["agenda_preventiva"][0] == d["proxima_preventiva"]
+           and d["agenda_preventiva"] == sorted(d["agenda_preventiva"]), d["agenda_preventiva"])
+    checar("uma manutenção recente conta na faixa (3 nos últimos 90 dias)",
+           d["manutencoes_recentes"] == 3, d["manutencoes_recentes"])
+    pq = d["plaqueta"]
+    checar("a prévia da plaqueta traz o QR quadrado, o link do código e o tamanho do rolo",
+           len(pq["qr"]) >= 21 and all(len(l) == len(pq["qr"]) for l in pq["qr"])
+           and pq["link"].endswith(f"/patrimonio/b/{codigo}") and pq["largura_mm"] > 0, pq["link"])
+    st, r = chamar("PUT", f"/patrimonio/{id_bem}",
+                   {"garantia_ate": str(hoje + timedelta(days=10))}, token=token)
+    checar("garantia daqui a 10 dias: VENCE_30", r.get("status_garantia") == "VENCE_30", r)
+    st, r = chamar("PUT", f"/patrimonio/{id_bem}", {"garantia_ate": None}, token=token)
+    checar("sem data: SEM garantia", r.get("status_garantia") == "SEM", r)
+    st, tipo, rel = baixar(f"/exportar/patrimonio-manutencoes.csv?busca_bem={marca}", token)
+    texto = rel.decode("utf-8-sig") if isinstance(rel, bytes) else str(rel)
+    checar("o relatório de manutenções traz O que gerou e Garantia cobriu",
+           "O que gerou" in texto and "Garantia cobriu" in texto and "parou de gelar" in texto,
+           texto[:300])
+
     print("\n4. baixa")
     st, r = chamar("DELETE", f"/patrimonio/{id_bem}", token=token)
     checar("bem com histórico não se apaga (409)", st == 409, (st, r))

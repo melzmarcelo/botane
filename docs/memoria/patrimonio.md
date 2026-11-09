@@ -5,6 +5,39 @@
 
 ## O que já existe
 
+- 🔑 **A ficha do bem em ABAS** (1.3.11, migração `156_manutencao_causa_garantia.sql`, 09/11/2026).
+  Pedido do dono, com um desenho da ficha (Dados do bem · Garantia · Preventiva · Manutenções ·
+  Custos) e *"lembrar de ajustar o layout mas deixar no padrão que temos o sistema hoje"* → análise
+  em duas entregas → *"pode seguir"*. **Esta é a entrega 1.**
+  - **Padrão da casa, não o do desenho**: faixa de 4 cartões = a do Início (`.faixa-hoje`, cada
+    cartão leva à aba), abas = as da ficha do produto (`role="tablist"`), blocos em `Cartao`,
+    botões Imprimir plaqueta · Registrar manutenção · Salvar no cabeçalho. Código continua
+    `PAT-` (o desenho dizia BOT-).
+  - **Um formulário só** (`id="bem-form"`) para Dados/Garantia/Preventiva, estado na página;
+    Manutenções e Custos FORA dele (form dentro de form não existe). O Salvar é
+    `form="bem-form"` e o form existe sempre, mesmo vazio nas outras abas.
+  - **A aba vai no endereço** (`?aba=manutencoes`). Arquivos: `[id]/page.tsx` + `form.ts`,
+    `faixa.tsx`, `abas-da-ficha.tsx`, `aba-*.tsx`, `plaqueta.tsx`, `valor.tsx`.
+  - **Calculado no servidor, nada gravado**: `status_garantia` (ATIVA / VENCE_30 / FORA / SEM, a
+    mesma janela de 30 dias), `garantia_dias`, `preventiva_dias` (no `_SELECT`); em `obter`:
+    `custos` (compra, preventivas, corretivas, total, % sobre a compra, extrato com saldo — em
+    Decimal), `agenda_preventiva` (4 visitas, mesma soma de meses da próxima),
+    `manutencoes_recentes` (90 dias) e `plaqueta`.
+  - 🔑 **Prévia da plaqueta = matriz do QR do servidor** (mesmo `QrCodeWidget` do PDF), desenhada
+    em SVG: o navegador não ganha biblioteca de QR. ⚠️ A matriz só existe depois de `draw()`.
+    ⚠️ O tamanho é o do rolo de Etiquetas (`pagina_mm`), A4 = 60 × 40.
+  - **156**: `bem_manutencoes.causa` ("o que gerou") e `coberta_garantia`. 🔑 Os acionamentos da
+    garantia SÃO essas manutenções, não um cadastro à parte. Vão também no relatório
+    `patrimonio-manutencoes` (O que gerou, Garantia cobriu) e no conector `registrar_manutencao`.
+  - "Exige preventiva" desligado = `preventiva_meses` nulo (não há sim/não gravado à parte).
+  - O valor atual ficou na aba Dados (`#bem-valor-atual`, ao lado da vida útil que o muda — a
+    bateria depende disso) e repetido em Custos.
+  - ⏳ **Entrega 2, esperando decisão do dono**: foto e documentos anexados (o disco do App
+    Platform some a cada deploy — banco ou Spaces?), responsável (texto ou usuário), prazo de
+    garantia em meses + tipo, checklist da preventiva, ligação real com a nota de entrada e a
+    "situação no Omie" dos custos (o sistema só LÊ o Omie).
+  - Cobertura: `smoke_patrimonio.py` 3b (62 no total), `verificar-patrimonio.mjs` seção 2 (40).
+
 - 🔑 **Abas Bens · Conferência · Valor** (`patrimonio/abas.tsx`, 1.1.151, auditoria de
   29/10/2026): eram botões no meio de "Novo bem" e "Imprimir". Cada aba é uma página; os ids
   `patrimonio-conferencias`/`patrimonio-valor` são os dos botões de antes (a bateria clica neles).

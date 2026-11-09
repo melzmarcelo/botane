@@ -1652,6 +1652,9 @@ FERRAMENTAS: list[Ferramenta] = [
          "executado_por": Param("string", "Técnico ou empresa.", no_corpo=True),
          "custo": Param("number", "Quanto custou, em reais.", no_corpo=True),
          "descricao": Param("string", "O que foi feito.", no_corpo=True),
+         "causa": Param("string", "O que gerou a visita (ex.: preventiva programada, parou "
+                                  "de gelar).", no_corpo=True),
+         "coberta_garantia": Param("boolean", "A garantia cobriu esta visita.", no_corpo=True),
          "situacao_depois": Param("string", "A situação do bem depois da visita (ex.: EM_USO "
                                             "quando a corretiva consertou).",
                                   enum=["EM_USO", "EM_MANUTENCAO", "PARADO", "DESATIVADO"],

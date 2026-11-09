@@ -3100,6 +3100,7 @@ def _manutencoes(cur, id_unidade: int, f: dict) -> Saida:
     busca = (f.get("busca_bem") or "").strip() or None
     cur.execute(
         """SELECT m.data, m.tipo, m.executado_por, m.custo, m.descricao AS o_que,
+                  m.causa, CASE WHEN m.coberta_garantia THEN 'Sim' ELSE '' END AS garantia,
                   b.codigo, b.descricao AS equipamento, s.nome AS setor, u.nome AS registrado_por
              FROM bem_manutencoes m
              JOIN bens b ON b.id = m.id_bem
@@ -3126,8 +3127,8 @@ def _manutencoes(cur, id_unidade: int, f: dict) -> Saida:
         linhas,
         [("data", "Data"), ("codigo", "Código"), ("equipamento", "Equipamento"),
          ("setor", "Setor"), ("tipo_txt", "Tipo"), ("executado_por", "Feito por"),
-         ("custo", "Custo (R$)"), ("o_que", "O que foi feito"),
-         ("registrado_por", "Registrado por")],
+         ("causa", "O que gerou"), ("custo", "Custo (R$)"), ("garantia", "Garantia cobriu"),
+         ("o_que", "O que foi feito"), ("registrado_por", "Registrado por")],
         "Patrimônio — manutenções",
         [("Período", _intervalo(inicio, fim)), ("Registros", len(linhas)),
          ("Preventivas", sum(1 for l in linhas if l["tipo"] == "PREVENTIVA")),

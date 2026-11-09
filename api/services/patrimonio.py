@@ -30,6 +30,12 @@ PREVENTIVA = {"VENCIDA": "Vencida", "VENCE_30": "Vence em 30 dias",
               "SEM_REGISTRO": "Sem a data da última", "EM_DIA": "Em dia",
               "SEM_PLANO": "Sem plano", "FORA": "Fora de uso"}
 TIPOS_MANUTENCAO = {"PREVENTIVA": "Preventiva", "CORRETIVA": "Corretiva"}
+GARANTIA = {"ATIVA": "Em garantia", "VENCE_30": "Vence em 30 dias",
+            "FORA": "Fora de garantia", "SEM": "Sem garantia"}
+# Quantas visitas a agenda da preventiva mostra à frente.
+VISITAS_NA_AGENDA = 4
+# "Recente" no histórico e na faixa da ficha.
+RECENTE_DIAS = 90
 # ⚠️ Fora dos alertas e do status: o bem que não está na casa (baixado, desativado) e
 # a sugestão que ninguém confirmou não cobram preventiva de ninguém.
 FORA_DE_USO = ("A_CONFIRMAR", "DESATIVADO", "BAIXADO")
@@ -47,7 +53,13 @@ _SELECT = f"""
                 WHEN pv.proxima < current_date THEN 'VENCIDA'
                 WHEN pv.proxima <= current_date + {JANELA_DIAS} THEN 'VENCE_30'
                 ELSE 'EM_DIA' END AS status_preventiva,
-           (b.garantia_ate IS NOT NULL AND b.garantia_ate >= current_date) AS em_garantia
+           (b.garantia_ate IS NOT NULL AND b.garantia_ate >= current_date) AS em_garantia,
+           CASE WHEN b.garantia_ate IS NULL THEN 'SEM'
+                WHEN b.garantia_ate < current_date THEN 'FORA'
+                WHEN b.garantia_ate <= current_date + {JANELA_DIAS} THEN 'VENCE_30'
+                ELSE 'ATIVA' END AS status_garantia,
+           (b.garantia_ate - current_date) AS garantia_dias,
+           (pv.proxima - current_date) AS preventiva_dias
       FROM bens b
       LEFT JOIN setores s ON s.id = b.id_setor
       LEFT JOIN locais_estoque l ON l.id = b.id_local
@@ -65,6 +77,7 @@ def _rotulos(d: dict) -> dict:
     d["criticidade_txt"] = CRITICIDADES.get(d.get("criticidade")) if d.get("criticidade") else None
     d["tensao_txt"] = TENSOES.get(d.get("tensao")) if d.get("tensao") else None
     d["preventiva_txt"] = PREVENTIVA.get(d.get("status_preventiva"), "")
+    d["garantia_txt"] = GARANTIA.get(d.get("status_garantia"), "")
     return d
 
 
@@ -163,6 +176,13 @@ def obter(cur, id_bem: int, id_unidade: int, *, ve_valor_estoque: bool = False) 
     bem["manutencoes"] = [dict(r) | {"tipo_txt": TIPOS_MANUTENCAO[r["tipo"]]}
                           for r in cur.fetchall()]
     bem["custo_manutencao"] = float(sum((m["custo"] or 0) for m in bem["manutencoes"]))
+    bem["custos"] = _custos(bem)
+    bem["agenda_preventiva"] = _agenda(cur, bem)
+    hoje = relogio.hoje_da_casa()
+    bem["manutencoes_recentes"] = sum(1 for m in bem["manutencoes"]
+                                      if (hoje - m["data"]).days <= RECENTE_DIAS)
+    bem["recente_dias"] = RECENTE_DIAS
+    bem["plaqueta"] = previa_plaqueta(cur, bem)
     # 141: a depreciação até hoje (ou até a baixa) — a mesma conta do relatório do valor.
     from services.patrimonio_valor import calcular
     bem["valor"] = calcular(bem, relogio.hoje_da_casa())
@@ -180,6 +200,62 @@ def obter(cur, id_bem: int, id_unidade: int, *, ve_valor_estoque: bool = False) 
             "produtos": e["produtos"],
             "valor": round(float(e["valor"]), 2) if ve_valor_estoque else None}
     return bem
+
+
+def _custos(bem: dict) -> dict:
+    """A aba Custos: compra, preventivas e reparos separados, o total, quanto a manutenção já
+    representa sobre a compra e o extrato com o saldo acumulado.
+
+    🔑 **Tudo calculado das manutenções**, nada gravado — gravado, divergiria no primeiro
+    registro apagado. Somado em `Decimal`: são centavos.
+    """
+    from decimal import Decimal
+
+    def dec(v) -> Decimal:
+        return Decimal(str(v)) if v is not None else Decimal(0)
+
+    compra = dec(bem["valor_compra"])
+    prev = sum((dec(m["custo"]) for m in bem["manutencoes"] if m["tipo"] == "PREVENTIVA"),
+               Decimal(0))
+    corr = sum((dec(m["custo"]) for m in bem["manutencoes"] if m["tipo"] == "CORRETIVA"),
+               Decimal(0))
+    extrato, saldo = [], Decimal(0)
+    if bem["valor_compra"] is not None:
+        saldo = compra
+        extrato.append({"data": bem["data_compra"], "o_que": "Compra",
+                        "detalhe": " · ".join(v for v in (
+                            bem.get("fornecedor"),
+                            f"NF {bem['nota_fiscal']}" if bem.get("nota_fiscal") else None) if v)
+                        or None,
+                        "valor": float(compra), "saldo": float(saldo)})
+    # Do mais velho para o mais novo: é a ordem em que o saldo se acumula.
+    for m in sorted(bem["manutencoes"], key=lambda m: (m["data"], m["id"])):
+        saldo += dec(m["custo"])
+        extrato.append({"data": m["data"], "o_que": TIPOS_MANUTENCAO[m["tipo"]],
+                        "detalhe": m.get("causa") or m.get("descricao"),
+                        "garantia": m.get("coberta_garantia", False),
+                        "valor": float(dec(m["custo"])) if m["custo"] is not None else None,
+                        "saldo": float(saldo)})
+    manutencao = prev + corr
+    return {"compra": float(compra) if bem["valor_compra"] is not None else None,
+            "preventivas": float(prev), "corretivas": float(corr),
+            "manutencao": float(manutencao), "total": float(compra + manutencao),
+            # Sem compra, não há sobre o que calcular a porcentagem.
+            "manutencao_pct": (round(float(manutencao / compra * 100), 1)
+                               if compra > 0 else None),
+            "extrato": extrato}
+
+
+def _agenda(cur, bem: dict) -> list:
+    """As próximas visitas da preventiva — a próxima e as seguintes, de intervalo em
+    intervalo. Calculadas pelo banco com a mesma soma de meses da `proxima_preventiva`."""
+    if not bem["proxima_preventiva"] or bem["status_preventiva"] == "FORA":
+        return []
+    cur.execute(
+        """SELECT (%s::date + make_interval(months => %s * k))::date AS data
+             FROM generate_series(0, %s) k ORDER BY k""",
+        (bem["proxima_preventiva"], int(bem["preventiva_meses"]), VISITAS_NA_AGENDA - 1))
+    return [r["data"] for r in cur.fetchall()]
 
 
 def por_codigo(cur, codigo: str) -> dict:
@@ -315,10 +391,11 @@ def registrar_manutencao(cur, id_bem: int, id_unidade: int, id_usuario: int,
         raise HTTPException(status_code=400, detail="Baixa é no cadastro do bem, com o motivo.")
     cur.execute(
         """INSERT INTO bem_manutencoes (id_bem, tipo, data, executado_por, custo, descricao,
-                                        id_usuario)
-           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                        causa, coberta_garantia, id_usuario)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (id_bem, dados["tipo"], dados["data"], dados.get("executado_por"), dados.get("custo"),
-         dados.get("descricao"), id_usuario))
+         dados.get("descricao"), dados.get("causa"), bool(dados.get("coberta_garantia")),
+         id_usuario))
     id_manutencao = cur.fetchone()["id"]
     if dados["tipo"] == "PREVENTIVA" and (bem["ultima_preventiva"] is None
                                           or dados["data"] > bem["ultima_preventiva"]):
@@ -451,6 +528,31 @@ def do_produto(cur, id_unidade: int, id_produto: int, *, ve_custo: bool = False)
 
 def link(codigo: str) -> str:
     return f"{WEB_URL.rstrip('/')}/patrimonio/b/{codigo}"
+
+
+def previa_plaqueta(cur, bem: dict) -> dict:
+    """A prévia da plaqueta na ficha: o QR como matriz (a tela desenha em SVG, sem biblioteca
+    de QR no pacote do navegador), o link e o tamanho do rolo configurado.
+
+    ⚠️ **O tamanho é o do rolo das etiquetas**, não um fixo: a plaqueta sai na mesma impressora
+    (`plaquetas_pdf`). Sem rolo (folha A4), a plaqueta da folha: 60 × 40 mm.
+    🔑 A matriz sai do MESMO codificador do PDF, com o mesmo nível de correção — a prévia é o QR
+    que vai ser impresso, não um parecido.
+    """
+    from reportlab.graphics.barcode.qr import QrCodeWidget
+
+    from services import etiquetas
+
+    w = QrCodeWidget(link(bem["codigo"]), barLevel="M")
+    # ⚠️ A matriz só é montada no `draw()` (é o que o PDF chama); antes dele ela é vazia.
+    w.draw()
+    qr = w.qr
+    n = qr.getModuleCount()
+    pagina = etiquetas.pagina_mm(etiquetas.config(cur, bem["id_unidade"]))
+    largura, altura = (pagina or (60, 40))[:2]
+    return {"link": link(bem["codigo"]),
+            "qr": ["".join("1" if qr.isDark(r, c) else "0" for c in range(n)) for r in range(n)],
+            "largura_mm": float(largura), "altura_mm": float(altura)}
 
 
 def _desenhar(c, x: float, y: float, w: float, h: float, b: dict, casa: str) -> None:

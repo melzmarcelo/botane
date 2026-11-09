@@ -22,6 +22,16 @@ export const PREVENTIVA: Record<string, string> = {
 export const COR_PREVENTIVA: Record<string, "alerta" | "erva" | "neutro"> = {
   VENCIDA: "alerta", VENCE_30: "alerta", EM_DIA: "erva",
 };
+/** 156 — a situação da garantia, calculada pelo servidor (`garantia_ate` contra hoje). */
+export const COR_GARANTIA: Record<string, "alerta" | "erva" | "neutro"> = {
+  ATIVA: "erva", VENCE_30: "alerta", FORA: "neutro", SEM: "neutro",
+};
+/** A periodicidade da preventiva pelo nome; o resto é "a cada N meses". */
+export const PERIODICIDADES: Record<string, string> = {
+  "1": "Mensal", "2": "Bimestral", "3": "Trimestral", "6": "Semestral", "12": "Anual",
+};
+export const periodicidade = (meses: number | null) =>
+  !meses ? "Sem plano" : PERIODICIDADES[String(meses)] ?? `A cada ${meses} meses`;
 
 export type Bem = {
   id: number;
@@ -61,6 +71,13 @@ export type Bem = {
   proxima_preventiva: string | null;
   status_preventiva: string;
   em_garantia: boolean;
+  /** 156 — ATIVA, VENCE_30, FORA ou SEM. */
+  status_garantia: string;
+  garantia_txt: string;
+  /** Dias até o fim da garantia (negativo = já venceu). */
+  garantia_dias: number | null;
+  /** Dias até a próxima preventiva (negativo = atrasada). */
+  preventiva_dias: number | null;
   situacao_txt: string;
   criticidade_txt: string | null;
   preventiva_txt: string;
@@ -74,7 +91,23 @@ export type Manutencao = {
   executado_por: string | null;
   custo: number | string | null;
   descricao: string | null;
+  /** 156 — o que gerou a visita e se a garantia cobriu. */
+  causa: string | null;
+  coberta_garantia: boolean;
   registrado_por: string | null;
+};
+
+/** 156 — a aba Custos, calculada pelo servidor das manutenções. */
+export type CustosDoBem = {
+  compra: number | null;
+  preventivas: number;
+  corretivas: number;
+  manutencao: number;
+  total: number;
+  /** Quanto a manutenção já representa sobre a compra (nula sem valor de compra). */
+  manutencao_pct: number | null;
+  extrato: { data: string | null; o_que: string; detalhe: string | null; garantia?: boolean;
+             valor: number | null; saldo: number }[];
 };
 
 export type BemDetalhe = Bem & {
@@ -84,6 +117,13 @@ export type BemDetalhe = Bem & {
   estoque_no_local: { produtos: number; valor: number | null } | null;
   /** 141 — a depreciação até hoje (ou até a baixa), a mesma conta do relatório do valor. */
   valor: Depreciacao;
+  custos: CustosDoBem;
+  /** As próximas visitas da preventiva (a próxima e as seguintes). */
+  agenda_preventiva: string[];
+  manutencoes_recentes: number;
+  recente_dias: number;
+  /** A prévia da plaqueta: o QR (linhas de 0 e 1) e o tamanho do rolo configurado. */
+  plaqueta: { link: string; qr: string[]; largura_mm: number; altura_mm: number };
 };
 
 /** A conta da depreciação de um bem (linear, por mês inteiro) — feita pelo servidor. */
@@ -208,6 +248,7 @@ export const apagar = (id: number) => api.delete<{ message: string }>(`/patrimon
 export const registrarManutencao = (id: number, dados: {
   tipo: string; data: string; executado_por?: string | null; custo?: number | null;
   descricao?: string | null; situacao_depois?: string | null;
+  causa?: string | null; coberta_garantia?: boolean;
 }) => api.post<{ id: number; bem: Bem; message: string }>(`/patrimonio/${id}/manutencoes`, dados);
 export const apagarManutencao = (id: number) =>
   api.delete<{ message: string }>(`/patrimonio/manutencoes/${id}`);

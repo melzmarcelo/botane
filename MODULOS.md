@@ -307,7 +307,7 @@ Pedido do dono em 27/10/2026 — etapas 1 e 2 da proposta; a **conferência pela
 - **Permissões:** `patrimonio.ver`, `patrimonio.cadastrar`, `patrimonio.manutencao`,
   `patrimonio.conferir`
 - **Migração:** `139_patrimonio.sql`, `140_conferencia_patrimonio.sql`,
-  `141_depreciacao_patrimonio.sql`
+  `141_depreciacao_patrimonio.sql`, `156_manutencao_causa_garantia.sql`
 - **Suítes:** `smoke_patrimonio.py`, `smoke_patrimonio_conferencia.py`,
   `smoke_patrimonio_valor.py`
 
