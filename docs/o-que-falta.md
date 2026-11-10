@@ -1,150 +1,137 @@
-# O que falta na primeira parte
+# O que falta
 
-Levantado em 25/08/2026, comparando o [`MAPEAMENTO.md`](../MAPEAMENTO.md) item a item com o
-que existe, e somando o que a análise de desempenho e confiabilidade encontrou com dado real
-na base (2.183 produtos, 817 fornecedores e 30 notas de uma conta de verdade).
-
-A fundação está inteira: acesso, cadastros, fichas com fator de correção e de cocção, razão de
-estoque, inventário com contagem cega, CMV com fechamento e o Omie exercitado contra a conta
-real do cliente. O que segue é o que resta.
+Revisado em 10/11/2026 (versão 1.3.11, migração 156), conferindo no código cada item da
+lista anterior (de 02/09/2026) e somando as pendências registradas nas memórias dos módulos
+(`docs/memoria/`). O primeiro levantamento foi feito em 25/08/2026 a partir do
+[`MAPEAMENTO.md`](../MAPEAMENTO.md).
 
 ---
 
-## 🔴 Sem isto, metade do sistema não produz número
+## 🟠 Código que falta
 
-### Carga inicial das fichas técnicas
+### O envio de e-mail segura a transação do banco (28/08/2026)
 
-**Há zero fichas.** Sem elas não existe CMV teórico; sem CMV teórico não existe variância nem
-food cost — que é o número que o sistema existe para produzir. O painel é honesto e mostra
-"—" em vez de zero, mas metade da tela fica muda.
+`email.enviar(cur, ...)` recebe o cursor e faz a conversa SMTP **dentro** da transação. São
+três chamadores — o botão de teste, a criação de usuário e a recuperação de senha
+(`services/senhas.py`) — e o último é **rota pública**: cada pedido prende uma conexão do pool
+por até `ORCAMENTO_ENVIO` (20 s) enquanto fala com um servidor externo. Com o SMTP mal
+configurado, alguns pedidos seguidos esgotam o pool e derrubam o sistema inteiro, não só o
+e-mail.
 
-Não é código: é levantar as receitas da casa (planilha, caderno ou cabeça da cozinheira) e
-cadastrá-las. O que talvez precise de código é uma **importação em massa** de fichas por
-planilha, se o volume justificar.
+O caminho já está aberto: `email.entregar(cfg, msg)` não toca no banco. Falta reordenar os
+chamadores para **ler a configuração, fechar a transação, enviar e só então gravar o status**.
 
----
-
-## 🟠 Falta construir
+⚠️ Na recuperação de senha a ordem importa: o token tem de ser gravado **mesmo que o envio
+falhe** — senão o admin não consegue entregar o link pela tela de Usuários, que é a saída
+prevista para quem não tem SMTP.
 
 ### Remessa de VÁRIOS produtos numa vez (31/08/2026)
+
 `POST /transferencias` já aceita N itens, e a tela de recebimento confere item a item — mas o
 **envio** só nasce por *Estoque ▸ Ajustes*, um produto de cada vez, então na prática cada
 remessa tem um item só. Quem manda a produção da semana para a filial despacha oito produtos
-juntos, num carro só, e hoje isso vira oito remessas para o outro lado conferir uma a uma.
+num carro só, e hoje isso vira oito remessas para o outro lado conferir uma a uma.
 
 Falta a tela `/transferencias/nova`: escolher origem, destino e ir somando produtos, no modelo
-de `/compras/nova`. **O servidor não muda** — é só o formulário que falta.
-
-⚠️ E aí vale a mesma prévia do inventário: quantos itens, e o saldo de cada um na prateleira de
-origem, ANTES do botão.
-
-### Foto na ficha e no produto
-A coluna `foto_url` existe em `fichas_tecnicas`; não há upload nem exibição. Só a logo da
-empresa tem caminho de envio hoje. A cozinha reconhece prato por foto, não por código.
-
-### Cobertura de vínculo como indicador
-O painel mostra a cobertura de **ficha**. O mapeamento (seção 9) pede outra coisa: **% da
-receita do período com prato vinculado à ficha**. CMV teórico de 60% do faturamento não é CMV
-teórico — é metade da conta, e o número precisa dizer isso na cara de quem olha.
-
-### Conciliação por semelhança fora do Python
-Medido: **296 ms por item pendente**, dos quais 94% é comparação de texto contra 2.183
-produtos. Uma nota com 50 itens desconhecidos leva 15 s; reconciliar 1.100 itens levaria 5,4
-minutos numa chamada só. O `pg_trgm` está disponível no servidor e **não instalado** — com
-índice trigrama isso vira milissegundos.
-
----
-
-## 🟡 Falta, e dói quando a base cresce
-
-### A fotografia do razão não sobrevive a lançamento retroativo
-`saldo_apos`/`custo_medio_apos` são calculados na **ordem de lançamento** — decisão de projeto,
-e a certa: recalcular por data faria o CMV de ontem mudar sozinho. A consequência, que só agora
-ficou visível, é que **um movimento gravado hoje com data de trás carrega a fotografia do
-momento em que foi gravado**. Como `valor_do_estoque` e `movimentacao_por_produto` leem o saldo
-de uma data passada pegando o último movimento antes dela, esse retroativo entra como "o
-último" e devolve um saldo que já inclui o que veio antes dele na fila de gravação.
-
-Efeito prático: a identidade `inicial + entradas − saídas = final` abre num recorte que
-**termina antes de hoje**, se houve retroativo depois. Medido na base local: três produtos do
-`smoke_cmv` (que lança retroativo de propósito) abriam R$ 130,00 cada num recorte de um dia. No
-recorte do mês inteiro a conta fecha, porque o retroativo e os movimentos que ele contamina
-caem os dois dentro da janela — foi por isso que passou despercebido enquanto o único período
-possível era o mês.
-
-⚠️ **Não é regressão dos ciclos de fechamento** — é anterior a eles, e sempre esteve ao alcance
-de quem escolhesse datas na mão. Os ciclos só tornaram a janela curta o padrão. A tela nomeia
-essa causa junto com a do saldo negativo.
-
-Consertar de verdade quer dizer parar de usar a fotografia para data passada e reconstruir o
-saldo somando o razão **na ordem de data** — o que é caro (é justamente o que a fotografia
-existe para evitar) e muda o número histórico. A alternativa barata é **impedir retroativo
-fora de período fechado** — hoje só o fechamento trava, e período aberto aceita qualquer data
-de trás. Decidir antes de a casa começar a usar retroativo com frequência.
+de `/compras/nova`. **O servidor não muda.** ⚠️ Vale a mesma prévia do inventário: quantos
+itens, e o saldo de cada um na prateleira de origem, ANTES do botão. Só dói quando a filial
+abrir (ver "Segunda loja" abaixo).
 
 ### Engenharia de cardápio
+
 `cmv.margem_por_prato` já entrega o que cada prato vendeu, custou e deixou. Falta a matriz que
 cruza **popularidade × margem** e classifica em estrela, cavalo de batalha, quebra-cabeça e
 abacaxi — que é o que transforma a lista numa decisão de cardápio.
 
-### Classificar produtos em massa
-O catálogo do Omie trouxe **2.183 produtos sem categoria e sem setor**. Enquanto ficarem
-assim, o relatório de CMV por grupo devolve tudo em "Sem setor" e não serve para nada. Falta
-uma tela de classificação em lote (selecionar N produtos, aplicar categoria e setor).
+### Conciliação por semelhança fora do Python
 
-### ~~Unificar cadastros duplicados~~ — FEITO (27/08/2026)
-O botão **Vincular**, na tela do produto: escolhe-se o outro cadastro numa busca, vê-se a prévia
-e funde. A descrição fica com o nome do lado do Omie e a curta com o do PDV; os códigos das duas
-integrações (`codigo_omie` e o novo `codigo_pdv`) passam para o mesmo cadastro; os campos em
-branco se completam; o que sai vira inativo.
+Medido em 25/08: **296 ms por item pendente**, dos quais 94% é comparação de texto contra os
+produtos. Uma nota com 50 itens desconhecidos leva 15 s. O `pg_trgm` está disponível no
+servidor e **segue sem uso** — com índice trigrama isso vira milissegundos.
 
-🔑 **A detecção automática foi construída e depois REMOVIDA — vale registrar por quê.** Um
-cruzamento por semelhança de nome errava nos dois sentidos: não achava `BEB CERV HEINEKEN 350ML`
-contra `CERVEJA HEINEKEN PILSEN` (o mesmo produto, 63,8%) e juntava `CAKE BOARD N19` com
-`CAKE BOARD N21`, que são tamanhos diferentes. **Nenhum piso separa os dois casos, porque a
-diferença não está no texto.** Quem reconhece produto é gente.
+### Assistente no WhatsApp — o que ficou para depois
 
-⚠️ **O que NÃO foi feito, de propósito: mover saldo e movimentos.** O razão é append-only. Um
-cadastro com movimento fica; é o outro que é absorvido. Onde os DOIS têm movimento, a fusão é
-recusada — juntar duas histórias de estoque exigiria reescrever o razão, e o custo médio
-resultante seria uma invenção.
-
-### `cest` no produto
-Campo fiscal previsto no mapeamento (4.3) e ausente na tabela.
+As cinco etapas do estudo (`docs/assistente-whatsapp-estudo.md`) estão construídas (1.3.5 a
+1.3.9). Falta:
+- **O número de verdade** conectado à Meta — o código está pronto e só roda simulado até lá.
+- **Etiqueta e saída/perda pelo WhatsApp**, pela mesma trilha de prévia + botão Confirmar da
+  produção.
 
 ---
 
-## ⚪ Bloqueado por terceiro — não é dívida nossa
+## 🟡 Infraestrutura
 
-### PDV Legal — falta a ficha técnica dos pratos
-**As vendas e o de-para estão prontos** (26/08/2026). Na conta real: 46 vendas importadas, o
-cardápio de **164 itens** trazido, e **102 itens de venda vinculados** ao prato correspondente.
-
-**O que falta agora é a ficha técnica.** Os 164 pratos nasceram como **rascunho** com
-`producao_propria` marcada — estão na fila de "produzido sem ficha", em Produtos. Enquanto
-nenhum tiver ficha, `com_custo` é zero: a venda entra, a receita aparece, e o **CMV teórico
-continua zero**. É a mesma pendência que já era o maior item desta lista, agora com a lista
-pronta e nomeada em vez de em branco.
-
-Ordem que rende mais: fazer a ficha dos pratos **mais vendidos** primeiro. A tela de Vendas
-ordena por receita, e `cmv.margem_por_prato` mostra o que cada um faturou.
-
-⚠️ **Não case código de cardápio com código de produto.** A primeira versão da cascata fazia
-isso e criou 78 vínculos errados (REDBULL → LIMÃO TAITY). Os dois números são espaços de nome
-diferentes. Vinculam o de-para e o nome idêntico; semelhança vira dica no rascunho.
-
-Também não verificado: a paginação do `cupom/get` (a importação dia a dia não tem teto) e os
-valores de `tipovenda` além do `"B"`.
+- **Filesystem efêmero no App Platform**: `api/uploads/` (logo, fotos) e `api/arquivos/emails/`
+  somem a cada deploy. A saída é o **Spaces** — `api/arquivos.py` já foi escrito para a troca.
+- **Python preso em `3.13.13`** (`api/.python-version`), de propósito e por pouco tempo, porque
+  o buildpack da DO pedia uma versão que não existia lá. Voltar para `3.13` assim que o
+  buildpack aceitar (ver `docs/deploy.md`).
+- **Componente estático `reservas`** no app da DO: desde 16/10 o ingress de `reservas` aponta
+  para o `web`. Remover o componente quando estiver estável — só junto com o dono.
+- **Lighthouse** do site do cliente, pendente desde o Cardápio Vivo.
 
 ---
 
-## Fora do código
+## 🔵 Dados no ar (cadastro, não código)
 
-- **Não há deploy.** O sistema roda só local nesta primeira parte. Hospedagem e **backup**
-  seguem parados desde que foram adiados.
-- **Dados da empresa** incompletos: só razão social e UF preenchidos. Faltam CNPJ, IE, regime
-  tributário, endereço, contador e logo.
-- **Quem recebe login**, e quantos — hoje existe só o administrador.
+- **Limpeza dos insumos em rascunho** (ver memória `botane-limpeza-rascunhos`): hortifruti
+  (seção 2) feito em 06/10; a equipe segue pela tela desde 17/10. Faltam as seções 1 e 3 a 7. O
+  ponto de partida é [`pre-analise-unidades.md`](pre-analise-unidades.md); ler o estado atual
+  com `detalhe_produto` antes de propor lote, porque a lista envelhece sozinha.
+- **Vínculo errado**: o código Omie **000172 (sêmola)** continua ligado ao TOMATE CEREJA (137) —
+  nota de sêmola entraria como tomate. O conector não desvincula: Produto ▸ Vinculados ▸
+  desvincular, pela tela.
+- **Pães da Luciani**: desde 23/10 os códigos 50/51 estão desvinculados do PÃO BOTANE (3448) e
+  do PÃO DE GRÃOS (3449); a próxima nota pode cair em COSTELA (1222) ou TEQUILA (772). A
+  correção está na memória `botane-paes-luciani`.
+- **LeadsFood**: enquanto a casa usar o LeadsFood, os dados de lá andam. No dia da troca,
+  exportar de novo e reimportar (os selos em aberto valem como foto — o arquivo tem de ser a
+  lista inteira).
+- **Fichas técnicas**: eram zero em 25/08 e eram o maior buraco do CMV teórico. Conferir no ar
+  a cobertura atual (painel do CMV, "receita com custo") antes de tratar como resolvido.
+
+---
+
+## ⚪ Só quando a filial abrir
+
+- **No ar só existe UMA loja.** As duas lojas estão provadas na base local
+  (`smoke_duas_lojas.py`), mas vazamento entre lojas só aparece com duas. Módulo novo com
+  `id_unidade` pede varredura de isolamento antes da abertura.
+- A tela de remessa com vários produtos (acima) passa a ser necessária.
+
+---
+
+## 🟡 Limitação conhecida — retroativo não reprocessado
+
+`saldo_apos`/`custo_medio_apos` são calculados na **ordem de lançamento** — decisão de projeto:
+recalcular por data faria o CMV de ontem mudar sozinho. A consequência é que um movimento
+gravado hoje com data de trás carrega a fotografia do momento em que foi gravado, e a
+identidade `inicial + entradas − saídas = final` pode abrir num recorte que termina antes de
+hoje.
+
+Mitigado desde então: o parâmetro `bloquear_retroativo` (ligado por padrão) trava o lançamento
+retroativo para quem não tem `estoque.retroativo`, e existe o reprocessamento do estoque. O que
+**não** se acerta sozinho é o retroativo lançado e não reprocessado (ver
+`docs/memoria/estoque.md`).
+
+---
+
+## ✅ Feito desde a lista anterior
+
+- **Foto na ficha e no produto** — upload, exibição e cópia na nova versão (ver
+  `docs/memoria/producao.md`).
+- **Cobertura por receita** — o CMV mostra a % da receita com custo, não só a cobertura de ficha.
+- **Classificar produtos em massa** — "Alterar em lote" na lista de produtos; a reestruturação
+  de setores, categorias, locais e grupo de CMV entrou no ar em 25/10.
+- **Unificar cadastros duplicados** — botão Vincular/fusão (27/08) e a tela de duplicados.
+  🔑 A detecção automática por semelhança de nome foi construída e REMOVIDA: errava nos dois
+  sentidos, e nenhum piso separa os casos. Quem reconhece produto é gente. ⚠️ Onde os DOIS
+  cadastros têm movimento, a fusão é recusada — o razão é append-only.
+- **`cest` no produto** — migração 031.
+- **Deploy e backup** — no ar em `sistema.botanedeliecafe.com.br` (ver `docs/deploy.md`).
+- **PDV Legal** — vendas, de-para e baixa funcionando. ⚠️ Segue valendo: **não case código de
+  cardápio com código de produto** (a primeira cascata criou 78 vínculos errados, REDBULL →
+  LIMÃO TAITY).
 
 ---
 
@@ -160,20 +147,3 @@ Coisas que mudaram com bom motivo e que o `MAPEAMENTO.md` ainda não registra:
 2. **`modo_producao`** (`PARA_ESTOQUE` / `NA_HORA`) não existia no mapeamento. Sem ele, a casa
    venderia mil cafés e o pó continuaria inteiro no razão.
 3. **`KIT`** era um tipo previsto e não implementado; hoje é `services/kits.py`.
-
-## O envio de e-mail segura a transação do banco (28/08/2026)
-
-`email.enviar(cur, ...)` recebe o cursor e faz a conversa SMTP **dentro** da
-transação. São três chamadores — o botão de teste, a criação de usuário e a
-recuperação de senha — e o último é **rota pública**: cada pedido prende uma
-conexão do pool por até `ORCAMENTO_ENVIO` (20 s) enquanto fala com um servidor
-externo. Numa casa com o SMTP mal configurado, alguns pedidos seguidos esgotam
-o pool e derrubam o sistema inteiro, não só o e-mail.
-
-O caminho já está aberto: `email.entregar(cfg, msg)` não toca no banco. Falta
-reordenar os chamadores para **ler a configuração, fechar a transação, enviar e
-só então gravar o status**.
-
-⚠️ Na recuperação de senha a ordem importa: o token tem de ser gravado **mesmo
-que o envio falhe** — senão o admin não consegue entregar o link pela tela de
-Usuários, que é a saída prevista para quem não tem SMTP.
