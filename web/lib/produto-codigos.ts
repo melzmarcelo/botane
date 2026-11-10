@@ -33,6 +33,49 @@ export const desvincularCodigo = (idProduto: number, c: Linha, devolver: boolean
     { sistema: c.sistema, codigo: c.codigo, id_fornecedor: c.id_fornecedor ?? null, devolver },
   );
 
+/** Um código da origem, como a prévia de "mover códigos" o descreve. */
+export type CodigoMovivel = {
+  sistema: string;
+  codigo: string;
+  id_fornecedor: number | null;
+  fornecedor: string | null;
+  descricao: string | null;
+  /** "principal" (coluna do cadastro) · "vinculado" (apelido) · "fornecedor" (código no fornecedor) */
+  onde: "principal" | "vinculado" | "fornecedor";
+  fator: number | null;
+  fator_confirmado: boolean;
+  /** Decide a quantidade da nota: sem a conversão, não se move. */
+  pede_fator: boolean;
+  fator_sugerido: number | null;
+  ultima_nota: { fator: number; um_nota: string | null; data: string | null } | null;
+  bloqueio?: string;
+};
+
+type LadoDaMudanca = { id: number; codigo: string; nome: string; um_estoque: string | null; ativo: boolean };
+
+export type PreviaDaMudanca = {
+  origem: LadoDaMudanca;
+  destino: LadoDaMudanca;
+  mesma_unidade: boolean;
+  impedimentos: string[];
+  pode: boolean;
+  codigos: CodigoMovivel[];
+  itens_de_nota_abertos: number;
+};
+
+export const previaDaMudanca = (idOrigem: number, idDestino: number) =>
+  api.get<PreviaDaMudanca>(`/produtos/${idOrigem}/codigos/mudanca/previa?id_destino=${idDestino}`);
+
+export const moverCodigos = (
+  idOrigem: number,
+  idDestino: number,
+  codigos: { sistema: string; codigo: string; id_fornecedor: number | null; fator: number | null }[],
+) =>
+  api.post<{ message: string; itens_de_nota: number }>(`/produtos/${idOrigem}/codigos/mover`, {
+    id_destino: idDestino,
+    codigos,
+  });
+
 /** Corrige só o texto do "O que é lá" — produto, fator e cascata não mudam. */
 export const renomearCodigo = (idProduto: number, c: Linha, descricao: string) =>
   api.put<{ message: string }>(`/produtos/${idProduto}/codigos/descricao`, {

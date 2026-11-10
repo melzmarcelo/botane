@@ -11145,7 +11145,8 @@ try {
 // sem eles. Rodam aqui, DEPOIS do navegador fechar, e a soma entra no resumo de baixo, que
 // é a linha que o `promover.ps1` lê. Roteiro que estoura sem resumo conta como falha.
 for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mjs",
-                       "verificar-codigos-do-produto.mjs", "verificar-opcoes-notas-omie.mjs",
+                       "verificar-codigos-do-produto.mjs", "verificar-mover-codigos.mjs",
+                       "verificar-opcoes-notas-omie.mjs",
                        "verificar-reclassificar.mjs", "verificar-motivos.mjs",
                        "verificar-parcelas.mjs", "verificar-setor-produz.mjs",
                        "verificar-precificacao-config.mjs", "verificar-patrimonio.mjs",

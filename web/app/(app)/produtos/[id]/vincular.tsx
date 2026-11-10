@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Etiqueta, Modal } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
+import MoverCodigos from "./mover-codigos";
 
 import { plural } from "@/lib/numeros";
 /**
@@ -148,6 +149,9 @@ export default function Vincular({
   const [previas, setPrevias] = useState<Previa[]>([]);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  // 🔑 A fusão travada (os dois têm movimento) oferece mover só os CÓDIGOS do outro
+  // para cá — o caso CATCHUP × KETCHUP, 10/11/2026.
+  const [movendoDe, setMovendoDe] = useState<Previa | null>(null);
 
   const conferir = useCallback(async () => {
     setErro("");
@@ -365,7 +369,17 @@ export default function Vincular({
               <Aviso key={`trava-${p.escolhido}`} tipo="erro">
                 <b>{p.sai.nome}</b> não pode ser absorvido: {p.impedimentos.join("; ")}. Juntar
                 duas histórias de estoque exigiria reescrever o razão, que é append-only. Tire
-                este da lista — o código dele ainda pode apontar para cá pelo item da nota.
+                este da lista — ou mova só os códigos dele para cá: as próximas notas passam a
+                entrar neste cadastro.
+                <span className="mt-2 block">
+                  <button
+                    type="button"
+                    className="link-acao"
+                    onClick={() => setMovendoDe(p)}
+                  >
+                    mover os códigos de {p.sai.nome} para cá
+                  </button>
+                </span>
               </Aviso>
             ))}
 
@@ -542,6 +556,26 @@ export default function Vincular({
           </div>
         )}
 
+        {movendoDe && (
+          <MoverCodigos
+            idOrigem={movendoDe.escolhido}
+            destino={{
+              id: idProduto,
+              // ⚠️ O destino é SEMPRE este cadastro; `fica` é o da resolução de
+              // direção e pode ser o outro.
+              rotulo: (() => {
+                const aqui = movendoDe.fica.id === idProduto ? movendoDe.fica : movendoDe.sai;
+                return `${aqui.codigo} · ${aqui.nome}`;
+              })(),
+            }}
+            aoFechar={() => setMovendoDe(null)}
+            aoMover={() => {
+              setMovendoDe(null);
+              // Recarrega a tela: os códigos deste cadastro mudaram.
+              aoFundir();
+            }}
+          />
+        )}
       </>
     </Modal>
   );

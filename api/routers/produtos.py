@@ -20,6 +20,7 @@ from models.produtos import (
     FundirGrupoRequest,
     LocalDoProduto,
     LocalDoProdutoRequest,
+    MoverCodigosRequest,
     PrecoDaLoja,
     KitRequest,
     UnidadesCompraRequest,
@@ -548,6 +549,42 @@ def desvincular_codigo(id_produto: int, body: DesvincularCodigoRequest,
         auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "desvincular_codigo",
                             antes={"sistema": r["sistema"], "codigo": r["codigo"]},
                             depois={"devolvido_para": r["devolvido_para"]})
+    return r
+
+
+@router.get("/{id_produto}/codigos/mudanca/previa")
+def previa_da_mudanca(id_produto: int, id_destino: int,
+                      ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """O que mover os códigos deste produto para `id_destino` faria — sem fazer."""
+    with get_cursor() as cur:
+        try:
+            return produtos_vinculo.previa_da_mudanca(cur, id_produto, id_destino)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{id_produto}/codigos/mover")
+def mover_codigos(id_produto: int, body: MoverCodigosRequest,
+                  ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Move códigos deste produto para outro — o caminho quando a fusão recusa
+    porque os dois têm movimento no razão (o caso CATCHUP × KETCHUP, 10/11/2026).
+
+    ⚠️ **Vale daqui para a frente**, como o desvincular: o que já entrou no estoque
+    fica onde está. Só item de nota ainda não lançada muda de dono junto.
+    """
+    with get_cursor() as cur:
+        try:
+            r = produtos_vinculo.mover_codigos(
+                cur, id_produto, body.id_destino,
+                [c.model_dump() for c in body.codigos], ctx.id_usuario)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "mover_codigos",
+                            antes={"id_produto": id_produto},
+                            depois={"id_destino": body.id_destino, "movidos": r["movidos"],
+                                    "notas_recalculadas": r["notas_recalculadas"]})
     return r
 
 

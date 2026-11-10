@@ -1655,6 +1655,8 @@ FERRAMENTAS: list[Ferramenta] = [
          "causa": Param("string", "O que gerou a visita (ex.: preventiva programada, parou "
                                   "de gelar).", no_corpo=True),
          "coberta_garantia": Param("boolean", "A garantia cobriu esta visita.", no_corpo=True),
+         "nota_fiscal": Param("string", "Número da nota fiscal da visita (é por ela que a "
+                                        "ficha acha a conta a pagar no Omie).", no_corpo=True),
          "situacao_depois": Param("string", "A situação do bem depois da visita (ex.: EM_USO "
                                             "quando a corretiva consertou).",
                                   enum=["EM_USO", "EM_MANUTENCAO", "PARADO", "DESATIVADO"],
@@ -2150,6 +2152,43 @@ FERRAMENTAS: list[Ferramenta] = [
                                 no_corpo=True),
          "devolver": Param("boolean", "Devolver o código ao cadastro absorvido da prévia.",
                            padrao=False, no_corpo=True)},
+        metodo="POST"),
+    # 🔑 **Mover códigos** (pedido do dono, 10/11/2026, CATCHUP × KETCHUP): quando a
+    # fusão recusa porque os dois têm movimento, os códigos ainda podem mudar de dono.
+    Ferramenta(
+        "previa_mudanca_de_codigos", "O que mover os códigos de um produto para outro faria",
+        "Antes de `mover_codigos`: lista TODOS os códigos pelos quais a origem é achada "
+        "(principais da coluna, vinculados e código no fornecedor), quais pedem conversão "
+        "(`pede_fator`), a conversão sugerida pela última nota (`fator_sugerido`, só com a "
+        "mesma unidade de estoque) e o que impede. Não muda nada.",
+        "/produtos/{id_produto}/codigos/mudanca/previa",
+        {"id_produto": Param("integer", "O produto de ORIGEM (o que tem os códigos).",
+                             obrigatorio=True),
+         "id_destino": Param("integer", "O produto que passa a receber os códigos.",
+                             obrigatorio=True)}),
+    Ferramenta(
+        "mover_codigos", "Mover códigos de um produto para outro",
+        "Para quando dois cadastros são o mesmo produto e `fundir_produtos` recusa (os dois "
+        "têm movimento). Os códigos escolhidos passam a cair no destino; as próximas notas "
+        "entram nele. ⚠️ Rode `previa_mudanca_de_codigos` e confirme com a pessoa — "
+        "principalmente o `fator` (unidades de estoque do DESTINO em 1 unidade do código), "
+        "obrigatório onde `pede_fator`: errado, a nota entra com a quantidade errada. Vale "
+        "daqui para a frente; o saldo da origem não se move (é saída num, entrada no outro).",
+        "/produtos/{id_produto}/codigos/mover",
+        {"id_produto": Param("integer", "O produto de ORIGEM.", obrigatorio=True),
+         "id_destino": Param("integer", "O produto de destino (ativo).", obrigatorio=True,
+                             no_corpo=True),
+         "codigos": Param("array", "Os códigos a mover, como vieram na prévia.",
+                          obrigatorio=True, no_corpo=True,
+                          itens={"type": "object",
+                                 "properties": {
+                                     "sistema": {"type": "string"},
+                                     "codigo": {"type": "string"},
+                                     "id_fornecedor": {"type": "integer"},
+                                     "fator": {"type": "number",
+                                               "description": "Unidades de estoque do destino "
+                                                              "em 1 unidade do código."}},
+                                 "required": ["sistema", "codigo"]})},
         metodo="POST"),
     Ferramenta(
         "desativar_produto", "Desativar um produto",

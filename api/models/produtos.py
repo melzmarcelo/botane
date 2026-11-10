@@ -257,6 +257,25 @@ class DesvincularCodigoRequest(BaseModel):
     devolver: bool = True
 
 
+class CodigoAMover(BaseModel):
+    """Um código da origem que passa a cair no destino."""
+
+    sistema: str = Field(min_length=1, max_length=20)
+    codigo: str = Field(min_length=1, max_length=60)
+    id_fornecedor: int | None = None
+    # Unidades de estoque do DESTINO em 1 unidade deste código. Obrigatório para o
+    # código do Omie e o do fornecedor — são eles que decidem a quantidade da nota.
+    fator: float | None = Field(default=None, gt=0, le=100000)
+
+
+class MoverCodigosRequest(BaseModel):
+    """Mover códigos de um produto para outro — quando a fusão não pode (os dois
+    têm movimento no razão). Ver `produtos_vinculo.mover_codigos`."""
+
+    id_destino: int
+    codigos: list[CodigoAMover] = Field(min_length=1, max_length=200)
+
+
 class ConversaoDoCodigoRequest(BaseModel):
     """Quantas unidades de ESTOQUE vêm em uma unidade daquele código de fora.
 

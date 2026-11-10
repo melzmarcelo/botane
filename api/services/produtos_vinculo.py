@@ -20,6 +20,8 @@ inventário" — onde a diferença some sem nome. Dentro de uma porta, é o cust
 médio existindo em dois lugares, com cada ficha puxando o de um deles.
 """
 
+from decimal import Decimal
+
 # ⚠️ **O que o absorvido NÃO pode ter — e a lista já foi maior.** A primeira
 # versão barrava nota de entrada e vínculo de fornecedor, e isso estava errado:
 # são PONTEIROS, não história. Um item de nota diz "esta linha é deste produto";
@@ -1039,5 +1041,319 @@ def desvincular_codigo(cur, id_produto: int, sistema: str, codigo: str,
             if devolvido else
             f"O código {linha_codigo} deixou de apontar para este produto. A próxima nota "
             "com ele vai pedir conciliação."),
+    }
+
+
+# ------------------------------------------------------------ mover códigos
+#
+# 🔑 **Pedido do dono (10/11/2026):** CATCHUP e KETCHUP eram o mesmo produto, e a
+# fusão recusou — os DOIS tinham movimento no razão. O saldo foi passado à mão
+# (saída num, entrada no outro) e o CATCHUP desativado, mas os códigos dele
+# continuavam presos nele: a próxima nota da SDB cairia em "produto inativo" e
+# só ali alguém poderia dizer que é o KETCHUP. Mover os códigos é a parte da
+# fusão que NÃO depende de história: código é ponteiro, e ponteiro muda de dono.
+#
+# ⚠️ **A conversão vai JUNTO, e é obrigatória para o que decide quantidade.** O
+# CATCHUP compra em UN (bag de 2 kg); o KETCHUP, em GL de 3,8 kg. Movido sem
+# fator, o código do bag cairia no `fator_compra` do destino e 1 bag entraria
+# como 3,8 kg — o estoque inflando calado. Por isso o código do Omie e o do
+# fornecedor só se movem com fator, gravado CONFIRMADO (o 1 automático a cascata
+# ignora, ver `_fator_do_item`). A sugestão é o que a última nota LANÇADA fez.
+#
+# ⚠️ **O principal do destino não é tocado.** O que vem da coluna da origem
+# (`codigo_omie`, `codigo_barras`) vira APELIDO no destino e a coluna da origem é
+# zerada — senão, com a origem ativa, a coluna ganharia do apelido na cascata.
+# O do PDV segue `pdv.vinculo.gravar`: coluna vazia recebe, ocupada vira apelido.
+#
+# ⚠️ **"Código no fornecedor" (o de `produto_fornecedor`) vira de-para OMIE** do
+# destino — o mesmo que "vincular com aprender" grava, e é o primeiro degrau da
+# cascata. A linha de `produto_fornecedor` da origem fica: é negociação e preço
+# do passado, não ponteiro.
+#
+# ⚠️ Vale da próxima nota em diante. O que já entrou no estoque fica onde está;
+# só itens de nota AINDA NÃO LANÇADA com aqueles códigos mudam de dono (e a nota
+# é recalculada, para a conversão nova valer).
+
+_PEDE_FATOR = ("OMIE", "OMIE_PRODUTO")
+
+
+def _produto_resumo(cur, id_produto: int) -> dict | None:
+    cur.execute(
+        """SELECT id, codigo, nome, um_estoque, ativo, status, fator_compra,
+                  codigo_omie, codigo_pdv, codigo_barras
+             FROM produtos WHERE id = %s""",
+        (id_produto,),
+    )
+    linha = cur.fetchone()
+    return dict(linha) if linha else None
+
+
+def _fator_da_ultima_nota(cur, id_produto: int, sistema: str, codigo: str,
+                          id_fornecedor: int | None) -> dict | None:
+    """Quanto 1 unidade deste código valeu na última nota LANÇADA deste produto."""
+    if sistema == "OMIE_PRODUTO":
+        onde, args = "i.codigo_omie = %s", (codigo,)
+    elif sistema == "EAN":
+        onde, args = "i.codigo_barras = %s", (codigo,)
+    elif sistema == "OMIE" and id_fornecedor:
+        onde, args = ("lower(i.codigo_fornecedor) = lower(%s) AND n.id_fornecedor = %s",
+                      (codigo, id_fornecedor))
+    else:
+        return None
+    cur.execute(
+        f"""SELECT i.quantidade, i.quantidade_convertida, i.um_nota, n.data_emissao
+              FROM nota_itens i JOIN notas_entrada n ON n.id = i.id_nota
+             WHERE i.id_produto = %s AND n.status = 'LANCADA' AND NOT i.ignorado
+               AND i.quantidade > 0 AND i.quantidade_convertida > 0 AND {onde}
+             ORDER BY n.data_emissao DESC NULLS LAST, i.id DESC LIMIT 1""",
+        (id_produto, *args),
+    )
+    linha = cur.fetchone()
+    if not linha:
+        return None
+    fator = Decimal(linha["quantidade_convertida"]) / Decimal(linha["quantidade"])
+    return {"fator": float(round(fator, 6)), "um_nota": linha["um_nota"],
+            "data": linha["data_emissao"].isoformat() if linha["data_emissao"] else None}
+
+
+def _codigos_da_origem(cur, origem: dict, id_destino: int) -> list[dict]:
+    """Tudo pelo que a origem é achada: colunas, apelidos e código no fornecedor."""
+    codigos: list[dict] = []
+
+    for sistema, coluna in (("OMIE_PRODUTO", "codigo_omie"), ("EAN", "codigo_barras"),
+                            ("PDV_LEGAL", "codigo_pdv")):
+        if origem.get(coluna):
+            codigos.append({"sistema": sistema, "codigo": origem[coluna], "id_fornecedor": None,
+                            "fornecedor": None, "descricao": origem["nome"],
+                            "onde": "principal", "fator": None, "fator_confirmado": False})
+
+    cur.execute(
+        """SELECT c.sistema, c.codigo, c.id_fornecedor, f.nome AS fornecedor,
+                  c.descricao_externa, c.fator, c.fator_confirmado
+             FROM codigos_externos c LEFT JOIN fornecedores f ON f.id = c.id_fornecedor
+            WHERE c.id_produto = %s
+            ORDER BY c.sistema, c.codigo""",
+        (origem["id"],),
+    )
+    for r in cur.fetchall():
+        codigos.append({"sistema": r["sistema"], "codigo": r["codigo"],
+                        "id_fornecedor": r["id_fornecedor"], "fornecedor": r["fornecedor"],
+                        "descricao": r["descricao_externa"], "onde": "vinculado",
+                        "fator": float(r["fator"]) if r["fator"] is not None else None,
+                        "fator_confirmado": r["fator_confirmado"]})
+
+    cur.execute(
+        """SELECT pf.id_fornecedor, f.nome AS fornecedor, pf.codigo_no_fornecedor,
+                  c.id_produto AS dono
+             FROM produto_fornecedor pf
+             JOIN fornecedores f ON f.id = pf.id_fornecedor
+             LEFT JOIN codigos_externos c
+                    ON c.sistema = 'OMIE' AND lower(c.codigo) = lower(pf.codigo_no_fornecedor)
+                   AND c.id_fornecedor = pf.id_fornecedor
+            WHERE pf.id_produto = %s AND coalesce(trim(pf.codigo_no_fornecedor), '') <> ''""",
+        (origem["id"],),
+    )
+    for r in cur.fetchall():
+        if r["dono"] == origem["id"]:
+            continue  # já listado como linha de de-para, acima
+        item = {"sistema": "OMIE", "codigo": r["codigo_no_fornecedor"].strip(),
+                "id_fornecedor": r["id_fornecedor"], "fornecedor": r["fornecedor"],
+                "descricao": origem["nome"], "onde": "fornecedor",
+                "fator": None, "fator_confirmado": False}
+        if r["dono"] == id_destino:
+            item["bloqueio"] = "já cai no produto de destino"
+        elif r["dono"]:
+            item["bloqueio"] = "este código deste fornecedor já aponta para outro produto"
+        codigos.append(item)
+    return codigos
+
+
+def previa_da_mudanca(cur, id_origem: int, id_destino: int) -> dict:
+    """O que mover os códigos de `id_origem` para `id_destino` faria — sem fazer."""
+    origem = _produto_resumo(cur, id_origem)
+    destino = _produto_resumo(cur, id_destino)
+    if not origem or not destino:
+        raise LookupError("Produto não encontrado.")
+    impedimentos = []
+    if id_origem == id_destino:
+        impedimentos.append("origem e destino são o mesmo produto")
+    if not destino["ativo"]:
+        # ⚠️ Mover para um inativo prenderia o código de novo num cadastro que a
+        # cascata não acha pela coluna — o mesmo problema que isto resolve.
+        impedimentos.append(f"“{destino['nome']}” está inativo")
+
+    mesma_unidade = (bool(origem["um_estoque"]) and (origem["um_estoque"] or "").upper()
+                     == (destino["um_estoque"] or "").upper())
+    codigos = _codigos_da_origem(cur, origem, id_destino)
+    for c in codigos:
+        c["pede_fator"] = c["sistema"] in _PEDE_FATOR
+        c["ultima_nota"] = _fator_da_ultima_nota(cur, id_origem, c["sistema"], c["codigo"],
+                                                 c["id_fornecedor"])
+        # ⚠️ Só se sugere com a MESMA unidade de estoque: o número da origem fala
+        # a unidade dela, e copiá-lo para outra é o erro do quilo no cadastro em UN.
+        sugerido = None
+        if c["pede_fator"] and mesma_unidade:
+            if c["fator_confirmado"] and c["fator"]:
+                sugerido = c["fator"]
+            elif c["ultima_nota"]:
+                sugerido = c["ultima_nota"]["fator"]
+            elif c["fator"] and c["fator"] != 1:
+                sugerido = c["fator"]
+            elif origem["fator_compra"]:
+                sugerido = float(origem["fator_compra"])
+        c["fator_sugerido"] = sugerido
+
+    cur.execute(
+        """SELECT count(*) AS n FROM nota_itens i JOIN notas_entrada n ON n.id = i.id_nota
+            WHERE i.id_produto = %s AND n.status NOT IN ('LANCADA', 'CANCELADA')
+              AND NOT i.ignorado""",
+        (id_origem,),
+    )
+    abertos = cur.fetchone()["n"]
+
+    def _lado(p: dict) -> dict:
+        return {"id": p["id"], "codigo": p["codigo"], "nome": p["nome"],
+                "um_estoque": p["um_estoque"], "ativo": p["ativo"]}
+
+    return {
+        "origem": _lado(origem),
+        "destino": _lado(destino),
+        "mesma_unidade": mesma_unidade,
+        "impedimentos": impedimentos,
+        "pode": not impedimentos and any(not c.get("bloqueio") for c in codigos),
+        "codigos": codigos,
+        "itens_de_nota_abertos": abertos,
+    }
+
+
+def mover_codigos(cur, id_origem: int, id_destino: int, pedidos: list[dict],
+                  id_usuario: int | None) -> dict:
+    """Move os códigos escolhidos da origem para o destino — ver o bloco acima.
+
+    `pedidos`: `[{sistema, codigo, id_fornecedor, fator}]`, só os marcados. Cada
+    um precisa estar na prévia (recalculada aqui: o que se confirmou é o que
+    acontece) e, se decide quantidade, trazer o fator.
+    """
+    from services.omie import vinculo as vinculo_omie
+    from services.pdv import vinculo as vinculo_pdv
+
+    conferido = previa_da_mudanca(cur, id_origem, id_destino)
+    if conferido["impedimentos"]:
+        raise ValueError("Não dá para mover: " + "; ".join(conferido["impedimentos"]) + ".")
+    if not pedidos:
+        raise ValueError("Escolha ao menos um código para mover.")
+
+    def _chave(sistema: str, codigo: str, id_fornecedor: int | None) -> tuple:
+        return (sistema.upper(), str(codigo).lower(), id_fornecedor or 0)
+
+    conhecidos = {_chave(c["sistema"], c["codigo"], c["id_fornecedor"]): c
+                  for c in conferido["codigos"]}
+    escolhidos = []
+    for p in pedidos:
+        c = conhecidos.get(_chave(p["sistema"], p["codigo"], p.get("id_fornecedor")))
+        if not c:
+            raise LookupError(f"O código {p['codigo']} não é deste produto.")
+        if c.get("bloqueio"):
+            raise ValueError(f"O código {c['codigo']} não pode ser movido: {c['bloqueio']}.")
+        fator = p.get("fator")
+        if c["pede_fator"] and not (fator and fator > 0):
+            raise ValueError(
+                f"Diga quanto vale 1 unidade do código {c['codigo']} em "
+                f"{conferido['destino']['um_estoque'] or 'unidade de estoque'} do destino.")
+        escolhidos.append((c, fator if c["pede_fator"] else None))
+
+    origem, destino = conferido["origem"], conferido["destino"]
+    descricao_padrao = origem["nome"][:200]
+    movidos = []
+    for c, fator in escolhidos:
+        sistema, codigo = c["sistema"], c["codigo"]
+        if c["onde"] == "principal":
+            coluna = _COLUNA_DO_CODIGO[sistema]
+            cur.execute(f"UPDATE produtos SET {coluna} = NULL WHERE id = %s", (id_origem,))
+            if sistema == "OMIE_PRODUTO":
+                vinculo_omie.gravar_apelido(cur, id_destino, codigo, descricao_padrao, id_usuario)
+            elif sistema == "EAN":
+                vinculo_omie.gravar_apelido_ean(cur, id_destino, codigo, descricao_padrao,
+                                                id_usuario)
+            else:
+                vinculo_pdv.gravar(cur, id_destino, codigo, descricao_padrao, id_usuario)
+        elif c["onde"] == "vinculado":
+            cur.execute(
+                """UPDATE codigos_externos SET id_produto = %s, confirmado_por = %s,
+                          confirmado_em = now()
+                    WHERE id_produto = %s AND sistema = %s AND codigo = %s
+                      AND coalesce(id_fornecedor, 0) = coalesce(%s, 0)""",
+                (id_destino, id_usuario, id_origem, sistema, codigo, c["id_fornecedor"]),
+            )
+        else:  # código no fornecedor → de-para OMIE do destino
+            cur.execute(
+                """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
+                                                 id_fornecedor, origem_vinculo, confirmado_por)
+                   VALUES ('OMIE', %s, %s, %s, %s, 'MOVIDO', %s)""",
+                (codigo[:60], id_destino, descricao_padrao, c["id_fornecedor"], id_usuario),
+            )
+        # A marca de onde veio ("veio de outro produto" na aba Vinculados) e, quando
+        # o código decide quantidade, a conversão CONFIRMADA no destino.
+        cur.execute(
+            """UPDATE codigos_externos
+                  SET origem_vinculo = 'MOVIDO',
+                      fator = coalesce(%s, fator),
+                      fator_confirmado = fator_confirmado OR %s
+                WHERE id_produto = %s AND sistema = %s AND codigo = %s
+                  AND coalesce(id_fornecedor, 0) = coalesce(%s, 0)""",
+            (fator, fator is not None, id_destino, sistema, codigo, c["id_fornecedor"]),
+        )
+        movidos.append({"sistema": sistema, "codigo": codigo,
+                        "id_fornecedor": c["id_fornecedor"], "fator": fator})
+
+    # Itens de nota ainda não lançada, destes códigos, mudam de dono — e a nota é
+    # recalculada para a conversão nova valer antes do lançamento.
+    filtros, args = [], []
+    for m in movidos:
+        if m["sistema"] == "OMIE_PRODUTO":
+            filtros.append("i.codigo_omie = %s")
+            args.append(m["codigo"])
+        elif m["sistema"] == "EAN":
+            filtros.append("i.codigo_barras = %s")
+            args.append(m["codigo"])
+        elif m["sistema"] == "OMIE" and m["id_fornecedor"]:
+            filtros.append("(lower(i.codigo_fornecedor) = lower(%s) AND n.id_fornecedor = %s)")
+            args += [m["codigo"], m["id_fornecedor"]]
+    notas_recalculadas: list[int] = []
+    itens_de_nota = 0
+    if filtros:
+        cur.execute(
+            f"""UPDATE nota_itens i SET id_produto = %s
+                  FROM notas_entrada n
+                 WHERE n.id = i.id_nota AND i.id_produto = %s
+                   AND n.status NOT IN ('LANCADA', 'CANCELADA')
+                   AND ({' OR '.join(filtros)})
+             RETURNING i.id_nota""",
+            (id_destino, id_origem, *args),
+        )
+        linhas = cur.fetchall()
+        itens_de_nota = len(linhas)
+        notas_recalculadas = sorted({r["id_nota"] for r in linhas})
+        if notas_recalculadas:
+            from services.omie import importador
+            for id_nota in notas_recalculadas:
+                importador.calcular_nota(cur, id_nota)
+
+    lista = ", ".join(m["codigo"] for m in movidos)
+    nota = f"Códigos {lista} movidos para {destino['codigo']} — {destino['nome']}."
+    cur.execute(
+        """UPDATE produtos
+              SET observacao = trim(both E'\\n' from coalesce(observacao, '') || E'\\n' || %s)
+            WHERE id = %s""",
+        (nota, id_origem),
+    )
+
+    return {
+        "origem": origem, "destino": destino, "movidos": movidos,
+        "itens_de_nota": itens_de_nota, "notas_recalculadas": notas_recalculadas,
+        "message": (f"{len(movidos)} código(s) de “{origem['nome']}” passam a cair em "
+                    f"“{destino['nome']}”. Vale da próxima nota em diante"
+                    + (f"; {itens_de_nota} item(ns) de nota ainda não lançada mudaram junto"
+                       if itens_de_nota else "") + "."),
     }
 

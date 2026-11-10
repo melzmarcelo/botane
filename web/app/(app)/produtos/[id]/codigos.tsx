@@ -10,6 +10,7 @@ import {
   type PreviaDoDesvinculo,
 } from "@/lib/produto-codigos";
 import DescricaoDoCodigo from "./descricao-codigo";
+import MoverCodigos from "./mover-codigos";
 
 import { concorda } from "@/lib/numeros";
 /**
@@ -61,6 +62,7 @@ const ORIGEM: Record<string, string> = {
   MANUAL: "vinculado à mão",
   FUSAO: "veio de uma fusão",
   AUTOMATICO: "reconhecido sozinho",
+  MOVIDO: "veio de outro produto",
 };
 
 export default function CodigosDoProduto({
@@ -86,6 +88,8 @@ export default function CodigosDoProduto({
   );
   const [devolver, setDevolver] = useState(true);
   const [ocupado, setOcupado] = useState("");
+  // 🔑 Mover os códigos para outro produto (10/11/2026, o caso CATCHUP × KETCHUP).
+  const [movendo, setMovendo] = useState(false);
 
   async function pedirDesvinculo(c: CodigoExterno) {
     setOcupado(`${c.sistema}|${c.codigo}`);
@@ -152,17 +156,49 @@ export default function CodigosDoProduto({
     }
   }
 
+  // ⚠️ **O botão aparece mesmo com a tabela vazia**: os códigos PRINCIPAIS (o do
+  // Omie e o EAN da coluna do cadastro) não são listados aqui, e são justamente
+  // os que mais importa mover. A janela mostra todos.
+  const mover = podeEditar && (
+    <>
+      <div className="mb-3 flex justify-end">
+        <button
+          type="button"
+          className="btn btn-secundario"
+          onClick={() => setMovendo(true)}
+          title="Quando outro cadastro é este mesmo produto e a fusão não pode"
+        >
+          Mover códigos para outro produto
+        </button>
+      </div>
+      {movendo && (
+        <MoverCodigos
+          idOrigem={idProduto}
+          aoFechar={() => setMovendo(false)}
+          aoMover={() => {
+            setMovendo(false);
+            aoMudar();
+          }}
+        />
+      )}
+    </>
+  );
+
   if (!codigos.length) {
     return (
-      <Vazio>
-        Nenhum código de fora aponta para este produto ainda. Eles nascem quando uma nota é
-        vinculada à mão ou quando dois cadastros são fundidos.
-      </Vazio>
+      <>
+        {mover}
+        <Vazio>
+          Nenhum código de fora aponta para este produto ainda. Eles nascem quando uma nota é
+          vinculada à mão ou quando dois cadastros são fundidos.
+        </Vazio>
+      </>
     );
   }
 
   return (
     <>
+      {mover}
       <Aviso tipo="info">
         Um fornecedor pode mandar o mesmo produto em embalagens diferentes, cada uma com o seu
         código. Diga aqui <b>quanto vale uma unidade de cada código</b> — o pacote de 500 g de um

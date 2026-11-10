@@ -85,6 +85,34 @@
   cadastro, e sem isso o Enter salvava o produto inteiro junto.
   Cobertura: `smoke_codigos_do_produto.py` (bloco 3) e `verificar-codigos-do-produto.mjs`.
 
+- 🔑 **Mover códigos para outro produto** (`produtos_vinculo.previa_da_mudanca` /
+  `mover_codigos`, `GET /produtos/{id}/codigos/mudanca/previa?id_destino=` e
+  `POST /produtos/{id}/codigos/mover`, 10/11/2026, pedido do dono: CATCHUP × KETCHUP). A fusão
+  recusou — os DOIS tinham movimento no razão —, o saldo foi passado à mão (saída no CATCHUP,
+  entrada no KETCHUP, movimentos 13759/13760 no ar) e o CATCHUP desativado; os códigos ficaram
+  presos nele. Código é ponteiro: muda de dono sem tocar em história.
+  Entradas: botão na aba Vinculados (aparece mesmo com a tabela vazia — os principais da
+  coluna não são listados ali) e o link "mover os códigos de … para cá" no aviso da fusão
+  travada. Janela: `produtos/[id]/mover-codigos.tsx`. Conector: `previa_mudanca_de_codigos`
+  e `mover_codigos`.
+  - A prévia lista TUDO pelo que a origem é achada: colunas (`codigo_omie`, `codigo_barras`,
+    `codigo_pdv` → "principal"), linhas de `codigos_externos` ("vinculado") e
+    `produto_fornecedor.codigo_no_fornecedor` ("fornecedor", que vira de-para `OMIE` do
+    destino — o primeiro degrau da cascata). A linha de `produto_fornecedor` da origem fica.
+  - 🔴 **Conversão obrigatória no `OMIE` e no `OMIE_PRODUTO`**, gravada `fator_confirmado`. O
+    CATCHUP compra bag de 2 kg, o KETCHUP galão de 3,8 kg: sem fator o código caía no
+    `fator_compra` do destino e 1 bag entrava como 3,8 kg. Sugestão (só com a MESMA unidade
+    de estoque): fator confirmado da linha → última nota LANÇADA
+    (`quantidade_convertida / quantidade`) → fator da linha ≠ 1 → `fator_compra` da origem.
+    EAN e PDV não pedem: não decidem quantidade.
+  - ⚠️ O principal do destino não muda: coluna da origem vira APELIDO no destino e é zerada
+    na origem (com a origem ativa, a coluna ganharia do apelido). PDV vai por
+    `pdv.vinculo.gravar` (coluna vazia recebe). Linhas no destino ficam `origem_vinculo =
+    'MOVIDO'` ("veio de outro produto").
+  - ⚠️ Destino inativo é recusado. Item de nota NÃO lançada com aqueles códigos muda de dono e
+    a nota é recalculada (`calcular_nota`); nota lançada não se toca.
+  - Cobertura: `smoke_mover_codigos.py` (34) e `verificar-mover-codigos.mjs` (9).
+
 - ⚠️ **Código único em branco vira NULO no modelo** (23/10/2026, erro 500 no ar desde a 1.1.108):
   `codigo_barras`, `codigo_omie` e `codigo_pdv` têm índice único que só poupa o NULO; o primeiro
   `""` gravado passava e o segundo produto salvo com o campo vazio (o conector manda `""`)
