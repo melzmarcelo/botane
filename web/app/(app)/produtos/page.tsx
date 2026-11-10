@@ -68,6 +68,8 @@ export default function PaginaProdutos() {
   // 🔑 **A situacao**: rascunho e o que ainda nao foi revisado, e "aprovado" e
   // o vocabulario da casa para o produto ja revisado (`status = ATIVO`).
   const [situacao, setSituacao] = useEstadoNaUrl<string>("situacao", "");
+  // 🔑 Vende no PDV (10/11/2026): marcado para o PDV ou com código de lá — a regra é do servidor.
+  const [pdv, setPdv] = useEstadoNaUrl<string>("pdv", "");
   // A ordem do cabeçalho (vazia = a de sempre: ativos primeiro, por nome). Vai na URL e nas visões.
   const [ordem, setOrdem] = useEstadoNaUrl<string>("ordem", "", { atraso: 0 });
   const [direcao, setDirecao] = useEstadoNaUrl<string>("direcao", "asc", { atraso: 0 });
@@ -80,7 +82,7 @@ export default function PaginaProdutos() {
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const [alterando, setAlterando] = useState(false);
   const pag = usePaginacao("produtos", {
-    filtros: [busca, tipo, idCategoria, ativacao, situacao, ordem, direcao],
+    filtros: [busca, tipo, idCategoria, ativacao, situacao, pdv, ordem, direcao],
   });
 
   const carregar = useCallback(async () => {
@@ -111,6 +113,7 @@ export default function PaginaProdutos() {
         q.set("status", "RASCUNHO");
         q.set("em_uso", "false");
       } else if (situacao) q.set("status", situacao);
+      if (pdv) q.set("no_pdv", pdv === "sim" ? "true" : "false");
       if (ordem) {
         q.set("ordem", ordem);
         q.set("direcao", direcao);
@@ -122,7 +125,7 @@ export default function PaginaProdutos() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, busca, tipo, idCategoria, ativacao, situacao, ordem, direcao,
+  }, [pag.pronto, busca, tipo, idCategoria, ativacao, situacao, pdv, ordem, direcao,
       pag.offset, pag.porPagina]);
 
   useEffect(() => {
@@ -362,6 +365,14 @@ export default function PaginaProdutos() {
               <option value="">Ativo</option>
               <option value="nao">Inativo</option>
               <option value="todos">Todos</option>
+            </select>
+          </label>
+          <label className="sm:w-[150px]">
+            <span className="rotulo-campo">PDV</span>
+            <select className="campo mt-1.5" id="produtos-pdv" value={pdv} onChange={(e) => setPdv(e.target.value)}>
+              <option value="">Todos</option>
+              <option value="sim">Vende no PDV</option>
+              <option value="nao">Não vende no PDV</option>
             </select>
           </label>
           <label className="sm:w-[160px]">

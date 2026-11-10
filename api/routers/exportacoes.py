@@ -203,8 +203,11 @@ class _Filtros:
         preventiva_bem: list[str] | None = Query(default=None),
         criticidade_bem: list[str] | None = Query(default=None),
         busca_bem: str | None = Query(default=None, max_length=80),
+        # 🔑 Vende no PDV (10/11/2026): "sim", "nao" ou vazio (todos).
+        pdv_produto: str | None = Query(default=None, max_length=3),
     ):
         self.como_dict = {
+            "pdv_produto": pdv_produto,
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
             "locais": locais, "setores": setores,
             "categorias": categorias, "tipos_produto": tipos_produto,

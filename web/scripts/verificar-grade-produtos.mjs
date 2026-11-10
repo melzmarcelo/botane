@@ -145,6 +145,21 @@ try {
   checar("Restaurar volta às colunas de fábrica", r.includes("Tipo") && !r.includes("Situação"), r);
   await painel(false);
 
+  console.log("\n5b. o filtro do PDV (10/11/2026)");
+  await abrir("/produtos");
+  await p.select("#produtos-pdv", "sim");
+  await p.waitForFunction(() => location.search.includes("pdv=sim"), { timeout: 5000 }).catch(() => {});
+  await esperar(1500);
+  const totalSim = (await api("GET", "/produtos?no_pdv=true&limite=1")).dados;
+  const codigosSim = new Set((await api("GET", "/produtos?no_pdv=true&limite=1000")).dados.map((x) => x.codigo));
+  const naTelaPdv = await p.evaluate(() => [...document.querySelectorAll("table.tabela tbody tr")]
+    .map((tr) => tr.querySelector("td.mono")?.innerText.trim()).filter(Boolean));
+  checar("'Vende no PDV' vai para a URL e a tela só mostra o que o servidor diz que vende no PDV",
+    p.url().includes("pdv=sim") && naTelaPdv.length > 0 && naTelaPdv.every((c) => codigosSim.has(c)),
+    { url: p.url(), naTelaPdv: naTelaPdv.slice(0, 5), totalSim: totalSim?.length });
+  await p.select("#produtos-pdv", "");
+  await esperar(800);
+
   console.log("\n6. no celular");
   await p.setViewport({ width: 390, height: 844 });
   await p.reload({ waitUntil: "networkidle2" });

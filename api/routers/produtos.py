@@ -257,6 +257,9 @@ def listar(
     # `false` é o avesso (29/10/2026, auditoria): o rascunho que ninguém está tocando,
     # candidato a arquivar. Ausente = sem recorte.
     em_uso: bool | None = None,
+    # 🔑 **Vende no PDV** (10/11/2026, pedido do dono): a regra de "vai ao PDV" da ficha —
+    # marcado para o PDV OU com código de lá (ver cadastros.md, "Vai ao PDV NÃO é integrado_pdv").
+    no_pdv: bool | None = None,
     # 🔑 **Ordenar pelo cabeçalho do grid** (layout novo, fase 2 — 05/11/2026). A lista é
     # paginada, então quem ordena é o servidor: ordenar a página no navegador mostraria os 20
     # primeiros por nome reordenados, e não os 20 mais caros. ⚠️ Só as chaves de `ORDENS`.
@@ -297,6 +300,8 @@ def listar(
                AND (NOT %s OR NOT EXISTS
                     (SELECT 1 FROM fichas_tecnicas f WHERE f.id_produto = p.id))
                AND (%s::boolean IS NULL OR __EM_USO__ = %s)
+               AND (%s::boolean IS NULL
+                    OR (p.integrado_pdv OR p.codigo_pdv IS NOT NULL) = %s)
                AND (%s::varchar IS NULL
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     -- 🔑 Quem lança a venda digita o nome do PDV (22/10/2026).
@@ -318,6 +323,7 @@ def listar(
              # `em_uso`, as três vezes em que a condição pergunta pela loja, e de novo
              # `em_uso` (o lado direito do `=`).
              em_uso, id_unidade, id_unidade, id_unidade, em_uso,
+             no_pdv, no_pdv,
              busca, busca, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )

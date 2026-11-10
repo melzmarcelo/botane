@@ -5,6 +5,15 @@
 
 ## O que já existe
 
+- 🔑 **Filtro "PDV" na lista de produtos** (1.3.13, pedido do dono, 10/11/2026): Todos / Vende
+  no PDV / Não vende no PDV (`#produtos-pdv`, `?pdv=sim|nao` na URL). A regra é a da aba PDV
+  da ficha — **marcado (`integrado_pdv`) OU com `codigo_pdv`** —, nunca só `integrado_pdv` (ver
+  "Vai ao PDV NÃO é integrado_pdv" abaixo). É do servidor: `GET /produtos?no_pdv=true|false`.
+  O relatório "Cadastro de produtos" tem o mesmo recorte (filtro `pdv_produto`, que precisou
+  entrar também na classe `_Filtros` de `routers/exportacoes.py` — sem ela o parâmetro era
+  ignorado em silêncio). Cobertura: `smoke_produtos_pdv.py` e a seção 5b do
+  `verificar-grade-produtos.mjs`.
+
 - 🔑 **`em_uso` virou três estados** (1.1.151, auditoria de 29/10/2026): `true` = em uso, `false`
   = o AVESSO (rascunho que ninguém toca: sem nota aberta, sem venda em 30 dias, sem saldo),
   ausente = sem recorte. Na tela, "Rascunho parado". ⚠️ "Parado" não é "nunca usado": vendido há

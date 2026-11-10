@@ -154,8 +154,9 @@ checar("com os oito relatórios da casa",
 
 porchave = {c["chave"]: c for c in catalogo}
 filtros_de = lambda k: [f["nome"] for f in porchave[k]["filtros"]]  # noqa: E731
-checar("o cadastro filtra por tipo, categoria, setor e situação",
-       set(filtros_de("produtos")) == {"tipos_produto", "categorias", "setores", "situacao"},
+checar("o cadastro filtra por tipo, categoria, setor, situação e PDV",
+       set(filtros_de("produtos")) == {"tipos_produto", "categorias", "setores", "situacao",
+                                       "pdv_produto"},
        filtros_de("produtos"))
 checar("o razão filtra por período, movimento, local e produto",
        {"periodo", "tipos_movimento", "locais", "produtos"} <= set(filtros_de("movimentos")),

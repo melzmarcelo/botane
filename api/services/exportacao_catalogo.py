@@ -322,6 +322,12 @@ FILTROS: dict[str, dict] = {
     # 🔑 **Situação + datas, no lugar do ciclo** (22/10/2026, contas a receber).
     # O documento de UM lote sai pela rota do lote (`/exportar/lote-consumo`),
     # que recorta pelo lote e não por data.
+    # 🔑 Vende no PDV (10/11/2026, pedido do dono): o mesmo filtro da lista de produtos —
+    # marcado para o PDV OU com código de lá. Vazio = todos.
+    "pdv_produto": {"tipo": "escolha", "rotulo": "PDV", "ajuda": "todos os produtos",
+                    "opcoes": lambda _c, _u: [{"valor": "", "nome": "Todos"},
+                                              {"valor": "sim", "nome": "Vende no PDV"},
+                                              {"valor": "nao", "nome": "Não vende no PDV"}]},
     "situacao_consumo": {"tipo": "escolha", "rotulo": "Situação",
                          "ajuda": "em aberto — o que ainda não foi cobrado",
                          "opcoes": _opcoes_situacao_consumo},
@@ -623,10 +629,13 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
                    ('ativos' = ANY(%(situacao)s) AND p.ativo AND p.status <> 'RASCUNHO') OR
                    ('inativos' = ANY(%(situacao)s) AND NOT p.ativo) OR
                    ('rascunhos' = ANY(%(situacao)s) AND p.status = 'RASCUNHO'))
+              AND (%(no_pdv)s::boolean IS NULL
+                   OR (p.integrado_pdv OR p.codigo_pdv IS NOT NULL) = %(no_pdv)s)
             ORDER BY lower(p.nome)""",
         {"tipos": _lista(f.get("tipos_produto")),
          "categorias": _lista(f.get("categorias")), "setores": _lista(f.get("setores")),
-         "situacao": situacao, "uni": _id_unidade},
+         "situacao": situacao, "uni": _id_unidade,
+         "no_pdv": {"sim": True, "nao": False}.get(f.get("pdv_produto") or "")},
     )
     linhas = [dict(r) for r in cur.fetchall()]
     # 🔑 **Na planilha, TODOS os campos do cadastro** (pedido do dono, 20/10/2026:
@@ -3209,7 +3218,7 @@ RELATORIOS: dict[str, Relatorio] = {
         "Cadastro de produtos",
         "A ficha de cadastro de cada item. A planilha leva todos os campos; o PDF, os principais.",
         "cadastros.produtos", "produtos",
-        ("tipos_produto", "categorias", "setores", "situacao"), _produtos),
+        ("tipos_produto", "categorias", "setores", "situacao", "pdv_produto"), _produtos),
     "pessoas": Relatorio(
         "Cadastro de pessoas",
         "Fornecedores, equipe e quem consome: contato, política do cupom e compras. "
