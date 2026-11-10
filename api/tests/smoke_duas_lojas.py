@@ -413,8 +413,13 @@ try:
         soma = float(depois_m.get(campo) or 0) + float(depois_f.get(campo) or 0)
         # ⚠️ Outras filiais de teste, já desativadas, podem ter movimento de hoje:
         # por isso a soma das DUAS é o piso, e a igualdade vale quando só há elas.
-        checar(f"empresa = matriz + filial em {campo}",
-               perto(depois_e.get(campo), soma, 0.05), (depois_e.get(campo), soma))
+        # ⚠️ A checagem pedia IGUALDADE apesar do comentário, e quebrou em 10/11/2026: baterias
+        # interrompidas (falta de memória) deixaram filiais de teste com R$ 20 de movimento do
+        # dia. Agora vale o piso; o que prova a conta são os "andou" logo acima.
+        piso = float(depois_e.get(campo) or 0) >= soma - 0.05
+        so_elas = perto(depois_e.get(campo), soma, 0.05)
+        checar(f"empresa >= matriz + filial em {campo}" + ("" if so_elas else " (há outra filial no dia)"),
+               piso, (depois_e.get(campo), soma))
 
     print("\n9. os relatórios do CMV respeitam a loja")
     for nome, unidade, esperado in (("matriz", MATRIZ, None), ("filial", FILIAL, 6)):
@@ -671,8 +676,9 @@ try:
                bool(ap) and perto(conta, ap.get("cmv_real"), 0.05), (conta, ap.get("cmv_real")))
     for campo in ("compras", "estoque_final", "cmv_real", "receita"):
         soma = float(fim_m.get(campo) or 0) + float(fim_f.get(campo) or 0)
-        checar(f"e a empresa continua sendo matriz + filial em {campo}",
-               perto(fim_e.get(campo), soma, 0.05), (fim_e.get(campo), soma))
+        # O mesmo piso da seção 8: outra filial de teste com movimento do dia só pode SOMAR.
+        checar(f"e a empresa continua sendo pelo menos matriz + filial em {campo}",
+               float(fim_e.get(campo) or 0) >= soma - 0.05, (fim_e.get(campo), soma))
     # filial: 14 KG a 5,777778 + 4 bolos a 3,00 (a venda foi cancelada).
     checar("o estoque da filial vale 14 x 5,7778 + 4 x 3,00 = 92,89",
            perto(fim_f.get("estoque_final"), 14 * (11 * 64 / 12 + 28) / 15 + 12, 0.02),
