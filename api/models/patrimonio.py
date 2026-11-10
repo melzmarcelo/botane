@@ -9,6 +9,8 @@ Tensao = Literal["110V", "220V", "380V", "GAS", "NA"]
 Criticidade = Literal["ALTA", "MEDIA", "BAIXA"]
 Situacao = Literal["A_CONFIRMAR", "EM_USO", "EM_MANUTENCAO", "PARADO", "DESATIVADO", "BAIXADO"]
 TipoManutencao = Literal["PREVENTIVA", "CORRETIVA"]
+# 157 — de quem é a garantia.
+GarantiaTipo = Literal["FABRICA", "ESTENDIDA", "LOJA"]
 
 # Os campos que o cadastro edita — a mesma lista do `PUT` e da importação.
 CAMPOS = ("apelido", "descricao", "id_produto", "id_setor", "id_local", "marca", "modelo",
@@ -16,7 +18,9 @@ CAMPOS = ("apelido", "descricao", "id_produto", "id_setor", "id_local", "marca",
           "nota_fiscal", "garantia_ate", "assistencia", "assistencia_contato", "criticidade",
           "situacao", "motivo_baixa", "preventiva_meses", "ultima_preventiva", "observacao",
           # 141: a vida útil (vazia = o padrão de 10 anos) e quando saiu da casa.
-          "vida_util_anos", "data_baixa")
+          "vida_util_anos", "data_baixa",
+          # 157: responsável (texto), garantia em meses + tipo e o checklist da preventiva.
+          "responsavel", "garantia_meses", "garantia_tipo", "preventiva_checklist")
 
 
 class Bem(BaseModel):
@@ -48,6 +52,14 @@ class Bem(BaseModel):
     vida_util_anos: int | None = Field(default=None, ge=1, le=50)
     # 141 — vazia na baixa = hoje (o banco preenche); fora do baixado, o banco limpa.
     data_baixa: date | None = None
+    # 157 — quem responde pelo bem: TEXTO livre (decisão do dono, 10/11/2026), como a planilha.
+    responsavel: str | None = Field(default=None, max_length=120)
+    # 157 — o prazo em meses; com a data de compra, o servidor calcula `garantia_ate` quando
+    # ela vem vazia (a tela já a preenche, e ela continua editável).
+    garantia_meses: int | None = Field(default=None, ge=1, le=240)
+    garantia_tipo: GarantiaTipo | None = None
+    # 157 — os itens a verificar em cada preventiva. Nulo vira lista vazia.
+    preventiva_checklist: list[str] | None = Field(default_factory=list, max_length=30)
 
     @model_validator(mode="after")
     def _baixa_com_motivo(self):
@@ -81,6 +93,18 @@ class Manutencao(BaseModel):
     # 🔑 A situação do bem DEPOIS da visita: a corretiva que consertou devolve o bem ao
     # uso no mesmo gesto — senão ele ficaria "em manutenção" até alguém lembrar.
     situacao_depois: Situacao | None = None
+    # 157 — a nota da visita (é por ela que a situação no Omie acha a conta a pagar).
+    nota_fiscal: str | None = Field(default=None, max_length=40)
+    # 157 — o checklist da preventiva como foi marcado (uma foto, não o plano).
+    checklist: list["ItemChecklist"] | None = Field(default=None, max_length=30)
+
+
+class ItemChecklist(BaseModel):
+    item: str = Field(min_length=1, max_length=120)
+    feito: bool = False
+
+
+Manutencao.model_rebuild()
 
 
 # ---------------------------------------------------------------- conferência (140)

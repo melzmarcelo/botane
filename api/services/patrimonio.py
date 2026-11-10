@@ -32,6 +32,10 @@ PREVENTIVA = {"VENCIDA": "Vencida", "VENCE_30": "Vence em 30 dias",
 TIPOS_MANUTENCAO = {"PREVENTIVA": "Preventiva", "CORRETIVA": "Corretiva"}
 GARANTIA = {"ATIVA": "Em garantia", "VENCE_30": "Vence em 30 dias",
             "FORA": "Fora de garantia", "SEM": "Sem garantia"}
+# 157 — de quem é a garantia.
+GARANTIA_TIPOS = {"FABRICA": "Fábrica", "ESTENDIDA": "Estendida", "LOJA": "Loja"}
+# 157 — fotos e documentos por bem. Foto até 2 MB e PDF até 10 MB (os limites de `arquivos`).
+MAXIMO_ANEXOS = 20
 # Quantas visitas a agenda da preventiva mostra à frente.
 VISITAS_NA_AGENDA = 4
 # "Recente" no histórico e na faixa da ficha.
@@ -78,6 +82,8 @@ def _rotulos(d: dict) -> dict:
     d["tensao_txt"] = TENSOES.get(d.get("tensao")) if d.get("tensao") else None
     d["preventiva_txt"] = PREVENTIVA.get(d.get("status_preventiva"), "")
     d["garantia_txt"] = GARANTIA.get(d.get("status_garantia"), "")
+    d["garantia_tipo_txt"] = (GARANTIA_TIPOS.get(d.get("garantia_tipo"))
+                              if d.get("garantia_tipo") else None)
     return d
 
 
@@ -103,7 +109,8 @@ def _filtro(f: dict) -> tuple[str, dict]:
             OR b.apelido ILIKE '%%' || %(busca)s || '%%'
             OR b.marca ILIKE '%%' || %(busca)s || '%%'
             OR b.modelo ILIKE '%%' || %(busca)s || '%%'
-            OR b.numero_serie ILIKE '%%' || %(busca)s || '%%')"""
+            OR b.numero_serie ILIKE '%%' || %(busca)s || '%%'
+            OR b.responsavel ILIKE '%%' || %(busca)s || '%%')"""
     params = {"situacoes": situacoes, "setores": f.get("setores") or None,
               "id_local": f.get("id_local"), "id_produto": f.get("id_produto"),
               "criticidades": criticidades, "busca": busca,
@@ -173,8 +180,10 @@ def obter(cur, id_bem: int, id_unidade: int, *, ve_valor_estoque: bool = False) 
         """SELECT m.*, u.nome AS registrado_por
              FROM bem_manutencoes m LEFT JOIN usuarios u ON u.id = m.id_usuario
             WHERE m.id_bem = %s ORDER BY m.data DESC, m.id DESC""", (id_bem,))
-    bem["manutencoes"] = [dict(r) | {"tipo_txt": TIPOS_MANUTENCAO[r["tipo"]]}
+    bem["manutencoes"] = [dict(r) | {"tipo_txt": TIPOS_MANUTENCAO[r["tipo"]],
+                                     "checklist_txt": checklist_txt(r["checklist"])}
                           for r in cur.fetchall()]
+    bem["anexos"] = anexos(cur, id_bem)
     bem["custo_manutencao"] = float(sum((m["custo"] or 0) for m in bem["manutencoes"]))
     bem["custos"] = _custos(bem)
     bem["agenda_preventiva"] = _agenda(cur, bem)
@@ -222,7 +231,7 @@ def _custos(bem: dict) -> dict:
     extrato, saldo = [], Decimal(0)
     if bem["valor_compra"] is not None:
         saldo = compra
-        extrato.append({"data": bem["data_compra"], "o_que": "Compra",
+        extrato.append({"chave": "compra", "data": bem["data_compra"], "o_que": "Compra",
                         "detalhe": " · ".join(v for v in (
                             bem.get("fornecedor"),
                             f"NF {bem['nota_fiscal']}" if bem.get("nota_fiscal") else None) if v)
@@ -231,8 +240,12 @@ def _custos(bem: dict) -> dict:
     # Do mais velho para o mais novo: é a ordem em que o saldo se acumula.
     for m in sorted(bem["manutencoes"], key=lambda m: (m["data"], m["id"])):
         saldo += dec(m["custo"])
-        extrato.append({"data": m["data"], "o_que": TIPOS_MANUTENCAO[m["tipo"]],
-                        "detalhe": m.get("causa") or m.get("descricao"),
+        extrato.append({"chave": f"m{m['id']}", "data": m["data"],
+                        "o_que": TIPOS_MANUTENCAO[m["tipo"]],
+                        "detalhe": " · ".join(v for v in (
+                            m.get("causa") or m.get("descricao"),
+                            f"NF {m['nota_fiscal']}" if m.get("nota_fiscal") else None) if v)
+                        or None,
                         "garantia": m.get("coberta_garantia", False),
                         "valor": float(dec(m["custo"])) if m["custo"] is not None else None,
                         "saldo": float(saldo)})
@@ -311,7 +324,40 @@ def _validar(cur, id_unidade: int, dados: dict, id_bem: int | None = None) -> No
 
 def _limpo(dados: dict) -> dict:
     """Texto em branco vira nulo — "" no banco é um campo que parece preenchido."""
-    return {k: (v.strip() or None) if isinstance(v, str) else v for k, v in dados.items()}
+    d = {k: (v.strip() or None) if isinstance(v, str) else v for k, v in dados.items()}
+    if "preventiva_checklist" in d:
+        d["preventiva_checklist"] = _itens(d["preventiva_checklist"])
+    return d
+
+
+def _itens(lista) -> list[str]:
+    """O checklist do bem: sem item em branco nem repetido (sem diferença de maiúscula).
+    ⚠️ Nulo vira lista vazia — a coluna é NOT NULL, e "sem checklist" é a lista vazia."""
+    vistos, saida = set(), []
+    for item in lista or []:
+        t = " ".join(str(item).split())[:120]
+        if t and t.lower() not in vistos:
+            vistos.add(t.lower())
+            saida.append(t)
+    return saida
+
+
+def checklist_txt(checklist) -> str | None:
+    """"4 de 5 itens" — o resumo do checklist marcado numa visita."""
+    if not checklist:
+        return None
+    feitos = sum(1 for i in checklist if i.get("feito"))
+    return f"{feitos} de {len(checklist)} {'item' if len(checklist) == 1 else 'itens'}"
+
+
+def _calcular_garantia(cur, id_bem: int) -> None:
+    """157 — a data final da garantia = compra + meses, com a mesma soma de meses do banco
+    que a preventiva usa (31/01 + 1 mês = 28 ou 29/02). Só quando há os dois."""
+    cur.execute(
+        """UPDATE bens SET garantia_ate = (data_compra
+                                           + make_interval(months => garantia_meses::int))::date
+            WHERE id = %s AND garantia_meses IS NOT NULL AND data_compra IS NOT NULL""",
+        (id_bem,))
 
 
 def criar(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
@@ -325,7 +371,11 @@ def criar(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
                     {', '.join(['%s'] * len(campos))})
             RETURNING id""",
         (id_unidade, id_usuario, *[dados[c] for c in campos]))
-    return _do_bem(cur, cur.fetchone()["id"], id_unidade)
+    id_bem = cur.fetchone()["id"]
+    # 157: sem a data final, ela sai da compra + meses (a tela já manda preenchida).
+    if not dados.get("garantia_ate"):
+        _calcular_garantia(cur, id_bem)
+    return _do_bem(cur, id_bem, id_unidade)
 
 
 def atualizar(cur, id_bem: int, id_unidade: int, dados: dict) -> tuple[dict, dict]:
@@ -346,6 +396,11 @@ def atualizar(cur, id_bem: int, id_unidade: int, dados: dict) -> tuple[dict, dic
         cur.execute(
             f"""UPDATE bens SET {', '.join(f'{c} = %s' for c in dados)}, atualizado_em = now()
                  WHERE id = %s""", (*dados.values(), id_bem))
+    # 157: a data final da garantia se refaz quando mudam os meses ou a compra SEM vir a data
+    # (a planilha, o conector) — ou quando ela vem vazia. Vindo preenchida, vale a digitada.
+    if ((("garantia_meses" in dados or "data_compra" in dados) and "garantia_ate" not in dados)
+            or ("garantia_ate" in dados and dados["garantia_ate"] is None)):
+        _calcular_garantia(cur, id_bem)
     return antes, _do_bem(cur, id_bem, id_unidade)
 
 
@@ -368,6 +423,10 @@ def excluir(cur, id_bem: int, id_unidade: int) -> dict:
         raise HTTPException(status_code=409,
                             detail="Este bem já passou por uma conferência — dê baixa em vez "
                                    "de apagar, para o histórico continuar existindo.")
+    # 157: as fotos e documentos do cadastro errado saem junto (o arquivo mora em `arquivos`).
+    import arquivos
+    for a in anexos(cur, id_bem):
+        arquivos.remover(a["url"], cur)
     cur.execute("DELETE FROM bens WHERE id = %s", (id_bem,))
     return bem
 
@@ -389,13 +448,18 @@ def registrar_manutencao(cur, id_bem: int, id_unidade: int, id_usuario: int,
     depois = dados.pop("situacao_depois", None)
     if depois == "BAIXADO":
         raise HTTPException(status_code=400, detail="Baixa é no cadastro do bem, com o motivo.")
+    # 157: o checklist como foi marcado — uma foto; sem item, sem checklist.
+    marcado = [{"item": " ".join(i["item"].split())[:120], "feito": bool(i.get("feito"))}
+               for i in (dados.get("checklist") or []) if (i.get("item") or "").strip()]
+    import json
     cur.execute(
         """INSERT INTO bem_manutencoes (id_bem, tipo, data, executado_por, custo, descricao,
-                                        causa, coberta_garantia, id_usuario)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                        causa, coberta_garantia, nota_fiscal, checklist,
+                                        id_usuario)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (id_bem, dados["tipo"], dados["data"], dados.get("executado_por"), dados.get("custo"),
          dados.get("descricao"), dados.get("causa"), bool(dados.get("coberta_garantia")),
-         id_usuario))
+         dados.get("nota_fiscal"), json.dumps(marcado) if marcado else None, id_usuario))
     id_manutencao = cur.fetchone()["id"]
     if dados["tipo"] == "PREVENTIVA" and (bem["ultima_preventiva"] is None
                                           or dados["data"] > bem["ultima_preventiva"]):
@@ -426,6 +490,60 @@ def excluir_manutencao(cur, id_manutencao: int, id_unidade: int) -> dict:
                                             WHERE id_bem = %s AND tipo = 'PREVENTIVA')
                 WHERE id = %s""", (m["id_bem"], m["id_bem"]))
     return dict(m)
+
+
+# ---------------------------------------------------------------- fotos e documentos (157)
+
+def anexos(cur, id_bem: int) -> list[dict]:
+    """As fotos e os documentos do bem, na ordem em que foram enviados."""
+    cur.execute(
+        """SELECT a.id, a.tipo, a.nome, a.url, a.bytes, a.criado_em, u.nome AS enviado_por
+             FROM bem_anexos a LEFT JOIN usuarios u ON u.id = a.criado_por
+            WHERE a.id_bem = %s ORDER BY a.id""", (id_bem,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def anexar(cur, id_bem: int, id_unidade: int, id_usuario: int, conteudo: bytes, mime: str,
+           extensao: str, nome: str | None) -> dict:
+    """Guarda a foto ou o PDF no banco (`arquivos`) e liga ao bem.
+
+    ⚠️ **O conteúdo já chega conferido** (`arquivos.ler_enviada` / `ler_pdf`, lidos ANTES de
+    pedir a conexão). 🔑 O nome do arquivo leva um sufixo longo e aleatório: a rota
+    `/arquivos` é pública (a `<img>` não manda token), e a nota fiscal de um bem não deve
+    ser adivinhável.
+    """
+    import secrets
+
+    import arquivos
+    bem = _do_bem(cur, id_bem, id_unidade)
+    cur.execute("SELECT count(*) AS n FROM bem_anexos WHERE id_bem = %s", (id_bem,))
+    if cur.fetchone()["n"] >= MAXIMO_ANEXOS:
+        raise HTTPException(status_code=409,
+                            detail=f"O bem já tem {MAXIMO_ANEXOS} anexos — apague um antes.")
+    tipo = "DOCUMENTO" if mime == arquivos.PDF_TIPO else "FOTO"
+    url = arquivos.gravar(cur, conteudo, mime, extensao,
+                          f"bem-{id_bem}-{secrets.token_hex(8)}")
+    nome = " ".join((nome or "").split())[:160] or f"{bem['codigo']}{extensao}"
+    cur.execute(
+        """INSERT INTO bem_anexos (id_bem, tipo, nome, url, bytes, criado_por)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+        (id_bem, tipo, nome, url, len(conteudo), id_usuario))
+    return {"id": cur.fetchone()["id"], "tipo": tipo, "nome": nome, "url": url,
+            "codigo": bem["codigo"]}
+
+
+def remover_anexo(cur, id_anexo: int, id_unidade: int) -> dict:
+    """Apaga o anexo e o arquivo dele, na mesma transação."""
+    import arquivos
+    cur.execute(
+        """SELECT a.*, b.id_unidade, b.codigo FROM bem_anexos a JOIN bens b ON b.id = a.id_bem
+            WHERE a.id = %s""", (id_anexo,))
+    a = cur.fetchone()
+    if not a or a["id_unidade"] != id_unidade:
+        raise HTTPException(status_code=404, detail="Anexo não encontrado nesta loja")
+    cur.execute("DELETE FROM bem_anexos WHERE id = %s", (id_anexo,))
+    arquivos.remover(a["url"], cur)
+    return dict(a)
 
 
 # ---------------------------------------------------------------- alertas

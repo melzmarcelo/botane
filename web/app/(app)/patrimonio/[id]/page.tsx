@@ -15,6 +15,7 @@ import {
 } from "@/lib/patrimonio";
 import { useSessao } from "@/lib/sessao";
 
+import AbaAnexos from "./aba-anexos";
 import AbaCustos from "./aba-custos";
 import AbaDados from "./aba-dados";
 import AbaGarantia from "./aba-garantia";
@@ -231,7 +232,8 @@ export default function FichaDoBem() {
 
       {bem && <FaixaDoBem bem={bem} irPara={irPara} />}
 
-      <AbasDaFicha aba={aba} novo={novo} aoTrocar={irPara} contagem={bem?.manutencoes.length} />
+      <AbasDaFicha aba={aba} novo={novo} aoTrocar={irPara}
+                   contagens={{ manutencoes: bem?.manutencoes.length, anexos: bem?.anexos.length }} />
 
       {/* O form existe sempre (o Salvar do cabeçalho aponta para ele), mesmo vazio nas abas de fora. */}
       <form onSubmit={gravar} id="bem-form" className="flex flex-col gap-6" role="tabpanel"
@@ -255,6 +257,11 @@ export default function FichaDoBem() {
       )}
       {bem && aba === "custos" && (
         <div role="tabpanel" aria-labelledby="aba-custos"><AbaCustos bem={bem} /></div>
+      )}
+      {bem && aba === "anexos" && (
+        <div role="tabpanel" aria-labelledby="aba-anexos">
+          <AbaAnexos bem={bem} podeAnexar={podeManutencao} aoMudar={carregar} />
+        </div>
       )}
 
       {apagando && (

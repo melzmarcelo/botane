@@ -6,7 +6,7 @@ import { Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { hoje } from "@/lib/datas";
 import { COR_PREVENTIVA, PERIODICIDADES, dataBr, periodicidade, type BemDetalhe } from "@/lib/patrimonio";
 
-import { diasAte, emDias, type Form } from "./form";
+import { diasAte, emDias, itensDoChecklist, type Form } from "./form";
 
 /**
  * Aba Preventiva: se o bem exige, de quanto em quanto tempo, a última, a próxima e as
@@ -22,6 +22,17 @@ export default function AbaPreventiva({ f, setF, travado, bem }: {
 }) {
   const [exige, setExige] = useState(!!f.preventiva_meses);
   const [outro, setOutro] = useState(!!f.preventiva_meses && !PERIODICIDADES[f.preventiva_meses]);
+  const [novoItem, setNovoItem] = useState("");
+  const itens = itensDoChecklist(f.preventiva_checklist);
+
+  /** 157 — o checklist mora no formulário (um item por linha) e grava com o Salvar. */
+  function adicionar() {
+    const t = novoItem.trim().replace(/\s+/g, " ");
+    if (!t || itens.some((i) => i.toLowerCase() === t.toLowerCase()) || itens.length >= 30) return;
+    setF({ ...f, preventiva_checklist: [...itens, t].join("\n") });
+    setNovoItem("");
+  }
+  const tirar = (i: number) => setF({ ...f, preventiva_checklist: itens.filter((_, j) => j !== i).join("\n") });
   const mudou = bem && (String(bem.preventiva_meses ?? "") !== (f.preventiva_meses ?? "")
                         || (bem.ultima_preventiva ?? "") !== (f.ultima_preventiva ?? ""));
 
@@ -87,6 +98,40 @@ export default function AbaPreventiva({ f, setF, travado, bem }: {
         )}
         {mudou && <p className="mt-4 text-[13px] text-alerta">A próxima e a agenda se refazem ao salvar.</p>}
       </Cartao>
+
+      {exige && (
+        <Cartao titulo="Checklist da preventiva"
+                descricao="O que verificar em cada visita. Ao registrar uma preventiva, os itens aparecem para marcar.">
+          {itens.length ? (
+            <ol className="mb-4 flex flex-col divide-y divide-linha" id="preventiva-checklist">
+              {itens.map((item, i) => (
+                <li key={item} className="flex items-center justify-between gap-3 py-2">
+                  <span className="text-[14.5px]"><span className="mono mr-2 text-suave">{i + 1}.</span>{item}</span>
+                  {!travado && (
+                    <button type="button" className="link-acao text-[13px]" onClick={() => tirar(i)}
+                            aria-label={`tirar ${item}`}>tirar</button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          ) : <p className="mb-4 text-[14px] text-suave">Nenhum item ainda.</p>}
+          {!travado && (
+            <div className="flex flex-wrap gap-2">
+              <input className="campo min-w-0 flex-1" id="preventiva-checklist-novo" maxLength={120}
+                     placeholder="ex.: limpar o condensador" aria-label="novo item do checklist"
+                     value={novoItem} onChange={(e) => setNovoItem(e.target.value)}
+                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} />
+              <button type="button" className="btn btn-secundario" id="preventiva-checklist-adicionar"
+                      disabled={!novoItem.trim() || itens.length >= 30} onClick={adicionar}>
+                Adicionar
+              </button>
+            </div>
+          )}
+          {bem && f.preventiva_checklist !== (bem.preventiva_checklist ?? []).join("\n") && (
+            <p className="mt-3 text-[13px] text-alerta">O checklist grava ao salvar.</p>
+          )}
+        </Cartao>
+      )}
 
       {bem && exige && (
         <Cartao titulo="Próximas visitas"

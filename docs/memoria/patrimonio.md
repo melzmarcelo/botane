@@ -5,6 +5,52 @@
 
 ## O que já existe
 
+- 🔑 **A entrega 2 da ficha do bem** (1.3.12, migração `157_patrimonio_ficha_entrega2.sql`,
+  10/11/2026). Decisões do dono, perguntadas antes de começar: responsável em **texto livre**
+  (não usuário); garantia em **meses + tipo** com a data **calculada** e editável; anexos;
+  checklist; situação no Omie. **Ligação real do bem com a nota de entrada ficou de FORA** (o
+  dono não escolheu). Estoque do produto Patrimônio **continua** controlando (confirmado — fecha
+  o item 1 de "Decidido sem o dono").
+  - **Responsável** (`bens.responsavel`): aba Dados ▸ Localização e status; entra na busca da
+    lista, no relatório e na planilha (coluna "Responsável").
+  - **Garantia**: `garantia_meses` (1–240) e `garantia_tipo` (FABRICA / ESTENDIDA / LOJA).
+    🔑 A data final = compra + meses com a MESMA soma do banco (`make_interval(months)`:
+    31/01 + 1 mês = 28/02). A tela preenche ao digitar os meses ou trocar a compra
+    (`somarMeses` em `form.ts`, espelho da regra) e a pessoa pode corrigir; o servidor
+    (`_calcular_garantia`) calcula quando a data vem VAZIA, ou quando mudam meses/compra SEM a
+    data vir no corpo (planilha, conector). Vindo preenchida, vale a digitada.
+  - **Checklist da preventiva**: o plano é `bens.preventiva_checklist text[]` (NOT NULL, nulo
+    vira `[]`; sem vazio nem repetido, até 30). Na tela, mora no formulário como texto, um item
+    por linha. Ao registrar uma PREVENTIVA, os itens aparecem para marcar; a visita guarda
+    `bem_manutencoes.checklist jsonb` como **FOTO** — mudar o plano depois não mexe na visita.
+    `checklist_txt` = "2 de 3 itens" (histórico, relatório de manutenções). Na planilha, uma
+    célula separada por ";".
+  - **NF da manutenção** (`bem_manutencoes.nota_fiscal`): na tela, no relatório e no conector
+    (`registrar_manutencao`). É por ela que a consulta ao Omie acha o título.
+  - **Fotos e documentos** (`bem_anexos`, aba nova "Fotos e documentos"): foto PNG/JPG/WEBP até
+    2 MB ou PDF até 10 MB, **no banco** (`arquivos`, como a logo). Até 20 por bem. Quem registra
+    manutenção também anexa (o técnico com o laudo). A primeira foto é a capa (aside da aba
+    Dados, `#bem-foto-capa`). ⚠️ A rota `/arquivos` é pública: o dono do arquivo leva
+    `secrets.token_hex(8)` para o nome não ser adivinhável. Apagar o anexo apaga o arquivo na
+    mesma transação; apagar o bem (só sem histórico) leva os anexos; `limpar_dados` apaga
+    `arquivos` com dono `bem-%`.
+  - 🔑 **Situação no Omie** (`services/patrimonio_omie.py`, `GET /patrimonio/{id}/omie`, botão
+    na aba Custos): **só leitura, por botão** — nunca ao abrir a ficha (cota do Omie). Duas
+    fases: `planejar` lê o banco e a conexão FECHA antes de `consultar` falar com o Omie.
+    Fornecedor: o da compra pela nota de entrada daqui com o mesmo número, senão pelo nome; o da
+    manutenção pelo "Feito por". Uma busca `ListarContasPagar` por fornecedor
+    (`filtrar_cliente` = `codigo_omie`), até 5 × 100 títulos, e casa `numero_documento_fiscal`
+    sem zeros à esquerda. Parcelas viram uma linha: ATRASADO se alguma atrasou, PAGO se todas.
+    Situações sem título: SEM_NOTA, SEM_FORNECEDOR, NAO_ACHADO. Sem integração: 409.
+    ⚠️ **Os nomes dos campos do contas a pagar NÃO foram confirmados na conta real** — o modo
+    simulado usa `fixtures/financas_contapagar_ListarContasPagar.json`. Na primeira consulta
+    real, se o Omie recusar a estrutura, a frase dele aparece na tela e a correção é no serviço.
+  - ⚠️ No `planejar`, as manutenções são lidas ANTES de achar o fornecedor da compra: o mesmo
+    cursor apagava o resultado e só a compra aparecia (pego pela suíte).
+  - Cobertura: `smoke_patrimonio_ficha2.py` (36) e a seção 2b do `verificar-patrimonio.mjs`;
+    `smoke_patrimonio`, `_valor`, `_conferencia`, `smoke_exportacoes` e `smoke_rotulos_cabem`
+    verdes.
+
 - 🔑 **A ficha do bem em ABAS** (1.3.11, migração `156_manutencao_causa_garantia.sql`, 09/11/2026).
   Pedido do dono, com um desenho da ficha (Dados do bem · Garantia · Preventiva · Manutenções ·
   Custos) e *"lembrar de ajustar o layout mas deixar no padrão que temos o sistema hoje"* → análise
@@ -32,10 +78,8 @@
   - "Exige preventiva" desligado = `preventiva_meses` nulo (não há sim/não gravado à parte).
   - O valor atual ficou na aba Dados (`#bem-valor-atual`, ao lado da vida útil que o muda — a
     bateria depende disso) e repetido em Custos.
-  - ⏳ **Entrega 2, esperando decisão do dono**: foto e documentos anexados (o disco do App
-    Platform some a cada deploy — banco ou Spaces?), responsável (texto ou usuário), prazo de
-    garantia em meses + tipo, checklist da preventiva, ligação real com a nota de entrada e a
-    "situação no Omie" dos custos (o sistema só LÊ o Omie).
+  - ✅ **Entrega 2 feita na 1.3.12** (ver acima). Só a ligação real do bem com a nota de
+    entrada ficou de fora, por escolha do dono.
   - Cobertura: `smoke_patrimonio.py` 3b (62 no total), `verificar-patrimonio.mjs` seção 2 (40).
 
 - 🔑 **Abas Bens · Conferência · Valor** (`patrimonio/abas.tsx`, 1.1.151, auditoria de
@@ -245,14 +289,14 @@
 
 ## ⏳ Decidido sem o dono — validar
 
-1. O estoque dos produtos do tipo Patrimônio continua como está (não virou "sem estoque") —
-   e é justamente o saldo que diz quantos bens faltam cadastrar. Cadastrar o bem NÃO baixa
-   o estoque.
+1. ~~O estoque dos produtos do tipo Patrimônio continua como está~~ → **confirmado pelo dono
+   em 10/11/2026**: continua controlando; o saldo diz quantos bens faltam cadastrar. Cadastrar
+   o bem NÃO baixa o estoque.
 2. Plaqueta para qualquer bem cadastrado — sem corte por valor.
 3. ~~Sem depreciação~~ → veio na etapa 4 (141): linear, vida útil padrão de 10 anos, sem
    valor residual; o "A confirmar" fica fora do valor.
 4. Assistência técnica e fornecedor da compra são TEXTO (como na planilha), não um vínculo
-   com Pessoas.
+   com Pessoas. (O responsável também é texto — esse, decidido pelo dono em 10/11/2026.)
 5. Os alertas são da loja inteira, não só do setor de quem olha.
 6. (Conferência, 28/10) Não lido é MANTIDO por padrão; a baixa é escolha bem a bem.
 7. (Conferência) O "A confirmar" visto vira "Em uso" no fechamento (dá para desligar).

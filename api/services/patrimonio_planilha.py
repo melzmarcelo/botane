@@ -53,9 +53,15 @@ COLUNAS = dict([
     ("observacao", "observacao"), ("produto", "produto"),
     ("codigo do produto", "codigo_produto"), ("vida util (anos)", "vida_util_anos"),
     ("vida util", "vida_util_anos"),
+    # 157
+    ("responsavel", "responsavel"), ("garantia (meses)", "garantia_meses"),
+    ("garantia em meses", "garantia_meses"), ("tipo de garantia", "garantia_tipo"),
+    ("checklist da preventiva", "preventiva_checklist"), ("checklist", "preventiva_checklist"),
 ])
 _SITUACAO = {_chave(v): k for k, v in patrimonio.SITUACOES.items()}
 _CRITICIDADE = {_chave(v): k for k, v in patrimonio.CRITICIDADES.items()}
+_GARANTIA_TIPO = {_chave(v): k for k, v in patrimonio.GARANTIA_TIPOS.items()} | {
+    "fabrica": "FABRICA", "fabricante": "FABRICA"}
 _TENSAO = {_chave(v): k for k, v in patrimonio.TENSOES.items()} | {
     "110v": "110V", "220v": "220V", "380v": "380V", "na": "NA", "n/a": "NA"}
 # A ordem e o rótulo com que a prévia mostra o que muda.
@@ -68,7 +74,9 @@ ROTULOS = dict([
     ("assistencia_contato", "Contato"), ("criticidade", "Criticidade"),
     ("situacao", "Situação"), ("preventiva_meses", "Preventiva (meses)"),
     ("ultima_preventiva", "Última preventiva"), ("observacao", "Observações"),
-    ("vida_util_anos", "Vida útil (anos)"),
+    ("vida_util_anos", "Vida útil (anos)"), ("responsavel", "Responsável"),
+    ("garantia_meses", "Garantia (meses)"), ("garantia_tipo", "Tipo de garantia"),
+    ("preventiva_checklist", "Checklist da preventiva"),
 ])
 
 
@@ -175,11 +183,29 @@ def _converter(l: dict, setores: dict, locais: dict,
     from services.reclassificacao import _resolver
     d: dict = {}
     for campo in ("descricao", "marca", "modelo", "numero_serie", "fornecedor", "nota_fiscal",
-                  "assistencia", "assistencia_contato", "observacao", "apelido"):
+                  "assistencia", "assistencia_contato", "observacao", "apelido",
+                  "responsavel"):
         if l.get(campo):
             d[campo] = l[campo][:{"descricao": 120, "observacao": 500, "apelido": 20,
                                   "nota_fiscal": 40, "assistencia_contato": 80,
-                                  "fornecedor": 120, "assistencia": 120}.get(campo, 60)]
+                                  "fornecedor": 120, "assistencia": 120,
+                                  "responsavel": 120}.get(campo, 60)]
+    if l.get("preventiva_checklist"):
+        d["preventiva_checklist"] = patrimonio._itens(l["preventiva_checklist"].split(";"))[:30]
+    if l.get("garantia_tipo"):
+        tipo = _GARANTIA_TIPO.get(_chave(l["garantia_tipo"]))
+        if not tipo:
+            return {}, (f"Tipo de garantia “{l['garantia_tipo']}” não existe — use: "
+                        + ", ".join(patrimonio.GARANTIA_TIPOS.values()))
+        d["garantia_tipo"] = tipo
+    if l.get("garantia_meses"):
+        try:
+            gm = int(_numero(l["garantia_meses"]))
+        except (ValueError, ArithmeticError):
+            gm = 0
+        if not 1 <= gm <= 240:
+            return {}, f"Garantia de “{l['garantia_meses']}” meses — use de 1 a 240"
+        d["garantia_meses"] = gm
     if l.get("codigo_produto") or l.get("produto"):
         por_codigo, por_nome = produtos
         if l.get("codigo_produto"):
@@ -263,6 +289,10 @@ def _mostrar(campo: str, valor, nomes: dict) -> str | None:
         return patrimonio.CRITICIDADES.get(valor, valor)
     if campo == "tensao":
         return patrimonio.TENSOES.get(valor, valor)
+    if campo == "garantia_tipo":
+        return patrimonio.GARANTIA_TIPOS.get(valor, valor)
+    if campo == "preventiva_checklist":
+        return "; ".join(valor) or None
     return str(valor)
 
 

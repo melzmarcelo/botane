@@ -6,6 +6,8 @@
  * e 2 (cadastro com plaqueta e importação; manutenção com plano e alertas). Confere:
  *   1. a lista mostra o quadro por setor e filtra pela URL (o link do alerta);
  *   2. a ficha diz "Vencida", e registrar a preventiva de hoje a põe "Em dia";
+ *  2b. a entrega 2 (157): garantia em meses calcula a data, responsável, checklist marcado na
+ *      preventiva, NF, foto anexada (capa da ficha) e o botão "Consultar no Omie";
  *   3. "Novo bem" cadastra e abre a ficha do bem criado;
  *   4. o endereço do QR (/patrimonio/b/PAT-…) abre a ficha;
  *   5. a importação mostra a prévia e só grava no segundo clique;
@@ -35,6 +37,13 @@ const checar = (nome, cond, detalhe = "") => {
   else { falhas.push(nome); console.log(`  FALHA ${nome} ${typeof detalhe === "string" ? detalhe : JSON.stringify(detalhe)}`); }
 };
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+// ⚠️ Com a ficha mais alta (157), o botão fica abaixo da dobra e o clique do puppeteer saía
+// durante a rolagem, num ponto que já não era o botão: rola ANTES, sem animação, e clica.
+const clicar = async (alvo) => {
+  await alvo.evaluate((e) => e.scrollIntoView({ block: "center", behavior: "instant" }));
+  await esperar(150);
+  await alvo.click();
+};
 
 async function api(metodo, caminho, corpo, token) {
   const r = await fetch(API + caminho, {
@@ -110,7 +119,7 @@ try {
   await p.select("#manutencao-tipo", "PREVENTIVA");
   await p.$eval("#manutencao-descricao", (e) => { e.value = ""; });
   await p.type("#manutencao-descricao", "limpeza e calibração");
-  await p.click("#manutencao-registrar");
+  await clicar(await p.$("#manutencao-registrar"));
   await p.waitForFunction(() => /Em dia/.test(document.querySelector("main header")?.innerText ?? ""),
                           { timeout: 15000 }).catch(() => {});
   const depois = await p.evaluate(() => ({
@@ -120,11 +129,86 @@ try {
   checar("registrar a preventiva de hoje põe 'Em dia'", /Em dia/.test(depois.cab), depois.cab);
   checar("e o histórico mostra o registro", depois.hist.includes("limpeza e calibração"), depois.hist);
   checar("e marca a de hoje como recente", /recente/.test(depois.hist), depois.hist);
-  await p.click("#aba-custos");
+  await clicar(await p.$("#aba-custos"));
   await p.waitForSelector("#custos-extrato", { timeout: 15000 }).catch(() => {});
   const custos = await p.evaluate(() => document.querySelector("#custos-extrato")?.innerText ?? "");
   checar("a aba Custos traz o extrato com a preventiva e o saldo acumulado",
     /Preventiva/.test(custos) && /Saldo acumulado/i.test(custos), custos);
+
+  console.log("\n2b. entrega 2 da ficha (157): garantia em meses, responsável, checklist, NF, foto e Omie");
+  // React só vê o valor posto pelo setter NATIVO seguido de um evento de input.
+  const definir = (sel, valor) => p.$eval(sel, (e, v) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(e, v);
+    e.dispatchEvent(new Event("input", { bubbles: true }));
+  }, valor);
+  await clicar(await p.$("#aba-dados"));
+  await p.waitForSelector("#bem-data-compra", { timeout: 15000 });
+  await definir("#bem-data-compra", "2026-01-31");
+  await p.type("#bem-responsavel", `Chef Web ${MARCA}`);
+  await clicar(await p.$("#aba-garantia"));
+  await p.waitForSelector("#bem-garantia-meses", { timeout: 15000 });
+  await p.type("#bem-garantia-meses", "1");
+  await p.select("#bem-garantia-tipo", "FABRICA");
+  const ateCalculada = await p.$eval("#bem-garantia-ate", (e) => e.value);
+  checar("os meses calculam a data final pela compra (31/01 + 1 mês = 28/02)", ateCalculada === "2026-02-28", ateCalculada);
+  await clicar(await p.$("#aba-preventiva"));
+  await p.waitForSelector("#preventiva-checklist-novo", { timeout: 15000 });
+  for (const item of ["Limpar condensador", "Trocar filtro"]) {
+    await p.type("#preventiva-checklist-novo", item);
+    await p.keyboard.press("Enter");
+  }
+  const itensTela = await p.$$eval("#preventiva-checklist li", (l) => l.length);
+  checar("o checklist ganha os dois itens na tela", itensTela === 2, itensTela);
+  await clicar(await p.$("#bem-salvar"));
+  let salvo = {};
+  for (let i = 0; i < 20 && !salvo.preventiva_checklist?.length; i++) {
+    await esperar(500);
+    salvo = (await api("GET", `/patrimonio/${bem.id}`, undefined, token)).dados;
+  }
+  checar("Salvar grava garantia, tipo, responsável e checklist das três abas",
+    salvo.garantia_ate === "2026-02-28" && salvo.garantia_tipo === "FABRICA"
+    && salvo.responsavel === `Chef Web ${MARCA}` && salvo.preventiva_checklist?.length === 2, salvo);
+  await clicar(await p.$("#aba-manutencoes"));
+  await p.waitForSelector("#manutencao-checklist", { timeout: 15000 }).catch(() => {});
+  const caixas = await p.$$("#manutencao-checklist input[type=checkbox]");
+  checar("a preventiva mostra o checklist do bem para marcar", caixas.length === 2, caixas.length);
+  if (caixas[0]) await clicar(caixas[0]);
+  await p.type("#manutencao-nota", `NF${MARCA}`);
+  await clicar(await p.$("#manutencao-registrar"));
+  await p.waitForFunction(() => /1 de 2 itens/.test(document.querySelector("#manutencao-lista")?.innerText ?? ""),
+                          { timeout: 15000 }).catch(() => {});
+  const hist2 = await p.evaluate(() => document.querySelector("#manutencao-lista")?.innerText ?? "");
+  checar("o histórico mostra a NF e '1 de 2 itens'", hist2.includes(`NF${MARCA}`) && /1 de 2 itens/.test(hist2), hist2);
+  const foto = path.join(AQUI, `_foto_${MARCA}.png`);
+  fs.writeFileSync(foto, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64"));
+  try {
+    await clicar(await p.$("#aba-anexos"));
+    const seletor = await p.waitForSelector("#anexo-arquivo", { timeout: 15000 });
+    await seletor.uploadFile(foto);
+    await p.click("#anexo-enviar");
+    await p.waitForSelector("#anexos-fotos img", { timeout: 15000 }).catch(() => {});
+    checar("a aba Fotos e documentos anexa a foto", !!(await p.$("#anexos-fotos img")));
+    const contador = await p.$eval("#aba-anexos", (e) => e.textContent ?? "");
+    checar("e a aba conta o anexo", /1$/.test(contador.trim()), contador);
+    await clicar(await p.$("#aba-dados"));
+    await p.waitForSelector("#bem-foto-capa", { timeout: 15000 }).catch(() => {});
+    checar("a primeira foto vira a capa da ficha (aba Dados)", !!(await p.$("#bem-foto-capa")));
+  } finally {
+    fs.rmSync(foto, { force: true });
+  }
+  await clicar(await p.$("#aba-custos"));
+  await p.waitForSelector("#custos-omie-consultar", { timeout: 15000 });
+  await p.click("#custos-omie-consultar");
+  // Com ou sem Omie configurado na base local, a tela responde: a tabela, ou a frase do porquê.
+  await p.waitForFunction(() => !!document.querySelector("#custos-omie-lista")
+    || /Omie/.test(document.querySelector('[role="alert"], .text-erro')?.textContent ?? "")
+    || /não está configurado|Omie não/.test(document.body.innerText), { timeout: 30000 }).catch(() => {});
+  const omie = await p.evaluate(() => ({
+    tabela: document.querySelector("#custos-omie-lista")?.innerText ?? "",
+    texto: document.body.innerText,
+  }));
+  checar("'Consultar no Omie' responde: a situação de cada lançamento, ou por que não dá",
+    /Preventiva/.test(omie.tabela) || /não está configurado/.test(omie.texto), omie.tabela || omie.texto.slice(0, 300));
 
   console.log("\n3. novo bem");
   await p.goto(`${WEB}/patrimonio/novo`, { waitUntil: "networkidle2" });

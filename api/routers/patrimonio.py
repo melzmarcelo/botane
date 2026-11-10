@@ -276,3 +276,63 @@ def excluir_manutencao(id_manutencao: int, ctx: Contexto = Depends(_MANUTENCAO))
                             antes={"bem": m["id_bem"], "tipo": m["tipo"], "data": str(m["data"])},
                             id_unidade=id_unidade)
         return {"message": "Registro apagado."}
+
+
+# ---------------------------------------------------------------- fotos e documentos (157)
+
+@router.post("/{id_bem}/anexos", status_code=201)
+async def anexar(id_bem: int, arquivo: UploadFile = File(...),
+                 ctx: Contexto = Depends(_MANUTENCAO)) -> dict:
+    """Uma foto (PNG, JPG ou WEBP, até 2 MB) ou um PDF (até 10 MB) do bem: a nota, o manual,
+    o certificado da garantia, o laudo do técnico. Guardado no BANCO, como a logo.
+
+    🔑 Quem registra manutenção também anexa — é o técnico que chega com o laudo.
+    ⚠️ Os bytes são lidos e conferidos ANTES de pedir a conexão (`arquivos.ler_*`).
+    """
+    import arquivos
+    if (arquivo.content_type or "") == arquivos.PDF_TIPO:
+        conteudo, mime, extensao = await arquivos.ler_pdf(arquivo)
+    elif (arquivo.content_type or "") in arquivos.TIPOS:
+        conteudo, mime, extensao = await arquivos.ler_enviada(arquivo)
+    else:
+        raise HTTPException(status_code=400,
+                            detail="Formato não aceito. Envie uma foto (PNG, JPG ou WEBP) ou um PDF.")
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        a = servico.anexar(cur, id_bem, id_unidade, ctx.id_usuario, conteudo, mime, extensao,
+                           arquivo.filename)
+        auditoria.registrar(cur, ctx.id_usuario, "bem", id_bem, "anexar",
+                            depois={"tipo": a["tipo"], "nome": a["nome"]}, id_unidade=id_unidade)
+        rotulo = "Foto" if a["tipo"] == "FOTO" else "Documento"
+        return a | {"message": f"{rotulo} anexado ao bem {a['codigo']}."}
+
+
+@router.delete("/anexos/{id_anexo}")
+def remover_anexo(id_anexo: int, ctx: Contexto = Depends(_MANUTENCAO)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        a = servico.remover_anexo(cur, id_anexo, id_unidade)
+        auditoria.registrar(cur, ctx.id_usuario, "bem", a["id_bem"], "remover_anexo",
+                            antes={"tipo": a["tipo"], "nome": a["nome"]}, id_unidade=id_unidade)
+        return {"message": "Anexo apagado."}
+
+
+# ---------------------------------------------------------------- situação no Omie (157)
+
+@router.get("/{id_bem}/omie")
+def situacao_no_omie(id_bem: int, ctx: Contexto = Depends(_VER)) -> dict:
+    """Se a compra e as manutenções com nota já foram pagas no Omie. Só LEITURA, na hora.
+
+    ⚠️ **A conexão do banco fecha ANTES de falar com o Omie**: a consulta pode levar segundos
+    (o cliente espera entre chamadas para não bloquear a conta), e prender o pool esse tempo
+    todo é o que derruba o sistema inteiro.
+    """
+    from services import patrimonio_omie
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        plano = patrimonio_omie.planejar(cur, id_bem, id_unidade)
+        cli = patrimonio_omie.cliente(cur, id_unidade)
+    if cli is None:
+        raise HTTPException(status_code=409,
+                            detail="O Omie não está configurado nesta loja (Integrações ▸ Omie).")
+    return patrimonio_omie.consultar(cli, plano)

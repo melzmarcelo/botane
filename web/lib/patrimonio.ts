@@ -26,6 +26,8 @@ export const COR_PREVENTIVA: Record<string, "alerta" | "erva" | "neutro"> = {
 export const COR_GARANTIA: Record<string, "alerta" | "erva" | "neutro"> = {
   ATIVA: "erva", VENCE_30: "alerta", FORA: "neutro", SEM: "neutro",
 };
+/** 157 — de quem é a garantia. */
+export const GARANTIA_TIPOS: Record<string, string> = { FABRICA: "Fábrica", ESTENDIDA: "Estendida", LOJA: "Loja" };
 /** A periodicidade da preventiva pelo nome; o resto é "a cada N meses". */
 export const PERIODICIDADES: Record<string, string> = {
   "1": "Mensal", "2": "Bimestral", "3": "Trimestral", "6": "Semestral", "12": "Anual",
@@ -68,6 +70,14 @@ export type Bem = {
   vida_util_anos: number | null;
   /** 141 — quando saiu da casa (o banco põe hoje se a baixa vier sem data). */
   data_baixa: string | null;
+  /** 157 — quem responde pelo bem (texto livre). */
+  responsavel: string | null;
+  /** 157 — o prazo em meses e o tipo; a data final sai da compra + meses. */
+  garantia_meses: number | null;
+  garantia_tipo: string | null;
+  garantia_tipo_txt: string | null;
+  /** 157 — os itens a verificar em cada preventiva. */
+  preventiva_checklist: string[];
   proxima_preventiva: string | null;
   status_preventiva: string;
   em_garantia: boolean;
@@ -95,6 +105,21 @@ export type Manutencao = {
   causa: string | null;
   coberta_garantia: boolean;
   registrado_por: string | null;
+  /** 157 — a nota da visita e o checklist como foi marcado ("4 de 5 itens"). */
+  nota_fiscal: string | null;
+  checklist: { item: string; feito: boolean }[] | null;
+  checklist_txt: string | null;
+};
+
+/** 157 — uma foto ou um documento (PDF) do bem, guardado no banco. */
+export type Anexo = {
+  id: number;
+  tipo: "FOTO" | "DOCUMENTO";
+  nome: string;
+  url: string;
+  bytes: number;
+  criado_em: string;
+  enviado_por: string | null;
 };
 
 /** 156 — a aba Custos, calculada pelo servidor das manutenções. */
@@ -106,12 +131,13 @@ export type CustosDoBem = {
   total: number;
   /** Quanto a manutenção já representa sobre a compra (nula sem valor de compra). */
   manutencao_pct: number | null;
-  extrato: { data: string | null; o_que: string; detalhe: string | null; garantia?: boolean;
+  extrato: { chave: string; data: string | null; o_que: string; detalhe: string | null; garantia?: boolean;
              valor: number | null; saldo: number }[];
 };
 
 export type BemDetalhe = Bem & {
   manutencoes: Manutencao[];
+  anexos: Anexo[];
   custo_manutencao: number;
   /** O estoque guardado no local do bem (a câmara fria). Valor só para quem vê estoque. */
   estoque_no_local: { produtos: number; valor: number | null } | null;
@@ -238,7 +264,7 @@ export const porCodigo = (codigo: string) =>
     `/patrimonio/codigo/${encodeURIComponent(codigo.trim())}`);
 
 /** O corpo do cadastro: texto vazio vai como nulo. */
-export type BemForm = Partial<Record<keyof Bem, string | number | null>>;
+export type BemForm = Partial<Record<keyof Bem, string | number | string[] | null>>;
 export const criar = (dados: BemForm) =>
   api.post<Bem & { message: string }>("/patrimonio", dados);
 export const salvar = (id: number, dados: BemForm) =>
@@ -249,9 +275,41 @@ export const registrarManutencao = (id: number, dados: {
   tipo: string; data: string; executado_por?: string | null; custo?: number | null;
   descricao?: string | null; situacao_depois?: string | null;
   causa?: string | null; coberta_garantia?: boolean;
+  nota_fiscal?: string | null; checklist?: { item: string; feito: boolean }[] | null;
 }) => api.post<{ id: number; bem: Bem; message: string }>(`/patrimonio/${id}/manutencoes`, dados);
 export const apagarManutencao = (id: number) =>
   api.delete<{ message: string }>(`/patrimonio/manutencoes/${id}`);
+
+/** 157 — anexa uma foto (PNG, JPG, WEBP até 2 MB) ou um PDF (até 10 MB). */
+export function anexar(id: number, arquivo: File) {
+  const f = new FormData();
+  f.append("arquivo", arquivo);
+  return api.upload<Anexo & { message: string }>(`/patrimonio/${id}/anexos`, f);
+}
+export const apagarAnexo = (id: number) => api.delete<{ message: string }>(`/patrimonio/anexos/${id}`);
+
+/** 157 — a situação no Omie de cada lançamento de custo (só leitura, consultada na hora). */
+export type LinhaOmie = {
+  chave: string;
+  o_que: string;
+  data: string | null;
+  valor: number | null;
+  nota_fiscal: string | null;
+  fornecedor: string | null;
+  codigo_omie: string | null;
+  situacao: "PAGO" | "ABERTO" | "ATRASADO" | "CANCELADO" | "NAO_ACHADO" | "SEM_FORNECEDOR" | "SEM_NOTA";
+  situacao_txt: string;
+  detalhe: string | null;
+  parcelas?: number;
+  pagas?: number;
+  valor_omie?: number;
+  proximo_vencimento?: string | null;
+};
+export type SituacaoOmie = {
+  codigo: string; modo: "real" | "simulado"; linhas: LinhaOmie[];
+  pagos: number; em_aberto: number; atrasados: number;
+};
+export const situacaoNoOmie = (id: number) => api.get<SituacaoOmie>(`/patrimonio/${id}/omie`);
 
 /** As plaquetas: o mesmo rolo e a mesma impressora das etiquetas de validade. */
 export async function imprimirPlaquetas(ids: number[]): Promise<void> {

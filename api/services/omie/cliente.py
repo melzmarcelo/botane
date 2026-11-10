@@ -254,7 +254,7 @@ class ClienteOmie:
         pagina = int(param.get("pagina") or param.get("nPagina") or 1)
         if pagina > 1:
             for chave in ("nfe_encontradas", "produto_servico_cadastro", "clientes_cadastro",
-                          "recebimentos"):
+                          "recebimentos", "conta_pagar_cadastro"):
                 if chave in dados:
                     dados = {**dados, chave: [], "pagina": pagina, "nPagina": pagina}
         return dados

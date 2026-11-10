@@ -294,7 +294,8 @@ Pedido do dono em 27/10/2026 — etapas 1 e 2 da proposta; a **conferência pela
 - **Serviços:** `patrimonio.py` (cadastro, status da preventiva, manutenção, alertas, plaqueta),
   `patrimonio_planilha.py` (a importação), `planilha_xlsx.py` (lê .xlsx sem biblioteca),
   `patrimonio_conferencia.py` (abrir, ler, fechar com transferência/baixa),
-  `patrimonio_valor.py` (a depreciação linear e o valor numa data)
+  `patrimonio_valor.py` (a depreciação linear e o valor numa data),
+  `patrimonio_omie.py` (a situação no Omie dos custos — só leitura, na hora)
 - **Telas:** `patrimonio/` (lista + resumo por setor), `patrimonio/[id]/` (ficha e manutenção;
   `novo` cria), `patrimonio/importar/`, `patrimonio/b/[codigo]/` (o QR — e a leitura da conferência no aparelho que confere),
   `patrimonio/conferencias/` e `[id]/` (a leitura), `patrimonio/valor/` (o valor), `components/leitor-qr.tsx` (câmera),
@@ -307,9 +308,10 @@ Pedido do dono em 27/10/2026 — etapas 1 e 2 da proposta; a **conferência pela
 - **Permissões:** `patrimonio.ver`, `patrimonio.cadastrar`, `patrimonio.manutencao`,
   `patrimonio.conferir`
 - **Migração:** `139_patrimonio.sql`, `140_conferencia_patrimonio.sql`,
-  `141_depreciacao_patrimonio.sql`, `156_manutencao_causa_garantia.sql`
+  `141_depreciacao_patrimonio.sql`, `156_manutencao_causa_garantia.sql`,
+  `157_patrimonio_ficha_entrega2.sql`
 - **Suítes:** `smoke_patrimonio.py`, `smoke_patrimonio_conferencia.py`,
-  `smoke_patrimonio_valor.py`
+  `smoke_patrimonio_valor.py`, `smoke_patrimonio_ficha2.py`
 
 ⚠️ **Não é estoque**: nada aqui escreve no razão. O produto do tipo PATRIMONIO continua sendo
 quantidade; o bem é o item, com série, garantia e história próprios.

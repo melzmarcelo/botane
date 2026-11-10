@@ -3028,6 +3028,8 @@ def _bens(cur, id_unidade: int, f: dict) -> Saida:
     hoje = relogio.hoje_da_casa()
     for l in linhas:
         l["valor_atual"] = calcular(l, hoje)["valor_atual"]
+        # 157: o checklist numa célula, separado por ";" — é assim que a importação o lê.
+        l["checklist_txt"] = "; ".join(l.get("preventiva_checklist") or []) or None
     largo = f.get("_formato") != "pdf"
     colunas = ([("codigo", "Código"), ("apelido", "Apelido"), ("descricao", "Equipamento"),
                 ("produto", "Produto"), ("produto_codigo", "Código do produto"),
@@ -3035,10 +3037,15 @@ def _bens(cur, id_unidade: int, f: dict) -> Saida:
                 ("modelo", "Modelo"), ("numero_serie", "Nº de série / patrimônio"),
                 ("tensao_txt", "Tensão"), ("data_compra", "Data de compra"),
                 ("valor_compra", "Valor de compra"), ("fornecedor", "Fornecedor da compra"),
-                ("nota_fiscal", "Nota fiscal"), ("garantia_ate", "Garantia até"),
+                ("nota_fiscal", "Nota fiscal"),
+                # 157: garantia em meses + tipo (a data final sai da compra + meses).
+                ("garantia_meses", "Garantia (meses)"), ("garantia_tipo_txt", "Tipo de garantia"),
+                ("garantia_ate", "Garantia até"),
                 ("assistencia", "Fornecedor / assistência"),
                 ("assistencia_contato", "Contato"), ("criticidade_txt", "Criticidade"),
-                ("situacao_txt", "Situação"), ("preventiva_meses", "Preventiva a cada (meses)"),
+                ("situacao_txt", "Situação"), ("responsavel", "Responsável"),
+                ("preventiva_meses", "Preventiva a cada (meses)"),
+                ("checklist_txt", "Checklist da preventiva"),
                 ("ultima_preventiva", "Última preventiva"),
                 ("proxima_preventiva", "Próxima preventiva"),
                 ("preventiva_txt", "Status da preventiva"),
@@ -3053,6 +3060,7 @@ def _bens(cur, id_unidade: int, f: dict) -> Saida:
                [("codigo", "Código"), ("descricao", "Equipamento"), ("setor", "Setor"),
                 ("local", "Local"), ("marca", "Marca"), ("modelo", "Modelo"),
                 ("criticidade_txt", "Criticidade"), ("situacao_txt", "Situação"),
+                ("responsavel", "Responsável"),
                 ("proxima_preventiva", "Próxima preventiva"),
                 ("preventiva_txt", "Preventiva")])
     por_setor: dict[str, dict] = {}
@@ -3101,6 +3109,7 @@ def _manutencoes(cur, id_unidade: int, f: dict) -> Saida:
     cur.execute(
         """SELECT m.data, m.tipo, m.executado_por, m.custo, m.descricao AS o_que,
                   m.causa, CASE WHEN m.coberta_garantia THEN 'Sim' ELSE '' END AS garantia,
+                  m.nota_fiscal, m.checklist,
                   b.codigo, b.descricao AS equipamento, s.nome AS setor, u.nome AS registrado_por
              FROM bem_manutencoes m
              JOIN bens b ON b.id = m.id_bem
@@ -3113,7 +3122,9 @@ def _manutencoes(cur, id_unidade: int, f: dict) -> Saida:
             ORDER BY m.data DESC, b.codigo""",
         {"u": id_unidade, "i": inicio, "f": fim, "setores": _lista(f.get("setores")),
          "busca": busca})
-    linhas = [dict(r) | {"tipo_txt": p.TIPOS_MANUTENCAO[r["tipo"]]} for r in cur.fetchall()]
+    linhas = [dict(r) | {"tipo_txt": p.TIPOS_MANUTENCAO[r["tipo"]],
+                         "checklist_txt": p.checklist_txt(r["checklist"])}
+              for r in cur.fetchall()]
     total = sum((Decimal(str(l["custo"])) for l in linhas if l["custo"] is not None), Decimal(0))
     por_setor: dict[str, dict] = {}
     for l in linhas:
@@ -3127,7 +3138,8 @@ def _manutencoes(cur, id_unidade: int, f: dict) -> Saida:
         linhas,
         [("data", "Data"), ("codigo", "Código"), ("equipamento", "Equipamento"),
          ("setor", "Setor"), ("tipo_txt", "Tipo"), ("executado_por", "Feito por"),
-         ("causa", "O que gerou"), ("custo", "Custo (R$)"), ("garantia", "Garantia cobriu"),
+         ("causa", "O que gerou"), ("custo", "Custo (R$)"), ("nota_fiscal", "Nota fiscal"),
+         ("garantia", "Garantia cobriu"), ("checklist_txt", "Checklist"),
          ("o_que", "O que foi feito"), ("registrado_por", "Registrado por")],
         "Patrimônio — manutenções",
         [("Período", _intervalo(inicio, fim)), ("Registros", len(linhas)),

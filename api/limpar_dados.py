@@ -44,7 +44,8 @@ OPERACAO = [
     "etiqueta_usos", "etiquetas", "produto_validades",
     # O patrimônio (139): o bem aponta para o produto (o "modelo"), o local e o usuário; a
     # manutenção pendura no bem. Uma instalação nova nasce sem nenhum bem.
-    "bem_conferencia_itens", "bem_conferencias", "bem_manutencoes", "bens",
+    # Os anexos (157) penduram no bem; o arquivo deles sai abaixo, pelo dono 'bem-'.
+    "bem_conferencia_itens", "bem_conferencias", "bem_manutencoes", "bem_anexos", "bens",
     # Os pedidos do site (101) apontam para o cliente, o catálogo, o produto e a venda.
     "pedido_historico", "pedido_itens", "pedidos",
     # ⚠️ Os ITENS do catálogo (084) apontam para `produtos`, que saem logo abaixo: sem esta
@@ -694,6 +695,9 @@ def main() -> int:
         # tocada: apagá-la seria a mesma perda que as suítes causavam.
         if "fichas_tecnicas" in alvos:
             cur.execute("DELETE FROM arquivos WHERE dono LIKE 'ficha-%'")
+        # O mesmo para as fotos e documentos dos bens (157): `dono = 'bem-<id>-...'`.
+        if "bens" in alvos:
+            cur.execute("DELETE FROM arquivos WHERE dono LIKE 'bem-%'")
 
         if limpar_usuarios or so_o_admin:
             # O vínculo com papéis cai por CASCADE; sessões e tokens já foram

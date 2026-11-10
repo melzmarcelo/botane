@@ -2,12 +2,13 @@
 
 import BuscaCadastro from "@/components/busca-cadastro";
 import { Campo, CampoMoeda, Cartao } from "@/components/ui";
+import { urlArquivo } from "@/lib/api";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 import type { Local, Setor } from "@/lib/cadastros";
 import { hoje } from "@/lib/datas";
 import { CRITICIDADES, SITUACOES, TENSOES, dataBr, type BemDetalhe } from "@/lib/patrimonio";
 
-import type { Form, Muda } from "./form";
+import { somarMeses, type Form, type Muda } from "./form";
 import PreviaPlaqueta from "./plaqueta";
 import ValorDoBem from "./valor";
 
@@ -24,6 +25,8 @@ export default function AbaDados({ f, setF, muda, travado, bem, setores, locais,
   setores: Setor[]; locais: Local[]; produto: { id: number; rotulo: string } | null;
   aoEscolherProduto: (item: { id: number; nome: string } | null) => void;
 }) {
+  // 157: a primeira foto anexada é a capa da ficha.
+  const foto = bem?.anexos?.find((a) => a.tipo === "FOTO");
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="flex min-w-0 flex-col gap-6">
@@ -83,6 +86,10 @@ export default function AbaDados({ f, setF, muda, travado, bem, setores, locais,
                 {Object.entries(CRITICIDADES).map(([v, n]) => <option key={v} value={v}>{n}</option>)}
               </select>
             </Campo>
+            <Campo rotulo="Responsável" opcional dica="quem responde pelo bem (texto livre)">
+              <input className="campo" id="bem-responsavel" maxLength={120} disabled={travado}
+                     value={f.responsavel ?? ""} onChange={muda("responsavel")} />
+            </Campo>
             <Campo rotulo="Situação">
               <select className="campo" id="bem-situacao" disabled={travado}
                       value={f.situacao ?? "EM_USO"} onChange={muda("situacao")}>
@@ -108,7 +115,12 @@ export default function AbaDados({ f, setF, muda, travado, bem, setores, locais,
         <Cartao titulo="Aquisição">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Campo rotulo="Data de compra" opcional>
-              <input type="date" className="campo" disabled={travado} value={f.data_compra ?? ""} onChange={muda("data_compra")} />
+              {/* 157: com o prazo em meses, a compra refaz a data final da garantia. */}
+              <input type="date" className="campo" id="bem-data-compra" disabled={travado} value={f.data_compra ?? ""}
+                     onChange={(e) => setF({
+                       ...f, data_compra: e.target.value,
+                       garantia_ate: f.garantia_meses ? somarMeses(e.target.value, f.garantia_meses) || f.garantia_ate : f.garantia_ate,
+                     })} />
             </Campo>
             <Campo rotulo="Fornecedor da compra" opcional>
               <input className="campo" maxLength={120} disabled={travado} value={f.fornecedor ?? ""} onChange={muda("fornecedor")} />
@@ -134,6 +146,13 @@ export default function AbaDados({ f, setF, muda, travado, bem, setores, locais,
       </div>
 
       <aside className="flex min-w-0 flex-col gap-6">
+        {foto && (
+          <Cartao titulo="Foto">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${urlArquivo(foto.url)}?w=640`} alt={`Foto de ${bem?.descricao ?? "bem"}`} id="bem-foto-capa"
+                 className="aspect-[4/3] w-full rounded-lg border border-linha object-cover" />
+          </Cartao>
+        )}
         <Cartao titulo="Plaqueta">
           {bem ? (
             <>

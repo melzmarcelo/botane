@@ -1,0 +1,32 @@
+{
+  "pagina": 1,
+  "total_de_paginas": 1,
+  "registros": 6,
+  "total_de_registros": 6,
+  "conta_pagar_cadastro": [
+    {"codigo_lancamento_omie": 8800001, "codigo_cliente_fornecedor": 990101,
+     "numero_documento_fiscal": "000771", "numero_documento": "000771", "numero_parcela": "001/001",
+     "data_emissao": "02/09/2026", "data_vencimento": "02/10/2026", "valor_documento": 15000.00,
+     "status_titulo": "PAGO"},
+    {"codigo_lancamento_omie": 8800002, "codigo_cliente_fornecedor": 990101,
+     "numero_documento_fiscal": "772", "numero_documento": "772", "numero_parcela": "001/002",
+     "data_emissao": "01/10/2026", "data_vencimento": "15/10/2026", "valor_documento": 175.00,
+     "status_titulo": "PAGO"},
+    {"codigo_lancamento_omie": 8800003, "codigo_cliente_fornecedor": 990101,
+     "numero_documento_fiscal": "772", "numero_documento": "772", "numero_parcela": "002/002",
+     "data_emissao": "01/10/2026", "data_vencimento": "01/11/2026", "valor_documento": 175.00,
+     "status_titulo": "ATRASADO"},
+    {"codigo_lancamento_omie": 8800004, "codigo_cliente_fornecedor": 990101,
+     "numero_documento_fiscal": "773", "numero_documento": "773", "numero_parcela": "001/001",
+     "data_emissao": "05/11/2026", "data_vencimento": "05/12/2026", "valor_documento": 420.00,
+     "status_titulo": "A VENCER"},
+    {"codigo_lancamento_omie": 8800005, "codigo_cliente_fornecedor": 990101,
+     "numero_documento_fiscal": "774", "numero_documento": "774", "numero_parcela": "001/001",
+     "data_emissao": "05/11/2026", "data_vencimento": "10/11/2026", "valor_documento": 90.00,
+     "status_titulo": "CANCELADO"},
+    {"codigo_lancamento_omie": 8800006, "codigo_cliente_fornecedor": 990102,
+     "numero_documento_fiscal": "000775", "numero_documento": "000775", "numero_parcela": "001/001",
+     "data_emissao": "05/11/2026", "data_vencimento": "05/12/2026", "valor_documento": 1.00,
+     "status_titulo": "PAGO"}
+  ]
+}
