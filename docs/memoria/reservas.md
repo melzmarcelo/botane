@@ -640,6 +640,18 @@ revela. Quem já tem cadastro vê a dica mascarada (`M••••• D•••
   Platform o `X-Forwarded-For` traz o servidor de entrada da DO; quem traz o visitante é o
   `do-connecting-ip`, preenchido pela plataforma. Em casa não há o cabeçalho e vale o endereço
   da conexão. `smoke_reserva_site` §9 prova que forjar o `X-Forwarded-For` não reabre a porta.
+- 🔴 **A batida grava na transação DELA, não na da rota** (1.3.14, 11/11/2026). Gravada no
+  `cur` da rota, era desfeita junto com qualquer recusa que viesse depois — e as recusas são
+  justamente o que uma varredura produz: 30 cancelamentos de reserva inexistente (404) seguidos
+  na base local, nenhum 429; o mesmo valia para o cartão da fidelidade de telefone sem cadastro
+  (404 diz "não tem cadastro" — sem limite, a lista de quem é cliente) e para reserva recusada
+  por falta de mesa. `marcar_tentativa` agora abre `get_cursor()` próprio (os doze chamadores
+  não mudaram); `smoke_reserva_site` §9 prova que o 404 conta. ⚠️ Regra para rota pública
+  nova: o que precisa sobreviver à recusa NÃO pode morar na transação que a recusa desfaz —
+  é a mesma lição de `confirmar_codigo` (tentativa errada do código do caixa).
+- ⚠️ `mudar_status` lê a reserva com `FOR UPDATE` (1.3.14): o cliente cancelando no site e a
+  recepção marcando CHEGOU ao mesmo tempo liam os dois CONFIRMADA, e uma CANCELADA podia
+  voltar a CHEGOU segurando mesa.
 
 ### A porta que já existia
 

@@ -482,6 +482,16 @@ checar("mas outra origem continua entrando", st == 200, st)
 st, _r = chamar("POST", f"/publico/{UNIDADE}/reserva/telefone",
                 {"telefone": "47999109999"}, origem="198.51.100.4", forjado="10.9.8.7")
 checar("forjar o X-Forwarded-For NÃO reabre a porta de quem estourou", st == 429, st)
+# 🔴 **A tentativa que dá ERRADO conta também** (achado de 11/11/2026). A batida era gravada
+# na transação da rota e desfeita junto com o 404: cancelar reserva que não existe, ou
+# perguntar pelo cartão de um telefone sem cadastro, nunca fechava a porta — e é
+# exatamente o que uma varredura faz.
+respostas = [chamar("POST", f"/publico/{UNIDADE}/reserva/cancelar",
+                    {"telefone": f"4799910{i:04d}", "data": str(AMANHA), "hora": "12:00"},
+                    origem="198.51.100.21")[0]
+             for i in range(22)]
+checar("cancelar reserva inexistente dá 404 e conta: na 21ª a porta fecha (429)",
+       respostas[0] == 404 and respostas[-1] == 429, respostas)
 
 print("\n10. o que a casa ainda decide")
 sem_tentativas()

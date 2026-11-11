@@ -22,6 +22,8 @@ from datetime import date
 
 from fastapi import HTTPException
 
+from database import get_cursor
+
 from relogio import hoje_da_casa
 from services import termo_consentimento as termo
 
@@ -155,22 +157,31 @@ def marcar_tentativa(cur, id_unidade: int, origem: str | None) -> None:
     ⚠️ **Sem origem identificável, a contagem cai num balde só** (`"?"`): um
     proxy que esconde todo mundo faz o limite ficar mais apertado para todos, e
     isso é melhor do que não ter limite nenhum.
+    🔴 **A batida grava na SUA PRÓPRIA transação, não na de quem chamou** (11/11/2026).
+    Gravada no `cur` da rota, ela era desfeita junto com qualquer recusa que viesse depois
+    (404 "reserva não encontrada", 404 "sem cadastro", 409 "sem mesa"): justamente as
+    tentativas que uma varredura faz nunca contavam. Provado na base local: 30 cancelamentos
+    de reserva inexistente seguidos, nenhum 429. É a mesma lição de `confirmar_codigo`.
+    O `cur` fica na assinatura para não mexer nos doze chamadores.
     """
     marca = hashlib.sha256((origem or "?").encode()).hexdigest() if origem else "?"
-    cur.execute(
-        """SELECT count(*) AS n FROM reserva_tentativas
-            WHERE id_unidade = %s AND origem = %s AND em > now() - interval '1 hour'""",
-        (id_unidade, marca),
-    )
-    if cur.fetchone()["n"] >= TENTATIVAS_POR_HORA:
+    with get_cursor() as proprio:
+        proprio.execute(
+            """SELECT count(*) AS n FROM reserva_tentativas
+                WHERE id_unidade = %s AND origem = %s AND em > now() - interval '1 hour'""",
+            (id_unidade, marca),
+        )
+        cheio = proprio.fetchone()["n"] >= TENTATIVAS_POR_HORA
+        if not cheio:
+            proprio.execute(
+                "INSERT INTO reserva_tentativas (id_unidade, origem) VALUES (%s, %s)",
+                (id_unidade, marca),
+            )
+    if cheio:
         raise HTTPException(
             status_code=429,
             detail="Muitas tentativas em pouco tempo. Tente de novo daqui a pouco.",
         )
-    cur.execute(
-        "INSERT INTO reserva_tentativas (id_unidade, origem) VALUES (%s, %s)",
-        (id_unidade, marca),
-    )
 
 
 def _recusar_telefone_cheio(cur, id_unidade: int, telefone: str) -> None:

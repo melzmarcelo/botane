@@ -789,8 +789,11 @@ def mudar_status(cur, id_unidade: int, id_reserva: int, novo: str) -> dict:
     razão. "Cancelada" é um fato, e apagar a linha levaria junto a resposta para
     "por que a mesa ficou vazia naquele sábado".
     """
+    # ⚠️ **FOR UPDATE** (11/11/2026): sem a trava, o cliente cancelando no site e a
+    # recepção marcando CHEGOU ao mesmo tempo liam os dois CONFIRMADA, e quem gravasse
+    # por último vencia — uma reserva CANCELADA podia voltar a CHEGOU e segurar mesa.
     cur.execute(
-        "SELECT status, nome FROM reservas WHERE id = %s AND id_unidade = %s",
+        "SELECT status, nome FROM reservas WHERE id = %s AND id_unidade = %s FOR UPDATE",
         (id_reserva, id_unidade),
     )
     atual = cur.fetchone()
