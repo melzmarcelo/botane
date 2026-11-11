@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 import auditoria
 from config import REFRESH_GRACA_SEGUNDOS
@@ -303,9 +303,11 @@ RESPOSTA_UNICA = (
 
 
 @router.post("/esqueci-senha")
-def esqueci_senha(body: EsqueciSenhaRequest, request: Request) -> dict:
+def esqueci_senha(body: EsqueciSenhaRequest, request: Request,
+                  depois: BackgroundTasks) -> dict:
     with get_cursor() as cur:
         r = senhas.pedir(cur, body.email, _ip(request))
+        envio = r.pop("_envio", None)
         # A auditoria registra o que de fato aconteceu — é onde o dono descobre
         # que alguém tentou recuperar a senha de um endereço que não existe.
         auditoria.registrar(
@@ -313,7 +315,27 @@ def esqueci_senha(body: EsqueciSenhaRequest, request: Request) -> dict:
             depois={"enviado": r["enviado"], "motivo": r.get("motivo"), "modo": r.get("modo")},
             ip=_ip(request),
         )
+    # 🔴 **O envio sai DEPOIS da resposta, e fora da transação** (11/11/2026). Dentro dela,
+    # cada pedido prendia uma conexão do pool pelo tempo do SMTP (até 20 s), e alguns
+    # pedidos seguidos com o SMTP mal configurado derrubavam o sistema inteiro. E esperar
+    # o envio na resposta denunciava quem existe pelo TEMPO: o e-mail cadastrado demorava,
+    # o inventado voltava na hora — mesmo com a frase única.
+    if envio:
+        depois.add_task(_enviar_recuperacao, envio, r.get("id_usuario"),
+                        body.email.strip().lower(), _ip(request))
     return {"message": RESPOSTA_UNICA}
+
+
+def _enviar_recuperacao(envio, id_usuario: int | None, email: str, ip: str | None) -> None:
+    """O envio do pedido público, já sem ninguém esperando. Falha vira auditoria."""
+    r = senhas.despachar({"_envio": envio})
+    if r.get("modo") != "falhou":
+        return
+    # ⚠️ Sem isto a falha só iria para o log da nuvem: a pessoa recebeu a frase única e
+    # não tem como saber que o e-mail não saiu. A auditoria é onde o dono olha.
+    with get_cursor() as cur:
+        auditoria.registrar(cur, id_usuario, "senha", email, "recuperacao_falhou",
+                            depois={"motivo": r.get("motivo")}, ip=ip)
 
 
 @router.get("/redefinir-senha/{token}")

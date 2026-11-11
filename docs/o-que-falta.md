@@ -9,22 +9,6 @@ lista anterior (de 02/09/2026) e somando as pendências registradas nas memória
 
 ## 🟠 Código que falta
 
-### O envio de e-mail segura a transação do banco (28/08/2026)
-
-`email.enviar(cur, ...)` recebe o cursor e faz a conversa SMTP **dentro** da transação. São
-três chamadores — o botão de teste, a criação de usuário e a recuperação de senha
-(`services/senhas.py`) — e o último é **rota pública**: cada pedido prende uma conexão do pool
-por até `ORCAMENTO_ENVIO` (20 s) enquanto fala com um servidor externo. Com o SMTP mal
-configurado, alguns pedidos seguidos esgotam o pool e derrubam o sistema inteiro, não só o
-e-mail.
-
-O caminho já está aberto: `email.entregar(cfg, msg)` não toca no banco. Falta reordenar os
-chamadores para **ler a configuração, fechar a transação, enviar e só então gravar o status**.
-
-⚠️ Na recuperação de senha a ordem importa: o token tem de ser gravado **mesmo que o envio
-falhe** — senão o admin não consegue entregar o link pela tela de Usuários, que é a saída
-prevista para quem não tem SMTP.
-
 ### Remessa de VÁRIOS produtos numa vez (31/08/2026)
 
 `POST /transferencias` já aceita N itens, e a tela de recebimento confere item a item — mas o
@@ -118,6 +102,11 @@ retroativo para quem não tem `estoque.retroativo`, e existe o reprocessamento d
 
 ## ✅ Feito desde a lista anterior
 
+- **O envio de e-mail não segura mais a transação** (1.3.15, 11/11/2026) — `email.preparar`
+  (com banco) e `email.despachar` (sem banco). A recuperação pública responde na hora e envia
+  depois da resposta (falha vira `recuperacao_falhou` na auditoria); o token é gravado antes de
+  qualquer envio, e a tela de Usuários recebe o link mesmo com o SMTP recusando; o último status
+  do botão de teste passou a guardar o ERRO (o 502 desfazia a gravação). `smoke_senha` §9b.
 - **Foto na ficha e no produto** — upload, exibição e cópia na nova versão (ver
   `docs/memoria/producao.md`).
 - **Cobertura por receita** — o CMV mostra a % da receita com custo, não só a cobertura de ficha.

@@ -95,7 +95,10 @@ export default function PaginaUsuarios() {
       const r = await api.post<{ link: string; modo: string; message: string }>(
         `/usuarios/${u.id}/recuperar-senha`,
       );
-      aviso.sucesso(r.message);
+      // ⚠️ "falhou" (11/11/2026): o SMTP recusou, mas o link foi gerado e vale —
+      // é a saída de quando o e-mail não sai, então ele aparece igual.
+      if (r.modo === "falhou") aviso.erro(r.message);
+      else aviso.sucesso(r.message);
       if (r.modo !== "real") setLink({ nome: u.nome, url: r.link });
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível gerar o link");

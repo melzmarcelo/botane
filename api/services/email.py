@@ -111,15 +111,28 @@ def _gravar(msg: EmailMessage, para: str) -> str:
     return caminho
 
 
-def enviar(cur, para: str, assunto: str, texto: str, html: str | None = None) -> dict:
-    """Envia (ou grava, no modo simulado). Devolve o que aconteceu.
+def preparar(cur, para: str, assunto: str, texto: str,
+             html: str | None = None) -> tuple[dict, EmailMessage]:
+    """Lê a configuração e monta a mensagem — a parte que precisa do banco.
+
+    🔴 **O envio é em DOIS tempos, e a transação fecha no meio** (11/11/2026). Antes
+    era um `enviar(cur, ...)` só, e a conversa com o SMTP (até `ORCAMENTO_ENVIO`)
+    acontecia com a transação aberta, segurando uma conexão do pool. A recuperação
+    de senha é rota PÚBLICA: com o SMTP mal configurado, alguns pedidos seguidos
+    esgotavam o pool e derrubavam o sistema inteiro, não só o e-mail. Agora:
+    `preparar` dentro do `with get_cursor()`, `despachar` FORA dele.
+    """
+    cfg = configuracao(cur)
+    return cfg, _montar(cfg, para, assunto, texto, html, marca.nome_da_casa(cur))
+
+
+def despachar(cfg: dict, msg: EmailMessage) -> dict:
+    """Envia (ou grava, no modo simulado) o que `preparar` montou. Não toca no banco.
 
     O retorno **nunca** vai para uma resposta pública: o caminho do arquivo
     diria a quem pediu que aquele e-mail existe no sistema.
     """
-    cfg = configuracao(cur)
-    msg = _montar(cfg, para, assunto, texto, html, marca.nome_da_casa(cur))
-
+    para = str(msg["To"])
     if cfg["modo"] != "real":
         return {"modo": "simulado", "arquivo": _gravar(msg, para)}
 
@@ -192,15 +205,21 @@ def entregar(cfg: dict, msg: EmailMessage) -> None:
         raise ErroEmail(f"Não foi possível enviar o e-mail: {e}") from e
 
 
-def testar(cur, para: str) -> dict:
-    """Manda um e-mail de teste — o botão da tela de Integrações."""
-    r = enviar(
+def preparar_teste(cur, para: str) -> tuple[dict, EmailMessage]:
+    """O e-mail de teste do botão da tela de Integrações (mandar com `testar`)."""
+    return preparar(
         cur,
         para,
         f"{marca.nome_da_casa(cur)} — teste de envio",
         "Se você está lendo isto, o envio de e-mail do sistema está funcionando.\n",
         "<p>Se você está lendo isto, o envio de e-mail do sistema está funcionando.</p>",
     )
+
+
+def testar(cfg: dict, msg: EmailMessage) -> dict:
+    """Despacha o teste e diz o que houve. Sem banco: chamar fora da transação."""
+    para = str(msg["To"])
+    r = despachar(cfg, msg)
     if r["modo"] == "simulado":
         return {"ok": True, "modo": "simulado",
                 "detalhe": f"Sem SMTP configurado: a mensagem foi gravada em {r['arquivo']}"}

@@ -7,7 +7,6 @@ from database import get_cursor
 from paginacao import com_total
 from models.acesso import UsuarioCreate, UsuarioResponse, UsuarioUpdate
 from seguranca import Contexto, hash_senha, requer_permissao
-from services import email as correio
 from services import senhas
 
 router = APIRouter(
@@ -373,22 +372,24 @@ def recuperar_senha(id_usuario: int, request: Request,
         if not u["ativo"]:
             raise HTTPException(status_code=400, detail="Usuário inativo")
 
-        try:
-            envio = senhas.enviar_link(
-                cur, {"id": id_usuario, "nome": u["nome"], "email": u["email"]},
-                request.client.host if request.client else None, origem="ADMIN",
-            )
-        except correio.ErroEmail as e:
-            raise HTTPException(status_code=502, detail=e.mensagem)
+        preparado = senhas.preparar_link(
+            cur, {"id": id_usuario, "nome": u["nome"], "email": u["email"]},
+            request.client.host if request.client else None, origem="ADMIN",
+        )
+    # 🔴 Envio FORA da transação (11/11/2026): o token já está gravado, então uma falha do
+    # SMTP não leva mais o link junto — e o link é justamente a saída quando o e-mail falha.
+    envio = senhas.despachar(preparado)
+    with get_cursor() as cur:
         auditoria.registrar(cur, ctx.id_usuario, "senha", id_usuario, "recuperacao_pelo_admin",
-                            depois={"modo": envio["modo"]})
+                            depois={"modo": envio["modo"], "motivo": envio.get("motivo")})
 
-    return {
-        "link": envio["link"],
-        "modo": envio["modo"],
-        "message": (f"E-mail enviado para {u['email']}." if envio["modo"] == "real"
-                    else "Sem SMTP configurado: passe o link abaixo para a pessoa."),
-    }
+    if envio["modo"] == "real":
+        mensagem = f"E-mail enviado para {u['email']}."
+    elif envio["modo"] == "falhou":
+        mensagem = f"{envio['motivo']} Passe o link abaixo para a pessoa."
+    else:
+        mensagem = "Sem SMTP configurado: passe o link abaixo para a pessoa."
+    return {"link": envio["link"], "modo": envio["modo"], "message": mensagem}
 
 
 @router.post("/{id_usuario}/desbloquear")

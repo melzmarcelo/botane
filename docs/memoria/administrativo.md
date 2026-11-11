@@ -172,6 +172,14 @@
   auditoria. Sem SMTP o sistema **não para**: grava o `.eml` em `api/arquivos/emails/` e o
   admin entrega o link pela tela de Usuários (`POST /usuarios/{id}/recuperar-senha` devolve o
   link — é o único lugar onde ele aparece).
+  🔴 **O SMTP nunca conversa com transação aberta** (1.3.15, 11/11/2026): `email.preparar(cur,
+  …)` lê a configuração e monta; `email.despachar(cfg, msg)` envia SEM banco, depois do `with`.
+  Antes era um `enviar(cur, …)` só, e cada pedido público prendia uma conexão do pool por até
+  20 s — SMTP mal configurado + alguns pedidos = sistema inteiro fora. Na rota pública o envio
+  vai em `BackgroundTasks` (resposta na hora, sem denunciar pelo TEMPO quem tem cadastro; falha
+  vira `recuperacao_falhou` na auditoria). Na tela de Usuários, o token é gravado ANTES do envio
+  e a falha volta como `modo = "falhou"` com o link — antes o 502 desfazia o token. E o 502 do
+  botão de teste sai depois do `with`, senão desfazia o `ultimo_status = 'ERRO'`. `smoke_senha` §9b.
 
 - 🔑 **A lista de USUÁRIOS também pagina** — a base acumula um por rodada, porque usuário com
   histórico vira inativo em vez de sumir, e a checagem do link de recuperação acusava a tela de

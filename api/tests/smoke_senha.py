@@ -18,6 +18,7 @@ O que este teste existe para provar — cada item já foi buraco em algum sistem
 """
 
 import json
+import socket
 import sys
 import time
 import urllib.error
@@ -191,6 +192,51 @@ checar("modo real sem servidor é recusado",
 st, r = chamar("POST", "/email/testar", {"para": ADMIN[0]}, token=token)
 checar("o teste de envio funciona em modo simulado", st == 200 and r.get("ok"), r)
 checar("e diz onde a mensagem foi gravada", "gravada em" in (r.get("detalhe") or ""), r)
+
+print("9b. SMTP que falha não derruba nada nem leva o link junto (11/11/2026)")
+# 🔴 O envio saiu de dentro da transação. Porta fechada em 127.0.0.1 recusa na hora;
+# 192.0.2.1 (TEST-NET-1) engole os pacotes e gasta o orçamento inteiro (20 s).
+_livre = socket.socket()
+_livre.bind(("127.0.0.1", 0))
+porta_morta = _livre.getsockname()[1]
+_livre.close()
+try:
+    chamar("PUT", "/email/config", {"servidor": "127.0.0.1", "porta": porta_morta,
+                                    "seguranca": "starttls", "modo": "real", "ativa": True},
+           token=token)
+    st, r = chamar("POST", f"/usuarios/{id_usuario}/recuperar-senha", token=token)
+    checar("com o SMTP recusando, o administrador ainda recebe o link",
+           st == 200 and r.get("modo") == "falhou" and "/redefinir-senha?token=" in (r.get("link") or ""), r)
+    checar("e a mensagem diz o motivo e manda passar o link", "Passe o link" in (r.get("message") or ""), r)
+    st_tk, _r = chamar("GET", f"/auth/redefinir-senha/{token_do_link(r.get('link') or '')}")
+    checar("e o link gravado vale (antes a falha desfazia o token)", st_tk == 200, st_tk)
+
+    st, r = chamar("POST", "/email/testar", {"para": ADMIN[0]}, token=token)
+    st_cfg, cfg_erro = chamar("GET", "/email/config", token=token)
+    checar("o botão de teste falha com 502 e o último status fica ERRO (antes era desfeito)",
+           st == 502 and cfg_erro.get("ultimo_status") == "ERRO", (st, cfg_erro.get("ultimo_status")))
+
+    chamar("PUT", "/email/config", {"servidor": "192.0.2.1", "porta": 587, "modo": "real"},
+           token=token)
+    t0 = time.monotonic()
+    st, r = chamar("POST", "/auth/esqueci-senha", {"email": ADMIN[0]})
+    gasto = time.monotonic() - t0
+    checar(f"o pedido público responde na hora com o SMTP mudo ({gasto:.1f}s), com a frase única",
+           st == 200 and r == r1 and gasto < 5, (st, gasto))
+    falhou = []
+    for _ in range(40):
+        time.sleep(1)
+        _st, ev = chamar("GET", "/auditoria?entidade=senha&limite=40", token=token)
+        eventos = ev if isinstance(ev, list) else ev.get("itens", [])
+        falhou = [e for e in eventos if e.get("acao") == "recuperacao_falhou"
+                  and ADMIN[0] in json.dumps(e, default=str)]
+        if falhou:
+            break
+    checar("e a falha do envio, já sem ninguém esperando, vai para a auditoria", bool(falhou),
+           len(falhou))
+finally:
+    chamar("PUT", "/email/config", {"servidor": "smtp.segunda.com.br", "modo": "simulado"},
+           token=token)
 
 print("10. quem não é administrador não mexe nisso")
 st, r = chamar("POST", "/auth/login", {"email": EMAIL, "senha": SENHA2})

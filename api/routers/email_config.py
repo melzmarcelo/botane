@@ -127,17 +127,23 @@ def salvar(body: ConfigEmail,
 @router.post("/testar")
 def testar(body: TesteEmail,
            ctx: Contexto = Depends(requer_permissao("admin.integracoes"))) -> dict:
+    # ⚠️ Três tempos: ler a configuração, falar com o SMTP SEM conexão do banco presa
+    # (até 20 s), e só então gravar o resultado (ver `email.preparar`).
     with get_cursor() as cur:
-        try:
-            r = correio.testar(cur, body.para.strip())
-            status, mensagem = "OK", r["detalhe"]
-        except correio.ErroEmail as e:
-            status, mensagem = "ERRO", e.mensagem
+        cfg, msg = correio.preparar_teste(cur, body.para.strip())
+    try:
+        r = correio.testar(cfg, msg)
+        status, mensagem = "OK", r["detalhe"]
+    except correio.ErroEmail as e:
+        status, mensagem = "ERRO", e.mensagem
+    with get_cursor() as cur:
         cur.execute(
             """UPDATE integracoes SET ultimo_status = %s, ultima_mensagem = %s
                 WHERE servico = %s AND id_unidade IS NULL""",
             (status, mensagem, SERVICO),
         )
-        if status == "ERRO":
-            raise HTTPException(status_code=502, detail=mensagem)
+    # ⚠️ O 502 sai DEPOIS do `with`: levantado lá dentro, desfazia o UPDATE acima, e a
+    # tela de Integrações nunca mostrava "ERRO" como último status (11/11/2026).
+    if status == "ERRO":
+        raise HTTPException(status_code=502, detail=mensagem)
     return r

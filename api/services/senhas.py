@@ -95,8 +95,15 @@ def link_de(token: str) -> str:
     return f"{WEB_URL.rstrip('/')}/redefinir-senha?token={token}"
 
 
-def enviar_link(cur, u: dict, ip: str | None = None, origem: str = "PUBLICA") -> dict:
-    """Cria o token, monta a mensagem e envia. Devolve o link junto.
+def preparar_link(cur, u: dict, ip: str | None = None, origem: str = "PUBLICA") -> dict:
+    """Cria o token e monta a mensagem — SEM enviar. Devolve o link e o `_envio`.
+
+    🔴 **O envio sai depois do `with get_cursor()`, com `despachar`** (11/11/2026).
+    Antes a conversa com o SMTP acontecia dentro da transação (ver
+    `email.preparar`), e uma falha do envio desfazia o TOKEN: o administrador
+    ficava sem o link justamente quando não há SMTP que funcione, que é o caso
+    para o qual o link na tela existe. Agora o token está gravado antes de
+    qualquer tentativa de envio.
 
     Quem chama decide se o link pode aparecer para alguém: no pedido público,
     não; na tela do administrador, sim — é o que resolve o esquecimento da
@@ -106,8 +113,25 @@ def enviar_link(cur, u: dict, ip: str | None = None, origem: str = "PUBLICA") ->
     link = link_de(token)
     casa = marca.nome_da_casa(cur)
     texto, html = _corpo(u["nome"], link, SENHA_TOKEN_MINUTOS, casa)
-    envio = correio.enviar(cur, u["email"], f"{casa} — redefinir sua senha", texto, html)
-    return {"link": link, "email": u["email"], **envio}
+    cfg, msg = correio.preparar(cur, u["email"], f"{casa} — redefinir sua senha", texto, html)
+    return {"link": link, "email": u["email"], "modo": cfg["modo"], "_envio": (cfg, msg)}
+
+
+def despachar(preparado: dict) -> dict:
+    """Envia o que `preparar_link`/`pedir` montaram. Sem banco: chamar FORA da transação.
+
+    Nunca levanta: a falha vira `modo = "falhou"` com o `motivo`, porque nos dois
+    chamadores o token já está gravado e continua valendo.
+    """
+    r = dict(preparado)
+    envio = r.pop("_envio", None)
+    if not envio:
+        return r
+    try:
+        r.update(correio.despachar(*envio))
+    except correio.ErroEmail as e:
+        r.update(modo="falhou", motivo=e.mensagem)
+    return r
 
 
 def pedir(cur, email: str, ip: str | None = None) -> dict:
@@ -136,9 +160,10 @@ def pedir(cur, email: str, ip: str | None = None) -> dict:
         # caixa de entrada de alguém.
         return {"enviado": False, "motivo": "limite de pedidos por hora"}
 
-    r = enviar_link(cur, dict(u), ip)
+    r = preparar_link(cur, dict(u), ip)
     # O link some aqui: o retorno de `pedir` vai para a auditoria, e link em
-    # log é link vazado.
+    # log é link vazado. ⚠️ O `_envio` fica: quem chama despacha DEPOIS de fechar
+    # a transação (`despachar`), e tira o `_envio` antes de auditar.
     r.pop("link", None)
     return {"enviado": True, "id_usuario": u["id"], **r}
 
