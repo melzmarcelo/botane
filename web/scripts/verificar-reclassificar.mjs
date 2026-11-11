@@ -52,6 +52,7 @@ fs.writeFileSync(arquivo, `\ufeffCódigo;Tipo;Categoria\r\n${antes.codigo};Insum
 const navegador = await puppeteer.launch({ executablePath: CHROME, headless: true });
 try {
   const p = await navegador.newPage();
+  p.setDefaultNavigationTimeout(180000); // next dev lento sob pouca memoria (11/11/2026)
   await p.setViewport({ width: 1366, height: 1000 });
   await p.goto(WEB + "/login");
   await p.evaluate((a, r) => { localStorage.setItem("botane.access", a); localStorage.setItem("botane.refresh", r); localStorage.setItem("botane.unidade", "1"); },

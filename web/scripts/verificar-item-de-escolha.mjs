@@ -69,6 +69,7 @@ const navegador = await puppeteer.launch({
 let idChoc = null;
 try {
   const p = await navegador.newPage();
+  p.setDefaultNavigationTimeout(180000); // next dev lento sob pouca memoria (11/11/2026)
 
   console.log("\n1. o cadastro: + item de escolha na seção");
   await p.setViewport({ width: 1280, height: 900 });

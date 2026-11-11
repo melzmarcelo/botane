@@ -69,6 +69,7 @@ const navegador = await puppeteer.launch({ executablePath: CHROME, headless: "ne
                                            defaultViewport: { width: 390, height: 844 } });
 try {
   const p = await navegador.newPage();
+  p.setDefaultNavigationTimeout(180000); // next dev lento sob pouca memoria (11/11/2026)
   await p.evaluateOnNewDocument(() => {
     window.__lotes = [];
     const original = navigator.sendBeacon.bind(navigator);
@@ -123,6 +124,7 @@ try {
 
   console.log("\n4. no editor");
   const e = await navegador.newPage();
+  e.setDefaultNavigationTimeout(180000); // next dev lento sob pouca memoria (11/11/2026)
   await e.setViewport({ width: 1366, height: 1000 });
   await e.goto(WEB + "/login");
   await e.evaluate((a, r) => { localStorage.setItem("botane.access", a); localStorage.setItem("botane.refresh", r); localStorage.setItem("botane.unidade", "1"); },

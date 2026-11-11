@@ -336,6 +336,18 @@ if (jaExiste) {
 // começo, vale para todas — inclusive numa instalação virgem.
 await garantirLocal();
 
+// ⚠️ **Filial de teste que sobrou de rodada MORTA sai antes de tudo.** A fase 10e
+// cria "Filial tela …" e a desativa no `finally` — mas rodada morta por falta de
+// memória não chega ao `finally`. Com duas lojas ativas a ficha do produto troca
+// "Preço de venda" por "Preço de venda da casa" (vazio, de propósito) e a 10b0
+// falha sem defeito na tela (11/11/2026, filial 3451).
+for (const u of (await api("GET", "/unidades", null, token)).dados ?? []) {
+  if (u.ativo && /^Filial tela \d+$/.test(u.nome ?? "")) {
+    await api("PUT", `/unidades/${u.id}`, { ativo: false }, token);
+    console.log(`  (filial de teste ${u.id} que sobrou de rodada anterior: desativada)`);
+  }
+}
+
 // ⚠️ **E precisa do ritmo MENSAL, garantido — não suposto.** Quase tudo daqui
 // para baixo lê o período CORRENTE da loja: o painel de CMV, a tela inicial e a
 // movimentação por produto. Com a loja em SEMANAL ou DIARIO, esses recortes
