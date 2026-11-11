@@ -952,7 +952,18 @@ try {
 
   // ⚠️ Com o ponteiro em cima, o relógio PARA: era o medo real de fechar
   // sozinho — a mensagem sumir no meio da leitura.
-  await p.hover("[data-aviso]");
+  // (pelo centro medido na hora, e não por p.hover: o aviso re-renderiza e o
+  // elemento guardado "descola do documento" — derrubou a bateria em 11/11/2026)
+  for (let i = 0; i < 3; i++) {
+    const centro = await p.evaluate(() => {
+      const r = document.querySelector("[data-aviso]")?.getBoundingClientRect();
+      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+    });
+    if (!centro) break;
+    await p.mouse.move(centro.x, centro.y);
+    await assentar(200);
+    if (await p.evaluate(() => !!document.querySelector("[data-aviso]:hover"))) break;
+  }
   await assentar(2500);
   const pausado = await p.evaluate(() => !!document.querySelector("[data-aviso]"));
   checar("e não some enquanto o ponteiro está em cima", pausado);
