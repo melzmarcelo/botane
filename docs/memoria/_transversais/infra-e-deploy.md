@@ -244,8 +244,14 @@ Relatório inteiro em [`docs/analise-v1.2.0.md`](../../analise-v1.2.0.md).
   ("SSL SYSCALL error: EOF detected", 26/10).
 - 🔴 **Dependência com falha conhecida é ponto de não retorno também**: o Next 16.3.8 tinha
   execução remota de código sem login, e ninguém olhava. `npm audit --omit=dev` (web) e
-  `PYTHONUTF8=1 python -m pip_audit -r requirements.txt` (api) antes de promover. Next 16.4.3,
-  Pillow 13.0.0.
+  `PYTHONUTF8=1 python -m pip_audit -r requirements.txt` (api) antes de promover. Next 16.4.6
+  (1.3.17, 24/11/2026: a 16.4.3 tinha seis alertas moderados — cache entre parâmetros de rota,
+  cookie HttpOnly na borda, SVG no otimizador de imagem; corrigidos a partir da 16.4.5),
+  Pillow 13.0.0. O que sobra no `npm audit` (puppeteer-core, chromium-bidi, zod) é só da bateria
+  do navegador e não vai ao ar.
+- ⚠️ **O `next dev` dentro do Claude Code para sozinho quando a versão tem alerta**: o Next
+  detecta o agente e sai com o aviso de segurança. Repetir o mesmo comando em até 5 minutos passa
+  (recibo em `.next/dev/cache/next-agentic-upgrade-retries/`); na janela do dono não para.
 - 🔴 **Sem conexão NÃO é sair da conta** (`lib/sessao.tsx`, `lib/api.ts`): só 401/403 do servidor
   apagam a sessão. Antes, qualquer falha do `/auth/me` ao abrir (rede, deploy, banco) e qualquer
   500/503 na renovação deslogavam. Tela `#sem-conexao` tenta sozinha a cada 5 s.
