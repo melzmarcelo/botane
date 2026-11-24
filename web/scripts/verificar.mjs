@@ -3380,10 +3380,15 @@ try {
   // consumo interno) apagam a venda de teste e o movimento dela fica — o razão é append-only.
   // Na base de casa o link mais recente às vezes era um desses órfãos, e a checagem caía em
   // "Venda não encontrada" sem que nada estivesse errado na tela.
+  // ⚠️ **E a nota também** (24/11/2026): `verificar-codigos-do-produto` e `verificar-nota-produto-
+  // inativo` lançam e apagam nota de teste; o ENTRADA_NF dela fica no razão, e a rodada seguinte
+  // abria "/compras/10604" e via "Nota não encontrada".
   let origemViva = null;
   for (const h of razaoComLinks.origem) {
     const venda = h.match(/^\/vendas\/(\d+)/);
     if (venda && (await api("GET", `/vendas/${venda[1]}`, null, token)).status !== 200) continue;
+    const nota = h.match(/^\/compras\/(\d+)/);
+    if (nota && (await api("GET", `/notas/${nota[1]}`, null, token)).status !== 200) continue;
     origemViva = h;
     break;
   }

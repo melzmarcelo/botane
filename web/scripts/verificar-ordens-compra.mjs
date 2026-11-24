@@ -203,6 +203,9 @@ try {
   await esperarLinha(p, `Sabão ordem ${MARCA}`);
   const posto = await linhaCom(p, `Sabão ordem ${MARCA}`);
   checar("entra em A comprar com 6", !!posto && /\b6\b/.test(posto.texto), posto);
+  // ⚠️ A URL muda por navegação suave, depois da janela fechar: na bateria inteira (next dev
+  // lento) a checagem imediata pegava ainda "?sugestoes=1".
+  await p.waitForFunction(() => !location.search.includes("sugestoes"), { timeout: 15000 }).catch(() => {});
   checar("e a janela fecha (sai da URL)", !(await p.$("#ordem-sugestoes")) && !p.url().includes("sugestoes"), p.url());
 } finally {
   await navegador.close();
