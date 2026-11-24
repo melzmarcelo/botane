@@ -8,6 +8,7 @@ import { Aviso, Campo, Modal } from "@/components/ui";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 import { qtd, textoParaNumero } from "@/lib/numeros";
 import {
+  FILTRO_COMPRADOS,
   NovoItem,
   OpcoesDoProduto,
   opcoesDoProduto,
@@ -21,7 +22,7 @@ import {
  */
 export default function FormPedido({ aoPedir }: { aoPedir: () => void }) {
   const aviso = useAviso();
-  const fonte = useMemo(() => fonteProdutos(), []);
+  const fonte = useMemo(() => fonteProdutos(FILTRO_COMPRADOS), []);
   const [produto, setProduto] = useState<{ id: number; rotulo: string } | null>(null);
   const [opcoes, setOpcoes] = useState<OpcoesDoProduto | null>(null);
   const [foraDoCadastro, setForaDoCadastro] = useState(false);
@@ -144,11 +145,6 @@ export default function FormPedido({ aoPedir }: { aoPedir: () => void }) {
         </Campo>
       </div>
 
-      {opcoes?.produzido && (
-        <Aviso tipo="info">
-          A casa produz este item. Se é para repor, o caminho costuma ser a agenda de produção.
-        </Aviso>
-      )}
       {!!opcoes?.abertos.length && (
         <p className="text-[13px] text-suave" id="ordem-ja-na-lista">
           Já na lista: {opcoes.abertos.map((a) =>

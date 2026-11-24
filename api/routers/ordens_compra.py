@@ -15,6 +15,7 @@ from models.ordens_compra import (
     OrdemComprarRequest,
     OrdemItemCreate,
     OrdemItemUpdate,
+    OrdemLoteRequest,
     OrdemVoltarRequest,
 )
 from paginacao import pagina
@@ -51,6 +52,29 @@ def resumo(ctx: Contexto = Depends(_ver)) -> dict:
 def opcoes_do_produto(id_produto: int, ctx: Contexto = Depends(_ver)) -> dict:
     with get_cursor() as cur:
         return servico.opcoes_do_produto(cur, unidade_atual(cur, ctx), id_produto)
+
+
+@router.get("/sugestoes")
+def sugestoes(ctx: Contexto = Depends(_ver)) -> list[dict]:
+    """O que está abaixo do mínimo e se compra, já na unidade de pedir (etapa 2)."""
+    with get_cursor() as cur:
+        return servico.sugestoes(cur, unidade_atual(cur, ctx))
+
+
+@router.post("/lote", status_code=201)
+def adicionar_lote(body: OrdemLoteRequest, ctx: Contexto = Depends(_solicitar)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = servico.adicionar_lote(cur, id_unidade, ctx.id_usuario,
+                                   [i.model_dump() for i in body.itens])
+        for item, pedido in zip(r.pop("itens"), body.itens):
+            auditoria.registrar(
+                cur, ctx.id_usuario, "ordem_compra", item["id"],
+                "somar" if item["somado"] else "pedir",
+                depois={"item": item["item"], "quantidade": str(pedido.quantidade),
+                        "um": pedido.um, "origem": "sugestao"},
+                id_unidade=id_unidade)
+    return r
 
 
 @router.post("", status_code=201)

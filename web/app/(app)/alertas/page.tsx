@@ -11,6 +11,8 @@ import ExplicaTela from "@/components/explica-tela";
 import LinkProduto from "@/components/link-produto";
 
 import { plural } from "@/lib/numeros";
+import { LINK_SUGESTOES } from "@/lib/ordens-compra";
+import { useSessao } from "@/lib/sessao";
 type Alerta = {
   chave: string;
   severidade: "critico" | "atencao" | "aviso";
@@ -95,6 +97,7 @@ function TabelaDeLotes({ lotes }: { lotes: Vencimento[] }) {
 
 export default function PaginaAlertas() {
   const aviso = useAviso();
+  const { pode } = useSessao();
   const [alertas, setAlertas] = useState<Alerta[] | null>(null);
   const [vencimentos, setVencimentos] = useState<Vencimento[]>([]);
   const [minimos, setMinimos] = useState<Minimo[]>([]);
@@ -229,7 +232,15 @@ export default function PaginaAlertas() {
         descricao="O que vai faltar antes da próxima entrega — a base da lista de compras."
         acao={
           minimos.length ? (
-            <BotaoExportar relatorio="saldos" rotulo="Imprimir estoque" />
+            <span className="flex flex-wrap items-center gap-2">
+              {/* 🔑 Etapa 2 da ordem de compra: "a base da lista de compras" vira a lista. */}
+              {pode("compras.ordem_solicitar") && (
+                <Link href={LINK_SUGESTOES} className="btn btn-secundario" id="alertas-por-na-lista">
+                  Pôr na ordem de compra
+                </Link>
+              )}
+              <BotaoExportar relatorio="saldos" rotulo="Imprimir estoque" />
+            </span>
           ) : undefined
         }
       >

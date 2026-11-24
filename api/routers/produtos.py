@@ -260,6 +260,9 @@ def listar(
     # 🔑 **Vende no PDV** (10/11/2026, pedido do dono): a regra de "vai ao PDV" da ficha —
     # marcado para o PDV OU com código de lá (ver cadastros.md, "Vai ao PDV NÃO é integrado_pdv").
     no_pdv: bool | None = None,
+    # 🔑 **Só o que se COMPRA** (24/11/2026, pedido do dono para a ordem de compra): fora o
+    # que a casa produz. A regra é a de `ordens_compra.TIPOS_PRODUZIDOS`.
+    comprado: bool | None = None,
     # 🔑 **Ordenar pelo cabeçalho do grid** (layout novo, fase 2 — 05/11/2026). A lista é
     # paginada, então quem ordena é o servidor: ordenar a página no navegador mostraria os 20
     # primeiros por nome reordenados, e não os 20 mais caros. ⚠️ Só as chaves de `ORDENS`.
@@ -302,6 +305,7 @@ def listar(
                AND (%s::boolean IS NULL OR __EM_USO__ = %s)
                AND (%s::boolean IS NULL
                     OR (p.integrado_pdv OR p.codigo_pdv IS NOT NULL) = %s)
+               AND (%s::boolean IS NULL OR (p.tipo NOT IN ('PRODUZIDO', 'KIT')) = %s)
                AND (%s::varchar IS NULL
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     -- 🔑 Quem lança a venda digita o nome do PDV (22/10/2026).
@@ -324,6 +328,7 @@ def listar(
              # `em_uso` (o lado direito do `=`).
              em_uso, id_unidade, id_unidade, id_unidade, em_uso,
              no_pdv, no_pdv,
+             comprado, comprado,
              busca, busca, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )

@@ -6,6 +6,8 @@ import LinkProduto from "@/components/link-produto";
 import { Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { inteiro, pct, qtd, reais } from "@/lib/numeros";
 import { listaAbaixo, listaNegativos, type VisaoGeral } from "@/lib/estoque-painel";
+import { LINK_SUGESTOES } from "@/lib/ordens-compra";
+import { useSessao } from "@/lib/sessao";
 
 import { BarrasDeitadas } from "../../vendas/painel/graficos";
 import { dataBr } from "../../vendas/painel/periodo";
@@ -61,6 +63,7 @@ export default function Geral({ g, aoVerPerdas, aoVerProduto }: {
   aoVerPerdas: () => void;
   aoVerProduto: (id: number) => void;
 }) {
+  const { pode } = useSessao();
   const neg = g.negativos;
   const ab = g.abaixo_do_minimo;
   const pm = g.perdas_mes;
@@ -98,9 +101,17 @@ export default function Geral({ g, aoVerPerdas, aoVerProduto }: {
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[15px] font-bold">Abaixo do mínimo — o que acaba primeiro</h2>
           {ab.produtos > 0 && (
-            <Link href={listaAbaixo} className="link-acao text-[13px]">
-              ver os {inteiro(ab.produtos)} na lista de saldos →
-            </Link>
+            <span className="flex flex-wrap gap-x-4 gap-y-1">
+              {/* 🔑 Etapa 2 da ordem de compra: o que se compra vai para a lista daqui. */}
+              {pode("compras.ordem_solicitar") && (
+                <Link href={LINK_SUGESTOES} className="link-acao text-[13px]" id="painel-por-na-lista">
+                  pôr na ordem de compra →
+                </Link>
+              )}
+              <Link href={listaAbaixo} className="link-acao text-[13px]">
+                ver os {inteiro(ab.produtos)} na lista de saldos →
+              </Link>
+            </span>
           )}
         </div>
         {ab.lista.length ? (

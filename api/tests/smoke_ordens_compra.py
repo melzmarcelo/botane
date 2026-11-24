@@ -13,6 +13,8 @@ O que este arquivo cobra:
 9. **comprar não mexe no saldo**
 10. fusão leva o pedido; troca de unidade converte o aberto
 11. o relatório sai
+12. etapa 2: produzido fora da busca e da lista; sugestões do mínimo (sem saldo também, até o
+    máximo, em embalagem arredondada, descontando o que já está na lista); lote soma no aberto
 
     python tests/smoke_ordens_compra.py       (API de pé na 9200)
 
@@ -97,10 +99,14 @@ def _desativar_filiais():
         for u in (lista or []):
             if u.get("ativo") and str(u.get("nome", "")).startswith("Filial ordem"):
                 chamar("PUT", f"/unidades/{u['id']}", {"ativo": False}, token=token)
+        # ⚠️ Os produtos com mínimo apareceriam para sempre nas sugestões da base local.
+        for id_produto in com_minimo:
+            chamar("DELETE", f"/produtos/{id_produto}", token=token)
     except Exception:
         pass
 
 
+com_minimo: list[int] = []
 atexit.register(_desativar_filiais)
 
 
@@ -282,6 +288,83 @@ s, rel = api("GET", "/exportar/ordens-compra/dados")
 checar("o relatório responde", s == 200, (s, rel))
 texto = json.dumps(rel, ensure_ascii=False)
 checar("e traz o item aberto", f"INSUMO ORDEM {marca} A" in texto.upper(), texto[:200])
+
+print("10. só o que se compra (etapa 2)")
+s, prod = chamar("POST", "/produtos", {
+    "codigo": f"OC{marca}P", "nome": f"Molho ordem {marca}", "tipo": "PRODUZIDO",
+    "um_estoque": "UN", "um_compra": "UN", "fator_compra": 1, "status": "ATIVO",
+    "estoque_minimo": 5}, token=token, unidade=matriz_id)
+checar("produzido de teste nasce", s == 201, (s, prod))
+com_minimo.append(prod["id"])
+s, r = api("POST", "/ordens-compra", {"id_produto": prod["id"], "quantidade": 1, "um": "UN"})
+checar("produzido não entra na ordem: 409 apontando a agenda",
+       s == 409 and "agenda de produção" in r["detail"], (s, r))
+s, _ = api("GET", f"/ordens-compra/produto/{prod['id']}")
+checar("nem as opções dele abrem", s == 409, s)
+s, l = api("GET", f"/produtos?busca=OC{marca}&comprado=true&limite=50")
+codigos = {x["codigo"] for x in (l or [])}
+checar("a busca de comprados deixa o produzido de fora",
+       f"OC{marca}P" not in codigos and f"OC{marca}A" in codigos, codigos)
+s, l = api("GET", f"/produtos?busca=OC{marca}P&comprado=false&limite=50")
+checar("e o avesso traz só ele", [x["codigo"] for x in (l or [])] == [f"OC{marca}P"], l)
+
+
+def novo_com_minimo(sufixo, minimo, maximo=None):
+    s, p = chamar("POST", "/produtos", {
+        "codigo": f"OC{marca}{sufixo}", "nome": f"Insumo ordem {marca} {sufixo}", "tipo": "INSUMO",
+        "um_estoque": "UN", "um_compra": "UN", "fator_compra": 1, "status": "ATIVO",
+        "estoque_minimo": minimo, "estoque_maximo": maximo}, token=token, unidade=matriz_id)
+    checar(f"produto {sufixo} nasce com mínimo", s == 201, (s, p))
+    com_minimo.append(p["id"])
+    return p["id"]
+
+
+def sugestao(id_produto):
+    _s, l = api("GET", "/ordens-compra/sugestoes")
+    return next((x for x in (l or []) if x["id_produto"] == id_produto), None)
+
+
+caixa = novo_com_minimo("F", 30, 60)
+s, _ = api("PUT", f"/produtos/{caixa}/unidades", {"itens": [{"um": "CX", "fator": 12, "padrao": True}]})
+checar("a caixa de 12 é a unidade padrão", s == 200, s)
+cheio = novo_com_minimo("G", 10)
+api("POST", "/estoque/entradas", {"id_produto": cheio, "quantidade": 20, "custo_unitario": 1,
+                                  "id_local": id_local})
+pouco = novo_com_minimo("H", 8)
+api("POST", "/estoque/entradas", {"id_produto": pouco, "quantidade": 3, "custo_unitario": 1,
+                                  "id_local": id_local})
+
+sg = sugestao(caixa)
+checar("sem nenhuma linha de saldo, aparece (o painel não mostrava)", sg is not None, sg)
+checar("repõe até o máximo, em caixas arredondadas para cima: 60/12 = 5 CX",
+       sg and sg["um"] == "CX" and igual(sg["sugerida"], 5) and sg["ate_o_maximo"], sg)
+checar("acima do mínimo não aparece", sugestao(cheio) is None)
+checar("produzido abaixo do mínimo não aparece", sugestao(prod["id"]) is None)
+sg = sugestao(pouco)
+checar("sem máximo, repõe até o mínimo: 8 - 3 = 5 UN",
+       sg and sg["um"] == "UN" and igual(sg["sugerida"], 5) and not sg["ate_o_maximo"], sg)
+
+s, ab = api("POST", "/ordens-compra", {"id_produto": caixa, "quantidade": 2, "um": "CX"})
+sg = sugestao(caixa)
+checar("o que já está na lista é descontado: 5 - 2 = 3 CX",
+       sg and igual(sg["sugerida"], 3) and sg["na_lista"], sg)
+
+s, r = api("POST", "/ordens-compra/lote", {"itens": [
+    {"id_produto": caixa, "quantidade": 3, "um": "CX"},
+    {"id_produto": pouco, "quantidade": 5, "um": "UN"}]})
+checar("põe as sugestões de uma vez", s == 201 and len(r["ids"]) == 2, (s, r))
+l = linha(ab["id"])
+checar("a caixa soma na linha aberta: 2 + 3 = 5 CX, sem linha nova",
+       l and igual(l["quantidade"], 5) and r["ids"][0] == ab["id"], l)
+sg = sugestao(caixa)
+checar("coberta, a sugestão vem com zero (já na lista)", sg and igual(sg["sugerida"], 0), sg)
+
+s, r = api("POST", "/ordens-compra/lote", {"itens": [
+    {"id_produto": cheio, "quantidade": 1, "um": "UN"},
+    {"id_produto": prod["id"], "quantidade": 1, "um": "UN"}]})
+checar("lote com produzido: 409", s == 409, (s, r))
+_s, abertos = api("GET", f"/ordens-compra?status=A_COMPRAR&busca=OC{marca}G&limite=50")
+checar("e nada do lote entrou (tudo ou nada)", not abertos, abertos)
 
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 if falhas:

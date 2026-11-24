@@ -68,7 +68,7 @@ Notas de entrada (XML, digitação, conciliação e lançamento no razão) e a o
 
 - **Rotas:** `notas.py`, `ordens_compra.py`
 - **Serviços:** `nfe_xml.py`, `ean_das_notas.py`, `notas_lote.py` (lançar as conciliadas de uma vez, com prévia), `ordens_compra.py`
-- **Telas:** `compras/`, `compras/[id]/`, `compras/nova/`, `compras/ordens/` (roteiro `verificar-ordens-compra.mjs`)
+- **Telas:** `compras/`, `compras/[id]/`, `compras/nova/`, `compras/ordens/` (com a janela de sugestões do mínimo, `?sugestoes=1`; roteiro `verificar-ordens-compra.mjs`)
 - **Permissões:** `compras.notas`, `compras.conciliar`, `compras.lancar`, `compras.ordem_solicitar`, `compras.ordem_comprar`
 
 ⚠️ **A nota só vira estoque no LANÇAMENTO**, não na importação: o XML entra como

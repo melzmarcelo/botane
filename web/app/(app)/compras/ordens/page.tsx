@@ -21,6 +21,7 @@ import { useSessao } from "@/lib/sessao";
 
 import FormPedido from "./form-pedido";
 import { JanelaComprar, JanelaCorrigir } from "./janelas";
+import JanelaSugestoes from "./sugestoes";
 
 /**
  * A ordem de compra: o que falta comprar e o que já foi.
@@ -44,6 +45,8 @@ export default function PaginaOrdemDeCompra() {
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [de, setDe] = useEstadoNaUrl<string>("de", "", { atraso: 0 });
   const [ate, setAte] = useEstadoNaUrl<string>("ate", "", { atraso: 0 });
+  // 🔑 Na URL para o painel de estoque e os alertas abrirem direto nas sugestões (etapa 2).
+  const [sugestoes, setSugestoes] = useEstadoNaUrl<boolean>("sugestoes", false);
   const abaAtual: AbaOrdem = aba === "COMPRADO" ? "COMPRADO" : "A_COMPRAR";
   const [lista, setLista] = useState<OrdemItem[] | null>(null);
   const [aComprar, setAComprar] = useState<number | null>(null);
@@ -145,7 +148,16 @@ export default function PaginaOrdemDeCompra() {
       </div>
 
       {abaAtual === "A_COMPRAR" && podePedir && (
-        <Cartao><FormPedido aoPedir={() => void carregar()} /></Cartao>
+        <Cartao>
+          <FormPedido aoPedir={() => void carregar()} />
+          <div className="mt-3 border-t border-[var(--borda)] pt-3">
+            <button type="button" className="btn btn-secundario" id="ordem-abrir-sugestoes"
+                    onClick={() => setSugestoes(true)}>
+              Abaixo do mínimo
+            </button>
+            <span className="ml-3 text-[13px] text-suave">o que o estoque já sabe que falta</span>
+          </div>
+        </Cartao>
       )}
 
       <Cartao>
@@ -229,6 +241,15 @@ export default function PaginaOrdemDeCompra() {
         <Paginacao p={pag} rotulo="itens" />
       </Cartao>
 
+      {sugestoes && podePedir && (
+        <JanelaSugestoes aoFechar={() => setSugestoes(false)}
+                         aoPor={(m) => {
+                           setSugestoes(false);
+                           aviso.sucesso(m);
+                           if (abaAtual !== "A_COMPRAR") setAba("A_COMPRAR");
+                           else void carregar();
+                         }} />
+      )}
       {comprando && (
         <JanelaComprar itens={comprando} aoFechar={() => setComprando(null)}
                        aoComprar={(ids, mensagem) => {

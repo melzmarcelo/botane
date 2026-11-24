@@ -6,7 +6,10 @@ observação opcional. E conforme estes pedidos vão sendo compras estes podem i
 e entram em outra como comprado."*
 
 Estado: **etapa 1 construída em 23/11/2026** (1.3.16, migração 158), com as quatro recomendações
-da seção 8. O que foi decidido está em `docs/memoria/compras.md`; as etapas 2 a 5 seguem por fazer.
+da seção 8, e **etapa 2 em 24/11/2026** (1.3.18): sugestões do mínimo na própria tela, atalhos no
+painel e nos alertas, e só produtos comprados (produzido e kit ficam fora, pedido do dono). O
+"selo já na lista" ficou dentro da janela de sugestões, não no painel. O que foi decidido está em
+`docs/memoria/compras.md`; as etapas 3 a 5 seguem por fazer.
 Abaixo, o estudo como foi escrito, com um ajuste: `voltar` recebe uma lista de ids
 (`POST /ordens-compra/voltar`), para o "desfazer" de uma compra em lote ser uma operação só.
 

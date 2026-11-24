@@ -27,6 +27,12 @@ class OrdemItemCreate(BaseModel):
         return self
 
 
+class OrdemLoteRequest(BaseModel):
+    """As sugestões marcadas, de uma vez."""
+
+    itens: list[OrdemItemCreate] = Field(min_length=1, max_length=200)
+
+
 class OrdemItemUpdate(BaseModel):
     quantidade: Decimal = Quantidade
     um: str = Field(min_length=1, max_length=6)

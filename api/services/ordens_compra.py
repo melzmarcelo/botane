@@ -8,7 +8,7 @@ o mesmo item é o caso normal, e a segunda precisa saber que a primeira já comp
 """
 
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 from fastapi import HTTPException
 
@@ -59,8 +59,14 @@ def _unidades_do_produto(cur, produto: dict) -> list[dict]:
     """Em que unidades este produto se pede: a de compra, as embalagens e a de estoque."""
     cur.execute("""SELECT um, fator, padrao FROM produto_unidades
                     WHERE id_produto = %s ORDER BY padrao DESC, fator""", (produto["id"],))
+    return _montar_unidades(produto, cur.fetchall())
+
+
+def _montar_unidades(produto: dict, embalagens: list) -> list[dict]:
+    """A primeira é a de pedir: a embalagem padrão, senão a de compra, senão a de estoque.
+    `fator` = quantas unidades de estoque cabem em uma."""
     unidades: dict[str, dict] = {}
-    for r in cur.fetchall():
+    for r in embalagens:
         unidades.setdefault(r["um"].upper(), {"um": r["um"], "fator": r["fator"]})
     if produto["um_compra"]:
         unidades.setdefault(produto["um_compra"].upper(),
@@ -72,7 +78,7 @@ def _unidades_do_produto(cur, produto: dict) -> list[dict]:
 
 
 def _produto(cur, id_produto: int) -> dict:
-    cur.execute("""SELECT id, nome, ativo, status, um_estoque, um_compra, fator_compra,
+    cur.execute("""SELECT id, nome, tipo, ativo, status, um_estoque, um_compra, fator_compra,
                           producao_propria, modo_producao
                      FROM produtos WHERE id = %s""", (id_produto,))
     p = cur.fetchone()
@@ -81,9 +87,25 @@ def _produto(cur, id_produto: int) -> dict:
     return dict(p)
 
 
+# 🔑 **Só entra o que se COMPRA** (24/11/2026, pedido do dono: "listar somente os produtos que
+# são comprados e deixar de fora os produzidos"). Prato, preparo e kit a casa faz: repor é a
+# agenda de produção. ⚠️ É o TIPO, não `producao_propria`: há 339 PRODUZIDO sem essa marca
+# (pratos do PDV), e nenhum deles se compra. O filtro `comprado` de `/produtos` usa o mesmo.
+TIPOS_PRODUZIDOS = ("PRODUZIDO", "KIT")
+
+
+def _exigir_comprado(produto: dict) -> None:
+    if produto["tipo"] in TIPOS_PRODUZIDOS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{produto['nome']} é produzido pela casa e não entra na ordem de compra. "
+                   "Para repor, use a agenda de produção.")
+
+
 def opcoes_do_produto(cur, id_unidade: int, id_produto: int) -> dict:
-    """O que a tela precisa ao escolher o produto: unidades, aviso e pedidos em aberto."""
+    """O que a tela precisa ao escolher o produto: unidades e pedidos em aberto."""
     p = _produto(cur, id_produto)
+    _exigir_comprado(p)
     unidades = _unidades_do_produto(cur, p)
     cur.execute(
         """SELECT i.id, i.quantidade, i.um, i.observacao, u.nome AS pedido_por
@@ -93,8 +115,6 @@ def opcoes_do_produto(cur, id_unidade: int, id_produto: int) -> dict:
     return {
         "id": p["id"], "nome": p["nome"], "unidades": unidades,
         "um_padrao": unidades[0]["um"] if unidades else None,
-        # O que a cozinha faz não se resolve comprando: a ação é a agenda de produção.
-        "produzido": bool(p["producao_propria"] and p["modo_producao"] == "PARA_ESTOQUE"),
         "abertos": [dict(r) for r in cur.fetchall()],
     }
 
@@ -165,6 +185,7 @@ def adicionar(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
             raise HTTPException(
                 status_code=409,
                 detail=f"{produto['nome']} está inativo. Reative o cadastro ou escreva o item.")
+        _exigir_comprado(produto)
     um = _sigla(cur, dados["um"], produto)
     observacao = _texto(dados.get("observacao"))
 
@@ -329,3 +350,102 @@ def voltar(cur, id_unidade: int, ids: list[int]) -> dict:
     n = len(unicos)
     return {"ids": unicos,
             "message": "1 item voltou à lista." if n == 1 else f"{n} itens voltaram à lista."}
+
+
+def sugestoes(cur, id_unidade: int) -> list[dict]:
+    """O que está abaixo do mínimo e se compra, com a quantidade para pedir (etapa 2).
+
+    🔑 **Parte do PRODUTO, não do saldo.** O painel parte de `estoque_saldos`, e produto com
+    mínimo e nenhuma linha de saldo na loja (o que mais falta) sumia da lista. Aqui o saldo é
+    LEFT JOIN, e quem nunca teve estoque aparece com zero.
+    🔑 **Repõe até o máximo quando há máximo**, senão até o mínimo.
+    ⚠️ Saldo negativo conta como zero: o negativo é erro de lançamento, não mercadoria a comprar.
+    ⚠️ O que já está em A comprar é descontado, convertido pela embalagem. Coberto, a linha
+    vem com `sugerida = 0` e a tela mostra "já na lista".
+    ⚠️ O mínimo é do produto, não da loja (`produtos.estoque_minimo`): com duas lojas, as duas
+    usam o mesmo número.
+    """
+    cur.execute(
+        """SELECT p.id AS id_produto, p.codigo, p.nome, p.um_estoque, p.um_compra,
+                  p.fator_compra, p.estoque_minimo, p.estoque_maximo,
+                  coalesce(sum(s.quantidade), 0) AS saldo,
+                  (SELECT coalesce(f.nome_fantasia, f.nome) FROM produto_fornecedor pf
+                     JOIN fornecedores f ON f.id = pf.id_fornecedor
+                    WHERE pf.id_produto = p.id
+                    ORDER BY pf.preferencial DESC, f.nome LIMIT 1) AS fornecedor
+             FROM produtos p
+             LEFT JOIN estoque_saldos s ON s.id_produto = p.id AND s.id_unidade = %s
+            WHERE p.ativo AND p.status <> 'ARQUIVADO' AND p.controla_estoque
+              AND p.um_estoque IS NOT NULL
+              AND p.estoque_minimo > 0 AND p.tipo <> ALL(%s)
+            GROUP BY p.id
+           HAVING coalesce(sum(s.quantidade), 0) < p.estoque_minimo
+            ORDER BY coalesce(sum(s.quantidade), 0) / p.estoque_minimo, lower(p.nome)""",
+        (id_unidade, list(TIPOS_PRODUZIDOS)))
+    linhas = [dict(r) for r in cur.fetchall()]
+    if not linhas:
+        return []
+    ids = [l["id_produto"] for l in linhas]
+    cur.execute("""SELECT id_produto, um, fator, padrao FROM produto_unidades
+                    WHERE id_produto = ANY(%s) ORDER BY padrao DESC, fator""", (ids,))
+    embalagens: dict[int, list] = {}
+    for r in cur.fetchall():
+        embalagens.setdefault(r["id_produto"], []).append(r)
+    cur.execute("""SELECT id_produto, um, sum(quantidade) AS quantidade FROM ordem_compra_itens
+                    WHERE id_unidade = %s AND status = 'A_COMPRAR' AND id_produto = ANY(%s)
+                    GROUP BY id_produto, um ORDER BY um""", (id_unidade, ids))
+    abertos: dict[int, list] = {}
+    for r in cur.fetchall():
+        abertos.setdefault(r["id_produto"], []).append(r)
+
+    saida = []
+    for l in linhas:
+        unidades = _montar_unidades(
+            {"id": l["id_produto"], "um_compra": l["um_compra"],
+             "fator_compra": l["fator_compra"], "um_estoque": l["um_estoque"]},
+            embalagens.get(l["id_produto"], []))
+        fatores = {u["um"].upper(): Decimal(u["fator"]) for u in unidades}
+        na_lista = sum((Decimal(a["quantidade"]) * fatores.get(a["um"].upper(), Decimal(1))
+                        for a in abertos.get(l["id_produto"], [])), Decimal(0))
+        minimo, maximo = Decimal(l["estoque_minimo"]), l["estoque_maximo"]
+        alvo = Decimal(maximo) if maximo and Decimal(maximo) > minimo else minimo
+        saldo = Decimal(l["saldo"])
+        faltam = alvo - max(saldo, Decimal(0)) - na_lista
+        um = unidades[0]["um"] if unidades else l["um_estoque"]
+        fator = Decimal(unidades[0]["fator"]) if unidades else Decimal(1)
+        sugerida = (faltam / fator).to_integral_value(rounding=ROUND_CEILING) \
+            if faltam > 0 and fator > 0 else Decimal(0)
+        saida.append({
+            "id_produto": l["id_produto"], "codigo": l["codigo"], "nome": l["nome"],
+            "um_estoque": l["um_estoque"], "saldo": saldo, "estoque_minimo": minimo,
+            "repor_ate": alvo, "ate_o_maximo": alvo != minimo,
+            "na_lista": [{"quantidade": a["quantidade"], "um": a["um"]}
+                         for a in abertos.get(l["id_produto"], [])],
+            "faltam": max(faltam, Decimal(0)), "um": um, "fator": fator, "sugerida": sugerida,
+            "unidades": unidades, "fornecedor": l["fornecedor"],
+        })
+    return saida
+
+
+def adicionar_lote(cur, id_unidade: int, id_usuario: int, itens: list[dict]) -> dict:
+    """Vários itens de uma vez (as sugestões), tudo ou nada.
+
+    🔑 **O que já tem linha aberta no mesmo produto e unidade SOMA nela**, sem perguntar: a
+    sugestão já descontou o que estava na lista, e duas linhas de farinha confundem quem compra.
+    """
+    feitos = []
+    for dados in itens:
+        if dados.get("id_produto") and not dados.get("somar_em"):
+            cur.execute(
+                """SELECT id FROM ordem_compra_itens
+                    WHERE id_unidade = %s AND id_produto = %s AND status = 'A_COMPRAR'
+                      AND upper(um) = upper(%s)
+                    ORDER BY criado_em LIMIT 1""",
+                (id_unidade, dados["id_produto"], dados["um"].strip()))
+            ja = cur.fetchone()
+            if ja:
+                dados = {**dados, "somar_em": ja["id"]}
+        feitos.append(adicionar(cur, id_unidade, id_usuario, dados))
+    n = len(feitos)
+    return {"ids": [f["id"] for f in feitos], "itens": feitos,
+            "message": "1 item na lista." if n == 1 else f"{n} itens na lista."}

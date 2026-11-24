@@ -26,6 +26,32 @@
     item ainda aberto). A tela limpa a lista ao trocar e ignora resposta atrasada.
   - Cobertura: `smoke_ordens_compra.py` e `verificar-ordens-compra.mjs`.
 
+- 🔑 **Ordem de compra, etapa 2: ligada ao estoque, e só o que se compra** (1.3.18, 24/11/2026,
+  pedido do dono: *"pode listar somente os produtos que são comprados e pode deixar de fora da
+  lista os produtos produzido"*). Sem migração.
+  - 🔑 **"Comprado" = tipo fora de `PRODUZIDO` e `KIT`** (`ordens_compra.TIPOS_PRODUZIDOS`). É o
+    TIPO e não `producao_propria`: há PRODUZIDO sem essa marca (pratos do PDV) e nenhum se compra.
+    A busca da tela usa `/produtos?comprado=true` (filtro novo), e a API recusa produzido e kit
+    com 409 apontando a agenda de produção, também nas opções e no lote. O aviso antigo
+    "a casa produz este item" saiu: o caso não chega mais à tela.
+  - **Sugestões** (`GET /ordens-compra/sugestoes`, janela "Abaixo do mínimo" na tela, que abre
+    por `?sugestoes=1`): comprado, ativo, controla estoque, com mínimo e saldo abaixo dele.
+    🔑 **Parte do produto, com LEFT JOIN no saldo**: o painel e o alerta partem de
+    `estoque_saldos` e escondem quem nunca teve saldo na loja, o que mais falta.
+    🔑 Repõe **até o máximo** quando há máximo, senão até o mínimo; na primeira unidade de pedir
+    (embalagem padrão, senão a de compra), **arredondando para cima**; desconta o que já está em
+    A comprar, convertido pela embalagem. Coberto vem com zero, desmarcado e "já na lista".
+    ⚠️ Saldo negativo conta como zero (é erro de lançamento, não mercadoria a comprar).
+  - **`POST /ordens-compra/lote`**, tudo ou nada: o que já tem linha aberta no mesmo produto e
+    unidade SOMA nela, sem perguntar (a sugestão já descontou o aberto).
+  - Atalhos "pôr na ordem de compra" no painel de estoque (cartão Abaixo do mínimo) e nos alertas,
+    só para quem tem `compras.ordem_solicitar`.
+  - ⚠️ **Sem mínimo cadastrado não há sugestão**: em 24/11/2026 a base local tinha ZERO produto
+    comprado com `estoque_minimo`. A etapa só rende quando o cadastro tiver mínimo.
+  - ⚠️ O mínimo continua sendo do produto, não da loja: com duas lojas, as duas usam o mesmo.
+  - ⚠️ `smoke_ordens_compra` desativa no fim os produtos com mínimo que cria: senão eles ficam
+    para sempre nas sugestões da base local.
+
 - 🔑 **Os filtros da lista de notas** (1.1.117, 21/10/2026, pedido do dono: *"nas notas de
   entrada poderia ter mais filtros: período, situação..."*). A rota já aceitava situação, origem
   e período; a tela só oferecia a busca.

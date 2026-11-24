@@ -6,7 +6,8 @@
  *   4. item fora do cadastro;
  *   5. comprar parte: o resto fica, a parte vai para Comprados;
  *   6. "Voltar à lista" junta de novo;
- *   7. no celular, a página não rola de lado.
+ *   7. no celular, a página não rola de lado;
+ *   8. etapa 2: o link das sugestões abre a janela com o produto sem saldo, e "Pôr na lista" grava.
  * O que o roteiro cria é cancelado no fim.
  *
  *    node scripts/verificar-ordens-compra.mjs   (API na 9200 e web na 3100 de pé)
@@ -43,6 +44,11 @@ const { status: st0, dados: produto } = await api("POST", "/produtos", {
   fator_compra: 1, status: "ATIVO",
 }, token);
 checar("o produto de teste nasce", st0 === 201, produto);
+const { status: st1, dados: minimo } = await api("POST", "/produtos", {
+  codigo: `OCM${MARCA}`, nome: `Sabão ordem ${MARCA}`, tipo: "INSUMO", um_estoque: "UN", um_compra: "UN",
+  fator_compra: 1, status: "ATIVO", estoque_minimo: 6,
+}, token);
+checar("o produto com mínimo nasce", st1 === 201, minimo);
 
 const linhaCom = (p, texto) => p.evaluate((t) => {
   const li = [...document.querySelectorAll("#ordem-lista li")]
@@ -171,6 +177,33 @@ try {
     lista: await p.evaluate(() => document.querySelector("#ordem-lista")?.innerText.slice(0, 160) ?? "(sem lista)"),
     abas: await p.evaluate(() => document.querySelector("#ordem-aba-comprar")?.className),
   });
+
+  console.log("8. abaixo do mínimo (etapa 2)");
+  await p.setViewport({ width: 1366, height: 1000 });
+  // ⚠️ Sem saldo nenhum de propósito: era o caso que o painel não mostrava.
+  await p.goto(`${WEB}/compras/ordens?sugestoes=1`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector(`li[data-sugestao="${minimo.id}"]`, { timeout: 30000 }).catch(() => {});
+  const sug = await p.evaluate((id) => {
+    const li = document.querySelector(`li[data-sugestao="${id}"]`);
+    return li ? { texto: li.innerText, qtd: li.querySelector("[data-sugestao-qtd]")?.value,
+                  marcado: li.querySelector("[data-marcar]")?.checked } : null;
+  }, minimo.id);
+  checar("o link abre direto nas sugestões, com o produto sem saldo", !!sug, sug);
+  checar("vem marcado, com a falta inteira: 6", !!sug && sug.marcado && sug.qtd === "6", sug);
+  // Só o de teste vai para a lista: a base local tem outros abaixo do mínimo.
+  await p.evaluate((id) => {
+    for (const li of document.querySelectorAll("#ordem-sugestoes li[data-sugestao]")) {
+      const cx = li.querySelector("[data-marcar]");
+      if (cx && cx.checked !== (li.dataset.sugestao === String(id))) cx.click();
+    }
+  }, minimo.id);
+  await p.waitForFunction(() => /Pôr 1 na lista/.test(document.querySelector("#ordem-por-na-lista")?.innerText ?? ""),
+    { timeout: 5000 }).catch(() => {});
+  await clicar(p, "#ordem-por-na-lista");
+  await esperarLinha(p, `Sabão ordem ${MARCA}`);
+  const posto = await linhaCom(p, `Sabão ordem ${MARCA}`);
+  checar("entra em A comprar com 6", !!posto && /\b6\b/.test(posto.texto), posto);
+  checar("e a janela fecha (sai da URL)", !(await p.$("#ordem-sugestoes")) && !p.url().includes("sugestoes"), p.url());
 } finally {
   await navegador.close();
   // ⚠️ O comprado também: rodada que falha no meio deixaria a linha em Comprados.
@@ -179,6 +212,7 @@ try {
   const { dados: abertos } = await api("GET", `/ordens-compra?status=A_COMPRAR&busca=${MARCA}&limite=50`, undefined, token);
   for (const i of abertos ?? []) await api("POST", `/ordens-compra/${i.id}/cancelar`, {}, token);
   if (produto?.id) await api("DELETE", `/produtos/${produto.id}`, undefined, token);
+  if (minimo?.id) await api("DELETE", `/produtos/${minimo.id}`, undefined, token);
 }
 
 console.log(`\n${ok} passaram, ${falhas.length} falharam`);

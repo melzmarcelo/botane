@@ -32,7 +32,6 @@ export type OpcoesDoProduto = {
   nome: string;
   unidades: { um: string; fator: number | string }[];
   um_padrao: string | null;
-  produzido: boolean;
   abertos: { id: number; quantidade: number | string; um: string; pedido_por: string | null }[];
 };
 
@@ -44,6 +43,35 @@ export type NovoItem = {
   observacao?: string | null;
   somar_em?: number;
 };
+
+/** Abaixo do mínimo e comprado, com a quantidade já na unidade de pedir (etapa 2). */
+export type Sugestao = {
+  id_produto: number;
+  codigo: string | null;
+  nome: string;
+  um_estoque: string | null;
+  saldo: number | string;
+  estoque_minimo: number | string;
+  repor_ate: number | string;
+  ate_o_maximo: boolean;
+  na_lista: { quantidade: number | string; um: string }[];
+  faltam: number | string;
+  um: string;
+  fator: number | string;
+  /** Zero quando o que já está na lista cobre a falta. */
+  sugerida: number | string;
+  unidades: { um: string; fator: number | string }[];
+  fornecedor: string | null;
+};
+
+/**
+ * 🔑 Só o que se COMPRA (pedido do dono, 24/11/2026): produzido e kit ficam fora da busca, e a
+ * API recusa os dois de qualquer jeito.
+ */
+export const FILTRO_COMPRADOS = "comprado=true";
+
+/** O painel de estoque e os alertas abrem a ordem de compra direto nas sugestões. */
+export const LINK_SUGESTOES = "/compras/ordens?sugestoes=1";
 
 type Resposta = { id: number; message: string };
 type RespostaLote = { ids: number[]; message: string };
@@ -60,6 +88,11 @@ export const unidadesDeMedida = () =>
   api.get<{ sigla: string; nome: string }[]>("/unidades-medida");
 
 export const pedirItem = (corpo: NovoItem) => api.post<Resposta>("/ordens-compra", corpo);
+
+export const sugestoesOrdem = () => api.get<Sugestao[]>("/ordens-compra/sugestoes");
+
+export const pedirLote = (itens: NovoItem[]) =>
+  api.post<RespostaLote>("/ordens-compra/lote", { itens });
 
 export const corrigirItem = (
   id: number,
