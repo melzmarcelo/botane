@@ -157,6 +157,24 @@ export default function PdvLegal() {
   }
 
   /**
+   * 🔑 Completa a forma de pagamento das vendas importadas antes da migração 160.
+   * Relê o PDV dia a dia a partir da primeira venda sem forma, até 120 dias por clique, sem
+   * criar venda nem mexer em estoque; clicar de novo continua de onde parou.
+   */
+  async function completarPagamentos() {
+    setOcupado(true);
+    try {
+      const r = await api.post<{ message: string; ainda_sem?: number }>("/pdv/pagamentos/completar");
+      aviso.sucesso(r.message + ((r.ainda_sem ?? 0) > 0
+        ? `. Ainda faltam ${r.ainda_sem} venda(s): clique de novo para continuar` : ""));
+    } catch (err) {
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível completar as formas de pagamento");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /**
    * Traz o cardápio e monta o de-para.
    *
    * ⚠️ O que a cascata **não** faz é casar código com código: o número do
@@ -556,6 +574,16 @@ export default function PdvLegal() {
                   title="Traz os itens do cardápio e liga aos pratos daqui"
                 >
                   Importar cardápio
+                </button>
+                <button
+                  className="btn btn-secundario"
+                  type="button"
+                  id="pdv-completar-pagamentos"
+                  onClick={completarPagamentos}
+                  aria-busy={ocupado} disabled={ocupado}
+                  title="Relê o PDV e grava como cada venda já importada foi paga"
+                >
+                  Completar formas de pagamento
                 </button>
               </>
             )}

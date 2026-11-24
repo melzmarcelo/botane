@@ -51,6 +51,8 @@
       {
         "cod": 685411749,
         "codcupom": 9900000101,
+        "codformarecebimentopdv": 1,
+        "codClassificacao": 1,
         "nome": "DINHEIRO",
         "nomeExterno": "Dinheiro",
         "valortotal": 17.5
@@ -107,7 +109,26 @@
         "dtmovimento": "2026-08-26T09:14:30"
       }
     ],
-    "formaPgtos": [],
+    "formaPgtos": [
+      {
+        "cod": 685411750,
+        "codcupom": 9900000102,
+        "codformarecebimentopdv": -1,
+        "codClassificacao": 1,
+        "nome": "TROCO",
+        "nomeExterno": "",
+        "valortotal": 9.0
+      },
+      {
+        "cod": 685411751,
+        "codcupom": 9900000102,
+        "codformarecebimentopdv": 1,
+        "codClassificacao": 1,
+        "nome": "DINHEIRO",
+        "nomeExterno": "Dinheiro",
+        "valortotal": 20.0
+      }
+    ],
     "notas": [],
     "clientes": [],
     "modificadores": [],
@@ -146,7 +167,17 @@
         "dtmovimento": "2026-08-26T10:02:30"
       }
     ],
-    "formaPgtos": [],
+    "formaPgtos": [
+      {
+        "cod": 685411752,
+        "codcupom": 9900000103,
+        "codformarecebimentopdv": 95239,
+        "codClassificacao": 3,
+        "nome": "CREDITO",
+        "nomeExterno": "Cartão de Crédito",
+        "valortotal": 6.5
+      }
+    ],
     "notas": [],
     "clientes": [],
     "modificadores": [],

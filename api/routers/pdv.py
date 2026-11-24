@@ -22,12 +22,13 @@ from pydantic import BaseModel, Field
 from psycopg2.extras import Json
 
 import auditoria
+import relogio
 from database import get_cursor
 from seguranca import Contexto, requer_permissao, unidade_atual
 from models.cmv import ImportarVendasRequest, VendaImportar
 from routers import vendas as rota_vendas
-from services import segredos
-from services.pdv import cardapio, envio, importador
+from services import segredos, venda_pagamentos
+from services.pdv import cardapio, envio, importador, mapeadores
 from services.pdv.cliente import ClientePdv, ErroPdv
 
 router = APIRouter(prefix="/pdv", tags=["PDV Legal"])
@@ -106,6 +107,31 @@ def _cliente(cur, id_unidade: int) -> ClientePdv:
     c = segredos.decifrar(linha["credenciais"])
     return ClientePdv(c.get("username"), c.get("password"), c.get("client_id"),
                       c.get("client_secret"), linha["modo"])
+
+
+def _filiais_da_busca(cred: dict, cliente: ClientePdv) -> str:
+    """As filiais que a busca de cupons cobre.
+
+    ⚠️ Sem filial configurada, descobre sozinho — uma casa com uma filial
+    só não deveria precisar digitar o código dela em lugar nenhum. Só
+    pergunta quando há mais de uma: aí a escolha é de quem configura, e
+    somar todas mudaria o CMV de cada loja.
+    """
+    filiais = (cred.get("filiais") or "").strip()
+    if filiais:
+        return filiais
+    try:
+        lista = cliente.get("/filial/get") or []
+    except ErroPdv as e:
+        raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
+    codigos = [str(f.get("codigo")) for f in lista if f.get("codigo")]
+    if len(codigos) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"A conta tem {len(codigos)} filial(is). Diga quais entram na "
+                    "busca no campo Filiais da configuração, separadas por vírgula."),
+        )
+    return codigos[0]
 
 
 @router.get("/config")
@@ -301,25 +327,7 @@ def sincronizar(
         linha = cur.fetchone()
         cred = segredos.decifrar(linha["credenciais"]) if linha else {}
         cliente = _cliente(cur, id_unidade)
-
-        # ⚠️ Sem filial configurada, descobre sozinho — uma casa com uma filial
-        # só não deveria precisar digitar o código dela em lugar nenhum. Só
-        # pergunta quando há mais de uma: aí a escolha é de quem configura, e
-        # somar todas mudaria o CMV de cada loja.
-        filiais = (cred.get("filiais") or "").strip()
-        if not filiais:
-            try:
-                lista = cliente.get("/filial/get") or []
-            except ErroPdv as e:
-                raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
-            codigos = [str(f.get("codigo")) for f in lista if f.get("codigo")]
-            if len(codigos) != 1:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(f"A conta tem {len(codigos)} filial(is). Diga quais entram na "
-                            "busca no campo Filiais da configuração, separadas por vírgula."),
-                )
-            filiais = codigos[0]
+        filiais = _filiais_da_busca(cred, cliente)
 
         # 🔑 **O cadastro vem ANTES da venda, e é por isso que a ordem importa.**
         # Prato criado no PDV hoje e vendido hoje: se a venda entrasse primeiro,
@@ -409,6 +417,57 @@ def sincronizar(
                     + (f". Cadastros não sincronizados: {cadastros['erro']}"
                        if cadastros.get("erro") else "")),
     }
+
+
+@router.post("/pagamentos/completar")
+def completar_pagamentos(
+    desde: date | None = None,
+    ctx: Contexto = Depends(requer_permissao("integracao.pdv")),
+) -> dict:
+    """Relê o PDV e grava a forma de pagamento das vendas que já existem (migração 160).
+
+    🔑 Não cria venda nem mexe em item, custo ou estoque. Sem `desde`, começa na primeira
+    venda do PDV que ainda não tem pagamento — rodar de novo continua de onde parou.
+    ⚠️ Uma chamada ao PDV por dia, até `venda_pagamentos.TETO_DE_DIAS` por vez.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
+            (id_unidade, SERVICO))
+        linha = cur.fetchone()
+        cred = segredos.decifrar(linha["credenciais"]) if linha else {}
+        cliente = _cliente(cur, id_unidade)
+        filiais = _filiais_da_busca(cred, cliente)
+        cur.execute(
+            """SELECT min(v.data) AS ini, max(v.data) AS fim FROM vendas v
+                WHERE v.id_unidade = %s AND v.origem = 'PDV_LEGAL'
+                  AND NOT EXISTS (SELECT 1 FROM venda_pagamentos vp WHERE vp.id_venda = v.id)""",
+            (id_unidade,))
+        faltam = cur.fetchone()
+        inicio = desde or faltam["ini"]
+        if not inicio:
+            return {"completadas": 0, "dias": 0, "cupons": 0, "sem_venda": 0,
+                    "modo": cliente.modo,
+                    "message": "Todas as vendas do PDV já têm a forma de pagamento."}
+        # Com `desde`, até hoje; sem, até a última venda que ainda não tem pagamento.
+        fim = relogio.hoje_da_casa() if desde else (faltam["fim"] or inicio)
+        try:
+            r = venda_pagamentos.completar(cur, cliente, mapeadores, id_unidade, filiais,
+                                           inicio, fim)
+        except ErroPdv as e:
+            raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
+        auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "completar_pagamentos",
+                            depois={k: r[k] for k in ("inicio", "fim", "dias", "cupons",
+                                                      "completadas", "sem_venda")},
+                            id_unidade=id_unidade)
+        cur.execute(
+            """SELECT count(*) AS n FROM vendas v
+                WHERE v.id_unidade = %s AND v.origem = 'PDV_LEGAL' AND NOT v.cancelada
+                  AND NOT EXISTS (SELECT 1 FROM venda_pagamentos vp WHERE vp.id_venda = v.id)""",
+            (id_unidade,))
+        r["ainda_sem"] = cur.fetchone()["n"]
+    return {**r, "modo": cliente.modo}
 
 
 def _filial_do_preco(cur, id_unidade: int, cliente: ClientePdv) -> str:

@@ -21,8 +21,10 @@ import Voltar from "@/components/voltar";
 
 import { concorda, custo, plural } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
+import AcoesDoItem from "./acoes-do-item";
 import AcrescentarItens from "./acrescentar-itens";
 import AlterarCabecalho from "./alterar-cabecalho";
+import PagamentosDaVenda from "./pagamentos-da-venda";
 /**
  * Uma venda, inteira, numa página só.
  *
@@ -81,6 +83,8 @@ export default function PaginaVenda() {
   const descontoPolitica =
     totalCheio - venda.itens.reduce((soma, i) => soma + Number(i.valor_total), 0);
   const parcial = venda.itens_sem_custo > 0;
+  // 🔑 Mudar a quantidade e excluir linha (24/11/2026): só à mão e em aberto — o servidor diz.
+  const mudaItens = podeCancelar && !!venda.pode_mudar_itens;
 
   return (
     <div className="flex flex-col gap-6">
@@ -218,6 +222,8 @@ export default function PaginaVenda() {
               <b className="tabular-nums">{reais(descontoPolitica)}</b>
             </p>
           )}
+          <PagamentosDaVenda pagamentos={venda.pagamentos ?? []} troco={venda.troco ?? 0}
+                             origem={venda.origem} />
         </Cartao>
         <Cartao titulo={parcial ? "Custo teórico (parcial)" : "Custo teórico"}>
           <p className="text-[26px] font-bold tabular-nums">{reais(venda.custo_teorico)}</p>
@@ -245,6 +251,7 @@ export default function PaginaVenda() {
                 <th className="num">Total</th>
                 <th className="num">Custo un.</th>
                 <th>De onde veio o custo</th>
+                {mudaItens && <th aria-label="ações" />}
               </tr>
             </thead>
             <tbody>
@@ -313,6 +320,13 @@ export default function PaginaVenda() {
                   <td className="text-[13px] text-suave">
                     {ORIGEM_CUSTO[i.origem_custo ?? ""] ?? i.origem_custo ?? "—"}
                   </td>
+                  {mudaItens && (
+                    <td data-item-venda={i.id}>
+                      <AcoesDoItem idVenda={venda.id} item={i}
+                                   nome={i.produto_curto || i.produto || i.descricao_pdv || "item"}
+                                   ultimo={venda.itens.length <= 1} aoMudar={() => void carregar()} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

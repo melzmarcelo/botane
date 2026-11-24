@@ -2178,6 +2178,75 @@ def _vendas_documentos(cur, id_unidade: int, f: dict) -> Saida:
         inicio, fim, anexos=anexos)
 
 
+def _vendas_pagamentos(cur, id_unidade: int, f: dict) -> Saida:
+    """Vendas por forma de pagamento, dia a dia (migração 160, pedido do dono de 24/11/2026).
+
+    🔑 **Dinheiro LÍQUIDO** (recebido − troco), como no painel, e o troco à parte: são os dois
+    números da conferência do caixa. ⚠️ O que não tem forma (planilha, lançado à mão, PDV
+    ainda não relido) sai em "Não informado", para cada dia fechar com a receita.
+    """
+    from services import venda_pagamentos as vp
+    inicio, fim = _periodo(f)
+    cur.execute(
+        """SELECT v.data, p.grupo, sum(p.valor) AS valor
+             FROM venda_pagamentos p JOIN vendas v ON v.id = p.id_venda
+            WHERE v.id_unidade = %s AND v.data BETWEEN %s AND %s
+              AND NOT v.cancelada AND NOT v.consumo_interno
+            GROUP BY v.data, p.grupo""",
+        (id_unidade, inicio, fim))
+    por_dia: dict = {}
+    for r in cur.fetchall():
+        por_dia.setdefault(r["data"], {})[r["grupo"]] = Decimal(r["valor"] or 0)
+    cur.execute(
+        """SELECT v.data, count(*) AS cupons, sum(v.valor_total) AS receita,
+                  sum(v.valor_total) FILTER (WHERE NOT EXISTS (
+                      SELECT 1 FROM venda_pagamentos p WHERE p.id_venda = v.id))
+                      AS sem_forma
+             FROM vendas v
+            WHERE v.id_unidade = %s AND v.data BETWEEN %s AND %s
+              AND NOT v.cancelada AND NOT v.consumo_interno
+            GROUP BY v.data ORDER BY v.data""",
+        (id_unidade, inicio, fim))
+    cem = lambda v: Decimal(v or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    linhas = []
+    for r in cur.fetchall():
+        g = por_dia.get(r["data"], {})
+        linhas.append({
+            "data": r["data"], "cupons": r["cupons"],
+            **{k.lower(): cem(g.get(k)) for k in ("CREDITO", "DEBITO", "PIX", "VALE", "OUTRO")},
+            "dinheiro": cem(g.get("DINHEIRO", 0) - g.get("TROCO", 0)),
+            "troco": cem(g.get("TROCO")),
+            "sem_forma": cem(r["sem_forma"]),
+            "receita": cem(r["receita"]),
+        })
+    total = sum((l["receita"] for l in linhas), Decimal(0))
+    quadro = vp.por_forma(cur, id_unidade, inicio, fim, total)
+    resumo_forma = [{"forma": l["rotulo"], "cupons": l["cupons"], "valor": cem(l["valor"]),
+                     "participacao_pct": Decimal(str(l["participacao_pct"] or 0)).quantize(
+                         Decimal("0.1"), rounding=ROUND_HALF_UP)}
+                    for l in quadro["linhas"]]
+    if quadro["sem_pagamento"]["cupons"]:
+        resumo_forma.append({"forma": "Não informado", "cupons": quadro["sem_pagamento"]["cupons"],
+                             "valor": cem(quadro["sem_pagamento"]["valor"]),
+                             "participacao_pct": None})
+    return Saida(
+        linhas,
+        [("data", "Data"), ("cupons", "Cupons"), ("credito", "Crédito"), ("debito", "Débito"),
+         ("pix", "Pix"), ("dinheiro", "Dinheiro (líquido)"), ("troco", "Troco"),
+         ("vale", "Vale-presente"), ("outro", "Outro"), ("sem_forma", "Não informado"),
+         ("receita", "Receita")],
+        "Vendas por forma de pagamento",
+        [("Período", _intervalo(inicio, fim)), ("Receita", cem(total)),
+         ("Dinheiro recebido", cem(quadro["dinheiro_recebido"])),
+         ("Troco devolvido", cem(quadro["troco"]))],
+        inicio, fim,
+        anexos=[(resumo_forma,
+                 [("forma", "Forma"), ("cupons", "Cupons"), ("valor", "Valor"),
+                  ("participacao_pct", "Participação %")],
+                 "Por forma no período", None)],
+    )
+
+
 def _vendas_motivos(cur, id_unidade: int, f: dict) -> Saida:
     """Os documentos que não são venda, por motivo — o mesmo recorte da tela.
 
@@ -3371,6 +3440,12 @@ RELATORIOS: dict[str, Relatorio] = {
         "com o caixa e o PDV.",
         "cmv.relatorios", "vendas-documentos", ("periodo", "origem_venda", "motivo_venda"),
         _vendas_documentos),
+    # 🔑 As finalizadoras do PDV (migração 160, pedido do dono de 24/11/2026).
+    "vendas-pagamentos": Relatorio(
+        "Vendas por forma de pagamento",
+        "Crédito, débito, Pix, dinheiro (já sem o troco) e vale, dia a dia — para saber quanto "
+        "entrou em cada forma e conferir o caixa.",
+        "cmv.relatorios", "vendas-pagamentos", ("periodo",), _vendas_pagamentos),
     # 🔑 Os documentos que não são venda, por motivo (26/10/2026, pedido do dono).
     "vendas-motivos": Relatorio(
         "Documentos por motivo",
@@ -3455,6 +3530,7 @@ GRUPOS = {
     "saldos": "Estoque", "saldos-rede": "Estoque", "movimentos": "Estoque", "vencimentos": "Estoque",
     "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
     "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
+    "vendas-pagamentos": "Vendas",
     "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
     "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
     "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",

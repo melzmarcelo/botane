@@ -1,6 +1,7 @@
 """Modelos de vendas e CMV."""
 
 from datetime import date, time
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -18,6 +19,16 @@ class ItemVenda(BaseModel):
     # de fora deixaria qualquer chamador declarar um desconto que não houve, e
     # o relatório de consumo somaria um desconto inventado.
     valor_unitario_cheio: float | None = None
+
+
+class PagamentoVenda(BaseModel):
+    """Uma finalizadora do cupom (migração 160). Hoje só o PDV Legal manda."""
+
+    grupo: Literal["DINHEIRO", "CREDITO", "DEBITO", "PIX", "VALE", "TROCO", "OUTRO"]
+    nome_pdv: str | None = Field(default=None, max_length=60)
+    cod_forma_pdv: int | None = None
+    # ⚠️ Decimal, não float: é dinheiro (regra 2 do CLAUDE.md).
+    valor: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
 
 
 class VendaImportar(BaseModel):
@@ -69,6 +80,11 @@ class VendaImportar(BaseModel):
     # obrigatório no motivo PREMIO. O documento liga o prêmio (ou o entrega, se o balcão
     # ainda não entregou) — ver `fidelidade.ligar_ao_documento`.
     codigo_premio: str | None = Field(default=None, max_length=12)
+    # 🔑 **Como foi paga** (migração 160). Vazia na planilha e no lançamento à mão: a venda
+    # fica "não informado", sem inventar forma. Em documento REPETIDO, a lista não vazia
+    # regrava os pagamentos da venda que já existe: é assim que a releitura completa o
+    # histórico sem duplicar venda.
+    pagamentos: list[PagamentoVenda] = Field(default_factory=list)
     itens: list[ItemVenda]
 
 
@@ -89,6 +105,12 @@ class PreviaCupomRequest(BaseModel):
 
     id_pessoa: int | None = None
     itens: list[ItemVenda]
+
+
+class QuantidadeItemRequest(BaseModel):
+    """A quantidade nova de uma linha de documento lançado à mão (24/11/2026)."""
+
+    quantidade: float = Field(gt=0, le=100000)
 
 
 class AcrescentarItensRequest(BaseModel):

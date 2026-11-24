@@ -18,13 +18,14 @@ import relogio
 from database import get_cursor
 from paginacao import pagina
 from models.cmv import (AcrescentarItensRequest, ImportarVendasRequest, PreviaCupomRequest,
-                        VendaAlterar, VendaResponse)
+                        QuantidadeItemRequest, VendaAlterar, VendaResponse)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
 from services import consumo_pessoa as consumo
 from services import estoque as motor_estoque
 from services import fidelidade
 from services import painel_vendas
+from services import venda_pagamentos
 from services import vendas_motivos
 from services import precos
 from services import producao_agenda as agenda
@@ -458,6 +459,20 @@ def _gravar_item(cur, id_unidade: int, id_venda: int, venda, item, id_usuario: i
          item.valor_unitario_cheio, custo, origem),
     )
 
+    if id_produto and not venda.cancelada:
+        b = _baixar(cur, id_unidade, id_venda, venda, id_produto, item.quantidade, id_usuario)
+        r["produzido"], r["baixado"] = b["produzido"], b["baixado"]
+    return r
+
+
+def _baixar(cur, id_unidade: int, id_venda: int, venda, id_produto: int, quantidade,
+            id_usuario: int) -> dict:
+    """A baixa de estoque de uma linha (e a produção na hora, se for o caso).
+
+    ⚠️ **Uma função só** para o item que entra e para o item cuja quantidade muda
+    (24/11/2026): a mesma saída, com o mesmo tipo, local e data, nos dois caminhos.
+    """
+    r = {"produzido": 0, "baixado": 0}
     # VENDER É SAIR DO ESTOQUE. Sem esta baixa, o que foi vendido
     # continuava na prateleira do sistema: o CMV real ficava
     # subestimado e a primeira contagem cobria o buraco inteiro
@@ -470,8 +485,8 @@ def _gravar_item(cur, id_unidade: int, id_venda: int, venda, item, id_usuario: i
     # poder entrar. Ele existe aqui para a conferência com o PDV
     # fechar e para aparecer no painel — mercadoria que voltou para
     # a prateleira (ou nunca saiu) não pode sair do razão, que é
-    # append-only e não teria como desfazer.
-    if id_produto and not venda.cancelada:
+    # append-only e não teria como desfazer. (Quem chama já filtrou o cancelado.)
+    if quantidade and quantidade > 0:
         cur.execute(
             # 🔑 **De onde a venda baixa é o `id_local_venda`, quando
             # ele existe** (migração 066, pedido do dono). A mesma
@@ -490,7 +505,7 @@ def _gravar_item(cur, id_unidade: int, id_venda: int, venda, item, id_usuario: i
         p_venda = cur.fetchone() or {}
         if p_venda.get("controla_estoque"):
             feito = agenda.producao_da_venda(
-                cur, id_unidade, id_produto, item.quantidade, id_usuario,
+                cur, id_unidade, id_produto, quantidade, id_usuario,
                 documento=venda.documento, id_venda=id_venda)
             if feito:
                 r["produzido"] = 1
@@ -506,7 +521,7 @@ def _gravar_item(cur, id_unidade: int, id_venda: int, venda, item, id_usuario: i
                 # é por ela que o cancelamento acha o movimento a estornar.
                 tipo=_tipo_da_saida(venda),
                 id_motivo_perda=_motivo_perda_da_venda(venda),
-                quantidade=item.quantidade,
+                quantidade=quantidade,
                 data_movimento=_quando(venda.data, venda.hora),
                 origem_tipo="VENDA", origem_id=id_venda,
                 documento=venda.documento, id_usuario=id_usuario,
@@ -559,12 +574,19 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         for venda in body.vendas:
             if venda.documento:
                 cur.execute(
-                    """SELECT 1 FROM vendas
+                    """SELECT id FROM vendas
                         WHERE id_unidade = %s AND origem = %s AND documento = %s""",
                     (id_unidade, venda.origem, venda.documento),
                 )
-                if cur.fetchone():
+                existente = cur.fetchone()
+                if existente:
                     repetidas += 1
+                    # 🔑 160: o repetido não muda — mas, se veio com a forma de pagamento,
+                    # ela é gravada. É o que completa as vendas de antes da migração na
+                    # busca de sempre, sem duplicar nada.
+                    if venda.pagamentos:
+                        venda_pagamentos.gravar(cur, id_unidade, existente["id"],
+                                                [p.model_dump() for p in venda.pagamentos])
                     continue
 
             # 🔑 **Cada venda num SAVEPOINT** (14/10/2026). O lote era uma transação
@@ -645,6 +667,9 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                      (politica or {}).get("cupom_desconto_pct"), ctx.id_usuario),
                 )
                 id_venda = cur.fetchone()["id"]
+                if venda.pagamentos:
+                    venda_pagamentos.gravar(cur, id_unidade, id_venda,
+                                            [p.model_dump() for p in venda.pagamentos])
                 if venda.cancelada:
                     canceladas += 1
                 else:
@@ -953,8 +978,8 @@ def acrescentar_itens(id_venda: int, body: AcrescentarItensRequest,
 
     🔑 **Pedido do dono (20/10/2026).** Antes, o item esquecido virava uma segunda venda
     com outro documento (ou cancelar e lançar tudo de novo), e o cupom deixava de ser um.
-    ⚠️ **Só acrescenta.** O que já entrou está no razão, que é append-only; tirar uma
-    linha é cancelar a venda (o estorno devolve tudo) e lançar de novo.
+    ⚠️ **Só acrescenta.** Mudar a quantidade ou tirar uma linha (só documento à mão, em
+    aberto) é `mudar_quantidade` / `excluir_item`, que refazem a baixa por estorno.
     ⚠️ A política vale a CONGELADA na venda, não a de hoje do cadastro: o cupom inteiro
     tem de sair pela mesma regra.
     """
@@ -1027,6 +1052,158 @@ def acrescentar_itens(id_venda: int, body: AcrescentarItensRequest,
                     + (f" · {sem_custo_politica} sem custo conhecido saíram pelo preço de venda"
                        if sem_custo_politica else "")),
     }
+
+
+def _por_que_nao_muda_itens(cur, id_unidade: int, venda: dict) -> str | None:
+    """Por que as linhas desta venda NÃO podem mudar de quantidade nem sair — ou nada.
+
+    🔑 **A regra do dono (24/11/2026):** *"editar a quantidade e excluir itens em documentos
+    lançados a mão que ainda estão em aberto"*. Em aberto = fora de lote de cobrança e com o
+    período do CMV aberto, a mesma régua do "acrescentar" (`_por_que_nao_edita`).
+    ⚠️ **Só MANUAL**: a planilha se reimporta pelo número e o PDV é dono do cupom.
+    """
+    if not venda["cancelada"] and venda["origem"] != "MANUAL":
+        return ("Só o documento lançado à mão tem itens editáveis: "
+                + ("o da planilha se corrige na planilha." if venda["origem"] == "PLANILHA"
+                   else "o do PDV se corrige lá."))
+    motivo = _por_que_nao_edita(cur, id_unidade, venda)
+    return motivo.replace("acrescentar itens", "mudar os itens") if motivo else None
+
+
+def _venda_para_itens(cur, id_unidade: int, id_venda: int) -> dict:
+    cur.execute(
+        """SELECT id, data, hora, origem, documento, cancelada, consumo_interno, motivo,
+                  motivo_observacao, id_motivo_perda, id_consumo_lote, valor_total
+             FROM vendas WHERE id = %s AND id_unidade = %s FOR UPDATE""",
+        (id_venda, id_unidade))
+    venda = cur.fetchone()
+    if not venda:
+        raise HTTPException(status_code=404, detail="Venda não encontrada")
+    venda = dict(venda)
+    motivo = _por_que_nao_muda_itens(cur, id_unidade, venda)
+    if motivo:
+        raise HTTPException(status_code=409, detail=motivo)
+    return venda
+
+
+def _item_da_venda(cur, id_venda: int, id_item: int) -> dict:
+    cur.execute("""SELECT id, id_produto, quantidade, valor_unitario, valor_total,
+                          coalesce(descricao_pdv, codigo_pdv) AS descricao
+                     FROM venda_itens WHERE id = %s AND id_venda = %s FOR UPDATE""",
+                (id_item, id_venda))
+    item = cur.fetchone()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item não encontrado nesta venda.")
+    return dict(item)
+
+
+def _refazer_baixa(cur, id_unidade: int, venda: dict, id_produto: int,
+                   id_usuario: int, motivo: str) -> int:
+    """Estorna a baixa deste produto nesta venda e lança de novo com o total que ficou.
+
+    🔑 **O razão é append-only** (regra 1): a quantidade nova não se escreve por cima — a
+    saída viva volta como estorno, na data em que estava, e nasce a saída do total que
+    sobrou das linhas do produto. A produção NA HORA que a venda disparou volta junto e é
+    refeita, senão o insumo do café a menos continuaria consumido.
+    ⚠️ Estorno na ordem inversa (a saída, depois a produção), a mesma do cancelamento.
+    """
+    cur.execute(
+        """SELECT m.id, m.data_movimento FROM estoque_movimentos m
+            WHERE ((m.origem_tipo = 'VENDA' AND m.origem_id = %(v)s AND m.id_produto = %(p)s)
+                   OR (m.origem_tipo = 'PRODUCAO'
+                       AND m.origem_id IN (SELECT pr.id FROM producoes pr
+                                            WHERE pr.id_venda = %(v)s
+                                              AND pr.id_produto = %(p)s)))
+              AND m.id_estorno_de IS NULL
+              AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e WHERE e.id_estorno_de = m.id)
+            ORDER BY m.id DESC""",
+        {"v": venda["id"], "p": id_produto})
+    vivos = [dict(r) for r in cur.fetchall()]
+    for m in vivos:
+        motor_estoque.estornar(cur, m["id"], id_usuario, motivo,
+                               data_movimento=m["data_movimento"])
+    cur.execute("""SELECT coalesce(sum(quantidade), 0) AS q FROM venda_itens
+                    WHERE id_venda = %s AND id_produto = %s""", (venda["id"], id_produto))
+    resta = float(cur.fetchone()["q"])
+    if resta > 0:
+        _baixar(cur, id_unidade, venda["id"], SimpleNamespace(**venda), id_produto, resta,
+                id_usuario)
+    return len(vivos)
+
+
+@router.put("/{id_venda}/itens/{id_item}")
+def mudar_quantidade(id_venda: int, id_item: int, body: QuantidadeItemRequest,
+                     ctx: Contexto = Depends(_editar)) -> dict:
+    """Muda a quantidade de uma linha de documento lançado à mão e em aberto (24/11/2026).
+
+    O preço unitário e o custo congelado da linha não mudam; o total da linha e o da venda
+    acompanham. A baixa de estoque do produto é refeita pelo total novo (`_refazer_baixa`).
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        venda = _venda_para_itens(cur, id_unidade, id_venda)
+        item = _item_da_venda(cur, id_venda, id_item)
+        antes = float(item["quantidade"])
+        nova = float(body.quantidade)
+        if abs(nova - antes) < 1e-9:
+            return {"id": id_item, "message": "Nada mudou"}
+        unitario = float(item["valor_unitario"])
+        diferenca = round((nova - antes) * unitario, 2)
+        cur.execute("UPDATE venda_itens SET quantidade = %s, valor_total = %s WHERE id = %s",
+                    (nova, nova * unitario, id_item))
+        cur.execute("UPDATE vendas SET valor_total = valor_total + %s WHERE id = %s",
+                    (diferenca, id_venda))
+        refeitos = 0
+        if item["id_produto"]:
+            refeitos = _refazer_baixa(
+                cur, id_unidade, venda, item["id_produto"], ctx.id_usuario,
+                f"Venda #{id_venda}: quantidade de {item['descricao'] or 'item'} "
+                f"mudou de {antes:g} para {nova:g}")
+        auditoria.registrar(cur, ctx.id_usuario, "vendas", id_venda, "mudar_quantidade",
+                            antes={"item": id_item, "quantidade": antes},
+                            depois={"quantidade": nova, "diferenca": diferenca,
+                                    "movimentos_estornados": refeitos},
+                            id_unidade=id_unidade)
+    return {"id": id_item, "quantidade": nova, "diferenca": diferenca,
+            "message": (f"Quantidade de {item['descricao'] or 'item'}: {antes:g} → {nova:g} "
+                        f"({'+' if diferenca >= 0 else '−'}R$ {abs(diferenca):.2f})")
+                       .replace(".", ",")}
+
+
+@router.delete("/{id_venda}/itens/{id_item}")
+def excluir_item(id_venda: int, id_item: int, ctx: Contexto = Depends(_editar)) -> dict:
+    """Tira uma linha de documento lançado à mão e em aberto (24/11/2026).
+
+    ⚠️ **A última linha não sai**: documento sem item é venda de valor zero que não explica
+    nada. Para desfazer o documento inteiro, cancela-se — e o cancelamento devolve tudo.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        venda = _venda_para_itens(cur, id_unidade, id_venda)
+        item = _item_da_venda(cur, id_venda, id_item)
+        cur.execute("SELECT count(*) AS n FROM venda_itens WHERE id_venda = %s", (id_venda,))
+        if cur.fetchone()["n"] <= 1:
+            raise HTTPException(
+                status_code=409,
+                detail="É o único item do documento. Para desfazê-lo, cancele a venda.")
+        valor = round(float(item["valor_total"]), 2)
+        cur.execute("DELETE FROM venda_itens WHERE id = %s", (id_item,))
+        cur.execute("UPDATE vendas SET valor_total = valor_total - %s WHERE id = %s",
+                    (valor, id_venda))
+        refeitos = 0
+        if item["id_produto"]:
+            refeitos = _refazer_baixa(
+                cur, id_unidade, venda, item["id_produto"], ctx.id_usuario,
+                f"Venda #{id_venda}: {item['descricao'] or 'item'} excluído do documento")
+        auditoria.registrar(cur, ctx.id_usuario, "vendas", id_venda, "excluir_item",
+                            antes={"item": id_item, "descricao": item["descricao"],
+                                   "id_produto": item["id_produto"],
+                                   "quantidade": float(item["quantidade"]), "valor": valor},
+                            depois={"movimentos_estornados": refeitos},
+                            id_unidade=id_unidade)
+    return {"id": id_item, "valor": valor,
+            "message": (f"{item['descricao'] or 'Item'} excluído — menos R$ {valor:.2f}"
+                        .replace(".", ","))}
 
 
 @router.delete("/{id_venda}")
@@ -1621,6 +1798,10 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
         por_que_nao = _por_que_nao_edita(cur, id_unidade, dict(venda) | do_lote)
         # 🔑 E se aceita trocar data e número (23/10/2026) — regra diferente da do item.
         por_que_nao_altera = _por_que_nao_altera(cur, id_unidade, dict(venda) | do_lote)
+        # 🔑 E se as linhas mudam de quantidade ou saem (24/11/2026) — só MANUAL e em aberto.
+        por_que_nao_muda = _por_que_nao_muda_itens(cur, id_unidade, dict(venda) | do_lote)
+        # 🔑 160: como foi paga (vazio na venda da planilha e na lançada à mão).
+        pagos = venda_pagamentos.da_venda(cur, id_venda)
 
     custo = sum(float(i["quantidade"]) * float(i["custo_ficha_unitario"] or 0) for i in itens)
     receita = sum(float(i["valor_total"] or 0) for i in itens)
@@ -1631,8 +1812,12 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
         "por_que_nao_acrescenta": por_que_nao,
         "pode_alterar": por_que_nao_altera is None,
         "por_que_nao_altera": por_que_nao_altera,
+        "pode_mudar_itens": por_que_nao_muda is None,
+        "por_que_nao_muda_itens": por_que_nao_muda,
         "itens": itens,
         "movimentos": movimentos,
+        "pagamentos": pagos["pagamentos"],
+        "troco": pagos["troco"],
         "receita": receita,
         # ⚠️ O custo teórico só vale a soma quando TODO item tem ficha. Com um
         # item sem custo, a margem sairia alta demais e pareceria um resultado

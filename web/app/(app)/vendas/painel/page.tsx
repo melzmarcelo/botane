@@ -12,6 +12,7 @@ import {
 } from "@/lib/vendas-painel";
 
 import { andar, janela, MODOS, nomeDoRecorte, type Modo } from "./periodo";
+import { PorPagamento } from "./por-pagamento";
 import { DiaDaSemana, Evolucao, Grupos, PorHora, Produtos, Resumo } from "./quadros";
 
 /**
@@ -190,6 +191,7 @@ export default function PainelDeVendas() {
                 {!umDia && <DiaDaSemana p={p} />}
                 <PorHora p={p} largo={!!umDia} />
               </div>
+              {p.por_pagamento && <PorPagamento q={p.por_pagamento} />}
               <div className="grid gap-4 lg:grid-cols-2">
                 <Grupos titulo="Por categoria" linhas={p.por_categoria} ativo={cat ? Number(cat) : null}
                         aoClicar={(id) => setCat(id === null || String(id) === cat ? "" : String(id))} />

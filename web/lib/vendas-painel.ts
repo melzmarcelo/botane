@@ -47,6 +47,18 @@ export type PainelVendas = {
   por_setor: Grupo[];
   produtos: ProdutoVendido[];
   produtos_total: number;
+  /** 🔑 160: por forma de pagamento. Nulo com recorte (o pagamento é do cupom inteiro). */
+  por_pagamento?: PorPagamento | null;
+};
+
+export type PorPagamento = {
+  linhas: { grupo: string; rotulo: string; cupons: number; valor: number;
+            participacao_pct: number | null }[];
+  total: number;
+  troco: number;
+  dinheiro_recebido: number;
+  sem_pagamento: { cupons: number; valor: number };
+  diferenca: number;
 };
 
 export type Grupo = {

@@ -104,7 +104,7 @@ Saldos, movimentos, ajustes, inventário e transferências entre lojas.
 ## Vendas
 
 - **Rotas:** `vendas.py`, `consumo.py` (Meu consumo), `receber.py`, `pdv.py`
-- **Serviços:** `consumo_pessoa.py`, `receber.py`, `painel_vendas.py`, `vendas_motivos.py`, `services/pdv/`
+- **Serviços:** `consumo_pessoa.py`, `receber.py`, `painel_vendas.py`, `vendas_motivos.py`, `venda_pagamentos.py` (as finalizadoras do PDV, suíte `smoke_venda_pagamentos.py`), `services/pdv/`
 - **Telas:** `vendas/`, `vendas/painel/`, `vendas/motivos/` (roteiro `verificar-motivos.mjs`), `vendas/[id]/`, `vendas/lancar/`, `vendas/por-pessoa/`, `vendas/sem-vinculo/`, `receber/`, `receber/lotes/[id]/`, `meu-consumo/` (`consumo/` só redireciona)
 - **Permissões:** `cmv.painel`, `cmv.relatorios`, `cmv.fechamento`, `consumo.periodos`
 

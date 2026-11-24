@@ -5,6 +5,44 @@
 
 ## O que já existe
 
+- 🔑 **Editar a quantidade e excluir item de documento lançado à mão e em aberto** (1.3.20,
+  24/11/2026, pedido do dono). `PUT`/`DELETE /vendas/{id}/itens/{id_item}`; botões
+  "Quantidade" e "Excluir" na linha (`vendas/[id]/acoes-do-item.tsx`), só com
+  `pode_mudar_itens` do detalhe.
+  - Regra em `_por_que_nao_muda_itens`: **só MANUAL** (planilha e PDV não), não cancelada,
+    fora de lote de cobrança (qualquer situação) e com o período do CMV aberto — a régua do
+    "acrescentar" (`_por_que_nao_edita`).
+  - 🔑 **Estoque por estorno** (`_refazer_baixa`): a saída viva daquele produto na venda volta
+    como estorno, na data dela, e nasce a saída do total que sobrou das linhas do produto.
+    A produção NA HORA que a venda disparou (`producoes.id_venda` + produto) volta e é
+    refeita junto. A baixa em si é `_baixar`, a mesma do item que entra.
+  - Preço unitário e custo congelado da linha não mudam; o total da linha e o da venda sim.
+  - ⚠️ **A última linha não sai** (409 mandando cancelar a venda). Quantidade zero: 422.
+  - Cobertura: `smoke_venda_itens.py` e `verificar-venda-itens-pagamentos.mjs`.
+
+- 🔑 **As finalizadoras do PDV: como cada venda foi paga** (1.3.20, migração 160, 24/11/2026,
+  pedido do dono: *"conseguimos a finalizadora da compra, se foi dinheiro, debito, credito,
+  pix ..."*). Estudo em `docs/pdv-finalizadoras-estudo.md`.
+  - O cupom sempre trouxe `formaPgtos`; `mapeadores.cupom` agora lê (`pagamento`), o
+    `importador.preparar` passa adiante e `/vendas/importar` grava em `venda_pagamentos`
+    (`services/venda_pagamentos.py`). Tela da venda, quadro "Por forma de pagamento" no painel
+    e relatório `vendas-pagamentos`.
+  - 🔑 **O grupo sai de `codClassificacao`, não do nome** (1 dinheiro, 3 crédito, 4 débito,
+    12 vale, 20/21/22 Pix). ⚠️ **O TROCO tem a classificação do dinheiro** e
+    `codformarecebimentopdv = -1`: testado antes, senão somaria como dinheiro recebido.
+    Classificação desconhecida tenta o nome e cai em OUTRO, sem sumir.
+  - 🔑 **Troco guardado como veio** (linha positiva); toda soma mostra o dinheiro LÍQUIDO
+    (recebido − troco) e o troco à parte: são os dois números da conferência de caixa.
+  - 🔑 **Documento repetido com pagamentos REGRAVA os pagamentos** da venda existente (apaga e
+    insere, não acumula). É o que completa o histórico: `POST /pdv/pagamentos/completar` relê o
+    PDV dia a dia, começando na primeira venda ainda sem forma, até 120 dias por vez, sem criar
+    venda nem mexer em item, custo ou estoque. Botão em Integrações ▸ PDV Legal.
+  - ⚠️ O quadro do painel só existe SEM recorte (o pagamento é do cupom inteiro). O que não tem
+    forma (planilha, à mão, PDV não relido) aparece como "não informado", para fechar com o
+    faturado. Cupom cancelado guarda os pagamentos e fica fora de toda soma.
+  - ⚠️ **Não vem do PDV**: bandeira, parcelas, NSU e taxa. A maquininha não é integrada
+    (`tef = false`, `taxacartao = 0`). Etapas 3 (caixa) e 4 (taxas) do estudo seguem por fazer.
+
 - 🔑 **Painel de vendas, modo Dia: o cartão "Média por dia" vira "Mesmo dia, semana passada"**
   (1.1.152, auditoria de 29/10/2026 — num dia só a média repetia o faturado). Usa a
   `comparacao` que o servidor já manda (`_anterior` compara um dia com o mesmo dia da semana

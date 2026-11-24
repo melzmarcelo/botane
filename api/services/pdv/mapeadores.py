@@ -86,6 +86,61 @@ def cupom(bruto: dict) -> dict:
         "desconto": _numero(_pega(bruto, "valordesconto", "valorDesconto")),
         "vendedor": (_pega(bruto, "nomeVendedor") or "")[:60] or None,
         "itens": [item(i) for i in (_pega(bruto, "itens", "Itens", padrao=[]) or [])],
+        # 🔑 As finalizadoras (migração 160, pedido do dono de 24/11/2026). Vinham em todo
+        # cupom e morriam aqui.
+        "pagamentos": [p for p in (pagamento(x) for x in
+                                   (_pega(bruto, "formaPgtos", "FormaPgtos", padrao=[]) or [])
+                                   if isinstance(x, dict)) if p["valor"] > 0],
+    }
+
+
+# 🔑 **O grupo sai da CLASSIFICAÇÃO do PDV** (`codClassificacao`), que é do sistema; o nome
+# ("CREDITO") é texto que o cliente edita lá. Conferido na conta real em 24/11/2026:
+# 1 Dinheiro, 3 Crédito, 4 Débito, 12 Vale presente, 20 PIX estático, 22 Pagamento eletrônico
+# (o "PIX WEB"). ⚠️ 21 não apareceu; pela tabela do PDV é o PIX dinâmico, e entra como PIX.
+_GRUPO_DA_CLASSIFICACAO = {1: "DINHEIRO", 3: "CREDITO", 4: "DEBITO", 12: "VALE",
+                           20: "PIX", 21: "PIX", 22: "PIX"}
+
+
+def _grupo(classificacao, codigo_forma, nome: str) -> str:
+    """O grupo da casa para uma linha de pagamento.
+
+    ⚠️ **O TROCO vem com a classificação do DINHEIRO** (1) e `codformarecebimentopdv = -1`:
+    testá-lo antes, senão o troco somaria como dinheiro recebido.
+    ⚠️ Classificação desconhecida tenta o nome e, sem pista, vira OUTRO: aparece na tela como
+    "Outro (nome do PDV)", em vez de sumir ou de cair num grupo inventado.
+    """
+    texto = (nome or "").upper()
+    if str(codigo_forma) == "-1" or texto == "TROCO":
+        return "TROCO"
+    try:
+        grupo = _GRUPO_DA_CLASSIFICACAO.get(int(classificacao))
+    except (TypeError, ValueError):
+        grupo = None
+    if grupo:
+        return grupo
+    for pista, g in (("PIX", "PIX"), ("CRED", "CREDITO"), ("DEB", "DEBITO"),
+                     ("DINHEIRO", "DINHEIRO"), ("VALE", "VALE")):
+        if pista in texto:
+            return g
+    return "OUTRO"
+
+
+def pagamento(bruto: dict) -> dict:
+    """Uma linha de `formaPgtos`: quanto foi pago e em quê."""
+    nome = str(_pega(bruto, "nome", "nomeExterno", padrao="") or "").strip()
+    codigo_forma = _pega(bruto, "codformarecebimentopdv", "codFormaRecebimentoPdv")
+    try:
+        codigo_forma = int(codigo_forma) if codigo_forma is not None else None
+    except (TypeError, ValueError):
+        codigo_forma = None
+    return {
+        "grupo": _grupo(_pega(bruto, "codClassificacao", "codclassificacao"), codigo_forma, nome),
+        "nome_pdv": nome[:60] or None,
+        "cod_forma_pdv": codigo_forma,
+        # ⚠️ Arredondado a centavo AQUI: o float do PDV (17.499999) não pode virar
+        # `numeric(14,2)` diferente conforme o banco arredonda.
+        "valor": _numero(_pega(bruto, "valortotal", "valorTotal")).quantize(Decimal("0.01")),
     }
 
 

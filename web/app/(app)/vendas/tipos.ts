@@ -23,6 +23,14 @@ export type Venda = {
   sem_custo: number;
 };
 
+/** Uma finalizadora do cupom do PDV (migração 160). O troco vem à parte, em `troco`. */
+export type PagamentoDaVenda = {
+  grupo: "DINHEIRO" | "CREDITO" | "DEBITO" | "PIX" | "VALE" | "OUTRO";
+  rotulo: string;
+  nome_pdv: string | null;
+  valor: number | string;
+};
+
 export type ItemVenda = {
   id: number;
   codigo_pdv: string | null;
@@ -82,6 +90,12 @@ export type VendaDetalhe = {
   /** 23/10/2026: a venda à mão aceita trocar data e número? (lote recebido não aceita) */
   pode_alterar?: boolean;
   por_que_nao_altera?: string | null;
+  /** 🔑 Mudar a quantidade e excluir linha (24/11/2026): só à mão e em aberto. */
+  pode_mudar_itens?: boolean;
+  por_que_nao_muda_itens?: string | null;
+  /** 🔑 Como foi paga (migração 160); vazio na planilha e no lançado à mão. */
+  pagamentos?: PagamentoDaVenda[];
+  troco?: number | string;
   id_consumo_lote?: number | null;
   lote_status?: string | null;
   data: string;

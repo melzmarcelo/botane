@@ -6,8 +6,8 @@
  * 🔑 Pedido do dono (20/10/2026): *"permitir editar um documento, adicionar mais itens,
  * desde que o período que ele esteja já não foi fechado"*. Quem decide se pode é o
  * servidor (`pode_acrescentar`); aqui só se monta a lista.
- * ⚠️ Só ACRESCENTA: o que já entrou está no razão, que é append-only. Tirar uma linha é
- * cancelar a venda e lançar de novo.
+ * ⚠️ Só ACRESCENTA. Mudar a quantidade ou tirar uma linha de documento à mão em aberto é
+ * `acoes-do-item.tsx` (24/11/2026), que refaz a baixa por estorno.
  * 🔑 O preço que entra sozinho é o do DIA DA VENDA, não o de hoje — o mesmo do lançamento.
  */
 

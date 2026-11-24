@@ -146,6 +146,9 @@ def preparar(cupons: list[dict], vinculos: dict[str, int] | None = None
             "cancelada": cancelada,
             # 🔑 O desconto do cupom, que era lido pelo mapeador e morria aqui.
             "desconto": float(c["desconto"] or 0),
+            # 🔑 As finalizadoras (160). Vão também no cupom cancelado: a conferência com o
+            # PDV precisa delas, e quem soma filtra a venda cancelada.
+            "pagamentos": c.get("pagamentos") or [],
             "itens": itens,
         })
 

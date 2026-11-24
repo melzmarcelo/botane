@@ -34,6 +34,8 @@ As regras são as do painel de início, e pelo mesmo motivo:
 from datetime import date, timedelta
 from decimal import Decimal
 
+from services import venda_pagamentos
+
 AGRUPAMENTOS = {"dia": "Dia", "semana": "Semana", "mes": "Mês"}
 ORDENS = {"receita": "Receita", "quantidade": "Quantidade"}
 SEMANA = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
@@ -317,9 +319,15 @@ def painel(cur, id_unidade: int, inicio: date, fim: date, agrupar: str = "dia",
         "participacao_pct": _pct(r["receita"], totais["bruta"]),
     } for r in rows]
 
+    # 🔑 160: por forma de pagamento. ⚠️ Só sem recorte: o pagamento é do CUPOM inteiro, e
+    # "quanto da bebida foi no crédito" não tem resposta honesta.
+    por_pagamento = None if com_recorte else venda_pagamentos.por_forma(
+        cur, id_unidade, inicio, fim, Decimal(str(totais["receita"])))
+
     return {
         "inicio": inicio, "fim": fim, "agrupar": agrupar, "ordem": ordem,
         "recorte": com_recorte, "bruta": com_recorte,
+        "por_pagamento": por_pagamento,
         "totais": totais, "comparacao": comparacao, "canceladas": canceladas,
         "serie": serie, "por_dia_semana": por_semana,
         "por_hora": por_hora, "sem_hora": sem_hora,
