@@ -52,6 +52,24 @@
   - ⚠️ `smoke_ordens_compra` desativa no fim os produtos com mínimo que cria: senão eles ficam
     para sempre nas sugestões da base local.
 
+- 🔑 **Ordem de compra no layout do dono, com "Para quando?"** (1.3.19, migração 159,
+  24/11/2026, modelo "Ordem de compra — versão didática"). Título "Pedir insumo para compra",
+  texto à vista, quatro passos, pedido em perguntas numeradas com resumo e "Enviar pedido", lista
+  em colunas (Produto · Quantidade · Urgência · Pedido por · Situação).
+  - 🔑 **`urgencia`** (`PODE_ESPERAR`, `SEMANA` padrão, `HOJE`): A comprar ordena pelo mais
+    urgente e, dentro dele, pelo que espera há mais tempo. Somar fica com a MAIOR das duas; a parte
+    de uma compra parcial leva a urgência; corrigir sem mandar urgência mantém a que estava.
+    Relatório ganhou "Para quando". Sugestões do mínimo entram com uma urgência para o lote todo.
+  - 🔑 **"Pedido por" é o SETOR** de quem pediu (`usuario_setores`), e sem setor o nome. O nome
+    fica no `title` da célula.
+  - ⚠️ **Três desvios do modelo, de propósito**: sem asterisco de obrigatório (o padrão da casa
+    marca o opcional, ver `Campo`); as cores dos selos são as da casa (sem azul); e a frase de
+    explicação fica À VISTA só nesta tela, contra o "saber mais" de 15/09, porque é a tela que a
+    equipe inteira usa.
+  - ⚠️ Colunas só do `md` para cima; no celular cada linha é cartão e os passos viram duas
+    colunas só com o título. Na observação (agora `textarea`), Enter envia e Shift+Enter quebra
+    a linha: o pedido pelo teclado continua inteiro.
+
 - 🔑 **Os filtros da lista de notas** (1.1.117, 21/10/2026, pedido do dono: *"nas notas de
   entrada poderia ter mais filtros: período, situação..."*). A rota já aceitava situação, origem
   e período; a tela só oferecia a busca.

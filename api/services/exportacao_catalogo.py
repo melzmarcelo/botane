@@ -3188,6 +3188,8 @@ def _ordens_compra(cur, id_unidade: int, f: dict) -> Saida:
     cur.execute(sql, params)
     quando = lambda d: d.strftime("%d/%m/%Y %H:%M") if d else ""
     linhas = [dict(r) | {"situacao": ordens_compra.SITUACOES[r["status"]],
+                         "para_quando": ordens_compra.URGENCIAS.get(r["urgencia"], ""),
+                         "pedido_quem": r["setor_pedido"] or r["pedido_por"],
                          "pedido_em": quando(r["criado_em"]),
                          "comprado_quando": quando(r["comprado_em"])}
               for r in cur.fetchall()]
@@ -3197,7 +3199,8 @@ def _ordens_compra(cur, id_unidade: int, f: dict) -> Saida:
     return Saida(
         linhas,
         [("item", "Item"), ("quantidade", "Quantidade"), ("um", "Unidade"),
-         ("observacao", "Observação"), ("situacao", "Situação"), ("pedido_por", "Pedido por"),
+         ("para_quando", "Para quando"),
+         ("observacao", "Observação"), ("situacao", "Situação"), ("pedido_quem", "Pedido por"),
          ("pedido_em", "Pedido em"), ("comprado_por_nome", "Comprado por"),
          ("comprado_quando", "Comprado em"), ("fornecedor", "Fornecedor")],
         "Ordem de compra", resumo, inicio, fim)

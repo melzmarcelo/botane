@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 
 import { Aviso, Carregando, Etiqueta, Modal, Vazio } from "@/components/ui";
 import { qtd, textoParaNumero } from "@/lib/numeros";
-import { pedirLote, qtdParaCampo, Sugestao, sugestoesOrdem } from "@/lib/ordens-compra";
+import {
+  pedirLote,
+  qtdParaCampo,
+  Sugestao,
+  sugestoesOrdem,
+  Urgencia,
+  URGENCIAS,
+} from "@/lib/ordens-compra";
 
 /**
  * Etapa 2: o que está abaixo do mínimo, para pôr na lista sem ninguém precisar lembrar.
@@ -34,6 +41,8 @@ export default function JanelaSugestoes({
   const [linhas, setLinhas] = useState<Record<number, Linha>>({});
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  // Uma urgência para o lote todo: abaixo do mínimo ainda não é falta, então "Esta semana".
+  const [urgencia, setUrgencia] = useState<Urgencia>("SEMANA");
 
   useEffect(() => {
     sugestoesOrdem()
@@ -61,6 +70,7 @@ export default function JanelaSugestoes({
       id_produto: s.id_produto,
       quantidade: textoParaNumero(linhas[s.id_produto].quantidade) ?? 0,
       um: linhas[s.id_produto].um,
+      urgencia,
     }));
     const ruim = itens.findIndex((i) => i.quantidade <= 0);
     if (ruim >= 0) return setErro(`Informe a quantidade de ${marcadas[ruim].nome}.`);
@@ -85,6 +95,12 @@ export default function JanelaSugestoes({
                            ([k, v]) => [k, { ...v, marcado: !todas }])))}>
                    {todas ? "desmarcar todas" : "marcar todas"}
                  </button>
+               )}
+               {!!lista?.length && (
+                 <select className="campo w-auto" id="ordem-sugestoes-urgencia" aria-label="Para quando"
+                         value={urgencia} onChange={(e) => setUrgencia(e.target.value as Urgencia)}>
+                   {URGENCIAS.map((u) => <option key={u.valor} value={u.valor}>{u.rotulo}</option>)}
+                 </select>
                )}
                <button type="button" className="btn" onClick={aoFechar}>Fechar</button>
                <button type="button" className="btn btn-primario" id="ordem-por-na-lista"

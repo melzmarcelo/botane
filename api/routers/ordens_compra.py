@@ -124,7 +124,7 @@ def corrigir(id_item: int, body: OrdemItemUpdate, ctx: Contexto = Depends(_ver))
             cur, ctx.id_usuario, "ordem_compra", id_item, "corrigir",
             antes={**antes, "quantidade": str(antes["quantidade"])},
             depois={"quantidade": str(body.quantidade), "um": body.um,
-                    "observacao": body.observacao},
+                    "observacao": body.observacao, "urgencia": body.urgencia},
             id_unidade=id_unidade)
     return r
 

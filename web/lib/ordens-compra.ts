@@ -7,6 +7,17 @@ import { api } from "@/lib/api";
 
 export type AbaOrdem = "A_COMPRAR" | "COMPRADO";
 
+/** Para quando o item precisa chegar (migração 159, modelo do dono de 24/11/2026). */
+export type Urgencia = "PODE_ESPERAR" | "SEMANA" | "HOJE";
+
+export const URGENCIAS: { valor: Urgencia; rotulo: string; dica: string }[] = [
+  { valor: "PODE_ESPERAR", rotulo: "Pode esperar", dica: "Entra na próxima compra de rotina." },
+  { valor: "SEMANA", rotulo: "Esta semana", dica: "Precisa chegar nos próximos dias." },
+  { valor: "HOJE", rotulo: "Urgente — hoje", dica: "Falta para o serviço de hoje." },
+];
+
+export const rotuloUrgencia = (u: Urgencia) => URGENCIAS.find((x) => x.valor === u)?.rotulo ?? u;
+
 export type OrdemItem = {
   id: number;
   id_produto: number | null;
@@ -18,10 +29,13 @@ export type OrdemItem = {
   um: string;
   observacao: string | null;
   status: AbaOrdem;
+  urgencia: Urgencia;
   id_item_origem: number | null;
   criado_em: string;
   criado_por: number;
   pedido_por: string | null;
+  /** O setor de quem pediu ("Cozinha"); nulo quando a pessoa não tem setor. */
+  setor_pedido: string | null;
   comprado_em: string | null;
   comprado_por_nome: string | null;
   fornecedor: string | null;
@@ -41,6 +55,7 @@ export type NovoItem = {
   quantidade: number;
   um: string;
   observacao?: string | null;
+  urgencia?: Urgencia;
   somar_em?: number;
 };
 
@@ -96,7 +111,7 @@ export const pedirLote = (itens: NovoItem[]) =>
 
 export const corrigirItem = (
   id: number,
-  corpo: { quantidade: number; um: string; observacao: string | null },
+  corpo: { quantidade: number; um: string; observacao: string | null; urgencia: Urgencia },
 ) => api.put<Resposta>(`/ordens-compra/${id}`, corpo);
 
 export const cancelarItem = (id: number) =>

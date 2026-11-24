@@ -13,6 +13,8 @@ import {
   OrdemItem,
   qtdParaCampo,
   unidadesDeMedida,
+  Urgencia,
+  URGENCIAS,
 } from "@/lib/ordens-compra";
 
 /**
@@ -108,6 +110,7 @@ export function JanelaCorrigir({
   const [quantidade, setQuantidade] = useState(qtdParaCampo(item.quantidade));
   const [um, setUm] = useState(item.um);
   const [observacao, setObservacao] = useState(item.observacao ?? "");
+  const [urgencia, setUrgencia] = useState<Urgencia>(item.urgencia);
   const [unidades, setUnidades] = useState<string[]>([item.um]);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -127,7 +130,7 @@ export function JanelaCorrigir({
     if (!n || n <= 0) return setErro("Informe a quantidade.");
     setOcupado(true);
     try {
-      const r = await corrigirItem(item.id, { quantidade: n, um, observacao: observacao.trim() || null });
+      const r = await corrigirItem(item.id, { quantidade: n, um, observacao: observacao.trim() || null, urgencia });
       aoSalvar(r.message);
     } catch (x) {
       setErro(x instanceof Error ? x.message : "Não foi possível corrigir");
@@ -157,6 +160,12 @@ export function JanelaCorrigir({
             </select>
           </Campo>
         </div>
+        <Campo rotulo="Para quando?">
+          <select className="campo" id="ordem-corrigir-urgencia" value={urgencia}
+                  onChange={(e) => setUrgencia(e.target.value as Urgencia)}>
+            {URGENCIAS.map((u) => <option key={u.valor} value={u.valor}>{u.rotulo}</option>)}
+          </select>
+        </Campo>
         <Campo rotulo="Observação" opcional>
           <input className="campo" maxLength={300} value={observacao}
                  onChange={(e) => setObservacao(e.target.value)} />

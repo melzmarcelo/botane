@@ -15,10 +15,19 @@ from fastapi import HTTPException
 A_COMPRAR, COMPRADO, CANCELADO = "A_COMPRAR", "COMPRADO", "CANCELADO"
 SITUACOES = {A_COMPRAR: "A comprar", COMPRADO: "Comprado"}
 
+# 🔑 **Para quando** (migração 159, modelo do dono de 24/11/2026). A ordem é a de A comprar:
+# o mais urgente primeiro, e dentro de cada um o que espera há mais tempo.
+URGENCIAS = {"HOJE": "Urgente — hoje", "SEMANA": "Esta semana", "PODE_ESPERAR": "Pode esperar"}
+_PESO = {"HOJE": 0, "SEMANA": 1, "PODE_ESPERAR": 2}
+
 _COLUNAS = """
     i.id, i.id_unidade, i.id_produto, i.descricao_livre, i.quantidade, i.quantidade_pedida,
-    i.um, i.observacao, i.status, i.id_item_origem, i.id_fornecedor, i.criado_em, i.criado_por,
-    i.comprado_em, i.comprado_por,
+    i.um, i.observacao, i.status, i.urgencia, i.id_item_origem, i.id_fornecedor, i.criado_em,
+    i.criado_por, i.comprado_em, i.comprado_por,
+    -- 🔑 "Pedido por: Cozinha" (modelo do dono): o setor de quem pediu, de `usuario_setores`.
+    -- Sem setor, a tela mostra o nome.
+    (SELECT string_agg(s.nome, ', ' ORDER BY s.nome) FROM usuario_setores us
+       JOIN setores s ON s.id = us.id_setor WHERE us.id_usuario = i.criado_por) AS setor_pedido,
     coalesce(p.nome, i.descricao_livre) AS item, p.codigo,
     (i.id_produto IS NULL) AS fora_do_cadastro,
     uc.nome AS pedido_por, uq.nome AS comprado_por_nome,
@@ -45,7 +54,11 @@ def consulta_da_lista(id_unidade: int, status: list[str], de: date | None = None
           AND (%(ate)s::date IS NULL OR coalesce(i.comprado_em, i.criado_em)::date <= %(ate)s)
           AND (%(busca)s::text IS NULL OR coalesce(p.nome, i.descricao_livre) ILIKE
                '%%' || %(busca)s || '%%' OR p.codigo ILIKE '%%' || %(busca)s || '%%')
-        ORDER BY coalesce(i.comprado_em, i.criado_em) DESC, i.id DESC"""
+        ORDER BY (i.status <> 'A_COMPRAR'),
+                 CASE WHEN i.status = 'A_COMPRAR' THEN
+                      CASE i.urgencia WHEN 'HOJE' THEN 0 WHEN 'SEMANA' THEN 1 ELSE 2 END END,
+                 CASE WHEN i.status = 'A_COMPRAR' THEN i.criado_em END,
+                 coalesce(i.comprado_em, i.criado_em) DESC, i.id DESC"""
     return sql, {"u": id_unidade, "status": status, "de": de, "ate": ate, "busca": termo}
 
 
@@ -196,20 +209,25 @@ def adicionar(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
             raise HTTPException(status_code=400,
                                 detail="Só dá para somar no mesmo produto e na mesma unidade.")
         juntas = " · ".join(x for x in (alvo["observacao"], observacao) if x) or None
+        # Somar nunca deixa o pedido menos urgente: vale o mais urgente dos dois.
+        nova = dados.get("urgencia") or "SEMANA"
+        urgencia = min((alvo["urgencia"], nova), key=lambda u: _PESO[u])
         cur.execute(
-            """UPDATE ordem_compra_itens SET quantidade = quantidade + %s, observacao = %s
+            """UPDATE ordem_compra_itens SET quantidade = quantidade + %s, observacao = %s,
+                      urgencia = %s
                 WHERE id = %s RETURNING quantidade""",
-            (dados["quantidade"], juntas[:300] if juntas else None, alvo["id"]))
+            (dados["quantidade"], juntas[:300] if juntas else None, urgencia, alvo["id"]))
         return {"id": alvo["id"], "somado": True, "quantidade": cur.fetchone()["quantidade"],
                 "item": produto["nome"], "message": f"Somado ao pedido de {produto['nome']}."}
 
     livre = None if produto else _texto(dados.get("descricao_livre"))
     cur.execute(
         """INSERT INTO ordem_compra_itens
-               (id_unidade, id_produto, descricao_livre, quantidade, um, observacao, criado_por)
-           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+               (id_unidade, id_produto, descricao_livre, quantidade, um, observacao, urgencia,
+                criado_por)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (id_unidade, produto["id"] if produto else None, livre, dados["quantidade"], um,
-         observacao, id_usuario))
+         observacao, dados.get("urgencia") or "SEMANA", id_usuario))
     nome = produto["nome"] if produto else livre
     return {"id": cur.fetchone()["id"], "somado": False, "quantidade": dados["quantidade"],
             "item": nome, "message": f"{nome} na lista."}
@@ -222,11 +240,14 @@ def corrigir(cur, id_unidade: int, id_item: int, id_usuario: int, pode_comprar: 
     _exigir_aberto(cur, linha)
     produto = _produto(cur, linha["id_produto"]) if linha["id_produto"] else None
     um = _sigla(cur, dados["um"], produto)
-    cur.execute("""UPDATE ordem_compra_itens SET quantidade = %s, um = %s, observacao = %s
+    cur.execute("""UPDATE ordem_compra_itens SET quantidade = %s, um = %s, observacao = %s,
+                          urgencia = coalesce(%s, urgencia)
                     WHERE id = %s""",
-                (dados["quantidade"], um, _texto(dados.get("observacao")), id_item))
+                (dados["quantidade"], um, _texto(dados.get("observacao")),
+                 dados.get("urgencia"), id_item))
     return {"id": id_item, "antes": {"quantidade": linha["quantidade"], "um": linha["um"],
-                                     "observacao": linha["observacao"]},
+                                     "observacao": linha["observacao"],
+                                     "urgencia": linha["urgencia"]},
             "message": "Pedido corrigido."}
 
 
@@ -279,12 +300,12 @@ def comprar(cur, id_unidade: int, id_usuario: int, itens: list[dict],
             cur.execute(
                 """INSERT INTO ordem_compra_itens
                        (id_unidade, id_produto, descricao_livre, quantidade, um, observacao,
-                        status, id_item_origem, id_fornecedor, criado_em, criado_por,
+                        urgencia, status, id_item_origem, id_fornecedor, criado_em, criado_por,
                         comprado_em, comprado_por)
-                   VALUES (%s, %s, %s, %s, %s, %s, 'COMPRADO', %s, %s, %s, %s, now(), %s)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, 'COMPRADO', %s, %s, %s, %s, now(), %s)
                    RETURNING id""",
                 (linha["id_unidade"], linha["id_produto"], linha["descricao_livre"], qtd,
-                 linha["um"], linha["observacao"], linha["id"], id_fornecedor,
+                 linha["um"], linha["observacao"], linha["urgencia"], linha["id"], id_fornecedor,
                  linha["criado_em"], linha["criado_por"], id_usuario))
             comprados.append(cur.fetchone()["id"])
         else:

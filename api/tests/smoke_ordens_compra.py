@@ -15,6 +15,8 @@ O que este arquivo cobra:
 11. o relatório sai
 12. etapa 2: produzido fora da busca e da lista; sugestões do mínimo (sem saldo também, até o
     máximo, em embalagem arredondada, descontando o que já está na lista); lote soma no aberto
+13. para quando (159): padrão, ordem por urgência, somar fica com a maior, corrigir, a parte
+    comprada leva junto, relatório
 
     python tests/smoke_ordens_compra.py       (API de pé na 9200)
 
@@ -365,6 +367,41 @@ s, r = api("POST", "/ordens-compra/lote", {"itens": [
 checar("lote com produzido: 409", s == 409, (s, r))
 _s, abertos = api("GET", f"/ordens-compra?status=A_COMPRAR&busca=OC{marca}G&limite=50")
 checar("e nada do lote entrou (tudo ou nada)", not abertos, abertos)
+
+print("11. para quando (migração 159)")
+s, sem = api("POST", "/ordens-compra", {"descricao_livre": f"Pano {marca}", "quantidade": 1, "um": "UN"})
+checar("sem dizer, o pedido é para esta semana", linha(sem["id"])["urgencia"] == "SEMANA", linha(sem["id"]))
+s, hoje = api("POST", "/ordens-compra", {"descricao_livre": f"Gelo {marca}", "quantidade": 2, "um": "UN",
+                                         "urgencia": "HOJE"})
+s, espera = api("POST", "/ordens-compra", {"descricao_livre": f"Vela {marca}", "quantidade": 1, "um": "UN",
+                                           "urgencia": "PODE_ESPERAR"})
+s, _ = api("POST", "/ordens-compra", {"descricao_livre": "x", "quantidade": 1, "um": "UN",
+                                      "urgencia": "ONTEM"})
+checar("urgência que não existe: 422", s == 422, s)
+_s, l = api("GET", f"/ordens-compra?status=A_COMPRAR&busca={marca}&limite=200")
+ordem = [x["id"] for x in l if x["id"] in (sem["id"], hoje["id"], espera["id"])]
+checar("A comprar vem com o urgente primeiro e o que pode esperar por último",
+       ordem == [hoje["id"], sem["id"], espera["id"]], ordem)
+checar("e a linha traz o setor de quem pediu (ou nulo)", "setor_pedido" in l[0], l[0])
+s, r = api("POST", "/ordens-compra", {"descricao_livre": f"Pano {marca}", "quantidade": 1, "um": "UN"})
+s, p_hoje = api("POST", "/ordens-compra", {"id_produto": outro, "quantidade": 1, "um": "UN",
+                                           "urgencia": "PODE_ESPERAR"})
+s, r = api("POST", "/ordens-compra", {"id_produto": outro, "quantidade": 1, "um": "UN",
+                                      "urgencia": "HOJE", "somar_em": p_hoje["id"]})
+checar("somar fica com o mais urgente dos dois", linha(p_hoje["id"])["urgencia"] == "HOJE", linha(p_hoje["id"]))
+s, r = api("POST", "/ordens-compra", {"id_produto": outro, "quantidade": 1, "um": "UN",
+                                      "urgencia": "PODE_ESPERAR", "somar_em": p_hoje["id"]})
+checar("e não volta a ser menos urgente", linha(p_hoje["id"])["urgencia"] == "HOJE")
+s, _ = api("PUT", f"/ordens-compra/{espera['id']}", {"quantidade": 1, "um": "UN", "urgencia": "HOJE"})
+checar("corrigir muda a urgência", s == 200 and linha(espera["id"])["urgencia"] == "HOJE")
+s, _ = api("PUT", f"/ordens-compra/{espera['id']}", {"quantidade": 3, "um": "UN"})
+checar("corrigir sem urgência mantém a que estava", linha(espera["id"])["urgencia"] == "HOJE")
+s, parte = api("POST", "/ordens-compra/comprar", {"itens": [{"id": hoje["id"], "quantidade": 1}]})
+c = linha(parte["ids"][0], "COMPRADO")
+checar("a parte comprada leva a urgência", c and c["urgencia"] == "HOJE", c)
+s, rel = api("GET", "/exportar/ordens-compra/dados")
+texto = json.dumps(rel, ensure_ascii=False)
+checar("o relatório tem Para quando", "Para quando" in texto and "Urgente — hoje" in texto, texto[:200])
 
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 if falhas:

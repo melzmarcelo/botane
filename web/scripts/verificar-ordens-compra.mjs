@@ -98,6 +98,9 @@ try {
   let l = await linhaCom(p, `Farinha ordem ${MARCA}`);
   checar("a linha aparece com quantidade e observação",
     !!l && /10/.test(l.texto) && l.texto.includes("a de sempre"), l);
+  checar("sem escolher, o pedido sai para esta semana", !!l && /Esta semana/.test(l.texto), l);
+  checar("os quatro passos estão na tela", await p.evaluate(() =>
+    document.querySelectorAll("#ordem-passos li").length === 4));
 
   console.log("3. repetido");
   await pedirPeloTeclado(p, "2");
@@ -117,10 +120,22 @@ try {
   await p.type("#ordem-descricao", `Guardanapo ${MARCA}`);
   await p.type("#ordem-quantidade", "3");
   await p.select("#ordem-um", "UN");
+  await clicar(p, '[data-urgencia="HOJE"]');
+  const resumo = await p.$eval("#ordem-resumo", (e) => e.innerText);
+  checar("o resumo lê o pedido de volta, com a urgência",
+    /3 UN de Guardanapo/i.test(resumo) && /Urgente — hoje/.test(resumo), resumo);
   await clicar(p, "#ordem-adicionar");
   await esperarLinha(p, `Guardanapo ${MARCA}`);
   const livre = await linhaCom(p, `Guardanapo ${MARCA}`);
   checar("entra com a etiqueta", !!livre && /fora do cadastro/i.test(livre.texto), livre);
+  checar("e com o selo de urgente", !!livre && /Urgente — hoje/.test(livre.texto), livre);
+  const posicoes = await p.evaluate((m) => {
+    const lis = [...document.querySelectorAll("#ordem-lista li")].map((x) => x.innerText.toUpperCase());
+    return { guardanapo: lis.findIndex((t) => t.includes(`GUARDANAPO ${m}`)),
+             farinha: lis.findIndex((t) => t.includes(`FARINHA ORDEM ${m}`)) };
+  }, MARCA);
+  checar("o urgente sobe acima do de esta semana", posicoes.guardanapo >= 0
+    && posicoes.guardanapo < posicoes.farinha, posicoes);
 
   console.log("5. comprar parte");
   await clicar(p, `li[data-ordem-item="${l.id}"] [data-acao="comprei"]`);

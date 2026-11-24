@@ -1,11 +1,15 @@
 """Ordem de compra — o que entra pelas rotas de `routers/ordens_compra.py`."""
 
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 # ⚠️ Decimal e não float: quantidade é `numeric` (regra 2 do CLAUDE.md).
 Quantidade = Field(gt=0, max_digits=18, decimal_places=4)
+
+# Para quando o item precisa chegar (migração 159).
+Urgencia = Literal["PODE_ESPERAR", "SEMANA", "HOJE"]
 
 
 class OrdemItemCreate(BaseModel):
@@ -16,6 +20,7 @@ class OrdemItemCreate(BaseModel):
     quantidade: Decimal = Quantidade
     um: str = Field(min_length=1, max_length=6)
     observacao: str | None = Field(default=None, max_length=300)
+    urgencia: Urgencia = "SEMANA"
     # Já havia um pedido aberto do mesmo item e a pessoa escolheu somar nele.
     somar_em: int | None = None
 
@@ -37,6 +42,8 @@ class OrdemItemUpdate(BaseModel):
     quantidade: Decimal = Quantidade
     um: str = Field(min_length=1, max_length=6)
     observacao: str | None = Field(default=None, max_length=300)
+    # Nula = não mexi: quem chamava antes da migração 159 não perde a urgência ao corrigir.
+    urgencia: Urgencia | None = None
 
 
 class OrdemCompraLinha(BaseModel):
