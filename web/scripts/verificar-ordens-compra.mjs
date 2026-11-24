@@ -101,6 +101,15 @@ try {
   checar("sem escolher, o pedido sai para esta semana", !!l && /Esta semana/.test(l.texto), l);
   checar("os quatro passos estão na tela", await p.evaluate(() =>
     document.querySelectorAll("#ordem-passos li").length === 4));
+  // ⚠️ Cabeçalho e linhas eram grades separadas e a coluna de ações (auto) desalinhava tudo.
+  const colunas = await p.evaluate(() => {
+    const cab = document.querySelector("#ordem-lista")?.previousElementSibling;
+    const li = document.querySelector("#ordem-lista li");
+    const x = (e) => [...(e?.children ?? [])].map((c) => Math.round(c.getBoundingClientRect().left));
+    return { cab: x(cab), linha: x(li) };
+  });
+  checar("as colunas do cabeçalho caem em cima das da linha",
+    colunas.cab.length === 7 && colunas.cab.every((v, n) => Math.abs(v - colunas.linha[n]) <= 1), colunas);
 
   console.log("3. repetido");
   await pedirPeloTeclado(p, "2");

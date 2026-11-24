@@ -55,7 +55,11 @@ function quando(iso: string) {
 }
 
 // Produto · Quantidade · Urgência · Pedido por · Situação · ações (e a caixinha de quem compra).
-const COLUNAS = "md:grid md:grid-cols-[1.75rem_minmax(0,2fr)_minmax(0,0.8fr)_minmax(8.5rem,1fr)_minmax(0,1.1fr)_minmax(9.5rem,1.1fr)_auto] md:items-center md:gap-3";
+// ⚠️ **Uma grade só, e cabeçalho e linhas em SUBGRADE.** Eram grades separadas com a mesma
+// receita, e a coluna de ações é `auto`: vazia no cabeçalho (zero) e com os botões nas linhas
+// (~250px). As frações saíam diferentes e "Quantidade" ficava 100px fora do número (24/11/2026).
+const TRILHOS = "md:grid md:grid-cols-[1.75rem_minmax(0,2fr)_minmax(0,0.8fr)_minmax(8.5rem,1fr)_minmax(0,1.1fr)_minmax(9.5rem,1.1fr)_auto] md:gap-x-3";
+const LINHA = "md:col-span-full md:grid md:grid-cols-subgrid md:items-center";
 
 export default function PaginaOrdemDeCompra() {
   const { pode, eu, unidade } = useSessao();
@@ -251,8 +255,8 @@ export default function PaginaOrdemDeCompra() {
             </Vazio>
           </div>
         ) : (
-          <div className="mt-3">
-            <div className={`hidden border-b border-linha pb-2 text-[12.5px] font-semibold text-suave ${COLUNAS}`}
+          <div className={`mt-3 ${TRILHOS}`}>
+            <div className={`hidden border-b border-linha pb-2 text-[12.5px] font-semibold text-suave ${LINHA}`}
                  aria-hidden>
               <span />
               <span>Produto</span>
@@ -262,10 +266,10 @@ export default function PaginaOrdemDeCompra() {
               <span>Situação</span>
               <span />
             </div>
-            <ul className="flex flex-col divide-y divide-[var(--borda)]" id="ordem-lista">
+            <ul className={`flex flex-col divide-y divide-[var(--borda)] ${LINHA}`} id="ordem-lista">
               {lista.map((i) => (
                 <li key={i.id} data-ordem-item={i.id}
-                    className={`flex flex-wrap items-center gap-x-3 gap-y-2 py-3 ${COLUNAS}`}>
+                    className={`flex flex-wrap items-center gap-x-3 gap-y-2 py-3 ${LINHA}`}>
                   <span className="flex md:justify-center">
                     {comCaixinha && (
                       <input type="checkbox" className="h-5 w-5" aria-label={`selecionar ${i.item}`}
@@ -288,7 +292,7 @@ export default function PaginaOrdemDeCompra() {
                   <span><SeloUrgencia urgencia={i.urgencia} /></span>
                   <span className="text-[13.5px]" title={i.pedido_por ?? undefined}>
                     {i.setor_pedido ?? i.pedido_por ?? "—"}
-                    <span className="text-suave md:block"> · {quando(i.criado_em)}</span>
+                    <span className="text-suave md:block"><span className="md:hidden"> · </span>{quando(i.criado_em)}</span>
                   </span>
                   <span className="text-[13px]">
                     <SeloSituacao status={i.status} />
