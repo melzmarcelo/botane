@@ -19,6 +19,11 @@
     peso de cada forma — referência para a linha de cartão da Precificação, que NÃO é
     alterada sozinha.
   - Cobertura: `smoke_caixa.py` e `verificar-venda-itens-pagamentos.mjs` (seções 6 a 8).
+  - 🔑 **O relatório do painel ("Estudo de vendas") traz as finalizadoras** (pedido do dono,
+    24/11/2026): anexos "Por forma de pagamento" (com troco, não informado, taxa e custo) e,
+    em mais de um dia, "Formas de pagamento dia a dia" (o de `vendas-pagamentos`). Só sem
+    recorte. ⚠️ A rota `/exportar/{rel}/dados` (prévia) não traz anexos: o teste chama
+    `_vendas` direto, e o PDF foi conferido.
 
 - 🔑 **Editar a quantidade e excluir item de documento lançado à mão e em aberto** (1.3.20,
   24/11/2026, pedido do dono). `PUT`/`DELETE /vendas/{id}/itens/{id_item}`; botões

@@ -232,6 +232,25 @@ checar("com as colunas das formas e o troco",
        all(c in texto for c in ("Crédito", "Débito", "Dinheiro (líquido)", "Troco", "Não informado")),
        texto[:300])
 
+# ⚠️ Os anexos saem no PDF e na planilha; a rota `/dados` (prévia da tela) traz só o quadro da
+# frente. Por isso a montagem do relatório é chamada direto.
+from services import exportacao_catalogo as ex  # noqa: E402
+
+with get_cursor() as cur:
+    s1 = ex._vendas(cur, 1, {"inicio": date.today(), "fim": date.today()})
+    s2 = ex._vendas(cur, 1, {"inicio": date.today(), "fim": date.today(), "produtos": [1]})
+    s3 = ex._vendas(cur, 1, {"inicio": date.fromordinal(date.today().toordinal() - 6),
+                             "fim": date.today()})
+titulos = [a[2] for a in s1.anexos]
+formas = next((a[0] for a in s1.anexos if a[2] == "Por forma de pagamento"), [])
+checar("o relatório do painel (Estudo de vendas) traz o quadro Por forma de pagamento",
+       "Por forma de pagamento" in titulos and any(f["forma"] == "Débito" for f in formas), titulos)
+checar("com o troco dito à parte", any(str(f["forma"]).startswith("Troco") for f in formas), formas)
+checar("com recorte de produto, não traz (o pagamento é do cupom inteiro)",
+       "Por forma de pagamento" not in [a[2] for a in s2.anexos])
+checar("em mais de um dia, vem também o dia a dia das formas",
+       "Formas de pagamento dia a dia" in [a[2] for a in s3.anexos], [a[2] for a in s3.anexos])
+
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 if falhas:
     for x in falhas:

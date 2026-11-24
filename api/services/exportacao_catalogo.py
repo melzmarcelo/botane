@@ -1485,6 +1485,35 @@ def _vendas(cur, id_unidade: int, f: dict) -> Saida:
         resumo += [("Cupons cancelados (fora das somas)", p["canceladas"]["cupons"]),
                    ("Valor dos cancelados", r2(p["canceladas"]["valor"]))]
 
+    # 🔑 **Por finalizadora** (pedido do dono, 24/11/2026: "um relatório por finalizadora,
+    # no relatório do painel"). O mesmo quadro da tela (`por_pagamento`) e, em período de mais
+    # de um dia, o dia a dia do relatório próprio. ⚠️ Só sem recorte, como no painel.
+    pagamento: list[tuple] = []
+    q = p.get("por_pagamento")
+    if q:
+        formas = [{"forma": l["rotulo"], "cupons": l["cupons"], "valor": r2(l["valor"]),
+                   "participacao_pct": l["participacao_pct"],
+                   "taxa_pct": l.get("taxa_pct"), "custo_taxa": r2(l.get("custo_taxa"))}
+                  for l in q["linhas"]]
+        if q["troco"]:
+            formas.append({"forma": "Troco (já tirado do dinheiro)", "cupons": None,
+                           "valor": r2(q["troco"]), "participacao_pct": None,
+                           "taxa_pct": None, "custo_taxa": None})
+        if q["sem_pagamento"]["cupons"]:
+            formas.append({"forma": "Não informado", "cupons": q["sem_pagamento"]["cupons"],
+                           "valor": r2(q["sem_pagamento"]["valor"]), "participacao_pct": None,
+                           "taxa_pct": None, "custo_taxa": None})
+        pagamento.append((formas, [("forma", "Forma de pagamento"), ("cupons", "Cupons"),
+                                   ("valor", "Valor"), ("participacao_pct", "Participação %"),
+                                   ("taxa_pct", "Taxa %"), ("custo_taxa", "Custo da taxa")],
+                          "Por forma de pagamento", None))
+        if q["custo_taxas"] is not None:
+            resumo.append(("Custo estimado das taxas", r2(q["custo_taxas"])))
+        if inicio != fim:
+            dia_a_dia = _vendas_pagamentos(cur, id_unidade, {"inicio": inicio, "fim": fim})
+            pagamento.append((dia_a_dia.linhas, dia_a_dia.colunas,
+                              "Formas de pagamento dia a dia", None))
+
     return Saida(
         produtos,
         [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
@@ -1507,6 +1536,7 @@ def _vendas(cur, id_unidade: int, f: dict) -> Saida:
              "Por hora do cupom", None),
             (p["por_categoria"], grupo, "Por categoria", None),
             (p["por_setor"], grupo, "Por setor", None),
+            *pagamento,
         ],
     )
 
@@ -3399,7 +3429,7 @@ RELATORIOS: dict[str, Relatorio] = {
     "vendas": Relatorio(
         "Estudo de vendas",
         "O período escolhido: totais e a comparação com o anterior, os produtos, a "
-        "evolução, o dia da semana, a hora, a categoria e o setor.",
+        "evolução, o dia da semana, a hora, a categoria, o setor e as formas de pagamento.",
         "cmv.relatorios", "vendas",
         ("periodo", "agrupar", "categorias", "setores", "produtos"), _vendas),
     "consumo-pessoa": Relatorio(
