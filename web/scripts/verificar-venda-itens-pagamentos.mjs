@@ -6,7 +6,9 @@
  *   3. excluir pede confirmação e tira a linha; a última linha não tem "Excluir" ativo;
  *   4. a venda com pagamentos mostra "pago em" com crédito, Pix e o troco;
  *   5. o painel de vendas do dia tem o quadro "Por forma de pagamento";
- *   6. a do PDV não oferece editar.
+ *   6. a do PDV não oferece editar;
+ *   7. Vendas ▸ Caixa: a diferença aparece ao digitar e grava com quem conferiu (161);
+ *   8. a configuração da Precificação tem a taxa de cada forma; o caixa cabe no celular.
  * O que o roteiro cria é cancelado no fim.
  *
  *    node scripts/verificar-venda-itens-pagamentos.mjs   (API na 9200 e web na 3100 de pé)
@@ -110,6 +112,42 @@ try {
   await p.waitForSelector("#painel-vendas-pagamento", { timeout: 60000 }).catch(() => {});
   const quadro = await p.$eval("#painel-vendas-pagamento", (e) => e.innerText).catch(() => "");
   checar("o painel do dia tem Por forma de pagamento, com crédito e Pix", /Crédito/.test(quadro) && /Pix/.test(quadro), quadro.slice(0, 200));
+
+  console.log("6. conferência do caixa (161)");
+  const { dados: antesCaixa } = await api("GET", `/caixa/conferencia?inicio=${HOJE}&fim=${HOJE}`, undefined, token);
+  const diaAntes = antesCaixa?.dias?.find((d) => d.data === HOJE);
+  await p.goto(`${WEB}/vendas/caixa`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector(`[data-caixa-dia="${HOJE}"]`, { timeout: 60000 }).catch(() => {});
+  checar("o menu tem Vendas ▸ Caixa", await p.evaluate(() => !!document.querySelector('a[href="/vendas/caixa"]')));
+  checar("o dia de hoje aparece com o esperado", !!(await p.$(`[data-caixa-dia="${HOJE}"]`)));
+  const esperado = diaAntes ? diaAntes.esperado : 0;
+  const campoCx = `[data-caixa-dia="${HOJE}"] [data-caixa-contado]`;
+  await p.click(campoCx, { clickCount: 3 });
+  await p.type(campoCx, (esperado + 2).toFixed(2).replace(".", ","));
+  const difTela = await p.$eval(`[data-caixa-dia="${HOJE}"] [data-caixa-diferenca]`, (e) => e.innerText);
+  checar("a diferença aparece enquanto digita (sobra 2)", /sobra/.test(difTela) && /2,00/.test(difTela), difTela);
+  await p.click(`[data-caixa-dia="${HOJE}"] [data-caixa-gravar]`);
+  await p.waitForFunction((h) => /por /.test(document.querySelector(`[data-caixa-dia="${h}"]`)?.innerText ?? ""),
+    { timeout: 15000 }, HOJE).catch(() => {});
+  const { dados: depoisCaixa } = await api("GET", `/caixa/conferencia?inicio=${HOJE}&fim=${HOJE}`, undefined, token);
+  const diaDepois = depoisCaixa.dias.find((d) => d.data === HOJE);
+  checar("gravado no servidor, com quem conferiu", !!diaDepois && Math.abs(diaDepois.diferenca - 2) < 0.01 && !!diaDepois.conferido_por, diaDepois);
+  if (diaAntes && diaAntes.contado !== null) {
+    await api("PUT", `/caixa/conferencia/${HOJE}`, { contado: diaAntes.contado, observacao: diaAntes.observacao }, token);
+  }
+
+  console.log("7. taxas por forma (161)");
+  await p.goto(`${WEB}/precificacao/configuracao`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector("#taxas-pagamento", { timeout: 60000 }).catch(() => {});
+  checar("a configuração da Precificação tem a taxa de cada forma",
+    await p.evaluate(() => document.querySelectorAll("#taxas-pagamento [data-taxa]").length >= 5));
+  const larg = await (async () => {
+    await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await p.goto(`${WEB}/vendas/caixa`, { waitUntil: "networkidle2", timeout: 180000 });
+    await p.waitForSelector("#caixa-dias", { timeout: 60000 }).catch(() => {});
+    return p.evaluate(() => ({ doc: document.documentElement.scrollWidth, tela: window.innerWidth }));
+  })();
+  checar("o caixa no celular não rola de lado", larg.doc <= larg.tela, larg);
 } finally {
   await navegador.close();
   for (const id of criadas) await api("DELETE", `/vendas/${id}`, undefined, token);

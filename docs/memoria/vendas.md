@@ -5,6 +5,21 @@
 
 ## O que já existe
 
+- 🔑 **Conferência do caixa e taxa por forma** (1.3.21, migração 161, 24/11/2026; etapas 3 e 4
+  de `docs/pdv-finalizadoras-estudo.md`). `routers/caixa.py`, `services/caixa.py`.
+  - **Vendas ▸ Caixa** (`vendas/caixa/`, permissão nova `vendas.caixa`, Administrador e
+    Gerente): por dia, recebido, troco, **esperado = recebido − troco** e o contado digitado,
+    com a diferença ao digitar (sobra positiva, falta negativa). Relatório `caixa`.
+  - 🔑 **O esperado é conta, não registro**: sai de `venda_pagamentos`; só o CONTADO é gravado
+    (`caixa_conferencias`, um por loja e dia, corrigir substitui). Dia com venda sem forma
+    mostra "esperado incompleto".
+  - **Taxas** (`forma_pagamento_taxas`, por loja e grupo; nulo = "não sei", diferente de zero),
+    editadas na configuração da Precificação (`precificacao.configurar`). Dão o custo estimado
+    das taxas no quadro de pagamento do painel e a **taxa média real** dos últimos 90 dias pelo
+    peso de cada forma — referência para a linha de cartão da Precificação, que NÃO é
+    alterada sozinha.
+  - Cobertura: `smoke_caixa.py` e `verificar-venda-itens-pagamentos.mjs` (seções 6 a 8).
+
 - 🔑 **Editar a quantidade e excluir item de documento lançado à mão e em aberto** (1.3.20,
   24/11/2026, pedido do dono). `PUT`/`DELETE /vendas/{id}/itens/{id_item}`; botões
   "Quantidade" e "Excluir" na linha (`vendas/[id]/acoes-do-item.tsx`), só com

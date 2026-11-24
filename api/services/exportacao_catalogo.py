@@ -2247,6 +2247,29 @@ def _vendas_pagamentos(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _caixa(cur, id_unidade: int, f: dict) -> Saida:
+    """A conferência do caixa (161): o mesmo dia a dia da tela, com esperado, contado e diferença."""
+    from services import caixa
+    inicio, fim = _periodo(f)
+    c = caixa.conferencia(cur, id_unidade, inicio, fim)
+    cem = lambda v: None if v is None else Decimal(str(v)).quantize(Decimal("0.01"))
+    linhas = [{**d, **{k: cem(d[k]) for k in ("recebido", "troco", "esperado", "contado",
+                                              "diferenca")},
+               "sem_forma": d["sem_forma"] or None} for d in c["dias"]]
+    t = c["totais"]
+    return Saida(
+        linhas,
+        [("data", "Data"), ("cupons_dinheiro", "Cupons em dinheiro"), ("recebido", "Recebido"),
+         ("troco", "Troco"), ("esperado", "Esperado na gaveta"), ("contado", "Contado"),
+         ("diferenca", "Diferença"), ("observacao", "Observação"),
+         ("conferido_por", "Conferido por"), ("sem_forma", "Vendas sem forma")],
+        "Conferência do caixa",
+        [("Período", _intervalo(inicio, fim)), ("Esperado no período", cem(t["esperado"])),
+         ("Dias conferidos", t["conferidos"]), ("Dias a conferir", t["a_conferir"]),
+         ("Diferença dos conferidos", cem(t["diferenca"]))],
+        inicio, fim)
+
+
 def _vendas_motivos(cur, id_unidade: int, f: dict) -> Saida:
     """Os documentos que não são venda, por motivo — o mesmo recorte da tela.
 
@@ -3446,6 +3469,12 @@ RELATORIOS: dict[str, Relatorio] = {
         "Crédito, débito, Pix, dinheiro (já sem o troco) e vale, dia a dia — para saber quanto "
         "entrou em cada forma e conferir o caixa.",
         "cmv.relatorios", "vendas-pagamentos", ("periodo",), _vendas_pagamentos),
+    # 🔑 A conferência do caixa (161, etapa 3 das finalizadoras).
+    "caixa": Relatorio(
+        "Conferência do caixa",
+        "Dia a dia: o dinheiro que devia estar na gaveta (recebido − troco), o contado e a "
+        "diferença, com quem conferiu.",
+        "vendas.caixa", "conferencia-caixa", ("periodo",), _caixa),
     # 🔑 Os documentos que não são venda, por motivo (26/10/2026, pedido do dono).
     "vendas-motivos": Relatorio(
         "Documentos por motivo",
@@ -3530,7 +3559,7 @@ GRUPOS = {
     "saldos": "Estoque", "saldos-rede": "Estoque", "movimentos": "Estoque", "vencimentos": "Estoque",
     "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
     "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
-    "vendas-pagamentos": "Vendas",
+    "vendas-pagamentos": "Vendas", "caixa": "Vendas",
     "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
     "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
     "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",

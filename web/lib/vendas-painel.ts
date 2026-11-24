@@ -53,8 +53,11 @@ export type PainelVendas = {
 
 export type PorPagamento = {
   linhas: { grupo: string; rotulo: string; cupons: number; valor: number;
-            participacao_pct: number | null }[];
+            participacao_pct: number | null; taxa_pct?: number | null;
+            custo_taxa?: number | null }[];
   total: number;
+  /** 161: pelas taxas configuradas; nulo sem nenhuma taxa. */
+  custo_taxas?: number | null;
   troco: number;
   dinheiro_recebido: number;
   sem_pagamento: { cupons: number; valor: number };

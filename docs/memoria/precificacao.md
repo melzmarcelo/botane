@@ -6,6 +6,11 @@
 
 ## O que já existe
 
+- 🔑 **Taxa de cada forma de pagamento** na configuração (1.3.21, migração 161): cartão
+  `taxas-pagamento.tsx`, rotas `/caixa/taxas`. Mostra a taxa média REAL pelo peso de cada forma
+  nas vendas do PDV; ⚠️ não mexe nas linhas percentuais daqui (a de cartão continua digitada).
+  Detalhes em `vendas.md`.
+
 - 🔑 **Sem configuração, só o convite** (1.1.151, auditoria de 29/10/2026): sem `configurada`,
   somem os ladrilhos, as colunas Mínimo sugerido/Diferença/Impacto, as caixinhas e o Aplicar.
   A faixa dizia "não configurada" e logo abaixo vinha "abaixo da margem: 0 de 0".

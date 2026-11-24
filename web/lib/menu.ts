@@ -108,6 +108,8 @@ export const MENU: GrupoMenu[] = [
         chave: ["cmv.painel", "cmv.relatorios"] },
       // Os documentos de venda (cupons do PDV e os lançados à mão) — a antiga "Vendas".
       { href: "/vendas", nome: "Documentos", icone: "vendas", chave: "cmv.painel" },
+      // 🔑 A conferência do caixa (161, 24/11/2026): esperado na gaveta × contado, por dia.
+      { href: "/vendas/caixa", nome: "Caixa", icone: "calendario", chave: "vendas.caixa" },
     ],
   },
   {

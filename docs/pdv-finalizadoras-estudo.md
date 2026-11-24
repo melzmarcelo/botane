@@ -3,7 +3,9 @@
 🔑 **Pedido do dono (24/11/2026):** *"pode realizar um estudo do que temos do PDV Legal,
 conseguimos a finalizadora da compra, se foi dinheiro, debito, credito, pix ..."*
 
-Estado: **etapas 1 e 2 construídas em 24/11/2026** (1.3.20, migração 160); 3 e 4 por fazer. O
+Estado: **etapas 1 e 2 construídas em 24/11/2026** (1.3.20, migração 160), e **3 e 4 também**
+(1.3.21, migração 161: Vendas ▸ Caixa e as taxas na configuração da Precificação). O histórico
+foi completado no ar em 24/11/2026: 4.891 vendas de 20/08 a 21/11, 29 cupons sem venda. O
 que foi decidido está em `docs/memoria/vendas.md`. O levantamento abaixo foi conferido contra a
 conta real do cliente em 24/11/2026, só com leituras (`formapagamentopdv/get` e `cupom/get` de
 20, 21 e 23/11), nenhuma gravação.

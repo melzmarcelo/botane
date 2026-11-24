@@ -8,6 +8,7 @@ import { Aviso, Carregando, Cartao, Confirmacao } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
 import { pct } from "@/lib/numeros";
 import { useSessao } from "@/lib/sessao";
+import TaxasPagamentoCartao from "./taxas-pagamento";
 import {
   faturamentoRecente,
   gravarConfig,
@@ -328,6 +329,9 @@ export default function PaginaConfiguracaoDePrecificacao() {
           </Aviso>
         )}
       </Cartao>
+
+      {/* 🔑 161: a taxa de cada forma e a média real pelo peso de cada uma nas vendas. */}
+      <TaxasPagamentoCartao podeEditar={podeEditar} />
 
       <Cartao titulo="Quanto a casa quer que sobre"
               descricao="A margem de lucro, também sobre a venda. Uma margem para uma categoria ou um setor substitui a da loja.">

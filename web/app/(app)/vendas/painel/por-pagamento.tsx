@@ -31,6 +31,13 @@ export function PorPagamento({ q }: { q: Dados }) {
         ) : (
           <p className="text-[13.5px] text-suave">Nenhuma venda do recorte tem a forma de pagamento.</p>
         )}
+        {q.custo_taxas !== null && q.custo_taxas !== undefined && (
+          <p className="mt-3 text-[13.5px]" id="painel-vendas-custo-taxas">
+            Custo estimado das taxas: <b>{reais(q.custo_taxas)}</b>
+            <span className="text-suave"> ({pct(q.total ? (q.custo_taxas / q.total) * 100 : 0, 2)} do que entrou com forma,
+              pelas taxas da Precificação)</span>
+          </p>
+        )}
         {q.sem_pagamento.cupons > 0 && (
           <p className="mt-3 border-t border-dashed border-linha pt-2.5 text-[12.5px] text-suave"
              id="painel-vendas-sem-pagamento">

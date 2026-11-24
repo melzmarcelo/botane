@@ -81,20 +81,31 @@ def por_forma(cur, id_unidade: int, inicio: date, fim: date, receita: Decimal) -
         (id_unidade, inicio, fim))
     sem = cur.fetchone()
 
+    # 🔑 161: a taxa de cada forma, configurada na loja, estima quanto o cartão levou.
+    # ⚠️ Sem taxa configurada não há estimativa (nula), em vez de um "R$ 0" que parece real.
+    cur.execute("SELECT grupo, taxa_pct FROM forma_pagamento_taxas WHERE id_unidade = %s",
+                (id_unidade,))
+    taxas = {r["grupo"]: Decimal(r["taxa_pct"]) for r in cur.fetchall()}
+
     linhas = []
     for g in ORDEM:
         if g not in brutos:
             continue
         valor = Decimal(brutos[g]["valor"] or 0) - (troco if g == "DINHEIRO" else 0)
+        custo = (valor * taxas[g] / 100).quantize(Decimal("0.01")) if g in taxas else None
         linhas.append({"grupo": g, "rotulo": GRUPOS[g], "cupons": brutos[g]["cupons"],
-                       "valor": float(valor)})
+                       "valor": float(valor),
+                       "taxa_pct": float(taxas[g]) if g in taxas else None,
+                       "custo_taxa": float(custo) if custo is not None else None})
     total = sum(Decimal(str(l["valor"])) for l in linhas)
+    custos = [Decimal(str(l["custo_taxa"])) for l in linhas if l["custo_taxa"] is not None]
     for l in linhas:
         l["participacao_pct"] = (round(float(Decimal(str(l["valor"])) / total * 100), 1)
                                  if total else None)
     return {
         "linhas": linhas,
         "total": float(total),
+        "custo_taxas": float(sum(custos, Decimal(0))) if custos else None,
         "troco": float(troco),
         "dinheiro_recebido": float(Decimal(brutos.get("DINHEIRO", {}).get("valor") or 0)),
         "sem_pagamento": {"cupons": sem["n"], "valor": float(sem["valor"] or 0)},
