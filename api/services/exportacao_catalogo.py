@@ -3161,6 +3161,48 @@ def _manutencoes(cur, id_unidade: int, f: dict) -> Saida:
                  "Por setor", None)] if quadro else [])
 
 
+# ---------------------------------------------------------------- ordem de compra (158)
+
+def _opcoes_situacao_ordem(_c, _u) -> list[dict]:
+    from services import ordens_compra
+    return [{"valor": v, "nome": n} for v, n in ordens_compra.SITUACOES.items()]
+
+
+FILTROS["situacao_ordem"] = {"tipo": "multipla", "rotulo": "Situação", "ajuda": "só o que falta comprar",
+                             "opcoes": _opcoes_situacao_ordem}
+FILTROS["periodo_ordem"] = {"tipo": "periodo", "rotulo": "Pedido ou comprado entre",
+                            "ajuda": "sem limite de data, se não escolher"}
+FILTROS["busca_ordem"] = {"tipo": "texto", "rotulo": "Item ou código contém", "ajuda": "todos os itens"}
+
+
+def _ordens_compra(cur, id_unidade: int, f: dict) -> Saida:
+    """A lista para levar ao mercado, ou o que já se comprou. Sem valor: o preço vem da nota.
+
+    ⚠️ Usa a MESMA consulta da tela, para o papel não mostrar outra lista.
+    """
+    from services import ordens_compra
+    status = _lista(f.get("situacao_ordem")) or [ordens_compra.A_COMPRAR]
+    inicio, fim = f.get("inicio"), f.get("fim")
+    sql, params = ordens_compra.consulta_da_lista(
+        id_unidade, status, inicio, fim, f.get("busca_ordem"))
+    cur.execute(sql, params)
+    quando = lambda d: d.strftime("%d/%m/%Y %H:%M") if d else ""
+    linhas = [dict(r) | {"situacao": ordens_compra.SITUACOES[r["status"]],
+                         "pedido_em": quando(r["criado_em"]),
+                         "comprado_quando": quando(r["comprado_em"])}
+              for r in cur.fetchall()]
+    resumo: list[tuple[str, object]] = [("Itens", len(linhas))]
+    if inicio and fim:
+        resumo.insert(0, ("Período", _intervalo(inicio, fim)))
+    return Saida(
+        linhas,
+        [("item", "Item"), ("quantidade", "Quantidade"), ("um", "Unidade"),
+         ("observacao", "Observação"), ("situacao", "Situação"), ("pedido_por", "Pedido por"),
+         ("pedido_em", "Pedido em"), ("comprado_por_nome", "Comprado por"),
+         ("comprado_quando", "Comprado em"), ("fornecedor", "Fornecedor")],
+        "Ordem de compra", resumo, inicio, fim)
+
+
 def _valor_patrimonio(cur, id_unidade: int, f: dict) -> Saida:
     """141 — o valor do patrimônio numa data: compra, depreciação acumulada e valor atual,
     bem a bem e por setor. 🔑 Pedido do dono (28/10/2026, etapa 4): "valor patrimonial por
@@ -3394,6 +3436,13 @@ RELATORIOS: dict[str, Relatorio] = {
         "Cada preventiva e corretiva do período, com quem fez e quanto custou — por setor.",
         "patrimonio.ver", "patrimonio-manutencoes",
         ("periodo_manutencao", "setores", "busca_bem"), _manutencoes),
+    # 🔑 A ordem de compra (158, 23/11/2026): a lista que vai para o mercado.
+    "ordens-compra": Relatorio(
+        "Ordem de compra",
+        "O que falta comprar, com quantidade e observação, e o que já foi comprado, por quem "
+        "e de qual fornecedor.",
+        "compras.ordem_solicitar", "ordem-de-compra",
+        ("situacao_ordem", "periodo_ordem", "busca_ordem"), _ordens_compra),
 }
 
 
@@ -3406,7 +3455,7 @@ GRUPOS = {
     "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
     "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
     "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",
-    "compras": "Compras",
+    "compras": "Compras", "ordens-compra": "Compras",
     "producao": "Produção", "agenda-producao": "Produção", "fichas": "Produção", "etiquetas": "Produção",
     "reservas-dia": "Portal de Clientes", "pedidos": "Portal de Clientes", "fidelidade": "Portal de Clientes",
     "produtos": "Cadastros", "pessoas": "Cadastros",

@@ -74,6 +74,8 @@ _REAPONTAVEIS = (
     ("ficha_itens", "id_insumo", None),
     ("kit_itens", "id_componente", "{a}.id_kit"),
     ("kit_itens", "id_kit", "{a}.id_componente"),
+    # 🔑 A ordem de compra (158): o pedido aberto acompanha o produto que fica.
+    ("ordem_compra_itens", "id_produto", None),
 )
 
 # ⚠️ Os campos que se completam quando estão em branco no que fica. `nome` e

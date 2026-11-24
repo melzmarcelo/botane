@@ -18,7 +18,7 @@ entregue.
 |---|---|---|
 | [Cadastros](#cadastros) | `docs/memoria/cadastros.md` | `cadastros`, `pessoas`, `produto_do_omie`, `vinculo`, `conversao`, `acucar_500g`, `utensilios`, `troca_de_unidade`, `openfoodfacts`, `kits`, `descricoes`, `produtos_pdv` |
 | [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `fila_e_rascunhos`, `relatorio_fichas`, `producao`, `rendimento`, `rendimento_por_local`, `setor_que_produz` |
-| [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas` |
+| [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas`, `ordens_compra` |
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes`, `preco_custo`, `custo_referencia` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `contagem_parcelas`, `transferencias`, `duas_lojas`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `venda_consumo_interno`, `venda_motivo`, `vendas_motivos`, `consumo_pessoa`, `receber`, `pdv_legal`, `rotulos_cabem` |
@@ -64,15 +64,16 @@ faria a produção de ontem mudar de valor sozinha.
 
 ## Compras
 
-Notas de entrada: XML, digitação, conciliação e lançamento no razão.
+Notas de entrada (XML, digitação, conciliação e lançamento no razão) e a ordem de compra.
 
-- **Rotas:** `notas.py`
-- **Serviços:** `nfe_xml.py`, `ean_das_notas.py`, `notas_lote.py` (lançar as conciliadas de uma vez, com prévia)
-- **Telas:** `compras/`, `compras/[id]/`, `compras/nova/`
-- **Permissões:** `compras.notas`, `compras.conciliar`, `compras.lancar`
+- **Rotas:** `notas.py`, `ordens_compra.py`
+- **Serviços:** `nfe_xml.py`, `ean_das_notas.py`, `notas_lote.py` (lançar as conciliadas de uma vez, com prévia), `ordens_compra.py`
+- **Telas:** `compras/`, `compras/[id]/`, `compras/nova/`, `compras/ordens/` (roteiro `verificar-ordens-compra.mjs`)
+- **Permissões:** `compras.notas`, `compras.conciliar`, `compras.lancar`, `compras.ordem_solicitar`, `compras.ordem_comprar`
 
 ⚠️ **A nota só vira estoque no LANÇAMENTO**, não na importação: o XML entra como
 documento, e é a conciliação item→produto que decide o que baixa.
+⚠️ **A ordem de compra não toca o estoque**: "comprado" é aviso entre pessoas (migração 158).
 
 ## Custos
 

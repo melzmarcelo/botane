@@ -8590,9 +8590,10 @@ try {
       botaoDentroDeLink: document.querySelectorAll("aside a button").length,
       teclaVisivel: document.querySelector(".menu-tecla")?.offsetParent !== null,
       contas: grupos.map((g) => g.querySelector(".menu-conta")?.textContent ?? null),
-      // O grupo de uma tela so deixou de ser pasta (ver `montarMenu`).
-      grupoCompras: grupos.some((g) => /^compras/i.test(g.innerText.trim())),
-      linkCompras: document.querySelectorAll('aside a[href="/compras"]').length,
+      // O grupo de uma tela so deixou de ser pasta (ver `montarMenu`). O exemplo era Compras
+      // ate a Ordem de compra (23/11/2026) dar a ela uma segunda tela; hoje e o CMV.
+      grupoUmaTela: grupos.some((g) => /^cmv/i.test(g.innerText.trim())),
+      linkUmaTela: document.querySelectorAll('aside a[href="/cmv"]').length,
     };
   });
   checar("o menu tem linhas e toda linha tem icone",
@@ -8606,11 +8607,11 @@ try {
   checar("o grupo do menu nao mostra contagem, so o nome e a seta",
     menuNovo.contas.length > 0 && menuNovo.contas.every((c) => c === null), menuNovo.contas);
   // 🔑 Abrir uma pasta com um papel dentro e um clique que nao compra nada — e
-  // isto nao vale so para Compras: vale para quem tem permissao de UMA tela
+  // isto nao vale so para o CMV: vale para quem tem permissao de UMA tela
   // dentro de um grupo de seis.
-  checar("grupo de uma tela so vira item: Compras deixou de ser pasta",
-    menuNovo.grupoCompras === false, menuNovo);
-  checar("e a tela dela continua alcancavel", menuNovo.linkCompras >= 1, menuNovo);
+  checar("grupo de uma tela so vira item: CMV nao e pasta",
+    menuNovo.grupoUmaTela === false, menuNovo);
+  checar("e a tela dela continua alcancavel", menuNovo.linkUmaTela >= 1, menuNovo);
   // 🔑 **CMV direto, e Vendas com Períodos e Documentos** (pedido do dono, 28/09/2026).
   const menuVendas = await p.evaluate(() => {
     const grupos = [...document.querySelectorAll("aside .menu-grupo")].map((g) => g.innerText.trim());
@@ -11181,7 +11182,8 @@ for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mj
                        "verificar-grade-produtos.mjs", "verificar-bi-relatorios.mjs",
                        "verificar-tirar-varios.mjs", "verificar-cadastro-produto.mjs",
                        "verificar-site-novo.mjs", "verificar-nota-produto-inativo.mjs", "verificar-cesta-nao-cobrar.mjs",
-                       "verificar-assistente-whatsapp.mjs", "verificar-inicio-personalizado.mjs"]) {
+                       "verificar-assistente-whatsapp.mjs", "verificar-inicio-personalizado.mjs",
+                       "verificar-ordens-compra.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {

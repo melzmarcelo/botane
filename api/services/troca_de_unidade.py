@@ -470,6 +470,15 @@ def aplicar(cur, id_produto: int, plano: dict, id_usuario: int | None = None) ->
     )
     fornecedores = cur.rowcount
 
+    # 🔑 A ordem de compra (158): o pedido ABERTO na unidade antiga acompanha a troca, senão
+    # "2 CX" viraria uma sigla que o produto já não usa. O comprado é história e fica.
+    # ⚠️ O pedido em embalagem (FD, PCT) não muda: a embalagem continua existindo.
+    cur.execute(
+        """UPDATE ordem_compra_itens SET quantidade = quantidade * %s, um = %s
+            WHERE id_produto = %s AND status = 'A_COMPRAR' AND upper(um) = upper(%s)""",
+        (fator, plano["para"], id_produto, plano["de"]),
+    )
+
     for c in plano["conversoes"]:
         cur.execute(
             f"UPDATE produtos SET {c['campo']} = %s WHERE id = %s",

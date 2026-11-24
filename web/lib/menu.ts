@@ -80,6 +80,12 @@ export const MENU: GrupoMenu[] = [
     icone: "nota",
     itens: [
       { href: "/compras", nome: "Notas de entrada", icone: "nota", chave: "compras.notas" },
+      {
+        href: "/compras/ordens",
+        nome: "Ordem de compra",
+        icone: "nota",
+        chave: ["compras.ordem_solicitar", "compras.ordem_comprar"],
+      },
     ],
   },
   {
@@ -478,7 +484,7 @@ const visivel = (i: ItemMenu, a: Ambiente) =>
  * O menu desta pessoa, nesta loja.
  *
  * 🔑 **Grupo que sobra com UM item vira item.** Abrir uma pasta com um papel
- * dentro é um clique que não compra nada — e isso não vale só para Compras, que
+ * dentro é um clique que não compra nada — e isso não vale só para o CMV, que
  * nasce com um item: vale para quem tem permissão de uma tela só dentro de um
  * grupo de seis. Antes, essa pessoa clicava em "ADMINISTRAÇÃO" para encontrar
  * "Usuários" sozinho lá dentro.

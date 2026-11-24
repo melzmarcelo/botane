@@ -5,6 +5,27 @@
 
 ## O que já existe
 
+- 🔑 **Ordem de compra, etapa 1** (1.3.16, migração 158, 23/11/2026, pedido do dono: *"o usuario
+  adiciona itens que precisam ser comprar, informa a quantidade e um observação opcional. E
+  conforme estes pedidos vão sendo compras estes podem ir saindo da lista e entram em outra como
+  comprado"*). Estudo e etapas seguintes em `docs/ordem-de-compra-estudo.md`.
+  - Tela `compras/ordens/` (A comprar e Comprados), `routers/ordens_compra.py`,
+    `services/ordens_compra.py`, tabela `ordem_compra_itens`, relatório `ordens-compra`.
+  - 🔑 **Comprado NÃO é recebido**: nada toca razão, custo ou nota. Por isso sem valor na linha.
+  - 🔑 **Lista contínua, uma linha por item**, sem documento numerado. Aceita item fora do cadastro.
+  - **Duas chaves:** `compras.ordem_solicitar` (toda a equipe menos Contador; mexe só no próprio
+    pedido) e `compras.ordem_comprar` (Administrador, Gerente, Conferente).
+  - **Compra parcial divide a linha** (`id_item_origem`). Voltar à lista junta de novo com a origem
+    aberta, e a linha da parte fica `CANCELADO`: nada se apaga. Comprar A MAIS guarda o pedido em
+    `quantidade_pedida`, que é o que o voltar restaura.
+  - ⚠️ Marcar trava as linhas **em ordem de id** e é tudo ou nada; a segunda pessoa recebe 409
+    dizendo quem comprou.
+  - ⚠️ A tabela entrou em `_REAPONTAVEIS` (fusão), e `troca_de_unidade.aplicar` converte o pedido
+    aberto na unidade antiga. Pedido em embalagem não muda.
+  - ⚠️ **Na troca de aba, a lista velha aparecia sob os botões da aba nova** ("Voltar à lista" em
+    item ainda aberto). A tela limpa a lista ao trocar e ignora resposta atrasada.
+  - Cobertura: `smoke_ordens_compra.py` e `verificar-ordens-compra.mjs`.
+
 - 🔑 **Os filtros da lista de notas** (1.1.117, 21/10/2026, pedido do dono: *"nas notas de
   entrada poderia ter mais filtros: período, situação..."*). A rota já aceitava situação, origem
   e período; a tela só oferecia a busca.
