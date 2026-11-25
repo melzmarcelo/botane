@@ -245,7 +245,8 @@ print("9. o relatorio sai da mesma conta")
 st, cat = chamar("GET", "/exportar/catalogo", token=token)
 rel = next((x for x in (cat or []) if x["chave"] == "vendas"), None)
 checar("o relatorio esta no catalogo, com os filtros do painel",
-       rel and [f["nome"] for f in rel["filtros"]] == ["periodo", "agrupar", "categorias", "setores", "produtos"],
+       rel and [f["nome"] for f in rel["filtros"]] == ["periodo", "secoes_vendas", "agrupar", "categorias",
+                                                        "setores", "produtos"],
        rel)
 st, csv = chamar("GET", f"/exportar/vendas.csv?inicio={d1}&fim={d2}&agrupar=dia", token=token, cru=True)
 checar("a planilha sai", st == 200 and isinstance(csv, str), (st, str(csv)[:200]))
