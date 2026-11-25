@@ -169,7 +169,11 @@ checar("o troco do dia andou 10", igual(q["troco"] - q_antes.get("troco", 0), 10
 checar("a venda sem forma conta em não informado",
        q["sem_pagamento"]["cupons"] - q_antes.get("sem_pagamento", {}).get("cupons", 0) == 1
        and igual(q["sem_pagamento"]["valor"] - q_antes.get("sem_pagamento", {}).get("valor", 0), 25), q)
-checar("as formas + não informado fecham com a receita", abs(q["diferenca"]) < 0.05, q)
+# ⚠️ Pela DIFERENÇA: o dia de hoje tem cupom real do PDV com acréscimo (taxa de entrega ou de
+# serviço) pago nas formas e fora da receita dos itens — o dia inteiro não fecha no centavo, e não
+# é deste teste. As vendas daqui não podem mexer na diferença.
+checar("as formas + não informado fecham com a receita (as vendas do teste não mexem na diferença)",
+       abs(q["diferenca"] - q_antes.get("diferenca", 0)) < 0.05, (q_antes.get("diferenca"), q["diferenca"]))
 _s, p = chamar("GET", f"/vendas/painel?inicio={hoje}&fim={hoje}&produtos=1", token=token)
 checar("com recorte de produto não há quadro de pagamento", p.get("por_pagamento") is None,
        p.get("por_pagamento"))

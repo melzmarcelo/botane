@@ -218,7 +218,8 @@ s, _ = chamar("DELETE", f"/recebimentos/{c['id']}", token=tk)
 checar("apaga o próprio", s == 200, s)
 
 print("7. relatório")
-s, rel = chamar("GET", f"/exportar/recebimentos/dados?inicio={hoje}&fim={hoje}", token=token)
+# ⚠️ "recebimento-notas", e não "recebimentos": essa chave é a dos recebimentos do consumo.
+s, rel = chamar("GET", f"/exportar/recebimento-notas/dados?inicio={hoje}&fim={hoje}", token=token)
 texto = json.dumps(rel, ensure_ascii=False, default=str)
 checar("o relatório responde, com a situação", s == 200 and "Situação" in texto and marca in texto,
        texto[:300])

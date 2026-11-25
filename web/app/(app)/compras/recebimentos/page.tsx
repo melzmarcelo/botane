@@ -223,7 +223,7 @@ export default function PaginaRecebimentos() {
                      explica={<>Recebeu mercadoria com nota? Registre aqui o número, o fornecedor e a
                        data, com foto se quiser. É só registro: não mexe no estoque. A lista mostra se
                        a nota já chegou ao sistema.</>}
-                     acoes={<BotaoExportar relatorio="recebimentos" />} />
+                     acoes={<BotaoExportar relatorio="recebimento-notas" />} />
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {podeReceber && <Cartao><Formulario aoRegistrar={() => void carregar()} /></Cartao>}

@@ -8,7 +8,7 @@ import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Vazio } from "@/components/ui";
 import { conferenciaCaixa, gravarContado, type ConferenciaCaixa, type DiaCaixa } from "@/lib/caixa";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
-import { moedaParaNumero, reais } from "@/lib/numeros";
+import { textoParaNumero, reais } from "@/lib/numeros";
 
 /**
  * A conferência do caixa (migração 161, etapa 3 das finalizadoras, pedido do dono de 24/11/2026).
@@ -36,7 +36,7 @@ function Linha({ d, aoGravar }: { d: DiaCaixa; aoGravar: () => void }) {
   const [contado, setContado] = useState(paraCampo(d.contado));
   const [obs, setObs] = useState(d.observacao ?? "");
   const [ocupado, setOcupado] = useState(false);
-  const n = moedaParaNumero(contado);
+  const n = textoParaNumero(contado);
   const diferenca = n === null ? null : Math.round((n - d.esperado) * 100) / 100;
   const mudou = (n ?? null) !== d.contado || (obs.trim() || null) !== (d.observacao || null);
 

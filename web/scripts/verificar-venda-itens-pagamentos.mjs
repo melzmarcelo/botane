@@ -122,16 +122,22 @@ try {
   checar("o dia de hoje aparece com o esperado", !!(await p.$(`[data-caixa-dia="${HOJE}"]`)));
   const esperado = diaAntes ? diaAntes.esperado : 0;
   const campoCx = `[data-caixa-dia="${HOJE}"] [data-caixa-contado]`;
+  // ⚠️ Um valor INTEIRO, sem vírgula, como quem conta a gaveta digita: com a função de máscara
+  // de moeda, "500" virava R$ 5,00 (24/11/2026).
+  const inteiro = Math.ceil(esperado) + 2;
+  const sobra = (inteiro - esperado).toFixed(2).replace(".", ",");
   await p.click(campoCx, { clickCount: 3 });
-  await p.type(campoCx, (esperado + 2).toFixed(2).replace(".", ","));
+  await p.type(campoCx, String(inteiro));
   const difTela = await p.$eval(`[data-caixa-dia="${HOJE}"] [data-caixa-diferenca]`, (e) => e.innerText);
-  checar("a diferença aparece enquanto digita (sobra 2)", /sobra/.test(difTela) && /2,00/.test(difTela), difTela);
+  checar("digitar sem vírgula dá a diferença certa (sobra)", /sobra/.test(difTela) && difTela.includes(sobra),
+    { difTela, inteiro, esperado });
   await p.click(`[data-caixa-dia="${HOJE}"] [data-caixa-gravar]`);
   await p.waitForFunction((h) => /por /.test(document.querySelector(`[data-caixa-dia="${h}"]`)?.innerText ?? ""),
     { timeout: 15000 }, HOJE).catch(() => {});
   const { dados: depoisCaixa } = await api("GET", `/caixa/conferencia?inicio=${HOJE}&fim=${HOJE}`, undefined, token);
   const diaDepois = depoisCaixa.dias.find((d) => d.data === HOJE);
-  checar("gravado no servidor, com quem conferiu", !!diaDepois && Math.abs(diaDepois.diferenca - 2) < 0.01 && !!diaDepois.conferido_por, diaDepois);
+  checar("gravado no servidor, com quem conferiu",
+    !!diaDepois && Math.abs(diaDepois.contado - inteiro) < 0.01 && !!diaDepois.conferido_por, diaDepois);
   if (diaAntes && diaAntes.contado !== null) {
     await api("PUT", `/caixa/conferencia/${HOJE}`, { contado: diaAntes.contado, observacao: diaAntes.observacao }, token);
   }
