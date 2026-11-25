@@ -1,7 +1,8 @@
 """O assistente pelo WhatsApp, etapa 5 — o "bom dia" com as pendências (migração 155).
 
 🔑 Estudo em `docs/assistente-whatsapp-estudo.md`: às 7h (configurável), um modelo aprovado
-"Bom dia, {{1}}! Hoje você tem {{2}} na agenda de produção." para quem ligou a opção no Perfil.
+"Bom dia, {{1}}! Para hoje: {{2}}. …" para quem ligou a opção no Perfil — {{2}} com a agenda de
+produção e, desde a 164, as reservas do dia.
 
 Por que assim:
 - ⚠️ **Mensagem que o sistema inicia é sempre MODELO aprovado pela Meta** (fora da janela de
@@ -31,11 +32,15 @@ log = logging.getLogger("botane.assistente")
 MODELO_PADRAO = "botane_bom_dia"
 JANELA = timedelta(hours=2)
 # O texto do modelo, pronto para a casa cadastrar na Meta (categoria Utilidade). {{1}} = o primeiro
-# nome; {{2}} = "3 itens" / "1 item". Os botões são de resposta rápida, nesta ordem.
-TEXTO_DO_MODELO = "Bom dia, {{1}}! Hoje você tem {{2}} na agenda de produção."
+# nome; {{2}} = o resumo ("3 itens na agenda de produção e 2 reservas (9 pessoas)"). Os botões são
+# de resposta rápida, nesta ordem.
+# 🔑 164 (25/11/2026): as reservas do dia entram aqui (decisão do dono: "no bom dia"), e por isso o
+# texto deixou de dizer "na agenda de produção" fixo. ⚠️ A Meta recusa modelo que TERMINA em
+# variável: a frase final existe por isso.
+TEXTO_DO_MODELO = "Bom dia, {{1}}! Para hoje: {{2}}. Toque em Ver pendências para os detalhes."
 BOTOES = [{"payload": "BOMDIA:VER", "titulo": "Ver pendências"},
           {"payload": "BOMDIA:PARAR", "titulo": "Parar o bom dia"}]
-PERGUNTA = "Quais são as minhas pendências de hoje?"
+PERGUNTA = "Quais são as minhas pendências e as reservas de hoje?"
 
 
 def configuracao(c: dict) -> dict:
@@ -61,6 +66,33 @@ def _na_janela(cfg: dict, agora: datetime) -> bool:
 
 def _quantos(n: int) -> str:
     return "1 item" if n == 1 else f"{n} itens"
+
+
+def resumo(producao: int, reservas: int, pessoas: int) -> str:
+    """A variável {{2}}: "3 itens na agenda de produção e 2 reservas (9 pessoas)"."""
+    partes = []
+    if producao:
+        partes.append(f"{_quantos(producao)} na agenda de produção")
+    if reservas:
+        partes.append(f"{reservas} reserva{'s' if reservas != 1 else ''} "
+                      f"({pessoas} pessoa{'s' if pessoas != 1 else ''})")
+    return " e ".join(partes) or "nada pendente"
+
+
+def contar_reservas(id_usuario: int, dia) -> tuple[int, int]:
+    """164: as reservas do dia (aguardando ou confirmadas) nas lojas em que a pessoa VÊ reservas."""
+    from seguranca import carregar_contexto
+    ctx = carregar_contexto(id_usuario)
+    if not ctx.pode("reservas.ver"):
+        return 0, 0
+    with get_cursor() as cur:
+        cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY id")
+        lojas = [r["id"] for r in cur.fetchall() if ctx.ve_unidade(r["id"])]
+        cur.execute("""SELECT count(*) AS n, coalesce(sum(pessoas), 0) AS p FROM reservas
+                        WHERE id_unidade = ANY(%s) AND data = %s
+                          AND status IN ('PENDENTE', 'CONFIRMADA')""", (lojas, dia))
+        r = cur.fetchone()
+    return int(r["n"]), int(r["p"])
 
 
 async def _contar(id_usuario: int, email: str) -> int:
@@ -127,13 +159,14 @@ def varrer(agora: datetime | None = None) -> int:
                 u = cur.fetchone()
             try:
                 n = asyncio.run(_contar(quem["id_usuario"], u["email"]))
+                reservas, pessoas = contar_reservas(quem["id_usuario"], hoje)
             except Exception:  # noqa: BLE001 — falhou a contagem de UM: os outros seguem
                 log.exception("bom dia: falha ao contar as pendências de %s", quem["id_usuario"])
                 continue
-            if n == 0 and cfg["so_com_pendencia"]:
+            if n == 0 and reservas == 0 and cfg["so_com_pendencia"]:
                 continue
             primeiro = (u["nome"] or "").split(" ")[0] or "tudo bem"
-            variaveis = [primeiro, _quantos(n) if n else "nada"]
+            variaveis = [primeiro, resumo(n, reservas, pessoas)]
             texto = TEXTO_DO_MODELO.replace("{{1}}", variaveis[0]).replace("{{2}}", variaveis[1])
             with get_cursor() as cur:
                 assistente.responder(

@@ -253,10 +253,13 @@ checar("na janela, sai o bom dia", enviados >= 1 and len(bd_admin) == 1, (enviad
 m = bd_admin[0] if bd_admin else {}
 modelo = m.get("modelo") or {}
 n = int(str((modelo.get("variaveis") or ["", "0"])[1]).split(" ")[0]) if modelo.get("variaveis") and \
-    modelo["variaveis"][1] != "nada" else 0
+    modelo["variaveis"][1] != "nada pendente" else 0
+# 164: o resumo junta a agenda de produção e as reservas do dia ("3 itens na agenda de produção e …").
 checar("com o primeiro nome e a contagem da agenda de hoje (a linha do cenário conta)",
        modelo.get("variaveis", [None])[0] == PRIMEIRO and n >= 1
-       and m.get("texto") == f"Bom dia, {PRIMEIRO}! Hoje você tem {modelo['variaveis'][1]} na agenda de produção.",
+       and "na agenda de produção" in modelo["variaveis"][1]
+       and m.get("texto") == f"Bom dia, {PRIMEIRO}! Para hoje: {modelo['variaveis'][1]}. "
+                             "Toque em Ver pendências para os detalhes.",
        m)
 checar("e saiu (modo simulado)", m.get("status") == "SIMULADA", m.get("status"))
 carga = assistente._payload({"telefone": FONE, "texto": m.get("texto"), "modelo": modelo})
@@ -273,8 +276,8 @@ zerar_dia()
 config(bom_dia_so_com_pendencia=False)
 assistente_bomdia.varrer(NA_JANELA)
 so = bons_dias(FONE_SO)
-checar("desligado o \"só com pendência\", recebe — com \"nada\"",
-       len(so) == 1 and "Hoje você tem nada" in (so[0].get("texto") or ""), so)
+checar("desligado o \"só com pendência\", recebe — com \"nada pendente\"",
+       len(so) == 1 and "Para hoje: nada pendente." in (so[0].get("texto") or ""), so)
 
 print("\n4. os botões")
 FALSA.pedidos.clear()
@@ -282,7 +285,7 @@ antes = len(respostas())
 tocar("BOMDIA:VER")
 r = esperar(antes)
 checar("\"Ver pendências\" vira a pergunta das pendências, respondida pelo Claude",
-       (r.get("texto") or "").startswith("ok: Quais são as minhas pendências de hoje?"), r)
+       (r.get("texto") or "").startswith("ok: Quais são as minhas pendências e as reservas de hoje?"), r)
 antes = len(respostas())
 tocar("BOMDIA:PARAR")
 r = esperar(antes)

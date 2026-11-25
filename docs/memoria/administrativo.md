@@ -1003,3 +1003,46 @@ Aí ele retorna: para hoje precisa produzir 10 pães. Aí posso solicitar a rece
 - Teste: `smoke_assistente_bomdia.py` (19) chama `varrer(agora=…)` NO PRÓPRIO processo (importa o
   `main` para registrar o app) com hora fingida, e configura a hora seis horas longe da real para
   o laço da API não mandar junto. `verificar-assistente-whatsapp.mjs` (16).
+
+## Assistente no WhatsApp — etapa 6: avisos à equipe e número compartilhado (migração 164, 25/11/2026)
+🔑 **Pedido do dono:** *"o cliente reserva … o sistema dispara para o WhatsApp do cliente o aviso, e
+também para o WhatsApp da loja para avisar que tem uma nova reserva, e este confirma … pode
+realizar ações na reserva pelo sistema ou pelo próprio WhatsApp"* — e o mesmo nos pedidos do site.
+Decisões (todas as recomendadas): quem recebe são **usuários vinculados**; **o mesmo número** dos
+clientes; as **reservas do dia no bom dia**.
+- **Número compartilhado**: `config.id_whatsapp_loja` (Integrações ▸ Assistente ▸ "Número de
+  loja"). `assistente.conexao` passa a trazer número, identificação e token DAQUELE número de loja
+  (`whatsapp._conexao`); ⚠️ `cred_propria` é o que se grava de volta — o token da loja nunca é
+  copiado para a linha do assistente. Digitar a identificação de um número de loja continua 422,
+  agora apontando a escolha.
+- **O webhook separa por mensagem** (`whatsapp.receber`, `dividido`): estados → primeiro
+  `assistente_mensagens`, depois a loja; mensagens → `assistente.e_da_equipe`: 🔑 **primeiro o
+  BOTÃO** (ACAO:/BOMDIA:/EQUIPE: = assistente; CONFIRMAR:/CANCELAR: do lembrete = cliente, mesmo se
+  quem tocou for funcionário com reserva própria), **depois a PESSOA** (wa_id vinculado ou código
+  de vínculo válido = assistente). Assistente desligado: tudo vai para a loja.
+- **Avisos** (`services/assistente_equipe.py`): reserva do site PENDENTE (`publico.marcar_reserva`)
+  e pedido do site NOVO (`pedidos.enviar`), na MESMA transação. Modelos `botane_reserva_nova` e
+  `botane_pedido_novo` (textos em `AVISOS`, prontos na tela), botões "Confirmar"/"Recusar" com
+  payload `EQUIPE:<tipo>:<ação>:<id>`. Vão por `assistente_mensagens` (modelo), chave
+  `equipe:<tipo>:<id>:<usuário>` (reenvio não repete). Recebe quem: ligou no Perfil
+  (`usuario_whatsapp.avisos_reserva/avisos_pedido`), está ativo e vinculado, tem
+  `integracao.whatsapp_assistente` E a permissão de agir (`reservas.editar` / `pedidos.operar`) e
+  vê a loja. Itens do pedido numa linha só (variável de modelo não aceita quebra).
+- **O toque** (`assistente_equipe.tocou`): permissão e loja conferidas DE NOVO, com
+  `carregar_contexto` de quem tocou; auditoria com `origem = whatsapp` (seta o `ContextVar`).
+  ⚠️ **Reserva: só age se ainda PENDENTE** — "Recusar" depois de alguém confirmar pela tela
+  cancelava a reserva (CONFIRMADA → CANCELADA é caminho válido), achado na suíte. Pedido: os
+  serviços já só aceitam NOVO. Confirmar a reserva dispara `reserva_mudou(pela_casa=True)` como a
+  tela (o cliente recebe "confirmada" e o lembrete).
+- **Cliente que ESCREVE para um número da Cloud API** recebe UMA resposta por dia
+  (`whatsapp._ninguem_le`): o número não é lido; indica o principal da loja se for outro número.
+- **Bom dia**: `TEXTO_DO_MODELO` virou "Bom dia, {{1}}! Para hoje: {{2}}. Toque em Ver pendências
+  para os detalhes." ({{2}} = `resumo(produção, reservas, pessoas)`; reservas PENDENTE/CONFIRMADA
+  do dia nas lojas em que a pessoa tem `reservas.ver`). ⚠️ O modelo ainda não estava na Meta: se já
+  estiver cadastrado em algum lugar com o texto antigo, cadastrar de novo.
+- Cobertura: `smoke_assistente_equipe.py` (34), `smoke_assistente_bomdia.py` (ajustada ao texto),
+  `verificar-assistente-whatsapp.mjs` (+5).
+- ⚠️ **25/11/2026: a Meta recusa o bom dia como Utilidade** (avisou em três versões: o texto atual,
+  sem "Bom dia" e com o botão "Parar este aviso") — só aceita Marketing. Decisão do dono: **bom dia
+  desligado**; a equipe recebe reserva e pedido na hora, e o resumo do dia se pergunta ao
+  assistente. `botane_reserva_nova` e `botane_pedido_novo` foram aceitos para análise como Utilidade.

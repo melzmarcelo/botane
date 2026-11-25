@@ -40,8 +40,8 @@ export default function BomDiaDoAssistente({
           Mandar um bom dia com as pendências
           <span className="block text-[13px] text-suave">
             Só para quem escolher receber, em Perfil ▸ Assistente no WhatsApp. A mensagem diz quantos
-            itens a pessoa tem na agenda de produção hoje, com os botões “Ver pendências” (o assistente
-            responde tudo) e “Parar o bom dia”.
+            itens a pessoa tem na agenda de produção hoje e quantas reservas há no dia, com os botões
+            “Ver pendências” (o assistente responde tudo) e “Parar o bom dia”.
           </span>
         </span>
       </label>
@@ -83,14 +83,17 @@ export default function BomDiaDoAssistente({
             </Campo>
           </div>
           <div className="rounded-[10px] bg-[var(--color-superficie2)] p-3 text-[13px]">
-            <p className="mb-2 font-semibold">Cadastre este modelo na Meta (categoria Utilidade):</p>
+            {/* ⚠️ 25/11/2026: a Meta recusou o bom dia como Utilidade em três versões (o resumo do dia
+                não está ligado a uma reserva ou pedido) — só aceita como Marketing, que custa mais. */}
+            <p className="mb-2 font-semibold">Cadastre este modelo na Meta (ela só aceita como Marketing):</p>
             <p className="mono break-words">{cfg.bom_dia.texto_do_modelo}{" "}
               <button type="button" className="link-acao" onClick={() => copiar(cfg.bom_dia.texto_do_modelo)}>copiar</button>
             </p>
             <p className="mt-1">Botões de resposta rápida, nesta ordem: {cfg.bom_dia.botoes.map((b) => `“${b}”`).join(" e ")}.</p>
             <p className="mt-1 text-suave">
-              {"{{1}}"} é o primeiro nome; {"{{2}}"} é a contagem (“3 itens”). É a única mensagem do
-              assistente que a Meta cobra: as respostas a quem escreveu primeiro são de graça.
+              {"{{1}}"} é o primeiro nome; {"{{2}}"} é o resumo (“3 itens na agenda de produção e 2
+              reservas (9 pessoas)”). A Meta cobra as mensagens que o sistema inicia (este bom dia e os
+              avisos à equipe); as respostas a quem escreveu primeiro são de graça.
             </p>
           </div>
         </>

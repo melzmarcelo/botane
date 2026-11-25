@@ -42,6 +42,7 @@ from services import reservas_agenda as agenda
 from services import termo_consentimento as termo
 from services import fidelidade
 from services import whatsapp
+from services import assistente_equipe
 from services import pedidos as pedidos_servico
 from services import marca
 from models.pedidos import PedidoDoCliente, PedidoDoSite
@@ -968,6 +969,8 @@ def marcar_reserva(id_unidade: int, corpo: ReservaDoSite, pedido: Request) -> di
                     (cliente["id"], feita["id"]))
         # 🔑 WhatsApp (099): recebida (aguardando a casa) ou confirmada, e o lembrete.
         whatsapp.reserva_mudou(cur, id_unidade, feita["id"])
+        # 164: e a equipe, com Confirmar / Recusar — só a que espera a casa (PENDENTE).
+        assistente_equipe.reserva_nova(cur, id_unidade, feita["id"])
 
         return {
             "status": feita["status"],

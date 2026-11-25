@@ -110,7 +110,9 @@ EVENTOS: dict[str, dict] = {
         "quando": "Quando a casa confirma um pedido feito pelo catálogo",
         "modelo": "pedido_confirmado",
         "texto": "Olá, {{1}}! Seu pedido nº {{2}} no {{3}} está confirmado: {{4}}, "
-                 "{{5}}. Total: R$ {{6}}. Obrigado!",
+                 "{{5}}. Total: R$ {{6}}. Se precisar de alguma coisa, é só responder esta "
+                 "mensagem. Obrigado pela preferência!",
+        # ⚠️ A Meta recusou "… R$ {{6}}. Obrigado!": variáveis demais para o tamanho (24/11/2026).
         "variaveis": ["nome", "numero", "casa", "retirada/entrega", "quando", "total"],
         "categoria": "Utilidade",
     },
@@ -666,7 +668,11 @@ def receber(cur, corpo: bytes, assinatura: str | None) -> dict:
             # 🔑 151: o número do assistente é da CASA, não de loja — mesmo webhook, outro dono.
             from services import assistente
             ass = assistente.do_assistente(cur, pnid)
-            if ass:
+            achado = _loja_do_numero(cur, pnid)
+            # 🔑 164: o número pode ser da loja E do assistente (um número só para clientes e
+            # equipe). Aí cada mensagem vai para um lado (`assistente.e_da_equipe`).
+            dividido = bool(ass and ass["compartilhado"] and ass["ativa"] and achado)
+            if ass and not (ass["compartilhado"] and achado):
                 if not assinatura_valida(corpo, assinatura, ass["cred"].get("app_secret")):
                     raise HTTPException(status_code=403, detail="Assinatura inválida.")
                 for st in valor.get("statuses") or []:
@@ -674,13 +680,15 @@ def receber(cur, corpo: bytes, assinatura: str | None) -> dict:
                 for msg in valor.get("messages") or []:
                     feito["respostas"] += assistente.receber(cur, msg)
                 continue
-            achado = _loja_do_numero(cur, pnid)
             if not achado:
                 continue
             id_unidade, integ = achado
             if not assinatura_valida(corpo, assinatura, integ["cred"].get("app_secret")):
                 raise HTTPException(status_code=403, detail="Assinatura inválida.")
             for st in valor.get("statuses") or []:
+                if dividido and assistente.estado_da_meta(cur, st):
+                    feito["estados"] += 1
+                    continue
                 novo = _DA_META.get(st.get("status"))
                 if not novo:
                     continue
@@ -695,8 +703,33 @@ def receber(cur, corpo: bytes, assinatura: str | None) -> dict:
                                 (novo, erro, m["id"]))
                     feito["estados"] += 1
             for msg in valor.get("messages") or []:
-                feito["respostas"] += _resposta(cur, id_unidade, msg, integ["id"])
+                if dividido and assistente.e_da_equipe(cur, msg):
+                    feito["respostas"] += assistente.receber(cur, msg)
+                else:
+                    feito["respostas"] += _resposta(cur, id_unidade, msg, integ["id"])
     return feito
+
+
+def _ninguem_le(cur, id_unidade: int, msg: dict, id_whatsapp: int) -> int:
+    """O cliente ESCREVEU para um número da Cloud API — que ninguém lê. Uma resposta por dia.
+
+    🔑 25/11/2026: o número conectado à Meta não está em celular nenhum; sem isto, a pergunta do
+    cliente sumia em silêncio. A resposta é texto livre (quem escreveu abriu a janela de 24 h) e
+    indica o principal da loja, se for OUTRO número.
+    """
+    fone = telefone_internacional(re.sub(r"\D", "", msg.get("from") or ""))
+    if not fone:
+        return 0
+    cur.execute("""SELECT numero FROM unidade_whatsapps
+                    WHERE id_unidade = %s AND principal AND id <> %s""", (id_unidade, id_whatsapp))
+    principal = cur.fetchone()
+    contato = (f" Para falar com a gente, chame no WhatsApp {principal['numero']}."
+               if principal and principal["numero"] else "")
+    texto = (f"Olá! Este número só envia os avisos automáticos do {_casa(cur, id_unidade)} e não "
+             f"recebe mensagens.{contato}")
+    enfileirar(cur, id_unidade, RESPOSTA, f"ninguem-le:{fone}:{agora_da_casa().date()}", fone,
+               [texto], ignorar_aviso=True, id_whatsapp=id_whatsapp)
+    return 1
 
 
 def _resposta(cur, id_unidade: int, msg: dict, id_whatsapp: int) -> int:
@@ -713,7 +746,9 @@ def _resposta(cur, id_unidade: int, msg: dict, id_whatsapp: int) -> int:
                             WHERE %s LIKE '%%' || telefone AND whatsapp_optout_em IS NULL""",
                         (fone,))
             return 1
-        return 0
+        return _ninguem_le(cur, id_unidade, msg, id_whatsapp)
+    elif msg.get("type") in ("audio", "image", "video", "document", "sticker", "location"):
+        return _ninguem_le(cur, id_unidade, msg, id_whatsapp)
     if not payload or ":" not in payload:
         return 0
     acao, _, id_msg = payload.partition(":")

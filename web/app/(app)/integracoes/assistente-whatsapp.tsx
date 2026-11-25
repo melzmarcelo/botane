@@ -6,6 +6,7 @@ import { Aviso, Campo, Cartao } from "@/components/ui";
 import * as assist from "@/lib/assistente";
 import AudioDoAssistente from "./assistente-audio";
 import BomDiaDoAssistente from "./assistente-bomdia";
+import EquipeDoAssistente from "./assistente-equipe";
 
 /**
  * O número do assistente no WhatsApp — UM, da casa toda (etapa 1, migração 151).
@@ -26,6 +27,10 @@ const vazio = (c: assist.ConfigAssistente): assist.GravarConfigAssistente => ({
   bom_dia_ligado: c.bom_dia.ligado, bom_dia_hora: c.bom_dia.hora, bom_dia_dias: c.bom_dia.dias,
   bom_dia_so_com_pendencia: c.bom_dia.so_com_pendencia, bom_dia_modelo: c.bom_dia.modelo,
   bom_dia_idioma: c.bom_dia.idioma,
+  id_whatsapp_loja: c.id_whatsapp_loja,
+  equipe_reserva_ligado: c.equipe.reserva.ligado, equipe_reserva_modelo: c.equipe.reserva.modelo,
+  equipe_pedido_ligado: c.equipe.pedido.ligado, equipe_pedido_modelo: c.equipe.pedido.modelo,
+  equipe_idioma: c.equipe.idioma,
 });
 
 export default function AssistenteWhatsappConfig() {
@@ -86,8 +91,9 @@ export default function AssistenteWhatsappConfig() {
           </Aviso>
         ) : (
           <Aviso tipo="info">
-            <b>Desligado.</b> Um número exclusivo, que não esteja no aplicativo do WhatsApp (pode ser
-            um fixo virtual, sem chip). Não use um número das lojas: aqueles atendem clientes.
+            <b>Desligado.</b> Pode usar o mesmo número que manda os avisos aos clientes (escolha-o em
+            “Número de loja”): o sistema separa quem é funcionário vinculado de quem é cliente. Ou
+            um número só dele, que não esteja no aplicativo do WhatsApp.
           </Aviso>
         )}
 
@@ -118,6 +124,23 @@ export default function AssistenteWhatsappConfig() {
           ))}
         </fieldset>
 
+        <Campo rotulo="Número de loja"
+               dica="Use o número que já manda os avisos aos clientes: número e token vêm da aba WhatsApp da loja.">
+          <select className="campo" aria-label="número de loja" value={form.id_whatsapp_loja ?? ""}
+                  onChange={(e) => mudar("id_whatsapp_loja", e.target.value ? Number(e.target.value) : null)}>
+            <option value="">nenhum — o assistente tem número próprio</option>
+            {cfg.numeros_das_lojas.map((n) => (
+              <option key={n.id} value={n.id}>{n.loja} · {n.rotulo} · {n.numero}</option>
+            ))}
+          </select>
+        </Campo>
+
+        {form.id_whatsapp_loja ? (
+          <p className="text-[13px] text-suave" id="assistente-numero-de-loja">
+            Funcionário vinculado que escrever para este número fala com o assistente; os clientes
+            continuam recebendo os avisos e tocando nos botões do lembrete, como antes.
+          </p>
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo rotulo="Número do assistente" dica="É para ele que os funcionários mandam mensagem.">
             <input className="campo mono" maxLength={30} placeholder="(47) 3333-4444" aria-label="número do assistente"
@@ -146,6 +169,7 @@ export default function AssistenteWhatsappConfig() {
                    value={form.app_secret} onChange={(e) => mudar("app_secret", e.target.value)} />
           </Campo>
         </div>
+        )}
 
         <div className="flex flex-col gap-3 border-t border-linha pt-4" id="conversa-assistente">
           <p className="text-[14px] font-semibold">A conversa (Claude)</p>
@@ -182,6 +206,8 @@ export default function AssistenteWhatsappConfig() {
         <AudioDoAssistente cfg={cfg} form={form} mudar={mudar} />
 
         <BomDiaDoAssistente cfg={cfg} form={form} mudar={mudar} />
+
+        <EquipeDoAssistente cfg={cfg} form={form} mudar={mudar} />
 
         <div className="rounded-[10px] bg-[var(--color-superficie2)] p-3 text-[13px]">
           <p className="mb-2 font-semibold">Na Meta, em WhatsApp → Configuração → Webhook, informe:</p>

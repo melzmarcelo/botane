@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends
 import auditoria
 from config import API_URL_PUBLICA
 from database import get_cursor
-from models.assistente import BomDiaPessoa, ConfigAssistente
+from models.assistente import AvisosPessoa, BomDiaPessoa, ConfigAssistente
 from seguranca import Contexto, requer_permissao
 from services import assistente as servico
 
@@ -46,6 +46,9 @@ def salvar_config(body: ConfigAssistente, ctx: Contexto = Depends(_CONFIGURAR)) 
                                     "transcricao_provedor": body.transcricao_provedor,
                                     "bom_dia_ligado": body.bom_dia_ligado,
                                     "bom_dia_hora": body.bom_dia_hora,
+                                    "id_whatsapp_loja": body.id_whatsapp_loja,
+                                    "equipe_reserva_ligado": body.equipe_reserva_ligado,
+                                    "equipe_pedido_ligado": body.equipe_pedido_ligado,
                                     "transcricao_chave_trocada": bool(
                                         (body.transcricao_chave or "").strip())})
         return servico.configuracao(cur, API_URL_PUBLICA) | {"message": "Assistente gravado."}
@@ -73,6 +76,14 @@ def bom_dia(body: BomDiaPessoa, ctx: Contexto = Depends(_PODE)) -> dict:
         servico.definir_bom_dia(cur, ctx, body.ligado)
         return servico.estado(cur, ctx) | {
             "message": "Bom dia ligado." if body.ligado else "Bom dia desligado."}
+
+
+@router.put("/vinculo/avisos")
+def avisos(body: AvisosPessoa, ctx: Contexto = Depends(_PODE)) -> dict:
+    """164: a pessoa escolhe receber a reserva nova e o pedido novo, com Confirmar / Recusar."""
+    with get_cursor() as cur:
+        servico.definir_avisos(cur, ctx, body.reserva, body.pedido)
+        return servico.estado(cur, ctx) | {"message": "Avisos da loja gravados."}
 
 
 @router.delete("/vinculo")

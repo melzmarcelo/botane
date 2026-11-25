@@ -87,7 +87,8 @@ def conexao(cur) -> dict:
                      FROM integracoes WHERE servico = %s AND id_unidade IS NULL""", (SERVICO,))
     l = cur.fetchone()
     cfg = dict((l or {}).get("config") or {})
-    return {
+    propria = segredos.decifrar(l["credenciais"]) if l and l["credenciais"] else {}
+    c = {
         "ativa": bool(l and l["ativa"]), "modo": (l or {}).get("modo") or "simulado",
         "numero": cfg.get("numero") or "", "phone_number_id": cfg.get("phone_number_id") or "",
         "waba_id": cfg.get("waba_id") or "", "api_versao": cfg.get("api_versao") or API_VERSAO_PADRAO,
@@ -105,11 +106,35 @@ def conexao(cur) -> dict:
         "url_transcricao": cfg.get("url_transcricao") or "",
         # 155: o bom dia (ver `assistente_bomdia.configuracao`).
         **{k: cfg.get(k) for k in _CHAVES_BOM_DIA},
-        "cred": segredos.decifrar(l["credenciais"]) if l and l["credenciais"] else {},
+        # 164: os avisos à equipe (ver `assistente_equipe.configuracao`).
+        **{k: cfg.get(k) for k in _CHAVES_EQUIPE},
+        "cred": propria,
+        # ⚠️ Só o que é DESTA linha: é o que se grava de volta. Com número de loja, `cred` traz o
+        # token da loja — e ele nunca pode ser copiado para cá.
+        "cred_propria": propria,
+        "_config": cfg,
+        "id_whatsapp_loja": cfg.get("id_whatsapp_loja"),
+        "compartilhado": False,
         "ultimo_status": (l or {}).get("ultimo_status"),
         "ultima_mensagem": (l or {}).get("ultima_mensagem"),
         "existe": bool(l),
     }
+    # 🔑 164: o assistente pode usar um número de LOJA (decisão do dono, 25/11/2026: um número só
+    # para clientes e equipe). Número, identificação e token vêm da conexão daquele número — a
+    # troca de token na loja vale aqui sem redigitar. O webhook separa pela pessoa (`e_da_equipe`).
+    if cfg.get("id_whatsapp_loja"):
+        from services import whatsapp
+        w = whatsapp._conexao(cur, int(cfg["id_whatsapp_loja"]))
+        if w and w["phone_number_id"]:
+            c |= {"numero": w["numero"] or "", "phone_number_id": w["phone_number_id"],
+                  "waba_id": w["waba_id"] or "", "api_versao": w["api_versao"] or API_VERSAO_PADRAO,
+                  "cred": propria | {k: w["cred"][k] for k in ("token", "app_secret")
+                                     if w["cred"].get(k)},
+                  "compartilhado": True}
+        else:
+            # O número da loja sumiu ou perdeu a identificação: o assistente fica sem número.
+            c |= {"numero": "", "phone_number_id": ""}
+    return c
 
 
 def _gravar_linha(cur, ativa: bool, modo: str, config: dict, cred: dict) -> None:
@@ -126,13 +151,16 @@ def _gravar_linha(cur, ativa: bool, modo: str, config: dict, cred: dict) -> None
 
 _CHAVES_BOM_DIA = ("bom_dia_ligado", "bom_dia_hora", "bom_dia_dias", "bom_dia_so_com_pendencia",
                    "bom_dia_modelo", "bom_dia_idioma")
+_CHAVES_EQUIPE = ("equipe_reserva_ligado", "equipe_reserva_modelo", "equipe_pedido_ligado",
+                  "equipe_pedido_modelo", "equipe_idioma")
 _CHAVES_CONFIG = ("numero", "phone_number_id", "waba_id", "api_versao", "verify_token", "modelo",
                   "limite_diario", "url_api", "transcricao_provedor", "transcricao_modelo",
-                  "url_meta", "url_transcricao") + _CHAVES_BOM_DIA
+                  "url_meta", "url_transcricao", "id_whatsapp_loja") + _CHAVES_BOM_DIA + _CHAVES_EQUIPE
 
 
 def _config_de(c: dict) -> dict:
-    return {k: c[k] for k in _CHAVES_CONFIG}
+    """O `config` como está GRAVADO (com número de loja, `c` traz o número dela — não se grava)."""
+    return {k: c["_config"].get(k) for k in _CHAVES_CONFIG} | {"verify_token": c["verify_token"]}
 
 
 def configuracao(cur, url_publica: str) -> dict:
@@ -141,7 +169,7 @@ def configuracao(cur, url_publica: str) -> dict:
     if not c["verify_token"]:
         # O token de verificação do webhook nasce na primeira visita: a casa o cola na Meta.
         c["verify_token"] = secrets.token_urlsafe(18)
-        _gravar_linha(cur, c["ativa"], c["modo"], _config_de(c), c["cred"])
+        _gravar_linha(cur, c["ativa"], c["modo"], _config_de(c), c["cred_propria"])
     return {
         "ativa": c["ativa"], "modo": c["modo"], "numero": c["numero"],
         "phone_number_id": c["phone_number_id"], "waba_id": c["waba_id"],
@@ -164,7 +192,24 @@ def configuracao(cur, url_publica: str) -> dict:
         "bom_dia": _bom_dia().configuracao(c) | {
             "texto_do_modelo": _bom_dia().TEXTO_DO_MODELO,
             "botoes": [b["titulo"] for b in _bom_dia().BOTOES]},
+        # 164: o número de loja que o assistente usa (nulo = número próprio) e os candidatos.
+        "id_whatsapp_loja": c["id_whatsapp_loja"], "compartilhado": c["compartilhado"],
+        "numeros_das_lojas": _numeros_das_lojas(cur),
+        "equipe": _equipe().configuracao(c),
     }
+
+
+def _numeros_das_lojas(cur) -> list[dict]:
+    """Os números de loja que já têm a identificação da Meta — só esses podem servir ao assistente."""
+    cur.execute("""SELECT w.id, w.rotulo, w.numero, coalesce(nullif(u.apelido, ''), u.nome) AS loja
+                     FROM unidade_whatsapps w JOIN unidades u ON u.id = w.id_unidade
+                    WHERE w.phone_number_id IS NOT NULL ORDER BY u.id, w.ordem, w.id""")
+    return [dict(r) for r in cur.fetchall()]
+
+
+def _equipe():
+    from services import assistente_equipe
+    return assistente_equipe
 
 
 def _bom_dia():
@@ -191,32 +236,52 @@ def salvar(cur, body) -> None:
     """Grava a conexão. ⚠️ Token/segredo em branco = mantém o que já está."""
     c = conexao(cur)
     numero = (body.numero or "").strip()
-    if numero and not _wa_me(numero):
-        raise HTTPException(status_code=422, detail=f"O número “{numero}” está incompleto: use DDD e número.")
     pnid = (body.phone_number_id or "").strip()
-    if pnid:
-        cur.execute("SELECT 1 FROM unidade_whatsapps WHERE phone_number_id = %s", (pnid,))
-        if cur.fetchone():
+    cred = dict(c["cred_propria"])
+    loja = None
+    if body.id_whatsapp_loja:
+        # 164: o número de uma loja — número, identificação e token são os DELA (não se gravam aqui).
+        from services import whatsapp
+        loja = whatsapp._conexao(cur, body.id_whatsapp_loja)
+        if not loja or not loja["phone_number_id"]:
             raise HTTPException(status_code=422, detail=(
-                f"O identificador {pnid} da Meta já é de um número de loja: o assistente precisa "
-                "de um número só dele."))
-    cred = dict(c["cred"])
-    if (body.token or "").strip():
-        cred["token"] = body.token.strip()
-    if (body.app_secret or "").strip():
-        cred["app_secret"] = body.app_secret.strip()
+                "Esse número de loja ainda não tem a identificação da Meta: preencha-a na aba "
+                "WhatsApp da loja antes."))
+        numero, pnid = "", ""
+    else:
+        if numero and not _wa_me(numero):
+            raise HTTPException(status_code=422, detail=f"O número “{numero}” está incompleto: use DDD e número.")
+        if pnid:
+            cur.execute("SELECT 1 FROM unidade_whatsapps WHERE phone_number_id = %s", (pnid,))
+            if cur.fetchone():
+                raise HTTPException(status_code=422, detail=(
+                    f"O identificador {pnid} da Meta já é de um número de loja: para usar o mesmo "
+                    "número, escolha-o em “Número de loja”, em vez de digitar."))
+        if (body.token or "").strip():
+            cred["token"] = body.token.strip()
+        if (body.app_secret or "").strip():
+            cred["app_secret"] = body.app_secret.strip()
     if (body.transcricao_chave or "").strip():
         cred["transcricao_chave"] = body.transcricao_chave.strip()
     provedor = body.transcricao_provedor or ""
     if provedor and provedor not in _transcricao().PROVEDORES:
         raise HTTPException(status_code=422, detail="Provedor de transcrição desconhecido.")
-    if body.ativa and not numero:
+    if body.ativa and not (numero or loja):
         raise HTTPException(status_code=400, detail="Informe o número do assistente antes de ligar.")
-    if body.ativa and body.modo == "real" and not (pnid and cred.get("token")):
+    pronto = (loja["cred"].get("token") if loja else (pnid and cred.get("token")))
+    if body.ativa and body.modo == "real" and not pronto:
         raise HTTPException(status_code=400, detail=(
-            "Para enviar de verdade, informe o identificador do número e o token da Meta."))
+            "Para enviar de verdade, informe o identificador do número e o token da Meta"
+            + (" (na aba WhatsApp da loja)." if loja else ".")))
     _gravar_linha(cur, body.ativa, body.modo, {
-        "numero": numero, "phone_number_id": pnid, "waba_id": (body.waba_id or "").strip(),
+        "id_whatsapp_loja": body.id_whatsapp_loja if loja else None,
+        "equipe_reserva_ligado": body.equipe_reserva_ligado,
+        "equipe_reserva_modelo": (body.equipe_reserva_modelo or "").strip(),
+        "equipe_pedido_ligado": body.equipe_pedido_ligado,
+        "equipe_pedido_modelo": (body.equipe_pedido_modelo or "").strip(),
+        "equipe_idioma": (body.equipe_idioma or "").strip(),
+        "numero": numero, "phone_number_id": pnid,
+        "waba_id": "" if loja else (body.waba_id or "").strip(),
         "api_versao": (body.api_versao or "").strip() or API_VERSAO_PADRAO,
         "verify_token": c["verify_token"] or secrets.token_urlsafe(18),
         "modelo": (body.modelo or "").strip(),
@@ -274,7 +339,28 @@ def estado(cur, ctx) -> dict:
         # 155: a escolha da pessoa, e se a casa mandou ligar o bom dia (e a que horas).
         "bom_dia": bool(v.get("bom_dia")),
         "bom_dia_casa": _bom_dia_da_casa(cur),
+        # 164: os avisos à equipe — se a casa ligou, se esta pessoa pode agir, e a escolha dela.
+        "avisos_equipe": _avisos_da_pessoa(cur, ctx, v),
     }
+
+
+def _avisos_da_pessoa(cur, ctx, v: dict) -> dict:
+    eq = _equipe()
+    cfg = eq.configuracao(conexao(cur))
+    return {tipo: {"casa": cfg[tipo]["ligado"], "pode": ctx.pode(a["permissao"]),
+                   "ligado": bool(v.get(a["coluna"])), "titulo": a["titulo"]}
+            for tipo, a in eq.AVISOS.items()}
+
+
+def definir_avisos(cur, ctx, reserva: bool, pedido: bool) -> None:
+    """164: a pessoa escolhe receber a reserva nova e o pedido novo. Sem permissão de agir, não liga."""
+    eq = _equipe()
+    reserva = reserva and ctx.pode(eq.AVISOS["reserva"]["permissao"])
+    pedido = pedido and ctx.pode(eq.AVISOS["pedido"]["permissao"])
+    cur.execute("""UPDATE usuario_whatsapp SET avisos_reserva = %s, avisos_pedido = %s
+                    WHERE id_usuario = %s AND wa_id IS NOT NULL""", (reserva, pedido, ctx.id_usuario))
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Vincule o seu WhatsApp antes.")
 
 
 def _bom_dia_da_casa(cur) -> dict | None:
@@ -532,6 +618,15 @@ def receber(cur, msg: dict) -> int:
     nome, id_u = _primeiro(quem["nome"]), quem["id_usuario"]
     botao = ((msg.get("interactive") or {}).get("button_reply") or {}).get("id") \
         if tipo == "interactive" else None
+    carga = _carga(msg)
+    if carga.startswith(_equipe().PREFIXO):
+        # 164: Confirmar / Recusar a reserva ou o pedido novo — com a permissão de quem tocou.
+        if not _tem_permissao(cur, id_u):
+            responder(cur, chave, fone, f"{nome}, seu usuário não tem o assistente liberado. "
+                                        "Nada foi feito.", id_u)
+        else:
+            responder(cur, chave, fone, _equipe().tocou(cur, id_u, carga), id_u)
+        return 1
     if tipo == "button" and str((msg.get("button") or {}).get("payload") or "").startswith("BOMDIA:"):
         # 155: o botão do modelo do bom dia. "Ver" vira a pergunta das pendências; "Parar" desliga.
         frase = _bom_dia().tocou(cur, id_u, msg["button"]["payload"])
@@ -574,6 +669,41 @@ def receber(cur, msg: dict) -> int:
         # 152: a pergunta fica guardada e o Claude responde logo depois do 200 do webhook.
         _conversa().guardar_pergunta(cur, id_u, texto, chave)
     return 1
+
+
+def _carga(msg: dict) -> str:
+    """O payload do botão tocado (modelo: `button`; mensagem interativa: `button_reply`)."""
+    if msg.get("type") == "button":
+        return str((msg.get("button") or {}).get("payload") or "")
+    if msg.get("type") == "interactive":
+        return str(((msg.get("interactive") or {}).get("button_reply") or {}).get("id") or "")
+    return ""
+
+
+def e_da_equipe(cur, msg: dict) -> bool:
+    """164, número COMPARTILHADO com uma loja: esta mensagem é do assistente ou de um cliente?
+
+    🔑 Primeiro o BOTÃO, depois a PESSOA. Os botões do assistente têm prefixo próprio (ACAO:,
+    BOMDIA:, EQUIPE:); os do lembrete do cliente (CONFIRMAR:/CANCELAR:) são da loja — mesmo que
+    quem tocou seja um funcionário com reserva própria. Sem botão: funcionário vinculado, ou
+    alguém mandando o código de vínculo, é do assistente; o resto é cliente.
+    """
+    carga = _carga(msg)
+    if carga:
+        return carga.startswith(("ACAO:", "BOMDIA:", _equipe().PREFIXO))
+    fone = _digitos(msg.get("from"))
+    if not fone:
+        return False
+    cur.execute("SELECT 1 FROM usuario_whatsapp WHERE wa_id = %s", (fone,))
+    if cur.fetchone():
+        return True
+    texto = ((msg.get("text") or {}).get("body") or "").upper() if msg.get("type") == "text" else ""
+    for candidato in _CODIGO.findall(texto):
+        cur.execute("""SELECT 1 FROM usuario_whatsapp
+                        WHERE codigo_hash = %s AND codigo_expira_em > now()""", (_hash(candidato),))
+        if cur.fetchone():
+            return True
+    return False
 
 
 def _no_limite(cur, id_u: int, fone: str, nome: str) -> bool:

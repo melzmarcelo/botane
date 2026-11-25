@@ -354,6 +354,9 @@ def enviar(cur, id_unidade: int, id_catalogo: int, cliente: dict, dados: dict) -
     id_pedido = cur.fetchone()["id"]
     _gravar_itens(cur, id_pedido, linhas)
     _historico(cur, id_pedido, "CRIADO", None, "NOVO", None, None)
+    # 164: o aviso à equipe (Confirmar / Recusar pelo WhatsApp) nasce na MESMA transação.
+    from services import assistente_equipe
+    assistente_equipe.pedido_novo(cur, id_unidade, id_pedido)
     return publico(cur, id_pedido) | {"repetido": False}
 
 

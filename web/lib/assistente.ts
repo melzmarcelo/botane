@@ -29,7 +29,19 @@ export type VinculoAssistente = {
   bom_dia: boolean;
   /** Nulo quando a casa não ligou o bom dia. Dias na ISO (1 = segunda … 7 = domingo). */
   bom_dia_casa: { hora: string; dias: number[] } | null;
+  /** 164: reserva nova e pedido novo — a casa ligou? a pessoa pode agir? ela escolheu receber? */
+  avisos_equipe: Record<TipoAvisoEquipe, AvisoEquipeDaPessoa>;
 };
+
+export type TipoAvisoEquipe = "reserva" | "pedido";
+
+export type AvisoEquipeDaPessoa = { casa: boolean; pode: boolean; ligado: boolean; titulo: string };
+
+export type AvisoEquipeDaCasa = { ligado: boolean; modelo: string; titulo: string; texto_do_modelo: string };
+
+export type EquipeDaCasa = Record<TipoAvisoEquipe, AvisoEquipeDaCasa> & { idioma: string; botoes: string[] };
+
+export type NumeroDeLoja = { id: number; rotulo: string; numero: string; loja: string };
 
 export type CodigoAssistente = VinculoAssistente & {
   codigo: string;
@@ -63,6 +75,12 @@ export type ConfigAssistente = {
   provedores_transcricao: { id: "openai" | "groq"; nome: string; modelo: string }[];
   /** 155: o bom dia da casa, com o texto do modelo para cadastrar na Meta. */
   bom_dia: BomDiaDaCasa & { texto_do_modelo: string; botoes: string[] };
+  /** 164: o número de loja usado pelo assistente (nulo = número próprio) e os que podem servir. */
+  id_whatsapp_loja: number | null;
+  compartilhado: boolean;
+  numeros_das_lojas: NumeroDeLoja[];
+  /** 164: os avisos à equipe, com os textos para cadastrar na Meta. */
+  equipe: EquipeDaCasa;
 };
 
 export type GravarConfigAssistente = {
@@ -87,6 +105,12 @@ export type GravarConfigAssistente = {
   bom_dia_so_com_pendencia: boolean;
   bom_dia_modelo: string;
   bom_dia_idioma: string;
+  id_whatsapp_loja: number | null;
+  equipe_reserva_ligado: boolean;
+  equipe_reserva_modelo: string;
+  equipe_pedido_ligado: boolean;
+  equipe_pedido_modelo: string;
+  equipe_idioma: string;
 };
 
 export type BomDiaDaCasa = {
@@ -102,6 +126,8 @@ export const vinculoAssistente = () => api.get<VinculoAssistente>("/assistente/v
 export const gerarCodigoAssistente = () => api.post<CodigoAssistente>("/assistente/vinculo/codigo", {});
 export const bomDiaAssistente = (ligado: boolean) =>
   api.put<VinculoAssistente & { message: string }>("/assistente/vinculo/bom-dia", { ligado });
+export const avisosAssistente = (reserva: boolean, pedido: boolean) =>
+  api.put<VinculoAssistente & { message: string }>("/assistente/vinculo/avisos", { reserva, pedido });
 export const desvincularAssistente = () =>
   api.delete<VinculoAssistente & { message: string }>("/assistente/vinculo");
 

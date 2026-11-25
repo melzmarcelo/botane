@@ -84,11 +84,23 @@ try {
     !!(await p.$('#bomdia-assistente input[aria-label="horário do bom dia"]'))
       && (await p.$$('#bomdia-assistente [data-dia]')).length === 7
       && (await p.$eval("#bomdia-assistente", (d) => d.textContent.includes("{{1}}") && d.textContent.includes("Ver pendências"))));
+  // 164: o número pode ser de loja; e os avisos à equipe, com o texto do modelo para a Meta.
+  checar("há a escolha de usar um número de loja (vazio = número próprio)",
+    (await p.$eval('select[aria-label="número de loja"]', (s) => s.value).catch(() => null)) === "");
+  if (!(await p.$eval('#equipe-assistente input[aria-label="ligar Reserva nova pelo site"]', (c) => c.checked)))
+    await p.click('#equipe-assistente input[aria-label="ligar Reserva nova pelo site"]');
+  await p.waitForSelector('#equipe-assistente input[aria-label="nome do modelo reserva"]', { timeout: 5000 }).catch(() => {});
+  checar("ligada a reserva nova, aparecem o nome do modelo e o texto com os botões",
+    !!(await p.$('#equipe-assistente input[aria-label="nome do modelo reserva"]'))
+      && (await p.$eval('#equipe-assistente [data-aviso="reserva"]', (d) => d.textContent.includes("{{6}}")
+        && d.textContent.includes("Confirmar") && d.textContent.includes("Recusar"))));
   await p.$eval("#salvar-assistente", (b) => b.click());
   await esperar(1200);
   const gravado = (await api("GET", "/assistente/config", undefined, token)).dados;
   checar("salvar grava o número ligado, em modo simulado, com a chave secreta",
     gravado.ativa && gravado.modo === "simulado" && gravado.numero === NUMERO && gravado.segredo_configurado, gravado);
+  checar("e a reserva nova à equipe, ligada (o pedido novo, não)",
+    gravado.equipe?.reserva?.ligado === true && gravado.equipe?.pedido?.ligado === false, gravado.equipe);
   checar("o áudio começa sem serviço de transcrição, sem pedir chave",
     (await p.$eval('#audio-assistente select[aria-label="serviço de transcrição"]', (s) => s.value)) === ""
       && !(await p.$('#audio-assistente input[aria-label="chave da transcrição"]')));
@@ -138,6 +150,14 @@ try {
   await esperar(800);
   checar("marcar liga o bom dia da pessoa",
     (await api("GET", "/assistente/vinculo", undefined, token)).dados?.bom_dia === true);
+  // 164: a casa ligou a reserva nova e o admin pode agir — o Perfil oferece; o pedido, não.
+  checar("o Perfil oferece a reserva nova (desmarcada) e não o pedido novo, que a casa não ligou",
+    await p.$eval('[data-aviso-perfil="reserva"] input', (c) => !c.checked).catch(() => false)
+      && !(await p.$('[data-aviso-perfil="pedido"]')));
+  await p.click('[data-aviso-perfil="reserva"] input');
+  await esperar(800);
+  checar("marcar liga a reserva nova da pessoa",
+    (await api("GET", "/assistente/vinculo", undefined, token)).dados?.avisos_equipe?.reserva?.ligado === true);
 
   console.log("\n3. desvincular");
   await p.evaluate(() => [...document.querySelectorAll("#assistente-whatsapp button")]
@@ -157,7 +177,11 @@ try {
     transcricao_chave: "", bom_dia_ligado: antes.bom_dia?.ligado ?? false,
     bom_dia_hora: antes.bom_dia?.hora ?? "07:00", bom_dia_dias: antes.bom_dia?.dias ?? [1, 2, 3, 4, 5, 6],
     bom_dia_so_com_pendencia: antes.bom_dia?.so_com_pendencia ?? true,
-    bom_dia_modelo: "", bom_dia_idioma: "" }, token);
+    bom_dia_modelo: "", bom_dia_idioma: "",
+    id_whatsapp_loja: antes.id_whatsapp_loja ?? null,
+    equipe_reserva_ligado: antes.equipe?.reserva?.ligado ?? false, equipe_reserva_modelo: "",
+    equipe_pedido_ligado: antes.equipe?.pedido?.ligado ?? false, equipe_pedido_modelo: "",
+    equipe_idioma: "" }, token);
   if (antes.segredo_configurado) console.log("  ⚠️ havia chave secreta do assistente: cole a verdadeira de novo em Integrações");
   if (vinculoAntes?.vinculado) console.log("  ⚠️ o admin tinha WhatsApp vinculado antes: vincule de novo em Perfil");
 }

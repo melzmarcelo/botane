@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Cartao, Etiqueta } from "@/components/ui";
 import {
+  avisosAssistente,
   bomDiaAssistente,
   desvincularAssistente,
   gerarCodigoAssistente,
@@ -84,7 +85,27 @@ export default function AssistenteWhatsapp() {
     }
   }
 
+  // 164: reserva nova e pedido novo, com Confirmar / Recusar no WhatsApp.
+  async function alternarAviso(tipo: "reserva" | "pedido", ligado: boolean) {
+    if (!estado) return;
+    setOcupado(true);
+    try {
+      const a = estado.avisos_equipe;
+      const r = await avisosAssistente(tipo === "reserva" ? ligado : a.reserva.ligado,
+                                       tipo === "pedido" ? ligado : a.pedido.ligado);
+      setEstado(r);
+      aviso.sucesso(r.message);
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível mudar o aviso");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   const semNumero = estado && !estado.assistente;
+  const avisosVisiveis = estado?.vinculado
+    ? (["reserva", "pedido"] as const).filter((t) => estado.avisos_equipe[t].casa && estado.avisos_equipe[t].pode)
+    : [];
 
   return (
     <Cartao
@@ -116,12 +137,27 @@ export default function AssistenteWhatsapp() {
             <span className="text-[14px]">
               Receber o bom dia às {estado.bom_dia_casa.hora}
               <span className="block text-[13px] text-suave">
-                Uma mensagem curta com quantos itens você tem na agenda de produção, e o botão
-                “Ver pendências” para o assistente detalhar.
+                Uma mensagem curta com quantos itens você tem na agenda de produção e as reservas
+                do dia, e o botão “Ver pendências” para o assistente detalhar.
               </span>
             </span>
           </label>
         )}
+
+        {avisosVisiveis.map((t) => (
+          <label key={t} className="flex items-start gap-3" data-aviso-perfil={t}>
+            <input type="checkbox" className="mt-1" checked={estado!.avisos_equipe[t].ligado} disabled={ocupado}
+                   aria-label={`receber ${estado!.avisos_equipe[t].titulo}`}
+                   onChange={(e) => void alternarAviso(t, e.target.checked)} />
+            <span className="text-[14px]">
+              Avisar {t === "reserva" ? "cada reserva nova pelo site" : "cada pedido novo pelo site"}
+              <span className="block text-[13px] text-suave">
+                Com os botões Confirmar e Recusar: o toque faz o mesmo que a tela
+                {t === "reserva" ? " da agenda de reservas" : " de pedidos"}, com o seu usuário.
+              </span>
+            </span>
+          </label>
+        ))}
 
         {semNumero && (
           <Aviso tipo="info">

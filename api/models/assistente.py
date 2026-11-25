@@ -42,6 +42,15 @@ class ConfigAssistente(BaseModel):
     bom_dia_modelo: str | None = Field(default=None, max_length=120, pattern=r"^[a-z0-9_]*$")
     bom_dia_idioma: str | None = Field(default=None, max_length=10, pattern=r"^[a-zA-Z_]*$")
 
+    # 164: um número de LOJA para o assistente (nulo = o número próprio, nos campos acima).
+    id_whatsapp_loja: int | None = Field(default=None, ge=1)
+    # 164: os avisos à equipe — reserva nova e pedido novo pelo site, com Confirmar / Recusar.
+    equipe_reserva_ligado: bool = False
+    equipe_reserva_modelo: str | None = Field(default=None, max_length=120, pattern=r"^[a-z0-9_]*$")
+    equipe_pedido_ligado: bool = False
+    equipe_pedido_modelo: str | None = Field(default=None, max_length=120, pattern=r"^[a-z0-9_]*$")
+    equipe_idioma: str | None = Field(default=None, max_length=10, pattern=r"^[a-zA-Z_]*$")
+
     @field_validator("bom_dia_dias")
     @classmethod
     def _dias_validos(cls, v: list[int]) -> list[int]:
@@ -53,3 +62,9 @@ class ConfigAssistente(BaseModel):
 class BomDiaPessoa(BaseModel):
     """155: a pessoa liga ou desliga o bom dia no Perfil."""
     ligado: bool
+
+
+class AvisosPessoa(BaseModel):
+    """164: a pessoa escolhe receber a reserva nova e o pedido novo (Perfil)."""
+    reserva: bool = False
+    pedido: bool = False
