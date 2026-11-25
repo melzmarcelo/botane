@@ -9,7 +9,8 @@
  *   7. no celular, a página não rola de lado;
  *   8. etapa 2: o link das sugestões abre a janela com o produto sem saldo, e "Pôr na lista" grava;
  *   9. aprovação (migração 165): o pedido da cozinha vai para "Aguardando aprovação", o
- *      administrador aprova (vai para A comprar) e recusa com motivo (vai para Recusados).
+ *      administrador aprova (vai para A comprar) e recusa com motivo (vai para Recusados);
+ *      e (166) a cozinha vê só os próprios pedidos e não mexe no aprovado.
  * O que o roteiro cria é cancelado no fim.
  *
  *    node scripts/verificar-ordens-compra.mjs   (API na 9200 e web na 3100 de pé)
@@ -301,6 +302,15 @@ try {
   const aprovado = await linhaCom(p, `Pano aprovar ${MARCA}`);
   checar("o aprovado está em A comprar, com quem aprovou",
     !!aprovado && /aprovado por/i.test(aprovado.texto), aprovado);
+
+  // 🔑 Migração 166: sem ver todos, a cozinha vê só os próprios pedidos e não mexe no aprovado.
+  await c.goto(`${WEB}/compras/ordens?aba=A_COMPRAR`, { waitUntil: "networkidle2", timeout: 180000 });
+  await esperarLinha(c, `Pano aprovar ${MARCA}`);
+  checar("a cozinha é avisada de que vê só os seus pedidos", !!(await c.$("#ordem-so-meus")));
+  checar("e não vê o pedido do administrador", !(await linhaCom(c, `Sabão ordem ${MARCA}`)));
+  const meuAprovado = await linhaCom(c, `Pano aprovar ${MARCA}`);
+  checar("no próprio pedido aprovado, nem Corrigir nem Cancelar",
+    !!meuAprovado && !(await c.$(`li[data-ordem-item="${meuAprovado.id}"] [data-acao]`)), meuAprovado);
 
   await c.goto(`${WEB}/compras/ordens?aba=RECUSADO`, { waitUntil: "networkidle2", timeout: 180000 });
   await esperarLinha(c, `Vela recusar ${MARCA}`);

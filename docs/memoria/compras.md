@@ -19,8 +19,17 @@
     compra sem aprovação: vira linha nova aguardando. Quem aprova somando no que aguarda aprovaria
     a linha inteira sem querer: vira linha nova, aprovada. A tela só oferece "Somar" na linha da
     situação de quem pede; o lote das sugestões segue a mesma regra.
-  - ⚠️ **Aprovado, quem só pediu não CORRIGE mais** (409: cancela e pede de novo); cancelar
-    continua podendo. Linha de antes da 165 (`aprovado_por` nulo) segue a regra antiga.
+  - ⚠️ **Aprovado pelo gestor, quem só pediu não corrige NEM cancela** (409; 166, pedido do dono:
+    *"sem realizar alteração após a aprovação do gestor"*). Quem compra ou aprova continua podendo.
+    Linha de antes da 165 (`aprovado_por` nulo) segue a regra antiga. `_exigir_nao_aprovado`.
+  - 🔑 **Cada um vê os próprios pedidos** (1.3.26, migração 166, 25/11/2026, pedido do dono:
+    *"usuários sem permissão pudessem visualizar somente os seus itens pedidos"*). Chave nova
+    **`compras.ordem_ver_todos`** (Administrador, Gerente, Conferente). 🔑 Quem compra ou aprova
+    vê tudo de qualquer jeito (`ordens_compra.VER_TODOS` / `so_de`): não se compra o que não se
+    vê. O filtro vale na lista, nas contagens das abas, nos pedidos abertos ao escolher o produto
+    e no RELATÓRIO (`_ordem_so_de`, interno, posto por `_com_as_lojas`). A tela diz "Você vê só
+    os seus pedidos". ⚠️ As sugestões do mínimo continuam descontando o aberto de TODOS (é soma,
+    não mostra de quem).
   - As sugestões do mínimo descontam também o que aguarda aprovação; a troca de unidade converte
     os dois abertos.
   - Alerta `compras.ordem_aguardando` (só para quem tem `compras.ordem_aprovar`), que abre a aba.
@@ -30,7 +39,9 @@
     Relatório ganhou a coluna "Aprovação" (quem aprovou, ou quem recusou e o motivo).
   - ⚠️ O roteiro do navegador deixa duas linhas em Recusados na base local (recusado não se
     cancela pela API); a suíte da API apaga as dela direto no banco.
-  - Cobertura: `smoke_ordens_compra.py` seção 5b e `verificar-ordens-compra.mjs` seção 9.
+  - Cobertura: `smoke_ordens_compra.py` seções 5b e 5c e `verificar-ordens-compra.mjs` seção 9.
+  - ⚠️ O nome do produto é gravado em MAIÚSCULAS: checagem de texto em relatório compara com
+    `.upper()`, senão a negativa ("não contém") passa sem testar nada.
 
 - 🔑 **Recebimento de notas** (1.3.22, migração 162, 24/11/2026, pedido do dono: *"o usuário
   pode informar que recebeu a nota X do fornecedor Y da data Z e anexar uma foto, como opcional.

@@ -3484,8 +3484,9 @@ def _ordens_compra(cur, id_unidade: int, f: dict) -> Saida:
     from services import ordens_compra
     status = _lista(f.get("situacao_ordem")) or [ordens_compra.A_COMPRAR]
     inicio, fim = f.get("inicio"), f.get("fim")
+    # ⚠️ `_ordem_so_de` vem do router (166): quem não vê todos imprime só os próprios pedidos.
     sql, params = ordens_compra.consulta_da_lista(
-        id_unidade, status, inicio, fim, f.get("busca_ordem"))
+        id_unidade, status, inicio, fim, f.get("busca_ordem"), f.get("_ordem_so_de"))
     cur.execute(sql, params)
     quando = lambda d: d.strftime("%d/%m/%Y %H:%M") if d else ""
     linhas = [dict(r) | {"situacao": ordens_compra.SITUACOES[r["status"]],

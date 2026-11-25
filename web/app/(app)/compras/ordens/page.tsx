@@ -101,6 +101,8 @@ export default function PaginaOrdemDeCompra() {
   const podeComprar = pode("compras.ordem_comprar");
   const podePedir = pode("compras.ordem_solicitar");
   const podeAprovar = pode("compras.ordem_aprovar");
+  // 🔑 Sem ver todos (166), a lista, as contagens e o relatório trazem só os próprios pedidos.
+  const veTodos = podeComprar || podeAprovar || pode("compras.ordem_ver_todos");
   const [aba, setAba] = useEstadoNaUrl<string>("aba", "A_COMPRAR", { atraso: 0 });
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [de, setDe] = useEstadoNaUrl<string>("de", "", { atraso: 0 });
@@ -213,10 +215,9 @@ export default function PaginaOrdemDeCompra() {
     if (novo.has(id)) novo.delete(id); else novo.add(id);
     return novo;
   });
-  // ⚠️ Aprovado, quem só pediu já não corrige (a API recusa): só cancela. Linha de antes da
-  // aprovação existir (`aprovado_por` nulo) segue como era.
-  const podeMexer = (i: OrdemItem) => podeComprar || podeAprovar || i.criado_por === eu?.id;
-  const podeCorrigir = (i: OrdemItem) => podeComprar || podeAprovar ||
+  // ⚠️ Aprovado pelo gestor, quem só pediu não corrige nem cancela (166; a API recusa). Linha de
+  // antes da aprovação existir (`aprovado_por` nulo) segue como era.
+  const podeMexer = (i: OrdemItem) => podeComprar || podeAprovar ||
     (i.criado_por === eu?.id && (i.status === "AGUARDANDO" || !i.aprovado_por));
   const selecionados = (lista ?? []).filter((i) => marcados.has(i.id));
   const comCaixinha = (abaAtual === "A_COMPRAR" && podeComprar) ||
@@ -303,7 +304,10 @@ export default function PaginaOrdemDeCompra() {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[13.5px]">
-          <p className="text-suave">{FRASE_ABA[abaAtual]}</p>
+          <p className="text-suave">
+            {FRASE_ABA[abaAtual]}
+            {!veTodos && <span id="ordem-so-meus"> Você vê só os seus pedidos.</span>}
+          </p>
           {comData && (
             <span className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
               <span className="text-suave">de</span>
@@ -421,7 +425,7 @@ export default function PaginaOrdemDeCompra() {
                                     disabled={ocupado} onClick={() => setRecusando([i])}>Recusar</button>
                           </>
                         )}
-                        {podeCorrigir(i) && (
+                        {podeMexer(i) && (
                           <button type="button" className="btn btn-terciario btn-pequeno" data-acao="corrigir"
                                   onClick={() => setCorrigindo(i)}>Corrigir</button>
                         )}

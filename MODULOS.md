@@ -69,13 +69,14 @@ Notas de entrada (XML, digitação, conciliação e lançamento no razão), a or
 - **Rotas:** `notas.py`, `ordens_compra.py`, `recebimentos.py`
 - **Serviços:** `nfe_xml.py`, `ean_das_notas.py`, `notas_lote.py` (lançar as conciliadas de uma vez, com prévia), `ordens_compra.py`, `recebimentos.py` (suíte `smoke_recebimentos.py`)
 - **Telas:** `compras/`, `compras/[id]/`, `compras/nova/`, `compras/ordens/` (com a janela de sugestões do mínimo, `?sugestoes=1`; roteiro `verificar-ordens-compra.mjs`), `compras/recebimentos/` (roteiro `verificar-recebimentos.mjs`)
-- **Permissões:** `compras.notas`, `compras.conciliar`, `compras.lancar`, `compras.ordem_solicitar`, `compras.ordem_aprovar`, `compras.ordem_comprar`, `compras.receber`
+- **Permissões:** `compras.notas`, `compras.conciliar`, `compras.lancar`, `compras.ordem_solicitar`, `compras.ordem_ver_todos`, `compras.ordem_aprovar`, `compras.ordem_comprar`, `compras.receber`
 
 ⚠️ **A nota só vira estoque no LANÇAMENTO**, não na importação: o XML entra como
 documento, e é a conciliação item→produto que decide o que baixa.
 ⚠️ **A ordem de compra não toca o estoque**: "comprado" é aviso entre pessoas (migração 158).
 🔑 **E passa por aprovação** (migração 165): o pedido de quem não tem `compras.ordem_aprovar`
 nasce em "Aguardando aprovação"; aprovado vai para A comprar, recusado para Recusados.
+Sem `compras.ordem_ver_todos` (nem comprar ou aprovar), cada um vê só os próprios pedidos (166).
 
 ## Custos
 

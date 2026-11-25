@@ -1,6 +1,7 @@
 """Ordem de compra — pedir, marcar como comprado e voltar à lista.
 
-🔑 **Pedir, aprovar e comprar são três chaves.** Toda a equipe avisa o que falta; o pedido de
+🔑 **Pedir, aprovar e comprar são três chaves**, e ver os pedidos de todos é uma quarta (166):
+sem ela, quem só pede vê os próprios. Toda a equipe avisa o que falta; o pedido de
 quem não aprova espera aprovação (migração 165); quem marca é quem compra. Nada aqui toca o
 estoque: ver `services/ordens_compra.py`.
 """
@@ -43,20 +44,22 @@ def listar(resposta: Response,
            limite: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
            ctx: Contexto = Depends(_ver)) -> list[dict]:
     with get_cursor() as cur:
-        sql, params = servico.consulta_da_lista(unidade_atual(cur, ctx), [status], de, ate, busca)
+        sql, params = servico.consulta_da_lista(unidade_atual(cur, ctx), [status], de, ate, busca,
+                                                servico.so_de(ctx.pode, ctx.id_usuario))
         return pagina(cur, sql, params, limite=limite, offset=offset, resposta=resposta)
 
 
 @router.get("/resumo")
 def resumo(ctx: Contexto = Depends(_ver)) -> dict:
     with get_cursor() as cur:
-        return servico.resumo(cur, unidade_atual(cur, ctx))
+        return servico.resumo(cur, unidade_atual(cur, ctx), servico.so_de(ctx.pode, ctx.id_usuario))
 
 
 @router.get("/produto/{id_produto}")
 def opcoes_do_produto(id_produto: int, ctx: Contexto = Depends(_ver)) -> dict:
     with get_cursor() as cur:
-        return servico.opcoes_do_produto(cur, unidade_atual(cur, ctx), id_produto)
+        return servico.opcoes_do_produto(cur, unidade_atual(cur, ctx), id_produto,
+                                         servico.so_de(ctx.pode, ctx.id_usuario))
 
 
 @router.get("/sugestoes")

@@ -927,6 +927,10 @@ def _com_as_lojas(cur, ctx: Contexto, filtros: dict) -> dict:
     # E a lista de fichas, o custo da ficha só para quem tem `fichas.custos` — a regra
     # do router de fichas (26/10/2026).
     filtros["_ve_custo_ficha"] = ctx.pode("fichas.custos")
+    # E a ordem de compra, só os pedidos da pessoa quando ela não vê todos (166) — a regra
+    # da tela, para o papel não mostrar o que a tela esconde.
+    from services import ordens_compra
+    filtros["_ordem_so_de"] = ordens_compra.so_de(ctx.pode, ctx.id_usuario)
     return filtros
 
 

@@ -20,6 +20,15 @@ ABERTOS = (AGUARDANDO, A_COMPRAR)
 SITUACOES = {AGUARDANDO: "Aguardando aprovação", A_COMPRAR: "A comprar", COMPRADO: "Comprado",
              RECUSADO: "Recusado"}
 
+# 🔑 **Cada um vê o que pediu** (migração 166, pedido do dono de 25/11/2026). A lista inteira é
+# de quem tem `ordem_ver_todos`, e de quem compra ou aprova: não se compra o que não se vê.
+VER_TODOS = ("compras.ordem_ver_todos", "compras.ordem_comprar", "compras.ordem_aprovar")
+
+
+def so_de(pode, id_usuario: int) -> int | None:
+    """None = vê tudo; senão, o id de quem pediu, e só as linhas dele aparecem."""
+    return None if any(pode(c) for c in VER_TODOS) else id_usuario
+
 # 🔑 **Para quando** (migração 159, modelo do dono de 24/11/2026). A ordem é a de A comprar:
 # o mais urgente primeiro, e dentro de cada um o que espera há mais tempo.
 URGENCIAS = {"HOJE": "Urgente — hoje", "SEMANA": "Esta semana", "PODE_ESPERAR": "Pode esperar"}
@@ -50,15 +59,18 @@ _JUNTAS = """
 
 
 def consulta_da_lista(id_unidade: int, status: list[str], de: date | None = None,
-                      ate: date | None = None, busca: str | None = None) -> tuple[str, dict]:
+                      ate: date | None = None, busca: str | None = None,
+                      criado_por: int | None = None) -> tuple[str, dict]:
     """A consulta da tela e do relatório — uma só, para os dois não divergirem.
 
     O período é pela data da compra (ou da recusa) e, no que está aberto, pela do pedido.
     Aberto (aguardando ou a comprar) vem do mais urgente ao menos, e dentro dele o mais antigo.
+    `criado_por` (de `so_de`): só os pedidos dessa pessoa (166).
     """
     termo = (busca or "").strip() or None
     sql = f"""SELECT {_COLUNAS} {_JUNTAS}
         WHERE i.id_unidade = %(u)s AND i.status = ANY(%(status)s)
+          AND (%(quem)s::int IS NULL OR i.criado_por = %(quem)s)
           AND (%(de)s::date IS NULL OR
                coalesce(i.comprado_em, i.recusado_em, i.criado_em)::date >= %(de)s)
           AND (%(ate)s::date IS NULL OR
@@ -70,15 +82,17 @@ def consulta_da_lista(id_unidade: int, status: list[str], de: date | None = None
                       CASE i.urgencia WHEN 'HOJE' THEN 0 WHEN 'SEMANA' THEN 1 ELSE 2 END END,
                  CASE WHEN i.status IN ('AGUARDANDO', 'A_COMPRAR') THEN i.criado_em END,
                  coalesce(i.comprado_em, i.recusado_em, i.criado_em) DESC, i.id DESC"""
-    return sql, {"u": id_unidade, "status": status, "de": de, "ate": ate, "busca": termo}
+    return sql, {"u": id_unidade, "status": status, "de": de, "ate": ate, "busca": termo,
+                 "quem": criado_por}
 
 
-def resumo(cur, id_unidade: int) -> dict:
+def resumo(cur, id_unidade: int, criado_por: int | None = None) -> dict:
     cur.execute("""SELECT count(*) FILTER (WHERE status = 'A_COMPRAR') AS a_comprar,
                           count(*) FILTER (WHERE status = 'AGUARDANDO') AS aguardando
                      FROM ordem_compra_itens
-                    WHERE id_unidade = %s AND status IN ('A_COMPRAR', 'AGUARDANDO')""",
-                (id_unidade,))
+                    WHERE id_unidade = %s AND status IN ('A_COMPRAR', 'AGUARDANDO')
+                      AND (%s::int IS NULL OR criado_por = %s)""",
+                (id_unidade, criado_por, criado_por))
     r = cur.fetchone()
     return {"a_comprar": r["a_comprar"], "aguardando": r["aguardando"]}
 
@@ -130,8 +144,10 @@ def _exigir_comprado(produto: dict) -> None:
                    "Para repor, use a agenda de produção.")
 
 
-def opcoes_do_produto(cur, id_unidade: int, id_produto: int) -> dict:
-    """O que a tela precisa ao escolher o produto: unidades e pedidos em aberto."""
+def opcoes_do_produto(cur, id_unidade: int, id_produto: int,
+                      criado_por: int | None = None) -> dict:
+    """O que a tela precisa ao escolher o produto: unidades e pedidos em aberto (só os da
+    pessoa, quando ela não vê todos — 166)."""
     p = _produto(cur, id_produto)
     _exigir_comprado(p)
     unidades = _unidades_do_produto(cur, p)
@@ -140,7 +156,8 @@ def opcoes_do_produto(cur, id_unidade: int, id_produto: int) -> dict:
              FROM ordem_compra_itens i LEFT JOIN usuarios u ON u.id = i.criado_por
             WHERE i.id_unidade = %s AND i.id_produto = %s
               AND i.status IN ('AGUARDANDO', 'A_COMPRAR')
-            ORDER BY i.criado_em""", (id_unidade, id_produto))
+              AND (%s::int IS NULL OR i.criado_por = %s)
+            ORDER BY i.criado_em""", (id_unidade, id_produto, criado_por, criado_por))
     return {
         "id": p["id"], "nome": p["nome"], "unidades": unidades,
         "um_padrao": unidades[0]["um"] if unidades else None,
@@ -293,20 +310,24 @@ def adicionar(cur, id_unidade: int, id_usuario: int, dados: dict, pode_aprovar: 
                        else f"{nome} foi para aprovação."}
 
 
-def corrigir(cur, id_unidade: int, id_item: int, id_usuario: int, pode_comprar: bool,
-             dados: dict, pode_aprovar: bool = False) -> dict:
-    """⚠️ **Pedido já aprovado, quem só pediu não corrige** (migração 165): mudar a quantidade
-    depois do sim seria comprar sem aprovação. Cancela e pede de novo. Linha de antes da
-    aprovação existir (`aprovado_por` nulo) segue a regra antiga."""
-    linha = _travar(cur, id_unidade, id_item)
-    exigir_dono_ou_comprador(linha, id_usuario, pode_comprar or pode_aprovar)
-    _exigir_aberto(cur, linha)
-    if (linha["status"] == A_COMPRAR and linha["aprovado_por"]
-            and not (pode_comprar or pode_aprovar)):
+def _exigir_nao_aprovado(linha: dict, pode_mais: bool) -> None:
+    """⚠️ **Aprovado pelo gestor, quem só pediu não mexe mais** (165 e 166): nem corrige nem
+    cancela. Quem compra ou aprova continua podendo. Linha de antes da aprovação existir
+    (`aprovado_por` nulo) segue a regra antiga."""
+    if linha["status"] == A_COMPRAR and linha["aprovado_por"] and not pode_mais:
         raise HTTPException(
             status_code=409,
             detail="Este pedido já foi aprovado e não pode mais ser alterado por quem pediu. "
-                   "Cancele e peça de novo, ou peça a quem aprova para corrigir.")
+                   "Para mudar, fale com quem aprova.")
+
+
+def corrigir(cur, id_unidade: int, id_item: int, id_usuario: int, pode_comprar: bool,
+             dados: dict, pode_aprovar: bool = False) -> dict:
+    """Aprovado, quem só pediu não corrige (`_exigir_nao_aprovado`)."""
+    linha = _travar(cur, id_unidade, id_item)
+    exigir_dono_ou_comprador(linha, id_usuario, pode_comprar or pode_aprovar)
+    _exigir_aberto(cur, linha)
+    _exigir_nao_aprovado(linha, pode_comprar or pode_aprovar)
     produto = _produto(cur, linha["id_produto"]) if linha["id_produto"] else None
     um = _sigla(cur, dados["um"], produto)
     cur.execute("""UPDATE ordem_compra_itens SET quantidade = %s, um = %s, observacao = %s,
@@ -325,6 +346,7 @@ def cancelar(cur, id_unidade: int, id_item: int, id_usuario: int, pode_comprar: 
     linha = _travar(cur, id_unidade, id_item)
     exigir_dono_ou_comprador(linha, id_usuario, pode_comprar or pode_aprovar)
     _exigir_aberto(cur, linha)
+    _exigir_nao_aprovado(linha, pode_comprar or pode_aprovar)
     cur.execute("""UPDATE ordem_compra_itens
                       SET status = 'CANCELADO', cancelado_em = now(), cancelado_por = %s
                     WHERE id = %s""", (id_usuario, id_item))

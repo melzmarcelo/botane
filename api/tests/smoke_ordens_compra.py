@@ -331,8 +331,45 @@ if tk:
            s == 201 and linha(r["ids"][0], "AGUARDANDO") is not None and "aprovação" in r["message"], (s, r))
     s, _ = api("POST", f"/ordens-compra/{r['ids'][0]}/cancelar", {}, tk=tk)
     checar("quem pediu cancela o que aguarda", s == 201, s)
-    s, _ = api("POST", f"/ordens-compra/{pd['id']}/cancelar", {}, tk=tk)
-    checar("e cancela o próprio aprovado (só não corrige)", s == 201, s)
+    s, r = api("POST", f"/ordens-compra/{pd['id']}/cancelar", {}, tk=tk)
+    checar("aprovado, quem só pediu não cancela mais: 409 (166)",
+           s == 409 and "já foi aprovado" in r["detail"], (s, r))
+    s, _ = api("POST", f"/ordens-compra/{pd['id']}/cancelar", {})
+    checar("quem aprova ainda cancela", s == 201, s)
+
+print("5c. cada um vê os próprios pedidos (migração 166)")
+if tk:
+    s, meu2 = api("POST", "/ordens-compra", {"descricao_livre": f"So meu {marca}", "quantidade": 1,
+                                             "um": "UN"}, tk=tk)
+    s, la = api("GET", "/ordens-compra?status=A_COMPRAR&limite=200", tk=tk)
+    checar("a cozinha não vê em A comprar o pedido do administrador",
+           s == 200 and not any(x["id"] == a["id"] for x in la), [x["id"] for x in (la or [])][:10])
+    checar("e o que ela vê é só dela", all(x["criado_por"] == u["id"] for x in la), la[:3])
+    s, lg2 = api("GET", "/ordens-compra?status=AGUARDANDO&limite=200", tk=tk)
+    checar("em Aguardando, vê o próprio pedido",
+           any(x["id"] == meu2["id"] for x in lg2) and all(x["criado_por"] == u["id"] for x in lg2), lg2[:3])
+    s, lc = api("GET", "/ordens-compra?status=COMPRADO&limite=200", tk=tk)
+    checar("em Comprados, só os dela", all(x["criado_por"] == u["id"] for x in (lc or [])), (lc or [])[:3])
+    s, la_admin = api("GET", "/ordens-compra?status=A_COMPRAR&limite=200")
+    checar("o administrador vê todos, inclusive o pedido de outros",
+           any(x["id"] == a["id"] for x in la_admin), len(la_admin))
+    s, la_admin = api("GET", "/ordens-compra?status=AGUARDANDO&limite=200")
+    checar("e vê o que a cozinha pediu", any(x["id"] == meu2["id"] for x in la_admin))
+    s, rc = api("GET", "/ordens-compra/resumo", tk=tk)
+    s, ra = api("GET", "/ordens-compra/resumo")
+    checar("as contagens da cozinha são só dela (A comprar = 0, Aguardando = 1)",
+           rc["a_comprar"] == 0 and rc["aguardando"] == 1 and ra["a_comprar"] >= 1, (rc, ra))
+    s, op = api("GET", f"/ordens-compra/produto/{produto}", tk=tk)
+    checar("ao escolher o produto, não vê o pedido aberto dos outros",
+           s == 200 and not any(x["id"] == a["id"] for x in op["abertos"]), op.get("abertos"))
+    s, rel = api("GET", "/exportar/ordens-compra/dados?situacao_ordem=A_COMPRAR&situacao_ordem=AGUARDANDO", tk=tk)
+    texto = json.dumps(rel, ensure_ascii=False)
+    checar("o relatório da cozinha traz só os pedidos dela",
+           s == 200 and f"SO MEU {marca}" in texto.upper() and "INSUMO ORDEM" not in texto.upper(), texto[:300])
+    s, rel = api("GET", "/exportar/ordens-compra/dados?situacao_ordem=A_COMPRAR")
+    checar("e o do administrador traz os dos outros",
+           "INSUMO ORDEM" in json.dumps(rel, ensure_ascii=False).upper())
+    s, _ = api("POST", f"/ordens-compra/{meu2['id']}/cancelar", {}, tk=tk)
 
 print("6. lojas")
 s, filial = chamar("POST", "/unidades", {"nome": f"Filial ordem {marca}", "apelido": f"O{marca}"},
