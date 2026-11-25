@@ -1514,31 +1514,58 @@ def _vendas(cur, id_unidade: int, f: dict) -> Saida:
             pagamento.append((dia_a_dia.linhas, dia_a_dia.colunas,
                               "Formas de pagamento dia a dia", None))
 
-    return Saida(
-        produtos,
-        [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
-         ("setor", "Setor"), ("quantidade", "Quantidade"), ("cupons", "Cupons"),
-         ("receita", "Receita"), ("preco_medio", "Preço médio"),
-         ("participacao_pct", "Participação %")],
-        f"Vendas — {_intervalo(inicio, fim)}"
-        + (" — recorte (receita bruta dos itens)" if p["bruta"] else ""),
-        resumo, inicio, fim,
-        anexos=[
-            (serie, [("periodo", nome_ag), ("cupons", "Cupons"), ("itens", "Itens"),
-                     ("receita", "Receita"), ("ticket_medio", "Ticket médio")],
-             f"Evolução por {nome_ag.lower()}", None),
-            (semana, [("nome", "Dia da semana"), ("dias", "Dias com venda"),
-                      ("cupons", "Cupons"), ("receita", "Receita"),
-                      ("media_receita", "Receita média por dia"),
-                      ("media_cupons", "Cupons por dia")],
-             "Por dia da semana", None),
-            (horas, [("hora", "Hora"), ("cupons", "Cupons"), ("receita", "Receita")],
-             "Por hora do cupom", None),
-            (p["por_categoria"], grupo, "Por categoria", None),
-            (p["por_setor"], grupo, "Por setor", None),
-            *pagamento,
-        ],
-    )
+    # 🔑 **O que listar** (pedido do dono, 25/11/2026: "hoje ele imprime sempre tudo… quero
+    # listar somente as formas de pagamento"). Cada quadro tem uma chave; sem escolha, sai tudo,
+    # como antes. O PRIMEIRO escolhido vira o quadro da frente e os outros vão atrás, na ordem
+    # de sempre. ⚠️ Escolher só quadros que não existem no recorte (as formas, com categoria
+    # escolhida) cai no quadro dos produtos, para o arquivo nunca sair vazio sem explicação.
+    quadros: dict[str, tuple] = {
+        "produtos": (produtos,
+                     [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
+                      ("setor", "Setor"), ("quantidade", "Quantidade"), ("cupons", "Cupons"),
+                      ("receita", "Receita"), ("preco_medio", "Preço médio"),
+                      ("participacao_pct", "Participação %")],
+                     "Por produto", None),
+        "evolucao": (serie, [("periodo", nome_ag), ("cupons", "Cupons"), ("itens", "Itens"),
+                             ("receita", "Receita"), ("ticket_medio", "Ticket médio")],
+                     f"Evolução por {nome_ag.lower()}", None),
+        "semana": (semana, [("nome", "Dia da semana"), ("dias", "Dias com venda"),
+                            ("cupons", "Cupons"), ("receita", "Receita"),
+                            ("media_receita", "Receita média por dia"),
+                            ("media_cupons", "Cupons por dia")],
+                   "Por dia da semana", None),
+        "hora": (horas, [("hora", "Hora"), ("cupons", "Cupons"), ("receita", "Receita")],
+                 "Por hora do cupom", None),
+        "categoria": (p["por_categoria"], grupo, "Por categoria", None),
+        "setor": (p["por_setor"], grupo, "Por setor", None),
+    }
+    if pagamento:
+        quadros["pagamento"] = pagamento[0]
+        if len(pagamento) > 1:
+            quadros["pagamento_dia"] = pagamento[1]
+    escolhidas = _lista(f.get("secoes_vendas"))
+    chaves = [k for k in quadros if not escolhidas or k in escolhidas] or ["produtos"]
+    if escolhidas and "resumo" not in escolhidas:
+        # Sem os totais: fica só o custo das taxas, que é número das formas de pagamento.
+        resumo = [x for x in resumo if x[0] == "Custo estimado das taxas" and "pagamento" in chaves]
+    frente = quadros[chaves[0]]
+    titulo = (f"Vendas — {_intervalo(inicio, fim)}"
+              + (" — recorte (receita bruta dos itens)" if p["bruta"] else ""))
+    if chaves[0] != "produtos":
+        titulo += f" — {frente[2]}"
+    return Saida(frente[0], frente[1], titulo, resumo, inicio, fim,
+                 anexos=[quadros[k] for k in chaves[1:]])
+
+
+# A ordem é a do relatório; "resumo" são os totais do topo (cupons, receita, ticket…).
+SECOES_VENDAS = [("resumo", "totais do período"), ("produtos", "por produto"),
+                 ("evolucao", "evolução"), ("semana", "por dia da semana"),
+                 ("hora", "por hora"), ("categoria", "por categoria"), ("setor", "por setor"),
+                 ("pagamento", "formas de pagamento"),
+                 ("pagamento_dia", "formas de pagamento dia a dia")]
+FILTROS["secoes_vendas"] = {
+    "tipo": "multipla", "rotulo": "O que listar", "ajuda": "tudo, se não escolher",
+    "opcoes": lambda _c, _u: [{"valor": v, "nome": n} for v, n in SECOES_VENDAS]}
 
 
 def _situacoes_nota(f: dict) -> list[str]:
@@ -3581,9 +3608,10 @@ RELATORIOS: dict[str, Relatorio] = {
     "vendas": Relatorio(
         "Estudo de vendas",
         "O período escolhido: totais e a comparação com o anterior, os produtos, a "
-        "evolução, o dia da semana, a hora, a categoria, o setor e as formas de pagamento.",
+        "evolução, o dia da semana, a hora, a categoria, o setor e as formas de pagamento — "
+        "tudo, ou só o que escolher em \"O que listar\".",
         "cmv.relatorios", "vendas",
-        ("periodo", "agrupar", "categorias", "setores", "produtos"), _vendas),
+        ("periodo", "secoes_vendas", "agrupar", "categorias", "setores", "produtos"), _vendas),
     "consumo-pessoa": Relatorio(
         "Consumo por pessoa",
         "O que cada um consumiu, quanto custaria e quanto está sendo cobrado — "

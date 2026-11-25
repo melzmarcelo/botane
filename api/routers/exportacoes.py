@@ -205,8 +205,21 @@ class _Filtros:
         busca_bem: str | None = Query(default=None, max_length=80),
         # 🔑 Vende no PDV (10/11/2026): "sim", "nao" ou vazio (todos).
         pdv_produto: str | None = Query(default=None, max_length=3),
+        # ⚠️ Filtro declarado em `FILTROS` e esquecido aqui é IGNORADO em silêncio: a janela
+        # mostra a escolha e o arquivo sai com tudo. Os seis abaixo ficaram assim de 1.3.16 a
+        # 1.3.24; `smoke_exportacao_filtros.py` agora confere um contra o outro.
+        situacao_ordem: list[str] | None = Query(default=None),
+        busca_ordem: str | None = Query(default=None, max_length=80),
+        situacao_pagar: list[str] | None = Query(default=None),
+        categorias_financeiro: list[int] | None = Query(default=None),
+        situacao_recebimento: list[str] | None = Query(default=None),
+        # 🔑 O que listar no Estudo de vendas (pedido do dono, 25/11/2026).
+        secoes_vendas: list[str] | None = Query(default=None),
     ):
         self.como_dict = {
+            "situacao_ordem": situacao_ordem, "busca_ordem": busca_ordem,
+            "situacao_pagar": situacao_pagar, "categorias_financeiro": categorias_financeiro,
+            "situacao_recebimento": situacao_recebimento, "secoes_vendas": secoes_vendas,
             "pdv_produto": pdv_produto,
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
             "locais": locais, "setores": setores,

@@ -271,6 +271,13 @@
     fica fora dos totais; anexos por dia (se >1 dia) e por origem e canal. Filtro
     `origem_venda` acrescentado a `FILTROS` DEPOIS da função de opções (o dicionário é
     montado antes dela).
+- 🔴 **Filtro novo vai em DOIS lugares: `FILTROS` (a janela) e os parâmetros de
+  `routers/exportacoes.py` (`Filtros.__init__` + `como_dict`).** Só no primeiro, a janela
+  mostra a escolha e o arquivo sai com tudo, sem erro nenhum. Seis ficaram assim de 1.3.16 a
+  1.3.24 (`situacao_ordem`, `busca_ordem`, `situacao_pagar`, `categorias_financeiro`,
+  `situacao_recebimento` e o novo `secoes_vendas`), achados em 25/11/2026.
+  `smoke_exportacao_filtros.py` agora confere um contra o outro (os de tipo `periodo` viajam
+  como `inicio`/`fim` e ficam de fora).
 - 🔑 **Terceira leva** (23/10/2026, itens 8 e 9 da lista). Mesma suíte, seções 12 e 13 (a
   reserva e o pedido entram DIRETO no banco: o que se cobra é o relatório, não a criação).
   - `reservas-dia` (`reservas.ver`, filtros `data` + `situacao_reserva`): a folha da recepção.

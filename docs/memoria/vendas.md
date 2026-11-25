@@ -24,6 +24,14 @@
     em mais de um dia, "Formas de pagamento dia a dia" (o de `vendas-pagamentos`). Só sem
     recorte. ⚠️ A rota `/exportar/{rel}/dados` (prévia) não traz anexos: o teste chama
     `_vendas` direto, e o PDF foi conferido.
+  - 🔑 **"O que listar"** (filtro `secoes_vendas`, 1.3.24, pedido do dono de 25/11/2026: *"hoje
+    ele imprime sempre tudo… quero listar somente as formas de pagamento"*). Chaves: `resumo`
+    (os totais do topo), `produtos`, `evolucao`, `semana`, `hora`, `categoria`, `setor`,
+    `pagamento`, `pagamento_dia`. Sem escolha sai tudo, como antes. O PRIMEIRO escolhido vira o
+    quadro da frente (o título ganha o nome dele) e o resto vai atrás na ordem de sempre. Sem
+    `resumo`, os totais saem (fica só o custo das taxas, se as formas foram escolhidas).
+    Escolha que não existe no recorte (formas com categoria escolhida) cai nos produtos: o
+    arquivo nunca sai vazio. Cobertura: `smoke_exportacao_filtros.py`.
 
 - 🔑 **Editar a quantidade e excluir item de documento lançado à mão e em aberto** (1.3.20,
   24/11/2026, pedido do dono). `PUT`/`DELETE /vendas/{id}/itens/{id_item}`; botões
