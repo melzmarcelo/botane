@@ -407,15 +407,17 @@ cota. Uma chave vazada de quem tem `integracao.omie` poderia gastá-la. Ver
 ## O site do cliente — `app.botanedeliecafe.com.br` (antes `reservas.`)
 
 > 🔑 **25/11/2026 — o endereço passou a `app.botanedeliecafe.com.br` (pedido do dono).**
-> `reservas.*` continua valendo: QR impresso e link divulgado não podem quebrar.
+> `reservas.*` fica vivo SÓ para redirecionar (308, mesmo caminho e consulta) para `app.*`: QR
+> impresso e link divulgado não quebram, e o cliente só vê o `app`. Quando nada antigo circular,
+> apagar o `reservas` do App Spec (domínio, regra, CORS), do HostGator e do `web/proxy.ts`.
 > - **DO, app `botane`** (App Spec, só acréscimos): domínio `app…` como ALIAS, regra de
 >   ingress `authority: app…` → `web` (cópia da de `reservas`) e `https://app…` no
 >   `CORS_ORIGINS` da `api`.
 > - **HostGator**: CNAME `app` → `botane-app-zqokg.ondigitalocean.app`. ⚠️ O dono tinha
 >   RENOMEADO o `reservas` para `app` — o `reservas` sumiu do DNS (NXDOMAIN) e o site ficou
 >   fora do ar até o CNAME `reservas` ser recriado. Trocar domínio é ACRESCENTAR, nunca renomear.
-> - **Código**: `web/proxy.ts` (`DOMINIOS_DO_CLIENTE`) e `enderecoDoSite()` reconhecem `app.` e
->   `reservas.`. Sem isso, `app.*` abre o login da equipe na raiz.
+> - **Código**: `web/proxy.ts` trata `app.` como domínio do cliente e redireciona `reservas.`
+>   para ele. Sem isso, `app.*` abre o login da equipe na raiz.
 > - **No sistema**: o endereço do site dos QR (`fidelidade_config.site_url`, tela de QR codes)
 >   passa a `https://app…` — os QR novos saem com ele.
 

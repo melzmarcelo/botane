@@ -7,7 +7,7 @@ import type { NextRequest } from "next/server";
  * 🔑 **Pedido do dono (15/10/2026):** *"o site de reserva e cardápio ficou parecendo dois
  * sistemas separados… gostaria que esta parte fosse toda no reservas."* O site (`public/portal`)
  * e o feed do Cardápio Vivo (`/c/...`) são servidos por este app; no domínio do cliente
- * (`app.*`, e o antigo `reservas.*`):
+ * (`app.*`; o antigo `reservas.*` só redireciona para ele):
  *   - `/` abre o site;
  *   - `/c/...` (o feed), `/portal/...` e o que o Next serve (`/_next`, ícones) passam;
  *   - qualquer tela INTERNA redireciona ao início — o cliente não tropeça no login da equipe.
@@ -16,20 +16,22 @@ import type { NextRequest } from "next/server";
  */
 
 /**
- * Os domínios do CLIENTE. 🔑 **25/11/2026 — pedido do dono:** o site passa de `reservas.*` para
- * `app.*`. Os dois continuam valendo: link e QR antigos em `reservas` não podem quebrar.
+ * O domínio do CLIENTE. 🔑 **25/11/2026 — pedido do dono:** o site passa de `reservas.*` para
+ * `app.*`, e só o `app` deve aparecer. O `reservas` fica vivo SÓ para redirecionar: QR impresso e
+ * link divulgado com o endereço antigo caem no mesmo caminho em `app.*` (308, permanente).
  */
-const DOMINIOS_DO_CLIENTE = ["app.", "reservas."];
-const doCliente = (host: string) => DOMINIOS_DO_CLIENTE.some((d) => host.startsWith(d));
-
 const DO_CLIENTE = /^\/(c\/|portal\/|_next\/|favicon|icone|apple-touch|manifest|robots)/;
 
 export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
   const host = (request.headers.get("host") ?? "").toLowerCase();
   const site = new URL("/portal/index.html", request.url);
 
-  if (doCliente(host)) {
+  if (host.startsWith("reservas.")) {
+    // ⚠️ Mesmo caminho e mesma consulta (`?loja=`): o QR antigo abre a MESMA tela no `app`.
+    return NextResponse.redirect(`https://app.${host.slice("reservas.".length)}${pathname}${search}`, 308);
+  }
+  if (host.startsWith("app.")) {
     if (pathname === "/" || pathname === "/portal" || pathname === "/portal/") return NextResponse.rewrite(site);
     if (DO_CLIENTE.test(pathname)) return NextResponse.next();
     // ⚠️ O destino sai do DOMÍNIO pedido, não de `request.url`: atrás do roteador do App
