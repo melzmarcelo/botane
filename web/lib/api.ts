@@ -328,6 +328,34 @@ export const api = {
   },
 
   /**
+   * Uma imagem protegida, como URL de objeto para `<img src>` (24/11/2026, foto da nota no
+   * recebimento). ⚠️ Quem chama revoga com `URL.revokeObjectURL` quando a imagem sai da tela.
+   * A loja vai junto: a foto é da loja escolhida, como no `upload`.
+   */
+  async imagem(caminho: string): Promise<string> {
+    const pegar = async () =>
+      fetch(BASE + caminho, {
+        headers: {
+          Authorization: `Bearer ${lerSessao(CHAVE_ACCESS)}`,
+          ...(unidadeAtual() ? { "X-Unidade": unidadeAtual()! } : {}),
+        },
+      });
+    let r = await pegar();
+    if (r.status === 401 && (await renovar())) r = await pegar();
+    if (!r.ok) {
+      const texto = await r.text();
+      let dados: unknown = null;
+      try {
+        dados = texto ? JSON.parse(texto) : null;
+      } catch {
+        dados = null;
+      }
+      throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
+    }
+    return URL.createObjectURL(await r.blob());
+  },
+
+  /**
    * Baixa um arquivo da API. Não dá para usar um link simples: o endpoint exige
    * o token no cabeçalho, e o navegador não manda cabeçalho em navegação.
    */

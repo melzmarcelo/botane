@@ -2277,6 +2277,39 @@ def _vendas_pagamentos(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _recebimentos(cur, id_unidade: int, f: dict) -> Saida:
+    """Recebimento de notas (162): quem recebeu cada nota e se ela já chegou ao sistema.
+
+    ⚠️ A mesma consulta da tela (`recebimentos.consulta`).
+    """
+    from services import recebimentos
+    inicio, fim = _periodo(f)
+    situacao = (_lista(f.get("situacao_recebimento")) or [None])[0]
+    sql, p = recebimentos.consulta(id_unidade, situacao, inicio, fim, None)
+    cur.execute(sql, p)
+    linhas = [dict(r) | {"situacao_rotulo": recebimentos.SITUACOES[r["situacao"]],
+                         "registrado": r["registrado_em"].strftime("%d/%m/%Y %H:%M"),
+                         "foto": "sim" if r["tem_foto"] else ""}
+              for r in cur.fetchall()]
+    faltam = sum(1 for l in linhas if l["situacao"] == "FALTA")
+    return Saida(
+        linhas,
+        [("data_nota", "Data da nota"), ("numero_nota", "Nota"), ("fornecedor", "Fornecedor"),
+         ("situacao_rotulo", "Situação"), ("recebido_por_nome", "Recebida por"),
+         ("registrado", "Registrada em"), ("observacao", "Observação"), ("foto", "Foto")],
+        "Recebimento de notas",
+        [("Período", _intervalo(inicio, fim)), ("Notas recebidas", len(linhas)),
+         ("Não chegaram ao sistema", faltam)],
+        inicio, fim)
+
+
+FILTROS["situacao_recebimento"] = {
+    "tipo": "multipla", "rotulo": "Situação", "ajuda": "todas",
+    "opcoes": lambda _c, _u: [{"valor": "FALTA", "nome": "não chegou ao sistema"},
+                              {"valor": "NO_SISTEMA", "nome": "no sistema, falta lançar"},
+                              {"valor": "LANCADA", "nome": "lançada"}]}
+
+
 def _caixa(cur, id_unidade: int, f: dict) -> Saida:
     """A conferência do caixa (161): o mesmo dia a dia da tela, com esperado, contado e diferença."""
     from services import caixa
@@ -3499,6 +3532,12 @@ RELATORIOS: dict[str, Relatorio] = {
         "Crédito, débito, Pix, dinheiro (já sem o troco) e vale, dia a dia — para saber quanto "
         "entrou em cada forma e conferir o caixa.",
         "cmv.relatorios", "vendas-pagamentos", ("periodo",), _vendas_pagamentos),
+    # 🔑 O recebimento de notas (162, pedido do dono de 24/11/2026).
+    "recebimentos": Relatorio(
+        "Recebimento de notas",
+        "As notas que chegaram com a mercadoria: quem recebeu, quando, e se já estão no sistema.",
+        "compras.receber", "recebimento-de-notas", ("periodo", "situacao_recebimento"),
+        _recebimentos),
     # 🔑 A conferência do caixa (161, etapa 3 das finalizadoras).
     "caixa": Relatorio(
         "Conferência do caixa",
@@ -3589,7 +3628,7 @@ GRUPOS = {
     "saldos": "Estoque", "saldos-rede": "Estoque", "movimentos": "Estoque", "vencimentos": "Estoque",
     "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
     "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
-    "vendas-pagamentos": "Vendas", "caixa": "Vendas",
+    "vendas-pagamentos": "Vendas", "caixa": "Vendas", "recebimentos": "Compras",
     "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
     "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
     "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",

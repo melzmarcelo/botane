@@ -56,6 +56,7 @@ from routers import (
     fidelidade,
     ordens_compra,
     patrimonio,
+    recebimentos,
     pedidos,
     traducao,
     precificacao,
@@ -102,7 +103,7 @@ from seguranca import PREFIXO_TOKEN_API, decodificar_token, hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.3.21"
+VERSAO = "1.3.22"
 
 
 def conferir_segredo() -> None:
@@ -555,6 +556,8 @@ app.include_router(patrimonio.router)
 app.include_router(ordens_compra.router)
 # 🔑 Caixa e taxas por forma (161, 24/11/2026): finalizadoras, etapas 3 e 4.
 app.include_router(caixa.router)
+# 🔑 Recebimento de notas (162, 24/11/2026): registrar que a nota chegou, com foto.
+app.include_router(recebimentos.router)
 
 
 @app.get("/saude", tags=["infra"])

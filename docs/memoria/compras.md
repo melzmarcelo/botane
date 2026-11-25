@@ -5,6 +5,26 @@
 
 ## O que já existe
 
+- 🔑 **Recebimento de notas** (1.3.22, migração 162, 24/11/2026, pedido do dono: *"o usuário
+  pode informar que recebeu a nota X do fornecedor Y da data Z e anexar uma foto, como opcional.
+  Pois um usuário recebe a nota e produtos e acaba perdendo e quem repassa ela para o sistema
+  acaba não recebendo, seria somente para registro"*). Tela `compras/recebimentos/`,
+  `routers/recebimentos.py`, `services/recebimentos.py`, tabela `recebimentos`, relatório
+  `recebimentos`, permissão nova `compras.receber` (a equipe da ordem de compra).
+  - 🔑 **Só registro**: não mexe em estoque, custo nem na nota de entrada.
+  - 🔑 **A situação é CONTA na leitura**, não coluna: LATERAL em `notas_entrada` pelo número
+    normalizado (sem pontuação e zeros à esquerda, maiúsculas) e pelo fornecedor (sem cadastro,
+    pelo nome do emitente). FALTA / NO_SISTEMA (importada ou conciliada) / LANCADA — muda
+    sozinha quando a nota chega do Omie.
+  - 🔑 **A foto mora em `arquivos` (banco)** e sai SÓ por `GET /recebimentos/{id}/foto`
+    (autenticada, `api.imagem` no front com a loja). ⚠️ `/arquivos/{nome}` é pública (feita para
+    a logo) e o nome da foto nunca vai ao cliente.
+  - ⚠️ **A tela reduz a foto antes de enviar** (`lib/imagem.ts`, JPEG até 1600 px): a do celular
+    passa dos 2 MB do servidor. Medido: 13,7 MB de ruído viraram 618 KB.
+  - Mesma nota duas vezes: 409 com quem registrou; passa com `mesmo_assim` (outra entrega).
+    Apagar: quem registrou, ou quem tem `compras.notas`.
+  - Cobertura: `smoke_recebimentos.py` e `verificar-recebimentos.mjs`.
+
 - 🔑 **Ordem de compra, etapa 1** (1.3.16, migração 158, 23/11/2026, pedido do dono: *"o usuario
   adiciona itens que precisam ser comprar, informa a quantidade e um observação opcional. E
   conforme estes pedidos vão sendo compras estes podem ir saindo da lista e entram em outra como

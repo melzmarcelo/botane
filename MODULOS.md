@@ -64,12 +64,12 @@ faria a produção de ontem mudar de valor sozinha.
 
 ## Compras
 
-Notas de entrada (XML, digitação, conciliação e lançamento no razão) e a ordem de compra.
+Notas de entrada (XML, digitação, conciliação e lançamento no razão), a ordem de compra e o recebimento de notas.
 
-- **Rotas:** `notas.py`, `ordens_compra.py`
-- **Serviços:** `nfe_xml.py`, `ean_das_notas.py`, `notas_lote.py` (lançar as conciliadas de uma vez, com prévia), `ordens_compra.py`
-- **Telas:** `compras/`, `compras/[id]/`, `compras/nova/`, `compras/ordens/` (com a janela de sugestões do mínimo, `?sugestoes=1`; roteiro `verificar-ordens-compra.mjs`)
-- **Permissões:** `compras.notas`, `compras.conciliar`, `compras.lancar`, `compras.ordem_solicitar`, `compras.ordem_comprar`
+- **Rotas:** `notas.py`, `ordens_compra.py`, `recebimentos.py`
+- **Serviços:** `nfe_xml.py`, `ean_das_notas.py`, `notas_lote.py` (lançar as conciliadas de uma vez, com prévia), `ordens_compra.py`, `recebimentos.py` (suíte `smoke_recebimentos.py`)
+- **Telas:** `compras/`, `compras/[id]/`, `compras/nova/`, `compras/ordens/` (com a janela de sugestões do mínimo, `?sugestoes=1`; roteiro `verificar-ordens-compra.mjs`), `compras/recebimentos/` (roteiro `verificar-recebimentos.mjs`)
+- **Permissões:** `compras.notas`, `compras.conciliar`, `compras.lancar`, `compras.ordem_solicitar`, `compras.ordem_comprar`, `compras.receber`
 
 ⚠️ **A nota só vira estoque no LANÇAMENTO**, não na importação: o XML entra como
 documento, e é a conciliação item→produto que decide o que baixa.

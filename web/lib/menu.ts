@@ -80,6 +80,9 @@ export const MENU: GrupoMenu[] = [
     icone: "nota",
     itens: [
       { href: "/compras", nome: "Notas de entrada", icone: "nota", chave: "compras.notas" },
+      // 🔑 Recebimento de notas (162, 24/11/2026): quem recebeu, e se a nota chegou ao sistema.
+      { href: "/compras/recebimentos", nome: "Recebimento de notas", icone: "nota",
+        chave: ["compras.receber", "compras.notas"] },
       {
         href: "/compras/ordens",
         nome: "Ordem de compra",
