@@ -6,13 +6,21 @@ import type { NextRequest } from "next/server";
  *
  * 🔑 **Pedido do dono (15/10/2026):** *"o site de reserva e cardápio ficou parecendo dois
  * sistemas separados… gostaria que esta parte fosse toda no reservas."* O site (`public/portal`)
- * e o feed do Cardápio Vivo (`/c/...`) são servidos por este app; no domínio `reservas.*`:
+ * e o feed do Cardápio Vivo (`/c/...`) são servidos por este app; no domínio do cliente
+ * (`app.*`, e o antigo `reservas.*`):
  *   - `/` abre o site;
  *   - `/c/...` (o feed), `/portal/...` e o que o Next serve (`/_next`, ícones) passam;
  *   - qualquer tela INTERNA redireciona ao início — o cliente não tropeça no login da equipe.
  * Em qualquer outro domínio (o do sistema, e em casa) `/portal` também abre o site, para testar.
  * ⚠️ A API não passa por aqui: no App Platform `/api` é outro componente, roteado antes.
  */
+
+/**
+ * Os domínios do CLIENTE. 🔑 **25/11/2026 — pedido do dono:** o site passa de `reservas.*` para
+ * `app.*`. Os dois continuam valendo: link e QR antigos em `reservas` não podem quebrar.
+ */
+const DOMINIOS_DO_CLIENTE = ["app.", "reservas."];
+const doCliente = (host: string) => DOMINIOS_DO_CLIENTE.some((d) => host.startsWith(d));
 
 const DO_CLIENTE = /^\/(c\/|portal\/|_next\/|favicon|icone|apple-touch|manifest|robots)/;
 
@@ -21,7 +29,7 @@ export function proxy(request: NextRequest) {
   const host = (request.headers.get("host") ?? "").toLowerCase();
   const site = new URL("/portal/index.html", request.url);
 
-  if (host.startsWith("reservas.")) {
+  if (doCliente(host)) {
     if (pathname === "/" || pathname === "/portal" || pathname === "/portal/") return NextResponse.rewrite(site);
     if (DO_CLIENTE.test(pathname)) return NextResponse.next();
     // ⚠️ O destino sai do DOMÍNIO pedido, não de `request.url`: atrás do roteador do App

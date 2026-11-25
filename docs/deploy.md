@@ -404,7 +404,20 @@ cota. Uma chave vazada de quem tem `integracao.omie` poderia gastá-la. Ver
   local — mas não conte com isso como única proteção)
 - Promover sem a bateria de testes ter passado na base local
 
-## O site do cliente — `reservas.botanedeliecafe.com.br`
+## O site do cliente — `app.botanedeliecafe.com.br` (antes `reservas.`)
+
+> 🔑 **25/11/2026 — o endereço passou a `app.botanedeliecafe.com.br` (pedido do dono).**
+> `reservas.*` continua valendo: QR impresso e link divulgado não podem quebrar.
+> - **DO, app `botane`** (App Spec, só acréscimos): domínio `app…` como ALIAS, regra de
+>   ingress `authority: app…` → `web` (cópia da de `reservas`) e `https://app…` no
+>   `CORS_ORIGINS` da `api`.
+> - **HostGator**: CNAME `app` → `botane-app-zqokg.ondigitalocean.app`. ⚠️ O dono tinha
+>   RENOMEADO o `reservas` para `app` — o `reservas` sumiu do DNS (NXDOMAIN) e o site ficou
+>   fora do ar até o CNAME `reservas` ser recriado. Trocar domínio é ACRESCENTAR, nunca renomear.
+> - **Código**: `web/proxy.ts` (`DOMINIOS_DO_CLIENTE`) e `enderecoDoSite()` reconhecem `app.` e
+>   `reservas.`. Sem isso, `app.*` abre o login da equipe na raiz.
+> - **No sistema**: o endereço do site dos QR (`fidelidade_config.site_url`, tela de QR codes)
+>   passa a `https://app…` — os QR novos saem com ele.
 
 > 🔑 **15/10/2026 — um endereço e um layout só (pedido do dono).** O dono confirmou que o
 > `reservas` no ar é a pasta `site/` deste repositório. Ela continua sendo a fonte, e o app
