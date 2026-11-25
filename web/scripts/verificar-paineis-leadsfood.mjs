@@ -7,12 +7,20 @@
  *      cidades, origem) — e o botão que leva a ele na lista de Clientes;
  *   2. Reservas ▸ Painel: ano contra ano e sazonalidade;
  *   3. Fidelidade ▸ Painel: check-ins por mês e por dia, e os dois rankings (o nome abre a ficha).
- * ⚠️ Só lê: nada é criado. Os números dependem da base, então a régua é a própria API.
+ * ⚠️ Só lê, com UMA exceção: se a base não tem reserva em mês fechado, cria um histórico de
+ * teste (`_historia_reservas.py`) e apaga no fim — sem ele não há gráfico para conferir.
+ * Os números dependem da base, então a régua é a própria API.
  *
  *    node scripts/verificar-paineis-leadsfood.mjs   (API na 9200 e web na 3100 de pé)
  *    FOTOS=pasta node scripts/...                   (guarda uma foto de cada tela)
  */
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
 import puppeteer from "puppeteer-core";
+
+const HISTORIA = fileURLToPath(new URL("./_historia_reservas.py", import.meta.url));
+const historia = (acao) => console.log("  ", execFileSync("python", [HISTORIA, acao], { encoding: "utf-8" }).trim());
 
 const CHROME = process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const API = process.env.BOTANE_API ?? "http://127.0.0.1:9200";
@@ -37,7 +45,14 @@ const login = await (await fetch(API + "/auth/login", {
 const token = login.access_token;
 
 const { status: s1, dados: cli } = await api("/reservas/clientes/painel", token);
-const { status: s2, dados: res } = await api("/reservas/painel?meses=12", token);
+let { status: s2, dados: res } = await api("/reservas/painel?meses=12", token);
+// ⚠️ A base local já ficou sem reserva nenhuma (25/11/2026): sem histórico, sem gráfico.
+let criouHistoria = false;
+if (s2 === 200 && !res.sazonalidade.length) {
+  historia("criar");
+  criouHistoria = true;
+  ({ status: s2, dados: res } = await api("/reservas/painel?meses=12", token));
+}
 const { status: s3, dados: fid } = await api("/fidelidade/painel/graficos", token);
 console.log("0. a API");
 checar("as três rotas respondem", s1 === 200 && s2 === 200 && s3 === 200, { s1, s2, s3 });
@@ -168,6 +183,7 @@ try {
   }
 } finally {
   await navegador.close();
+  if (criouHistoria) historia("apagar");
 }
 
 console.log(`\n${ok} passaram, ${falhas.length} falharam`);

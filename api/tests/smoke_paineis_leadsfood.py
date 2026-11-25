@@ -329,12 +329,16 @@ try:
            and len(aa_d["meses"]) == aa_d["ate_mes"])
 
     def soma_saz(p, mes):
+        # ⚠️ Base sem nenhuma reserva antes deste mês: a sazonalidade vem VAZIA (é a regra do
+        # serviço), e a conta de antes vale zero — não é erro de índice (25/11/2026).
+        if not p["sazonalidade"]:
+            return 0
         x = p["sazonalidade"][mes - 1]
         return (x["reservas"] or 0) * x["anos"]
 
     checar("sazonalidade de janeiro: a soma dos janeiros cresce 4 (1 + 3)",
            abs(soma_saz(r_dep, 1) - soma_saz(r_antes, 1) - 4) < 0.1 * max(1, r_dep["sazonalidade"][0]["anos"]),
-           (r_antes["sazonalidade"][0], r_dep["sazonalidade"][0]))
+           ((r_antes["sazonalidade"] or [None])[0], r_dep["sazonalidade"][0]))
     checar("a reserva de hoje não mexe na sazonalidade do mês corrente",
            abs(soma_saz(r_dep, HOJE.month) - soma_saz(r_antes, HOJE.month)) < 0.1 * max(1, r_dep["sazonalidade"][HOJE.month - 1]["anos"]))
     with get_cursor() as cur:
