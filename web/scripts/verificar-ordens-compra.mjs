@@ -256,7 +256,8 @@ try {
   checar("para a cozinha, o botão diz que vai para aprovação",
     /Enviar para aprovação/.test(await c.$eval("#ordem-adicionar", (e) => e.innerText).catch(() => "")));
   async function pedirLivre(pg, texto) {
-    await clicar(pg, "#ordem-alternar");
+    // ⚠️ Depois de um pedido, o formulário continua em "fora do cadastro": alternar de novo voltava à busca.
+    if (!(await pg.$("#ordem-descricao"))) await clicar(pg, "#ordem-alternar");
     await pg.waitForSelector("#ordem-descricao");
     await pg.waitForFunction(() => document.querySelectorAll("#ordem-um option").length > 1, { timeout: 15000 });
     await pg.type("#ordem-descricao", texto);
