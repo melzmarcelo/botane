@@ -2641,16 +2641,25 @@ try {
   // ⚠️ **Espera limitada pelo link, não um sono fixo.** A agenda vem do
   // servidor e a lista cresceu com a base: a checagem media a tela antes de a
   // linha existir e acusava a agenda de não abrir a folha.
+  // ⚠️ **A linha DESTA suíte, nunca a primeira da agenda** (25/11/2026): com a
+  // bateria da API rodando ao mesmo tempo, a agenda tinha quatro linhas de
+  // amanhã das suítes de lá, antes da nossa — a folha aberta era de outra
+  // receita, sem modo de preparo, e a checagem acusava a folha de não tê-lo.
+  const minhaFolha = dAgenda?.id ? `/producao/${dAgenda.id}` : null;
   await p.waitForFunction(
-    () => [...document.querySelectorAll("a")]
-      .some((x) => /\/producao\/\d+$/.test(x.getAttribute("href") ?? "")),
-    { timeout: 15000 },
+    (alvo) => [...document.querySelectorAll("a")].some((x) => {
+      const h = x.getAttribute("href") ?? "";
+      return alvo ? h === alvo : /\/producao\/\d+$/.test(h);
+    }),
+    { timeout: 15000 }, minhaFolha,
   ).catch(() => {});
-  const alvoFolha = await p.evaluate(() => {
-    const a = [...document.querySelectorAll("a")].find((x) =>
-      /\/producao\/\d+$/.test(x.getAttribute("href") ?? ""));
+  const alvoFolha = await p.evaluate((alvo) => {
+    const a = [...document.querySelectorAll("a")].find((x) => {
+      const h = x.getAttribute("href") ?? "";
+      return alvo ? h === alvo : /\/producao\/\d+$/.test(h);
+    });
     return a ? a.getAttribute("href") : null;
-  });
+  }, minhaFolha);
   // ⚠️ Navegar de verdade, não `a.click()` de dentro da página: o clique
   // sintético saía sem a navegação do Next e a checagem media a tela errada.
   if (alvoFolha) await irPara(p, `${WEB}${alvoFolha}`);
