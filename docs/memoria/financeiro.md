@@ -43,7 +43,19 @@
   - Não entra no CMV nem no estoque.
   - Cobertura: `smoke_contas_pagar.py` (37) e `verificar-contas-pagar.mjs` (13).
 
+- 🔑 **Painel, etapa 2** (1.3.24, 25/11/2026, sem migração). Tela `financeiro/painel/` (primeiro
+  item do grupo, mesmas três chaves), `GET /contas-pagar/painel?de&ate` (sem período = o mês
+  corrente; período invertido ou maior que um ano = 422) e `contas_pagar.painel`, que o relatório
+  `painel-financeiro` também usa (um só cálculo para a tela e o papel).
+  - 🔑 **Dois recortes**: "pela frente" NÃO depende do período (resumo, os próximos 14 dias dia a
+    dia, as baixas automáticas dos últimos 7 dias para conferir no banco); "o período" separa
+    **pago (pela data do pagamento) × em aberto (pelo vencimento)** — a mesma regra da tela de
+    contas — por categoria, pessoa e forma. Cancelada não entra em nada.
+  - Os números e os dias levam para Contas a pagar já filtrada (aba e `de`/`ate` na URL).
+  - ⚠️ O relatório põe as categorias no quadro e pessoa, forma, próximos dias e baixadas sozinhas
+    nos anexos — que o `/exportar/{rel}/dados` não traz; o teste chama `_painel_financeiro` direto.
+  - Cobertura: `smoke_contas_pagar.py` (50) e `verificar-contas-pagar.mjs` (18).
+
 ## Etapas seguintes (do estudo)
 
-2. Painel (vence hoje, semana, atrasado; total por categoria no mês). 3. Recorrência e parcelas.
-4. Fluxo de caixa (a receber × a pagar).
+3. Recorrência e parcelas. 4. Fluxo de caixa (a receber × a pagar).

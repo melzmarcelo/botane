@@ -156,6 +156,21 @@ try {
   checar("agendada para hoje, já aparece paga com baixa automática",
     auto.length === 1 && /baixa automática/.test(auto[0].texto), auto);
 
+  console.log("6b. o painel (etapa 2)");
+  await p.goto(`${WEB}/financeiro/painel`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector("#painel-frente", { timeout: 60000 }).catch(() => {});
+  checar("o painel está no menu do Financeiro e abre", !!(await p.$('aside a[href="/financeiro/painel"]')) && !!(await p.$("#painel-frente")));
+  await p.waitForSelector(`[data-linha-painel="${nomes[0]}"]`, { timeout: 15000 }).catch(() => {});
+  const naPessoa = await p.$eval(`[data-linha-painel="${nomes[0]}"]`, (e) => e.innerText).catch(() => "");
+  checar("por pessoa, o que foi pago hoje no mês", /150,00/.test(naPessoa), naPessoa);
+  const sozinhas = await p.$eval("#painel-sozinhas", (e) => e.innerText).catch(() => "");
+  checar("a baixa automática de hoje aparece para conferir no banco", sozinhas.includes(nomes[1]), sozinhas.slice(0, 200));
+  await p.click("#painel-mes-passado");
+  await p.waitForFunction(() => /de=/.test(location.search), { timeout: 10000 }).catch(() => {});
+  await esperar(800);
+  const semPessoa = !(await p.$(`[data-linha-painel="${nomes[0]}"]`));
+  checar("no mês passado o pagamento de hoje não aparece", semPessoa);
+
   console.log("7. cadastro e celular");
   await p.goto(`${WEB}/fornecedores/${ids[0]}`, { waitUntil: "networkidle2", timeout: 180000 });
   await p.waitForSelector("#pessoa-chave-pix", { timeout: 30000 }).catch(() => {});
@@ -167,6 +182,11 @@ try {
   await esperar(500);
   const larg = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, tela: window.innerWidth }));
   checar("no celular a página não rola de lado", larg.doc <= larg.tela, larg);
+  await p.goto(`${WEB}/financeiro/painel`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector("#painel-frente", { timeout: 60000 }).catch(() => {});
+  await esperar(500);
+  const largP = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, tela: window.innerWidth }));
+  checar("no celular o painel não rola de lado", largP.doc <= largP.tela, largP);
 } finally {
   await navegador.close();
   const { dados } = await api("GET", `/contas-pagar?status=PAGO&status=A_PAGAR&status=AGENDADO&busca=${MARCA}&limite=100`, undefined, token);

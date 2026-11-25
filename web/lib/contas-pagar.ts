@@ -52,6 +52,18 @@ export type Resumo = {
 
 export type Categoria = { id: number; nome: string; ativo: boolean };
 
+/** Pago (pela data do pagamento) × em aberto (pelo vencimento) num recorte do painel. */
+export type NumerosPainel = { pago: number; n_pago: number; em_aberto: number; n_em_aberto: number; total: number };
+export type Painel = {
+  hoje: string; de: string; ate: string; resumo: Resumo;
+  agenda: { data: string; contas: number; valor: number; agendado: number }[];
+  baixadas_sozinhas: { id: number; pessoa: string; descricao: string; valor: number; pago_em: string; forma: Forma | null }[];
+  periodo: NumerosPainel;
+  por_categoria: (NumerosPainel & { categoria: string })[];
+  por_pessoa: (NumerosPainel & { id_pessoa: number; pessoa: string })[];
+  por_forma: { forma: Forma; rotulo: string; contas: number; valor: number }[];
+};
+
 export type NovaConta = {
   id_pessoa: number; id_categoria: number | null; descricao: string; funcao: string | null;
   competencia: string; vencimento: string; valor: number; observacao: string | null;
@@ -63,6 +75,12 @@ export const listarContas = (q: URLSearchParams) =>
   api.get<{ itens: Conta[]; totais: { contas: number; valor: number; atrasadas: number } }>(
     `/contas-pagar?${q}`);
 export const resumoContas = () => api.get<Resumo>("/contas-pagar/resumo");
+export const painelFinanceiro = (de: string, ate: string) => {
+  const q = new URLSearchParams();
+  if (de) q.set("de", de);
+  if (ate) q.set("ate", ate);
+  return api.get<Painel>(`/contas-pagar/painel?${q}`);
+};
 export const categoriasFinanceiro = () => api.get<Categoria[]>("/contas-pagar/categorias");
 export const criarCategoria = (nome: string) => api.post<Msg>("/contas-pagar/categorias", { nome });
 export const alterarCategoria = (id: number, nome: string, ativo: boolean) =>

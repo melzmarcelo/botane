@@ -291,7 +291,9 @@ Memória: [`docs/memoria/financeiro.md`](docs/memoria/financeiro.md).
 
 - **Rotas:** `contas_pagar.py`
 - **Serviços:** `contas_pagar.py` (com o laço da baixa automática, em `main.py`)
-- **Telas:** `financeiro/pagar/` (roteiro `verificar-contas-pagar.mjs`); `receber/` mora em Vendas
+- **Telas:** `financeiro/painel/` e `financeiro/pagar/` (roteiro `verificar-contas-pagar.mjs`, que
+  cobre as duas); `receber/` mora em Vendas
+- **Relatórios:** `contas-pagar`, `pagamentos-pessoa`, `painel-financeiro`
 - **Permissões:** `financeiro.pagar_ver`, `financeiro.pagar_lancar`, `financeiro.pagar_baixar`
 - **Suíte:** `smoke_contas_pagar.py`
 

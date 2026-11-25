@@ -5,13 +5,14 @@ agendar e cancelar) e baixar (pagar, comprovante, estorno). Ver `services/contas
 ⚠️ O comprovante sai só por rota autenticada: `/arquivos/{nome}` é pública.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 
 import arquivos
 import auditoria
+import relogio
 from database import get_cursor
 from models.contas_pagar import (
     AgendarRequest,
@@ -62,6 +63,22 @@ def resumo(ctx: Contexto = Depends(_ver)) -> dict:
     with get_cursor() as cur:
         servico.baixar_e_registrar(cur)
         return servico.resumo(cur, unidade_atual(cur, ctx))
+
+
+@router.get("/painel")
+def painel(de: date | None = None, ate: date | None = None,
+           ctx: Contexto = Depends(_ver)) -> dict:
+    """O painel do Financeiro (etapa 2): o que vem pela frente e o período (o mês, se vazio)."""
+    hoje = relogio.hoje_da_casa()
+    inicio = de or hoje.replace(day=1)
+    fim = ate or (inicio.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    if fim < inicio:
+        raise HTTPException(status_code=422, detail="O fim do período vem antes do início.")
+    if (fim - inicio).days > 400:
+        raise HTTPException(status_code=422, detail="Escolha um período de até um ano.")
+    with get_cursor() as cur:
+        servico.baixar_e_registrar(cur)
+        return servico.painel(cur, unidade_atual(cur, ctx), inicio, fim)
 
 
 @router.get("/categorias")

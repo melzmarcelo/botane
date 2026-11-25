@@ -161,6 +161,9 @@ export const MENU: GrupoMenu[] = [
     grupo: "Financeiro",
     icone: "preco",
     itens: [
+      // 🔑 Etapa 2 (25/11/2026): o que vence pela frente e o mês, pago × em aberto.
+      { href: "/financeiro/painel", nome: "Painel", icone: "grafico",
+        chave: ["financeiro.pagar_ver", "financeiro.pagar_lancar", "financeiro.pagar_baixar"] },
       // ⚠️ **Não entra com `cmv.painel`.** Esta tela mostra o que cada PESSOA deve — dívida
       // individual, não número de negócio — e a chave do painel é a mais larga da casa.
       {

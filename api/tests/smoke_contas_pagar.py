@@ -229,6 +229,39 @@ checar("os pagos somam pelo valor pago (140 + 120 + 100,50)", igual(l["totais"][
 s, r = chamar("POST", "/contas-pagar/cancelar", {"ids": [d["id"]]}, token=token)
 checar("cancelar a aberta", s == 200 and conta(d["id"])["status"] == "CANCELADO", (s, r))
 
+print("6b. o painel (etapa 2)")
+s, f1 = chamar("POST", "/contas-pagar", {**base, "id_pessoa": pessoas[1], "competencia": str(hoje),
+                                         "vencimento": str(hoje + timedelta(days=3)), "valor": 77,
+                                         "descricao": f"Futura {marca}"}, token=token)
+criadas.append(f1["id"])
+s, g = chamar("POST", "/contas-pagar", {**base, "id_pessoa": pessoas[2], "competencia": str(ontem),
+                                        "vencimento": str(ontem), "valor": 33,
+                                        "descricao": f"Sozinha {marca}"}, token=token)
+criadas.append(g["id"])
+chamar("POST", "/contas-pagar/agendar", {"ids": [g["id"]], "data": str(ontem), "forma": "PIX"}, token=token)
+s, pn = chamar("GET", f"/contas-pagar/painel?de={hoje}&ate={hoje}", token=token)
+checar("o painel responde", s == 200 and "agenda" in pn and "periodo" in pn, (s, str(pn)[:300]))
+pp = {x["id_pessoa"]: x for x in pn.get("por_pessoa", [])}
+checar("por pessoa, pago no período pela data do pagamento (140, 120 + 0, 100,50)",
+       igual(pp.get(pessoas[0], {}).get("pago"), 140) and igual(pp.get(pessoas[1], {}).get("pago"), 120)
+       and igual(pp.get(pessoas[2], {}).get("pago"), 100.5), {k: pp.get(k) for k in pessoas})
+checar("a cancelada não entra (a pessoa 0 não tem nada em aberto hoje)",
+       igual(pp.get(pessoas[0], {}).get("em_aberto"), 0), pp.get(pessoas[0]))
+checar("a futura fora do período não entra no período", igual(pp.get(pessoas[1], {}).get("em_aberto"), 0),
+       pp.get(pessoas[1]))
+dia = next((a for a in pn.get("agenda", []) if a["data"] == str(hoje + timedelta(days=3))), None)
+checar("a agenda dos próximos dias traz a futura", dia is not None and dia["valor"] >= 77, pn.get("agenda"))
+checar("a baixada sozinha ontem aparece para conferir",
+       any(x["id"] == g["id"] for x in pn.get("baixadas_sozinhas", [])), pn.get("baixadas_sozinhas"))
+formas = {x["forma"]: x["valor"] for x in pn.get("por_forma", [])}
+checar("pago por forma: dinheiro e Pix do teste", formas.get("DINHEIRO", 0) >= 140 and formas.get("PIX", 0) >= 220.5, formas)
+checar("o total do período soma pago + em aberto",
+       igual(pn["periodo"]["total"], pn["periodo"]["pago"] + pn["periodo"]["em_aberto"]), pn.get("periodo"))
+s, pm = chamar("GET", "/contas-pagar/painel", token=token)
+checar("sem período, é o mês corrente", s == 200 and pm["de"] == str(hoje.replace(day=1)), (s, pm.get("de")))
+s, _ = chamar("GET", f"/contas-pagar/painel?de={hoje}&ate={ontem}", token=token)
+checar("período invertido: 422", s == 422, s)
+
 print("7. permissões")
 _s, papeis = chamar("GET", "/papeis", token=token)
 cozinha = next(p for p in papeis if p["nome"] == "Cozinha")
@@ -243,6 +276,8 @@ s, _ = chamar("GET", "/contas-pagar", token=tk)
 checar("a cozinha não vê as contas a pagar: 403", s == 403, s)
 s, _ = chamar("POST", "/contas-pagar", base, token=tk)
 checar("nem lança: 403", s == 403, s)
+s, _ = chamar("GET", "/contas-pagar/painel", token=tk)
+checar("nem vê o painel: 403", s == 403, s)
 
 print("8. relatórios")
 for rel in ("contas-pagar", "pagamentos-pessoa"):
@@ -250,6 +285,16 @@ for rel in ("contas-pagar", "pagamentos-pessoa"):
                       token=token)
     checar(f"o relatório {rel} responde com as contas do teste",
            s == 200 and marca in json.dumps(dados, ensure_ascii=False, default=str), (s, str(dados)[:200]))
+s, dados = chamar("GET", f"/exportar/painel-financeiro/dados?inicio={hoje}&fim={hoje}", token=token)
+checar("o relatório do painel responde, com a categoria Freelancer",
+       s == 200 and "Freelancer" in json.dumps(dados, ensure_ascii=False, default=str), (s, str(dados)[:200]))
+from services import exportacao_catalogo as ec  # noqa: E402 — os anexos não saem pelo /dados
+from database import get_cursor  # noqa: E402
+with get_cursor() as cur:
+    saida = ec._painel_financeiro(cur, matriz, {"inicio": hoje, "fim": hoje})
+titulos = [a[2] for a in saida.anexos]
+checar("o relatório do painel traz pessoa, forma, próximos dias e baixadas sozinhas",
+       len(titulos) == 4 and "Por pessoa" in titulos, titulos)
 
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 if falhas:

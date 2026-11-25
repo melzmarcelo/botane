@@ -2337,6 +2337,43 @@ def _pagamentos_pessoa(cur, id_unidade: int, f: dict) -> Saida:
         inicio, fim)
 
 
+def _painel_financeiro(cur, id_unidade: int, f: dict) -> Saida:
+    """O painel do Financeiro (etapa 2) impresso: o mesmo `contas_pagar.painel` da tela."""
+    from services import contas_pagar as cp
+    inicio, fim = _periodo(f)
+    d = cp.painel(cur, id_unidade, inicio, fim)
+    cem = lambda v: Decimal(str(v)).quantize(Decimal("0.01"))
+    r, per = d["resumo"], d["periodo"]
+    numeros = lambda x: {"pago": cem(x["pago"]), "em_aberto": cem(x["em_aberto"]),
+                         "total": cem(x["total"]), "contas": x["n_pago"] + x["n_em_aberto"]}
+    colunas = [("pago", "Pago"), ("em_aberto", "Em aberto"), ("total", "Total"), ("contas", "Contas")]
+    return Saida(
+        [{"categoria": c["categoria"], **numeros(c)} for c in d["por_categoria"]],
+        [("categoria", "Categoria"), *colunas],
+        "Painel do financeiro",
+        [("Período", _intervalo(inicio, fim)),
+         ("Pago no período", cem(per["pago"])), ("Em aberto no período", cem(per["em_aberto"])),
+         ("Atrasado hoje", cem(r["atrasado"])), ("Vence hoje", cem(r["hoje"])),
+         ("Próximos 7 dias", cem(r["semana"])), ("Agendado", cem(r["agendado"]))],
+        inicio, fim,
+        anexos=[
+            ([{"pessoa": p["pessoa"], **numeros(p)} for p in d["por_pessoa"]],
+             [("pessoa", "Pessoa"), *colunas], "Por pessoa", None),
+            ([{"forma": x["rotulo"], "contas": x["contas"], "valor": cem(x["valor"])}
+              for x in d["por_forma"]],
+             [("forma", "Forma"), ("contas", "Contas"), ("valor", "Pago")], "Pago por forma", None),
+            ([{"data": a["data"], "contas": a["contas"], "valor": cem(a["valor"]),
+               "agendado": cem(a["agendado"])} for a in d["agenda"]],
+             [("data", "Vencimento"), ("contas", "Contas"), ("valor", "Valor"),
+              ("agendado", "Já agendado")], f"Próximos {cp.DIAS_AGENDA} dias", None),
+            ([{"pago_em": s["pago_em"], "pessoa": s["pessoa"], "descricao": s["descricao"],
+               "valor": cem(s["valor"])} for s in d["baixadas_sozinhas"]],
+             [("pago_em", "Pago em"), ("pessoa", "Pessoa"), ("descricao", "Descrição"),
+              ("valor", "Valor")], "Baixadas sozinhas nos últimos 7 dias (conferir no banco)", None),
+        ],
+    )
+
+
 FILTROS["situacao_pagar"] = {
     "tipo": "multipla", "rotulo": "Situação", "ajuda": "a pagar, agendadas e pagas",
     "opcoes": lambda _c, _u: [{"valor": "A_PAGAR", "nome": "a pagar"},
@@ -3625,6 +3662,11 @@ RELATORIOS: dict[str, Relatorio] = {
         "O que foi pago a cada pessoa no período — o extrato do freelancer.",
         "financeiro.pagar_ver", "pagamentos-por-pessoa", ("periodo", "categorias_financeiro"),
         _pagamentos_pessoa),
+    "painel-financeiro": Relatorio(
+        "Painel do financeiro",
+        "Pago × em aberto no período por categoria, pessoa e forma; atrasado, o que vence nos "
+        "próximos dias e as baixas automáticas para conferir no banco.",
+        "financeiro.pagar_ver", "painel-do-financeiro", ("periodo",), _painel_financeiro),
     # 🔑 O recebimento de notas (162, pedido do dono de 24/11/2026).
     "recebimento-notas": Relatorio(
         "Recebimento de notas",
@@ -3722,7 +3764,7 @@ GRUPOS = {
     "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
     "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
     "vendas-pagamentos": "Vendas", "caixa": "Vendas", "recebimento-notas": "Compras",
-    "contas-pagar": "Financeiro", "pagamentos-pessoa": "Financeiro",
+    "contas-pagar": "Financeiro", "pagamentos-pessoa": "Financeiro", "painel-financeiro": "Financeiro",
     "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
     "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
     "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",

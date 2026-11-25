@@ -8,8 +8,9 @@ que é, vencimento, se já foi agendado, se já foi pago; caso agendado, na data
 automática. Anexo do comprovante."*
 
 Estado: **etapa 1 construída em 24/11/2026** (1.3.23, migração 163), com as oito decisões da
-seção 3 (o CPF entrou no campo de documento que já existia). O que foi decidido está em
-`docs/memoria/financeiro.md`; as etapas 2 a 4 seguem por fazer.
+seção 3 (o CPF entrou no campo de documento que já existia). **Etapa 2 (painel) construída em
+25/11/2026** (1.3.24, sem migração). O que foi decidido está em `docs/memoria/financeiro.md`; as
+etapas 3 e 4 seguem por fazer.
 
 ## 1. O que já existe e serve
 

@@ -102,6 +102,86 @@ def resumo(cur, id_unidade: int) -> dict:
     return {k: (float(v) if not k.startswith(("n_", "pagos")) else v) for k, v in r.items()}
 
 
+DIAS_AGENDA = 14
+
+
+def painel(cur, id_unidade: int, inicio: date, fim: date) -> dict:
+    """O painel do Financeiro (etapa 2, 25/11/2026): o que vem pela frente e o mês.
+
+    🔑 Duas perguntas, dois recortes:
+    - **o que vem pela frente** não depende do período: atrasado, os próximos 14 dias dia a dia
+      e as baixas automáticas dos últimos 7 dias (alguém confere no banco);
+    - **o mês** (ou o período escolhido): pago (pela data do pagamento) × ainda em aberto (pelo
+      vencimento), por categoria, por pessoa e por forma.
+    ⚠️ Cancelada não entra em nada.
+    """
+    hoje = relogio.hoje_da_casa()
+    p = {"u": id_unidade, "h": hoje, "de": inicio, "ate": fim, "dias": DIAS_AGENDA - 1}
+
+    cur.execute(
+        """SELECT vencimento AS data, count(*) AS contas, sum(valor) AS valor,
+                  coalesce(sum(valor) FILTER (WHERE status = 'AGENDADO'), 0) AS agendado
+             FROM contas_pagar
+            WHERE id_unidade = %(u)s AND status IN ('A_PAGAR', 'AGENDADO')
+              AND vencimento BETWEEN %(h)s AND %(h)s + %(dias)s
+            GROUP BY vencimento ORDER BY vencimento""", p)
+    agenda = [{"data": r["data"], "contas": r["contas"], "valor": float(r["valor"]),
+               "agendado": float(r["agendado"])} for r in cur.fetchall()]
+
+    cur.execute(
+        f"""SELECT c.id, coalesce(f.nome_fantasia, f.nome) AS pessoa, c.descricao,
+                   c.valor_pago AS valor, c.pago_em, c.forma
+              {_JUNTAS}
+             WHERE c.id_unidade = %(u)s AND c.status = 'PAGO' AND c.baixado_automaticamente
+               AND c.pago_em BETWEEN %(h)s - 6 AND %(h)s
+             ORDER BY c.pago_em DESC, lower(coalesce(f.nome_fantasia, f.nome)), c.id""", p)
+    sozinhas = [dict(r) | {"valor": float(r["valor"])} for r in cur.fetchall()]
+
+    # O período: pago pela data do pagamento, em aberto pelo vencimento — a mesma regra da tela.
+    _no_periodo = """((c.status = 'PAGO' AND c.pago_em BETWEEN %(de)s AND %(ate)s)
+                      OR (c.status IN ('A_PAGAR', 'AGENDADO') AND c.vencimento BETWEEN %(de)s AND %(ate)s))"""
+    _somas = """coalesce(sum(c.valor_pago) FILTER (WHERE c.status = 'PAGO'), 0) AS pago,
+                count(*) FILTER (WHERE c.status = 'PAGO') AS n_pago,
+                coalesce(sum(c.valor) FILTER (WHERE c.status <> 'PAGO'), 0) AS em_aberto,
+                count(*) FILTER (WHERE c.status <> 'PAGO') AS n_em_aberto"""
+
+    def _numeros(r) -> dict:
+        return {"pago": float(r["pago"]), "n_pago": r["n_pago"],
+                "em_aberto": float(r["em_aberto"]), "n_em_aberto": r["n_em_aberto"],
+                "total": float(r["pago"] + r["em_aberto"])}
+
+    cur.execute(f"SELECT {_somas} FROM contas_pagar c WHERE c.id_unidade = %(u)s AND {_no_periodo}", p)
+    periodo = _numeros(cur.fetchone())
+
+    cur.execute(
+        f"""SELECT coalesce(cat.nome, 'Sem categoria') AS categoria, {_somas}
+              FROM contas_pagar c LEFT JOIN financeiro_categorias cat ON cat.id = c.id_categoria
+             WHERE c.id_unidade = %(u)s AND {_no_periodo}
+             GROUP BY cat.nome ORDER BY sum(coalesce(c.valor_pago, c.valor)) DESC""", p)
+    por_categoria = [{"categoria": r["categoria"], **_numeros(r)} for r in cur.fetchall()]
+
+    cur.execute(
+        f"""SELECT c.id_pessoa, coalesce(f.nome_fantasia, f.nome) AS pessoa, {_somas}
+              FROM contas_pagar c JOIN fornecedores f ON f.id = c.id_pessoa
+             WHERE c.id_unidade = %(u)s AND {_no_periodo}
+             GROUP BY c.id_pessoa, f.nome_fantasia, f.nome
+             ORDER BY sum(coalesce(c.valor_pago, c.valor)) DESC""", p)
+    por_pessoa = [{"id_pessoa": r["id_pessoa"], "pessoa": r["pessoa"], **_numeros(r)}
+                  for r in cur.fetchall()]
+
+    cur.execute(
+        """SELECT coalesce(c.forma, 'OUTRO') AS forma, count(*) AS contas, sum(c.valor_pago) AS valor
+             FROM contas_pagar c
+            WHERE c.id_unidade = %(u)s AND c.status = 'PAGO' AND c.pago_em BETWEEN %(de)s AND %(ate)s
+            GROUP BY 1 ORDER BY sum(c.valor_pago) DESC""", p)
+    por_forma = [{"forma": r["forma"], "rotulo": FORMAS.get(r["forma"], r["forma"]),
+                  "contas": r["contas"], "valor": float(r["valor"])} for r in cur.fetchall()]
+
+    return {"hoje": hoje, "de": inicio, "ate": fim, "resumo": resumo(cur, id_unidade),
+            "agenda": agenda, "baixadas_sozinhas": sozinhas, "periodo": periodo,
+            "por_categoria": por_categoria, "por_pessoa": por_pessoa, "por_forma": por_forma}
+
+
 def _pessoa(cur, id_pessoa: int) -> dict:
     cur.execute("SELECT id, coalesce(nome_fantasia, nome) AS nome, ativo FROM fornecedores WHERE id = %s",
                 (id_pessoa,))
