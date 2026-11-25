@@ -21,7 +21,10 @@ import {
   lancarConta,
   lancarEquipe,
   pagarContas,
+  ratear,
+  somarMeses,
   ultimoDaPessoa,
+  dataBr,
 } from "@/lib/contas-pagar";
 import { reduzirFoto } from "@/lib/imagem";
 import { textoParaNumero, reais } from "@/lib/numeros";
@@ -71,8 +74,16 @@ export function JanelaConta({ conta, categorias, aoFechar, aoSalvar }: {
   const [vencimento, setVencimento] = useState(conta?.vencimento ?? hojeIso());
   const [valor, setValor] = useState(paraCampo(conta?.valor));
   const [obs, setObs] = useState(conta?.observacao ?? "");
+  // 🔑 Parcelar (etapa 3, 167): só ao lançar. Com 2 ou mais, o valor é o TOTAL da compra.
+  const [parcelas, setParcelas] = useState("1");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const nParcelas = Math.min(60, Math.max(1, Math.floor(Number(parcelas) || 1)));
+  const parcelado = !conta && nParcelas > 1;
+  const valorNum = textoParaNumero(valor) ?? 0;
+  const previa = parcelado && valorNum > 0
+    ? ratear(valorNum, nParcelas).map((v, i) => ({ v, venc: somarMeses(vencimento, i) }))
+    : [];
 
   async function escolherPessoa(id: number, rotulo: string) {
     setPessoa({ id, rotulo });
@@ -95,7 +106,8 @@ export function JanelaConta({ conta, categorias, aoFechar, aoSalvar }: {
       const corpo = { id_pessoa: pessoa.id, id_categoria: categoria, descricao: descricao.trim(),
                       funcao: funcao.trim() || null, competencia, vencimento, valor: n,
                       observacao: obs.trim() || null };
-      const r = conta ? await corrigirConta(conta.id, corpo) : await lancarConta(corpo);
+      const r = conta ? await corrigirConta(conta.id, corpo)
+        : await lancarConta(parcelado ? { ...corpo, parcelas: nParcelas } : corpo);
       aoSalvar(r.message);
     } catch (x) {
       setErro(x instanceof Error ? x.message : "Não foi possível salvar");
@@ -104,11 +116,12 @@ export function JanelaConta({ conta, categorias, aoFechar, aoSalvar }: {
   }
 
   return (
-    <Modal titulo={conta ? `Corrigir conta nº ${conta.id}` : "Nova conta a pagar"} aoFechar={aoFechar} largura="640px"
+    <Modal titulo={conta ? `Corrigir conta nº ${conta.id}${conta.parcelas ? ` (parcela ${conta.parcela}/${conta.parcelas})` : ""}`
+                         : "Nova conta a pagar"} aoFechar={aoFechar} largura="640px"
            rodape={<div className="flex justify-end gap-2">
              <button type="button" className="btn" onClick={aoFechar}>Cancelar</button>
              <button type="button" className="btn btn-primario" id="conta-salvar" disabled={ocupado}
-                     onClick={() => void salvar()}>{conta ? "Salvar" : "Lançar"}</button>
+                     onClick={() => void salvar()}>{conta ? "Salvar" : parcelado ? `Lançar ${nParcelas} parcelas` : "Lançar"}</button>
            </div>}>
       <form onSubmit={salvar} className="grid gap-4 sm:grid-cols-2">
         {erro && <div className="sm:col-span-2"><Aviso tipo="erro">{erro}</Aviso></div>}
@@ -131,17 +144,32 @@ export function JanelaConta({ conta, categorias, aoFechar, aoSalvar }: {
           <input type="date" className="campo" id="conta-competencia" value={competencia}
                  onChange={(e) => setCompetencia(e.target.value)} />
         </Campo>
-        <Campo rotulo="Vencimento">
+        <Campo rotulo={parcelado ? "1º vencimento" : "Vencimento"}>
           <input type="date" className="campo" id="conta-vencimento" value={vencimento}
                  onChange={(e) => setVencimento(e.target.value)} />
         </Campo>
-        <Campo rotulo="Valor">
+        {!conta && (
+          <Campo rotulo="Parcelas" dica="uma por mês; 1 = à vista">
+            <input className="campo text-right" id="conta-parcelas" inputMode="numeric" value={parcelas}
+                   onFocus={(e) => e.target.select()}
+                   onChange={(e) => setParcelas(e.target.value.replace(/\D/g, "").slice(0, 2))} />
+          </Campo>
+        )}
+        <Campo rotulo={parcelado ? "Valor total" : "Valor"}>
           <input className="campo text-right" id="conta-valor" inputMode="decimal" placeholder="0,00"
                  value={valor} onFocus={(e) => e.target.select()} onChange={(e) => setValor(e.target.value)} />
         </Campo>
-        <Campo rotulo="Observação" opcional>
+        <Campo rotulo="Observação" opcional className={conta ? "" : "sm:col-span-2"}>
           <input className="campo" maxLength={300} value={obs} onChange={(e) => setObs(e.target.value)} />
         </Campo>
+        {previa.length > 0 && (
+          <div className="rounded-lg bg-erva-claro/60 px-3 py-2 text-[13px] sm:col-span-2" id="conta-previa-parcelas">
+            <p className="font-semibold">{nParcelas} parcelas, somando {reais(valorNum)}:</p>
+            <p className="mono mt-1 leading-relaxed">
+              {previa.map((p, i) => `${i + 1}ª ${dataBr(p.venc)} ${reais(p.v)}`).join(" · ")}
+            </p>
+          </div>
+        )}
       </form>
     </Modal>
   );

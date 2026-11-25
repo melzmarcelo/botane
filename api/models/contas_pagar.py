@@ -11,7 +11,7 @@ Valor = Field(gt=0, max_digits=14, decimal_places=2)
 Forma = Literal["PIX", "TRANSFERENCIA", "BOLETO", "DINHEIRO", "CARTAO", "OUTRO"]
 
 
-class ContaCreate(BaseModel):
+class _ContaBase(BaseModel):
     id_pessoa: int
     id_categoria: int | None = None
     descricao: str = Field(min_length=1, max_length=200)
@@ -22,8 +22,37 @@ class ContaCreate(BaseModel):
     observacao: str | None = Field(default=None, max_length=300)
 
 
-class ContaUpdate(ContaCreate):
+class ContaCreate(_ContaBase):
+    # 🔑 Parcelar (etapa 3, migração 167): com 2 ou mais, `valor` é o TOTAL da compra, rateado em
+    # centavos, e o `vencimento` é o da primeira parcela; as outras, um mês depois cada.
+    parcelas: int = Field(default=1, ge=1, le=60)
+
+
+class ContaUpdate(_ContaBase):
     pass
+
+
+class ContaFixaRequest(BaseModel):
+    """A conta fixa (migração 167): o molde que gera a conta de cada mês."""
+
+    id_pessoa: int
+    id_categoria: int | None = None
+    descricao: str = Field(min_length=1, max_length=180)
+    valor: Decimal = Valor
+    valor_variavel: bool = False
+    dia_vencimento: int = Field(ge=1, le=31)
+    # Qualquer dia do mês serve: vale o mês (a API guarda o dia 1º).
+    inicio: date
+    fim: date | None = None
+    antecedencia_dias: int = Field(default=10, ge=0, le=60)
+    agendar: bool = False
+    forma: Forma | None = None
+    observacao: str | None = Field(default=None, max_length=300)
+
+
+class EncerrarFixaRequest(BaseModel):
+    # Cancela também as já geradas que vencem de hoje em diante e estão em aberto.
+    cancelar_abertas: bool = False
 
 
 class ItemEquipe(BaseModel):

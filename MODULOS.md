@@ -293,12 +293,13 @@ Contas a pagar; no menu, também as contas a receber (cujo código e memória co
 Memória: [`docs/memoria/financeiro.md`](docs/memoria/financeiro.md).
 
 - **Rotas:** `contas_pagar.py`
-- **Serviços:** `contas_pagar.py` (com o laço da baixa automática, em `main.py`)
-- **Telas:** `financeiro/painel/` e `financeiro/pagar/` (roteiro `verificar-contas-pagar.mjs`, que
-  cobre as duas); `receber/` mora em Vendas
-- **Relatórios:** `contas-pagar`, `pagamentos-pessoa`, `painel-financeiro`
+- **Serviços:** `contas_pagar.py` (com o laço da baixa automática, em `main.py`, que também gera
+  as contas fixas do mês) e `contas_fixas.py` (etapa 3, migração 167)
+- **Telas:** `financeiro/painel/` e `financeiro/pagar/` (com a janela das contas fixas em
+  `fixas.tsx`; roteiro `verificar-contas-pagar.mjs`, que cobre as duas); `receber/` mora em Vendas
+- **Relatórios:** `contas-pagar`, `contas-fixas`, `pagamentos-pessoa`, `painel-financeiro`
 - **Permissões:** `financeiro.pagar_ver`, `financeiro.pagar_lancar`, `financeiro.pagar_baixar`
-- **Suíte:** `smoke_contas_pagar.py`
+- **Suítes:** `smoke_contas_pagar.py` e `smoke_contas_fixas.py`
 
 ⚠️ **Não entra no CMV nem no estoque.** A pessoa é do cadastro de Pessoas (que ganhou a chave Pix).
 

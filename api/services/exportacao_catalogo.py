@@ -2316,7 +2316,10 @@ def _contas_pagar(cur, id_unidade: int, f: dict) -> Saida:
                          + (" — automática" if r["baixado_automaticamente"] else ""),
                          "forma_rotulo": cp.FORMAS.get(r["forma"] or "", ""),
                          "valor": cem(r["valor"]), "valor_pago": cem(r["valor_pago"]),
-                         "comprovante": "sim" if r["tem_comprovante"] else ""}
+                         "comprovante": "sim" if r["tem_comprovante"] else "",
+                         # Etapa 3 (167): a parcela (2/3) ou a marca de conta fixa.
+                         "origem": (f"parcela {r['parcela']}/{r['parcelas']}" if r["parcelas"]
+                                    else "conta fixa" if r["id_conta_fixa"] else "")}
               for r in cur.fetchall()]
     total = sum(((l["valor_pago"] or l["valor"]) for l in linhas), Decimal(0))
     por_categoria: dict = {}
@@ -2326,7 +2329,8 @@ def _contas_pagar(cur, id_unidade: int, f: dict) -> Saida:
     return Saida(
         linhas,
         [("vencimento", "Vencimento"), ("pessoa", "Pessoa"), ("categoria", "Categoria"),
-         ("descricao", "Descrição"), ("funcao", "Função"), ("competencia", "Competência"),
+         ("descricao", "Descrição"), ("origem", "Parcela / fixa"), ("funcao", "Função"),
+         ("competencia", "Competência"),
          ("valor", "Valor"), ("situacao", "Situação"), ("agendado_para", "Agendado para"),
          ("pago_em", "Pago em"), ("valor_pago", "Valor pago"), ("forma_rotulo", "Forma"),
          ("chave_pix", "Chave Pix"), ("comprovante", "Comprovante")],
@@ -2336,6 +2340,40 @@ def _contas_pagar(cur, id_unidade: int, f: dict) -> Saida:
         anexos=[([{"categoria": k, "valor": v} for k, v in sorted(por_categoria.items())],
                  [("categoria", "Categoria"), ("valor", "Valor")], "Por categoria", None)],
     )
+
+
+def _contas_fixas(cur, id_unidade: int, f: dict) -> Saida:
+    """167 — as contas fixas (aluguel, internet, luz): quanto, que dia vence e o próximo mês.
+    ⚠️ A lista da tela (`contas_fixas.listar`), para o papel não mostrar outra."""
+    from services import contas_fixas as cf
+    from services import contas_pagar as cp
+    data = lambda d: d.strftime("%d/%m/%Y") if d else ""
+    mes = lambda d: d.strftime("%m/%Y") if d else ""
+    linhas = []
+    for x in cf.listar(cur, id_unidade, incluir_encerradas=True):
+        prox = x["proxima"]
+        linhas.append({
+            "descricao": x["descricao"], "pessoa": x["pessoa"], "categoria": x["categoria"],
+            "valor": Decimal(x["valor"]).quantize(Decimal("0.01")),
+            "tipo_valor": "previsto (varia)" if x["valor_variavel"] else "fixo",
+            "dia": x["dia_vencimento"], "inicio": mes(x["inicio"]), "fim": mes(x["fim"]) or "sem fim",
+            "pagamento": (f"agendada ({cp.FORMAS.get(x['forma'], '')})" if x["agendar"]
+                          else cp.FORMAS.get(x["forma"] or "", "")),
+            "proxima": data(prox["vencimento"]) if prox else "",
+            "nasce_em": data(prox["gera_em"]) if prox else "",
+            "situacao": "ativa" if x["ativo"] else "encerrada",
+        })
+    ativas = [l for l in linhas if l["situacao"] == "ativa"]
+    return Saida(
+        linhas,
+        [("descricao", "Conta"), ("pessoa", "Pessoa"), ("categoria", "Categoria"), ("valor", "Valor"),
+         ("tipo_valor", "Valor é"), ("dia", "Dia do vencimento"), ("inicio", "Desde"), ("fim", "Até"),
+         ("pagamento", "Pagamento"), ("proxima", "Próximo vencimento"), ("nasce_em", "Nasce em"),
+         ("situacao", "Situação")],
+        "Contas fixas",
+        [("Ativas", len(ativas)),
+         ("Total por mês das ativas", sum((l["valor"] for l in ativas), Decimal(0)))],
+        None, None)
 
 
 def _pagamentos_pessoa(cur, id_unidade: int, f: dict) -> Saida:
@@ -3692,6 +3730,11 @@ RELATORIOS: dict[str, Relatorio] = {
         "As contas do período por situação — a pagar (pelo vencimento), agendadas e pagas (pela "
         "data do pagamento) —, com a chave Pix e o total por categoria.",
         "financeiro.pagar_ver", "contas-a-pagar", ("periodo", "situacao_pagar"), _contas_pagar),
+    "contas-fixas": Relatorio(
+        "Contas fixas",
+        "O aluguel, a internet, a luz: cada conta fixa com o valor, o dia do vencimento e o próximo "
+        "mês que vai nascer nas contas a pagar.",
+        "financeiro.pagar_ver", "contas-fixas", (), _contas_fixas),
     "pagamentos-pessoa": Relatorio(
         "Pagamentos por pessoa",
         "O que foi pago a cada pessoa no período — o extrato do freelancer.",
@@ -3799,7 +3842,7 @@ GRUPOS = {
     "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
     "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
     "vendas-pagamentos": "Vendas", "caixa": "Vendas", "recebimento-notas": "Compras",
-    "contas-pagar": "Financeiro", "pagamentos-pessoa": "Financeiro", "painel-financeiro": "Financeiro",
+    "contas-pagar": "Financeiro", "contas-fixas": "Financeiro", "pagamentos-pessoa": "Financeiro", "painel-financeiro": "Financeiro",
     "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
     "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
     "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",

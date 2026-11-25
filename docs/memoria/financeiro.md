@@ -56,6 +56,39 @@
     nos anexos — que o `/exportar/{rel}/dados` não traz; o teste chama `_painel_financeiro` direto.
   - Cobertura: `smoke_contas_pagar.py` (50) e `verificar-contas-pagar.mjs` (18).
 
+- 🔑 **Contas fixas e parcelas, etapa 3** (1.3.27, migração 167, 25/11/2026, pedido do dono: *"pode
+  seguir com a etapa 3 do financeiro"*). `services/contas_fixas.py`, tabela `contas_fixas`,
+  colunas `contas_pagar.id_conta_fixa`, `parcela`, `parcelas`; janela `financeiro/pagar/fixas.tsx`
+  (botão "Contas fixas", para quem vê; editar e encerrar só com `pagar_lancar`); relatório
+  `contas-fixas`.
+  - 🔑 **Conta fixa = molde do mês** (pessoa, categoria, o que é, valor, dia do vencimento, primeiro
+    e último mês, antecedência). A conta de cada mês nasce em `contas_pagar` quando
+    `vencimento - antecedência <= hoje`, com competência no dia 1º do mês e a descrição
+    "Aluguel — nov/2026". Dia 31 em mês curto vence no último dia (`somar_meses`).
+  - 🔑 **Idempotência do banco** (regra 8): índice único `(id_conta_fixa, competencia)` e
+    `ON CONFLICT DO NOTHING`. A geração roda dentro de `baixar_e_registrar` (o laço de meia hora E
+    toda leitura da tela), ANTES da baixa automática, com auditoria `gerar_conta_fixa`.
+  - ⚠️ **Nunca volta para trás do último mês gerado**: começa no mês seguinte a ele (ou no início,
+    se for depois). Cancelar a conta de um mês não a faz nascer de novo (o mês segue ocupado).
+    Início no passado gera os meses atrasados de uma vez (foi o que a pessoa pediu).
+  - ⚠️ **Mudar a conta fixa vale para os meses que ainda não nasceram**; a gerada se corrige nela.
+    Encerrar para de gerar; com "cancelar as em aberto", cancela as geradas que vencem de hoje em
+    diante (as atrasadas ficam: são dívida). Reativar volta a gerar **a partir deste mês** (o
+    início vai para o mês corrente): os meses encerrados não nascem atrasados.
+  - **Débito automático** (`agendar`, exige `forma`): nasce AGENDADA para o vencimento com baixa
+    automática — então uma conta fixa de débito com início no passado nasce e é baixada na mesma
+    passada. **Valor variável** (luz, água): a observação avisa "valor previsto: corrija quando a
+    fatura chegar".
+  - 🔑 **Parcelar**: `POST /contas-pagar` com `parcelas` 2–60; `valor` é o TOTAL, rateado em
+    centavos com a sobra nas primeiras (`contas_pagar.ratear`, espelhado em `lib/contas-pagar.ts`
+    para a prévia da janela); o `vencimento` é o da 1ª e as outras um mês depois cada; mesma
+    competência; lote `PC…`. Corrigir mexe numa parcela só. A linha e o relatório mostram
+    "parcela 2/3" e "conta fixa".
+  - ⚠️ O teste simula datas futuras com `contas_fixas.gerar(hoje=..., so_ids=[...])`: sem
+    `so_ids`, uma data de 2031 geraria anos de contas para as contas fixas DE VERDADE da base.
+    O roteiro do navegador encerra a conta fixa de teste no fim, senão ela gera todo mês.
+  - Cobertura: `smoke_contas_fixas.py` (47) e `verificar-contas-pagar.mjs` seção 8 (25 no total).
+
 ## Etapas seguintes (do estudo)
 
-3. Recorrência e parcelas. 4. Fluxo de caixa (a receber × a pagar).
+4. Fluxo de caixa (a receber × a pagar).

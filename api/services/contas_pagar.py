@@ -31,7 +31,7 @@ _COLUNAS = """
     c.id, c.id_unidade, c.id_pessoa, c.id_categoria, c.descricao, c.funcao, c.competencia,
     c.vencimento, c.valor, c.observacao, c.status, c.agendado_para, c.forma, c.baixa_automatica,
     c.pago_em, c.valor_pago, c.baixado_automaticamente, (c.comprovante IS NOT NULL) AS tem_comprovante,
-    c.lote, c.criado_em,
+    c.lote, c.criado_em, c.id_conta_fixa, c.parcela, c.parcelas,
     coalesce(f.nome_fantasia, f.nome) AS pessoa, f.chave_pix, f.cnpj AS documento,
     cat.nome AS categoria, uc.nome AS criado_por_nome, up.nome AS pago_por_nome,
     (c.status IN ('A_PAGAR', 'AGENDADO') AND c.vencimento < %(hoje)s) AS atrasada"""
@@ -214,6 +214,37 @@ def lancar(cur, id_unidade: int, id_usuario: int, dados: dict, lote: str | None 
     return {"id": cur.fetchone()["id"], "pessoa": p["nome"]}
 
 
+def ratear(total, n: int) -> list:
+    """O valor total em `n` parcelas, em centavos: a sobra vai nas primeiras (100/3 = 33,34 +
+    33,33 + 33,33). ⚠️ Decimal, nunca float: a soma das parcelas é SEMPRE o total."""
+    from decimal import Decimal
+    centavos = int((Decimal(total) * 100).to_integral_value())
+    base, sobra = divmod(centavos, n)
+    return [Decimal(base + (1 if i < sobra else 0)) / 100 for i in range(n)]
+
+
+def lancar_parcelado(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
+    """🔑 Uma compra em N vezes (etapa 3, migração 167): N contas, uma por mês a partir do
+    vencimento informado, com `parcela`/`parcelas` e o mesmo `lote`. O `valor` é o TOTAL.
+    A competência é a mesma em todas (o dia da compra). Tudo ou nada."""
+    from services.contas_fixas import somar_meses
+    n = dados["parcelas"]
+    lote = f"PC{secrets.token_hex(4)}"
+    valores = ratear(dados["valor"], n)
+    ids = []
+    for i, v in enumerate(valores):
+        r = lancar(cur, id_unidade, id_usuario,
+                   {**dados, "valor": v, "vencimento": somar_meses(dados["vencimento"], i)}, lote)
+        cur.execute("UPDATE contas_pagar SET parcela = %s, parcelas = %s WHERE id = %s",
+                    (i + 1, n, r["id"]))
+        ids.append(r["id"])
+    maior, menor = max(valores), min(valores)
+    cada = (f"{n}x de R$ {maior:.2f}" if maior == menor
+            else f"{n}x (R$ {maior:.2f} nas primeiras, R$ {menor:.2f} nas demais)")
+    return {"ids": ids, "lote": lote, "pessoa": r["pessoa"],
+            "message": f"Compra parcelada em {cada.replace('.', ',')}."}
+
+
 def lancar_equipe(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
     """Uma conta por pessoa da equipe do dia, todas no mesmo lote. Tudo ou nada."""
     pessoas = [i["id_pessoa"] for i in dados["itens"]]
@@ -345,8 +376,18 @@ def baixar_agendadas(cur, hoje: date | None = None) -> list[dict]:
 
 
 def baixar_e_registrar(cur) -> int:
-    """`baixar_agendadas` com a auditoria de cada uma — o laço e a tela usam esta."""
+    """`baixar_agendadas` com a auditoria de cada uma — o laço e a tela usam esta.
+
+    🔑 Antes da baixa, gera as contas fixas do mês que chegou (etapa 3, 167): a conta fixa de
+    débito automático que nasce já vencida é baixada na mesma passada.
+    """
     import auditoria
+    from services import contas_fixas
+    for g in contas_fixas.gerar(cur):
+        auditoria.registrar(cur, None, "conta_pagar", g["id"], "gerar_conta_fixa",
+                            depois={"id_conta_fixa": g["id_conta_fixa"], "mes": str(g["mes"]),
+                                    "valor": str(g["valor"])},
+                            id_unidade=g["id_unidade"])
     feitas = baixar_agendadas(cur)
     for b in feitas:
         auditoria.registrar(cur, None, "conta_pagar", b["id"], "baixa_automatica",

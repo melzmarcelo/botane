@@ -23,6 +23,7 @@ import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { reais } from "@/lib/numeros";
 import { useSessao } from "@/lib/sessao";
 
+import { JanelaFixas } from "./fixas";
 import {
   JanelaAgendar,
   JanelaAnexar,
@@ -39,6 +40,8 @@ import {
  * 🔑 Três abas pela situação: A pagar · Agendados · Pagos. O agendado com baixa automática vira
  * pago sozinho na data. A lista se agrupa por pessoa — "quanto cada freelancer tem a receber" —
  * e "pagar todas" de uma pessoa usa um comprovante só.
+ * 🔑 Etapa 3 (167): as contas fixas (aluguel, internet, luz) geram a conta de cada mês sozinhas,
+ * e a nova conta pode ser parcelada. A linha marca "parcela 2/3" e "conta fixa".
  * ⚠️ Não mexe em CMV nem estoque.
  */
 
@@ -78,6 +81,7 @@ export default function PaginaContasPagar() {
   const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
   const [janela, setJanela] = useState<
     | { tipo: "nova" } | { tipo: "corrigir"; conta: Conta } | { tipo: "equipe" } | { tipo: "categorias" }
+    | { tipo: "fixas" }
     | { tipo: "agendar"; contas: Conta[] } | { tipo: "pagar"; contas: Conta[] }
     | { tipo: "anexar"; contas: Conta[] } | { tipo: "comprovante"; conta: Conta } | null>(null);
   const [confirmar, setConfirmar] = useState<{ acao: "estornar" | "cancelar"; contas: Conta[] } | null>(null);
@@ -154,6 +158,16 @@ export default function PaginaContasPagar() {
             {!porPessoa && <>{c.pessoa} <span className="font-normal text-suave">· </span></>}
             <span className={porPessoa ? "" : "font-normal"}>{c.descricao}</span>
             {c.funcao && <span className="font-normal text-suave"> · {c.funcao}</span>}
+            {c.parcelas && (
+              <span className="ml-2 rounded-full bg-superficie2 px-2 py-0.5 text-[12px] font-semibold" data-parcela>
+                parcela {c.parcela}/{c.parcelas}
+              </span>
+            )}
+            {c.id_conta_fixa && (
+              <span className="ml-2 rounded-full bg-superficie2 px-2 py-0.5 text-[12px] font-semibold" data-conta-fixa>
+                conta fixa
+              </span>
+            )}
           </p>
           <p className="text-[12.5px] text-suave">
             {c.categoria ?? "sem categoria"} · competência {dataBr(c.competencia)}
@@ -203,12 +217,14 @@ export default function PaginaContasPagar() {
       <CabecalhoTela caminho="Financeiro" titulo="Contas a pagar"
                      explica={<>O que a casa tem a pagar: freelancers, fornecedores, contas. Agende o
                        pagamento e, na data, o sistema dá baixa sozinho; ou pague à mão e anexe o
-                       comprovante. Não mexe no estoque nem no CMV.</>}
+                       comprovante. As contas fixas (aluguel, internet) nascem sozinhas todo mês, e
+                       uma compra pode ser parcelada. Não mexe no estoque nem no CMV.</>}
                      acoes={<div className="flex flex-wrap gap-2">
                        {podeLancar && <>
                          <button type="button" className="btn btn-primario" id="pagar-nova" onClick={() => setJanela({ tipo: "nova" })}>Nova conta</button>
                          <button type="button" className="btn btn-secundario" id="pagar-equipe" onClick={() => setJanela({ tipo: "equipe" })}>Lançar equipe do dia</button>
                        </>}
+                       <button type="button" className="btn btn-secundario" id="pagar-fixas" onClick={() => setJanela({ tipo: "fixas" })}>Contas fixas</button>
                        <BotaoExportar relatorio="contas-pagar" iniciais={{ situacao_pagar: [abaAtual] }} />
                      </div>} />
 
@@ -324,6 +340,10 @@ export default function PaginaContasPagar() {
       {janela?.tipo === "pagar" && <JanelaPagar contas={janela.contas} aoFechar={() => fechar()} aoSalvar={fechar} />}
       {janela?.tipo === "anexar" && <JanelaAnexar contas={janela.contas} aoFechar={() => fechar()} aoSalvar={fechar} />}
       {janela?.tipo === "comprovante" && <JanelaComprovante conta={janela.conta} aoFechar={() => fechar()} />}
+      {janela?.tipo === "fixas" && (
+        <JanelaFixas categorias={categorias} podeLancar={podeLancar}
+                     aoFechar={(mudou) => { setJanela(null); if (mudou) void carregar(); }} />
+      )}
       {janela?.tipo === "categorias" && (
         <JanelaCategorias categorias={categorias} aoFechar={() => fechar()} aoMudar={carregarCategorias} />
       )}

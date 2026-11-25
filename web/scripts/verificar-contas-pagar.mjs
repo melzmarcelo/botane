@@ -6,7 +6,9 @@
  *   4. agrupar por pessoa e "Pagar todas" com comprovante → vai para Pagos com Comprovante;
  *   5. o comprovante abre (rota autenticada);
  *   6. agendar para hoje com baixa automática → aparece em Pagos, automática;
- *   7. o cadastro de Pessoas tem a chave Pix; no celular a página não rola de lado.
+ *   7. o cadastro de Pessoas tem a chave Pix; no celular a página não rola de lado;
+ *   8. etapa 3 (167): parcelar mostra a prévia e lança "parcela 1/3"; a conta fixa que vence hoje
+ *      nasce na hora em A pagar, marcada; encerrar cancelando as em aberto tira a conta da lista.
  * O que o roteiro cria é estornado e cancelado no fim.
  *
  *    node scripts/verificar-contas-pagar.mjs   (API na 9200 e web na 3100 de pé)
@@ -171,6 +173,77 @@ try {
   const semPessoa = !(await p.$(`[data-linha-painel="${nomes[0]}"]`));
   checar("no mês passado o pagamento de hoje não aparece", semPessoa);
 
+  console.log("8. parcelas e contas fixas (etapa 3)");
+  await p.goto(`${WEB}/financeiro/pagar`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector("#pagar-nova", { timeout: 60000 });
+  await p.click("#pagar-nova");
+  await p.waitForSelector("#conta-pessoa", { timeout: 10000 });
+  await p.click("#conta-pessoa");
+  await p.type("#conta-pessoa", nomes[0]);
+  await p.keyboard.press("Tab");
+  await esperar(800);
+  await p.type("#conta-descricao", `Forno tela ${MARCA}`);
+  await p.click("#conta-parcelas", { clickCount: 3 });
+  await p.type("#conta-parcelas", "3");
+  await p.click("#conta-valor", { clickCount: 3 });
+  await p.type("#conta-valor", "100");
+  await p.waitForSelector("#conta-previa-parcelas", { timeout: 5000 }).catch(() => {});
+  const previa = await p.$eval("#conta-previa-parcelas", (e) => e.innerText).catch(() => "");
+  checar("a prévia mostra as 3 parcelas, a sobra na primeira", /3 parcelas/.test(previa) && /33,34/.test(previa) && /33,33/.test(previa), previa);
+  checar("o botão diz quantas parcelas", /Lançar 3 parcelas/.test(await p.$eval("#conta-salvar", (e) => e.innerText)));
+  await p.click("#conta-salvar");
+  await p.waitForFunction((m) => [...document.querySelectorAll("[data-conta]")].filter((li) => li.innerText.includes(m)).length === 3,
+    { timeout: 20000 }, `Forno tela ${MARCA}`).catch(() => {});
+  const parcs = await linhaDe(p, `Forno tela ${MARCA}`);
+  checar("entram 3 contas, marcadas parcela 1/3 a 3/3",
+    parcs.length === 3 && [1, 2, 3].every((n) => parcs.some((x) => x.texto.includes(`parcela ${n}/3`))), parcs.map((x) => x.texto.slice(0, 80)));
+
+  await p.click("#pagar-fixas");
+  await p.waitForSelector("#fixas-janela", { timeout: 10000 });
+  await p.click("#fixa-nova");
+  await p.waitForSelector("#fixa-pessoa", { timeout: 10000 });
+  await p.click("#fixa-pessoa");
+  await p.type("#fixa-pessoa", nomes[1]);
+  await p.keyboard.press("Tab");
+  await esperar(800);
+  await p.type("#fixa-descricao", `Internet tela ${MARCA}`);
+  await p.type("#fixa-valor", "99,90");
+  await p.click("#fixa-dia", { clickCount: 3 });
+  await p.type("#fixa-dia", String(Number(HOJE.slice(8, 10))));
+  await p.click("#fixa-antecedencia", { clickCount: 3 });
+  await p.type("#fixa-antecedencia", "0");
+  await p.click("#fixa-salvar");
+  await p.waitForFunction((m) => [...document.querySelectorAll("[data-fixa]")].some((li) => li.innerText.includes(m)),
+    { timeout: 20000 }, `Internet tela ${MARCA}`).catch(() => {});
+  const fixaTxt = await p.evaluate((m) => [...document.querySelectorAll("[data-fixa]")]
+    .find((li) => li.innerText.includes(m))?.innerText ?? "", `Internet tela ${MARCA}`);
+  checar("a conta fixa aparece na lista, com o dia e a próxima", /todo dia/.test(fixaTxt) && /próxima: vence/.test(fixaTxt), fixaTxt);
+  await p.evaluate(() => [...document.querySelectorAll('[role="dialog"] [aria-label="fechar"]')].pop()?.click());
+  await p.waitForFunction(() => !document.querySelector("#fixas-janela"), { timeout: 10000 }).catch(() => {});
+  await p.waitForFunction((m) => [...document.querySelectorAll("[data-conta]")].some((li) => li.innerText.includes(m)),
+    { timeout: 20000 }, `Internet tela ${MARCA}`).catch(() => {});
+  const gerada = await linhaDe(p, `Internet tela ${MARCA}`);
+  checar("vencendo hoje, a conta deste mês já está em A pagar, marcada como conta fixa",
+    gerada.length === 1 && /conta fixa/.test(gerada[0].texto) && /99,90/.test(gerada[0].texto), gerada);
+
+  await p.click("#pagar-fixas");
+  await p.waitForSelector("#fixas-janela", { timeout: 10000 });
+  await p.waitForFunction((m) => [...document.querySelectorAll("[data-fixa]")].some((li) => li.innerText.includes(m)),
+    { timeout: 20000 }, `Internet tela ${MARCA}`).catch(() => {});
+  await p.evaluate((m) => [...document.querySelectorAll("[data-fixa]")]
+    .find((li) => li.innerText.includes(m))?.querySelector('[data-acao="encerrar-fixa"]')?.click(), `Internet tela ${MARCA}`);
+  await p.waitForSelector("#fixa-cancelar-abertas", { timeout: 10000 }).catch(() => {});
+  await p.click("#fixa-cancelar-abertas");
+  await p.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.innerText.trim() === "Encerrar" && !b.dataset.acao)?.click());
+  await p.waitForFunction((m) => ![...document.querySelectorAll("[data-fixa]")].some((li) => li.innerText.includes(m)),
+    { timeout: 15000 }, `Internet tela ${MARCA}`).catch(() => {});
+  checar("encerrada, sai da lista das ativas", !(await p.evaluate((m) => [...document.querySelectorAll("[data-fixa]")]
+    .some((li) => li.innerText.includes(m)), `Internet tela ${MARCA}`)));
+  await p.evaluate(() => [...document.querySelectorAll('[role="dialog"] [aria-label="fechar"]')].pop()?.click());
+  await p.waitForFunction((m) => ![...document.querySelectorAll("[data-conta]")].some((li) => li.innerText.includes(m)),
+    { timeout: 15000 }, `Internet tela ${MARCA}`).catch(() => {});
+  checar("e a conta em aberto dela foi cancelada", (await linhaDe(p, `Internet tela ${MARCA}`)).length === 0);
+
   console.log("7. cadastro e celular");
   await p.goto(`${WEB}/fornecedores/${ids[0]}`, { waitUntil: "networkidle2", timeout: 180000 });
   await p.waitForSelector("#pessoa-chave-pix", { timeout: 30000 }).catch(() => {});
@@ -189,6 +262,11 @@ try {
   checar("no celular o painel não rola de lado", largP.doc <= largP.tela, largP);
 } finally {
   await navegador.close();
+  // ⚠️ A conta fixa de teste ativa geraria uma conta por mês para sempre na base local.
+  const { dados: fx } = await api("GET", "/contas-pagar/fixas", undefined, token);
+  for (const f of (fx ?? []).filter((x) => x.descricao.includes(MARCA))) {
+    await api("POST", `/contas-pagar/fixas/${f.id}/encerrar`, { cancelar_abertas: true }, token);
+  }
   const { dados } = await api("GET", `/contas-pagar?status=PAGO&status=A_PAGAR&status=AGENDADO&busca=${MARCA}&limite=100`, undefined, token);
   const pagas = (dados?.itens ?? []).filter((c) => c.status === "PAGO").map((c) => c.id);
   if (pagas.length) await api("POST", "/contas-pagar/estornar", { ids: pagas }, token);

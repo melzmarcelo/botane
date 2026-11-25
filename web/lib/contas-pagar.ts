@@ -39,6 +39,10 @@ export type Conta = {
   baixado_automaticamente: boolean;
   tem_comprovante: boolean;
   lote: string | null;
+  /** Etapa 3 (migração 167): a conta gerada por uma conta fixa, ou a parcela (2 de 3). */
+  id_conta_fixa: number | null;
+  parcela: number | null;
+  parcelas: number | null;
   atrasada: boolean;
   criado_por_nome: string | null;
   pago_por_nome: string | null;
@@ -67,6 +71,22 @@ export type Painel = {
 export type NovaConta = {
   id_pessoa: number; id_categoria: number | null; descricao: string; funcao: string | null;
   competencia: string; vencimento: string; valor: number; observacao: string | null;
+  /** Com 2 ou mais, `valor` é o TOTAL e `vencimento` o da primeira parcela (167). */
+  parcelas?: number;
+};
+
+/** A conta fixa (167): o molde que gera a conta de cada mês. */
+export type ContaFixa = {
+  id: number; id_pessoa: number; pessoa: string; id_categoria: number | null; categoria: string | null;
+  descricao: string; valor: number | string; valor_variavel: boolean; dia_vencimento: number;
+  inicio: string; fim: string | null; antecedencia_dias: number; agendar: boolean; forma: Forma | null;
+  observacao: string | null; ativo: boolean; ultimo_mes: string | null; em_aberto: number;
+  proxima: { mes: string; vencimento: string; gera_em: string } | null;
+};
+export type NovaContaFixa = {
+  id_pessoa: number; id_categoria: number | null; descricao: string; valor: number;
+  valor_variavel: boolean; dia_vencimento: number; inicio: string; fim: string | null;
+  antecedencia_dias: number; agendar: boolean; forma: Forma | null; observacao: string | null;
 };
 
 type Msg = { message: string };
@@ -107,6 +127,35 @@ export function anexarComprovante(ids: number[], arquivo: File) {
   return api.upload<Msg>("/contas-pagar/comprovante", fd);
 }
 export const comprovanteDaConta = (id: number) => api.imagem(`/contas-pagar/${id}/comprovante`);
+
+export const listarFixas = (encerradas: boolean) =>
+  api.get<ContaFixa[]>(`/contas-pagar/fixas${encerradas ? "?encerradas=true" : ""}`);
+export const criarFixa = (c: NovaContaFixa) => api.post<Msg & { id: number; geradas: number[] }>("/contas-pagar/fixas", c);
+export const alterarFixa = (id: number, c: NovaContaFixa) => api.put<Msg>(`/contas-pagar/fixas/${id}`, c);
+export const encerrarFixa = (id: number, cancelar_abertas: boolean) =>
+  api.post<Msg>(`/contas-pagar/fixas/${id}/encerrar`, { cancelar_abertas });
+export const reativarFixa = (id: number) => api.post<Msg>(`/contas-pagar/fixas/${id}/reativar`, {});
+
+/**
+ * O total em `n` parcelas, em centavos, a sobra nas primeiras — o espelho de
+ * `contas_pagar.ratear` da API, para a prévia mostrar o que vai ser gravado.
+ */
+export function ratear(total: number, n: number): number[] {
+  const centavos = Math.round(total * 100);
+  const base = Math.floor(centavos / n);
+  const sobra = centavos - base * n;
+  return Array.from({ length: n }, (_, i) => (base + (i < sobra ? 1 : 0)) / 100);
+}
+
+/** O mesmo dia `n` meses depois; 31 em fevereiro vira o último dia (espelho de `somar_meses`). */
+export function somarMeses(iso: string, n: number): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  const total = a * 12 + (m - 1) + n;
+  const ano = Math.floor(total / 12);
+  const mes = (total % 12) + 1;
+  const ultimo = new Date(ano, mes, 0).getDate();
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(Math.min(d, ultimo)).padStart(2, "0")}`;
+}
 
 export const hojeIso = () =>
   new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);

@@ -18,13 +18,16 @@ from models.contas_pagar import (
     AgendarRequest,
     CategoriaRequest,
     ContaCreate,
+    ContaFixaRequest,
     ContaUpdate,
+    EncerrarFixaRequest,
     EquipeRequest,
     IdsRequest,
     PagarRequest,
 )
 from paginacao import pagina
 from seguranca import Contexto, requer_permissao, unidade_atual
+from services import contas_fixas
 from services import contas_pagar as servico
 
 router = APIRouter(prefix="/contas-pagar", tags=["contas a pagar"])
@@ -127,10 +130,72 @@ def ultimo_da_pessoa(id_pessoa: int, ctx: Contexto = Depends(_ver)) -> dict:
 def lancar(body: ContaCreate, ctx: Contexto = Depends(_lancar)) -> dict:
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        if body.parcelas > 1:
+            r = servico.lancar_parcelado(cur, id_unidade, ctx.id_usuario, body.model_dump())
+            _auditar(cur, ctx, r["ids"], "lancar", id_unidade, pessoa=r["pessoa"], lote=r["lote"],
+                     total=str(body.valor), parcelas=body.parcelas, descricao=body.descricao)
+            return r
         r = servico.lancar(cur, id_unidade, ctx.id_usuario, body.model_dump())
         _auditar(cur, ctx, [r["id"]], "lancar", id_unidade, pessoa=r["pessoa"],
                  valor=str(body.valor), vencimento=str(body.vencimento), descricao=body.descricao)
     return {**r, "message": f"Conta de {r['pessoa']} lançada."}
+
+
+# ---------------------------------------------------------------- contas fixas (167)
+
+@router.get("/fixas")
+def listar_fixas(encerradas: bool = False, ctx: Contexto = Depends(_ver)) -> list[dict]:
+    """As contas fixas da loja, com o próximo mês: quando vence e quando nasce."""
+    with get_cursor() as cur:
+        servico.baixar_e_registrar(cur)
+        return contas_fixas.listar(cur, unidade_atual(cur, ctx), encerradas)
+
+
+@router.post("/fixas", status_code=201)
+def criar_fixa(body: ContaFixaRequest, ctx: Contexto = Depends(_lancar)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = contas_fixas.criar(cur, id_unidade, ctx.id_usuario, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "conta_fixa", r["id"], "criar",
+                            depois={"descricao": body.descricao, "valor": str(body.valor),
+                                    "dia": body.dia_vencimento, "inicio": str(body.inicio)},
+                            id_unidade=id_unidade)
+    return r
+
+
+@router.put("/fixas/{id_fixa}")
+def alterar_fixa(id_fixa: int, body: ContaFixaRequest, ctx: Contexto = Depends(_lancar)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = contas_fixas.alterar(cur, id_unidade, id_fixa, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "conta_fixa", id_fixa, "alterar",
+                            antes=r.pop("antes"),
+                            depois={"descricao": body.descricao, "valor": str(body.valor),
+                                    "dia": body.dia_vencimento},
+                            id_unidade=id_unidade)
+    return {"id": id_fixa, **r}
+
+
+@router.post("/fixas/{id_fixa}/encerrar")
+def encerrar_fixa(id_fixa: int, body: EncerrarFixaRequest,
+                  ctx: Contexto = Depends(_lancar)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = contas_fixas.encerrar(cur, id_unidade, ctx.id_usuario, id_fixa, body.cancelar_abertas)
+        auditoria.registrar(cur, ctx.id_usuario, "conta_fixa", id_fixa, "encerrar",
+                            depois={"canceladas": r["canceladas"]}, id_unidade=id_unidade)
+        _auditar(cur, ctx, r["canceladas"], "cancelar", id_unidade, motivo="conta fixa encerrada")
+    return r
+
+
+@router.post("/fixas/{id_fixa}/reativar")
+def reativar_fixa(id_fixa: int, ctx: Contexto = Depends(_lancar)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = contas_fixas.reativar(cur, id_unidade, id_fixa)
+        auditoria.registrar(cur, ctx.id_usuario, "conta_fixa", id_fixa, "reativar",
+                            id_unidade=id_unidade)
+    return r
 
 
 @router.post("/equipe", status_code=201)

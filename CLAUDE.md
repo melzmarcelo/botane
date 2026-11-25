@@ -144,7 +144,7 @@ arquivo por módulo**. **Antes de mexer num módulo, leia o arquivo dele.**
 | Portal de Clientes (ex-Reservas) | [`reservas.md`](docs/memoria/reservas.md) | site do cliente, cadastro, reserva de mesa: parâmetro da loja, configuração, salões e mesas |
 | Etiquetas | [`etiquetas.md`](docs/memoria/etiquetas.md) | etiquetas de validade de produzidos, abertos e descongelados; QR, baixa e descarte |
 | Precificação | [`precificacao.md`](docs/memoria/precificacao.md) | configuração por loja (impostos, taxas, margem), análise e aplicação de preços, preço × custo |
-| Financeiro | [`financeiro.md`](docs/memoria/financeiro.md) | painel (pela frente × o mês) e contas a pagar (lançar, agendar, baixa automática, comprovante, equipe do dia); no menu, junto das contas a receber |
+| Financeiro | [`financeiro.md`](docs/memoria/financeiro.md) | painel (pela frente × o mês) e contas a pagar (lançar, agendar, baixa automática, comprovante, equipe do dia, contas fixas e parcelas); no menu, junto das contas a receber |
 | Patrimônio | [`patrimonio.md`](docs/memoria/patrimonio.md) | os bens (um por item), plaqueta com QR, importação da planilha, manutenção preventiva e corretiva, conferência pelas plaquetas, valor e depreciação |
 
 E o que atravessa todos, em [`docs/memoria/_transversais/`](docs/memoria/_transversais/):
