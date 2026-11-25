@@ -11189,7 +11189,7 @@ for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mj
                        "verificar-site-novo.mjs", "verificar-nota-produto-inativo.mjs", "verificar-cesta-nao-cobrar.mjs",
                        "verificar-assistente-whatsapp.mjs", "verificar-inicio-personalizado.mjs",
                        "verificar-ordens-compra.mjs", "verificar-venda-itens-pagamentos.mjs",
-                       "verificar-recebimentos.mjs"]) {
+                       "verificar-recebimentos.mjs", "verificar-contas-pagar.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {

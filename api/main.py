@@ -22,6 +22,7 @@ from services.omie import agenda as agenda_omie
 from services.pdv import agenda as agenda_pdv
 from services import whatsapp as whatsapp_servico
 from services import cardapio_vivo as cardapio_vivo_servico
+from services import contas_pagar as contas_pagar_servico
 import impressao
 from config import (
     ADMIN_EMAIL,
@@ -49,6 +50,7 @@ from routers import (
     cadastros,
     caixa,
     cardapio_anuncios,
+    contas_pagar,
     cardapio_vivo,
     catalogo_cartoes,
     catalogos,
@@ -103,7 +105,7 @@ from seguranca import PREFIXO_TOKEN_API, decodificar_token, hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.3.22"
+VERSAO = "1.3.23"
 
 
 def conferir_segredo() -> None:
@@ -282,7 +284,9 @@ async def lifespan(app: FastAPI):
                # 🔑 A fila do WhatsApp (099): envia o que venceu e varre os avisos de data.
                asyncio.create_task(whatsapp_servico.laco(parar)),
                # 🔑 Cardápio Vivo (113): agrega a atenção do dia e aplica a retenção (LGPD).
-               asyncio.create_task(cardapio_vivo_servico.laco(parar))]
+               asyncio.create_task(cardapio_vivo_servico.laco(parar)),
+               # 🔑 Contas a pagar (163): a baixa automática do que foi agendado.
+               asyncio.create_task(contas_pagar_servico.laco(parar))]
 
     print(f"[botane] API {VERSAO} pronta em http://localhost:{PORT}")
     yield
@@ -558,6 +562,8 @@ app.include_router(ordens_compra.router)
 app.include_router(caixa.router)
 # 🔑 Recebimento de notas (162, 24/11/2026): registrar que a nota chegou, com foto.
 app.include_router(recebimentos.router)
+# 🔑 Módulo Financeiro, contas a pagar (163, 24/11/2026).
+app.include_router(contas_pagar.router)
 
 
 @app.get("/saude", tags=["infra"])

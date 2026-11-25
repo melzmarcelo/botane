@@ -223,6 +223,9 @@ class FornecedorCreate(BaseModel):
     # mesma mecânica.
     cupom_base: Literal["VENDA", "CUSTO"] = "VENDA"
     cupom_desconto_pct: float = Field(default=0, ge=0, le=100)
+    # 🔑 **A chave Pix** (migração 163, contas a pagar): o dado que se procura no dia de pagar o
+    # freelancer. O CPF entra no `cnpj`, que guarda só os dígitos.
+    chave_pix: str | None = Field(default=None, max_length=140)
 
 
 class FornecedorUpdate(FornecedorCreate):

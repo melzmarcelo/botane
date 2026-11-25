@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
-import { Fornecedor, mascaraCnpj, reais } from "@/lib/cadastros";
+import { Fornecedor, mascaraDocumento, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
@@ -155,7 +155,7 @@ export default function PaginaFornecedores() {
                 <Link href={`/fornecedores/${x.id}`} className="min-w-0 text-left">
                   <span className="link-registro">{x.nome}</span>
                   <span className="mt-0.5 block text-[13px] text-suave">
-                    {x.cnpj ? mascaraCnpj(x.cnpj) : "sem CNPJ"}
+                    {x.cnpj ? mascaraDocumento(x.cnpj) : "sem documento"}
                     {x.cidade ? ` · ${x.cidade}${x.uf ? "/" + x.uf : ""}` : ""}
                     {x.telefone ? ` · ${x.telefone}` : ""}
                   </span>

@@ -104,6 +104,8 @@ export type Fornecedor = {
   /** A base do cupom na venda lançada à mão: o preço de venda ou o custo. */
   cupom_base?: "VENDA" | "CUSTO";
   cupom_desconto_pct?: number;
+  /** 🔑 A chave Pix (163): o dado que se procura no dia de pagar o freelancer. */
+  chave_pix?: string | null;
   /** Quem entra no sistema como esta pessoa — nulo é o caso comum. */
   usuario?: string | null;
 };
@@ -192,6 +194,19 @@ export const nomeTipo = (t: string) =>
 // trinta e cinco telas já pedem `reais` deste arquivo; código novo importa de
 // `@/lib/numeros`.
 export { reais } from "./numeros";
+
+/**
+ * CPF ou CNPJ pela quantidade de dígitos (163, contas a pagar: o freelancer tem CPF, e ele mora
+ * no mesmo campo `cnpj`, que guarda só os dígitos). Até 11 dígitos é CPF.
+ */
+export function mascaraDocumento(valor: string) {
+  const d = valor.replace(/\D/g, "").slice(0, 14);
+  if (d.length > 11) return mascaraCnpj(d);
+  return d
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2");
+}
 
 export function mascaraCnpj(valor: string) {
   const d = valor.replace(/\D/g, "").slice(0, 14);

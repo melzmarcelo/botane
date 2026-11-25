@@ -284,6 +284,19 @@ venda)`, com a margem dentro da soma. ⚠️ O sugerido é o PISO, não o alvo.
 ⚠️ **Por loja, podendo seguir outra** — e cada linha vale para tudo, para uma categoria ou
 para um setor; a mais específica de mesmo nome substitui a geral.
 
+## Financeiro
+
+Contas a pagar; no menu, também as contas a receber (cujo código e memória continuam em Vendas).
+Memória: [`docs/memoria/financeiro.md`](docs/memoria/financeiro.md).
+
+- **Rotas:** `contas_pagar.py`
+- **Serviços:** `contas_pagar.py` (com o laço da baixa automática, em `main.py`)
+- **Telas:** `financeiro/pagar/` (roteiro `verificar-contas-pagar.mjs`); `receber/` mora em Vendas
+- **Permissões:** `financeiro.pagar_ver`, `financeiro.pagar_lancar`, `financeiro.pagar_baixar`
+- **Suíte:** `smoke_contas_pagar.py`
+
+⚠️ **Não entra no CMV nem no estoque.** A pessoa é do cadastro de Pessoas (que ganhou a chave Pix).
+
 ## Patrimônio
 
 Os bens da casa (equipamentos, móveis), **um registro por item físico**, com plaqueta de QR,

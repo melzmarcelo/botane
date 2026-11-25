@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
-import { Fornecedor, mascaraCnpj } from "@/lib/cadastros";
+import { Fornecedor, mascaraDocumento } from "@/lib/cadastros";
 import { Aviso, Campo, CampoMoeda, Cartao } from "@/components/ui";
 
 import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
@@ -48,6 +48,7 @@ type Form = {
   /** VENDA ou CUSTO — a base do cupom quando esta pessoa é informada na venda. */
   cupom_base: "VENDA" | "CUSTO";
   cupom_desconto_pct: string;
+  chave_pix: string;
 };
 
 export const VAZIO: Form = {
@@ -56,14 +57,14 @@ export const VAZIO: Form = {
   pedido_minimo: "", observacao: "",
   // ⚠️ Quem cadastra pela tela de Pessoas quase sempre está cadastrando um
   // fornecedor — é a origem histórica desta tela. Quem não for, desmarca.
-  fornecedor: true, cupom_base: "VENDA", cupom_desconto_pct: "",
+  fornecedor: true, cupom_base: "VENDA", cupom_desconto_pct: "", chave_pix: "",
 };
 
 export function doFornecedor(x: Fornecedor): Form {
   return {
     nome: x.nome ?? "",
     nome_fantasia: x.nome_fantasia ?? "",
-    cnpj: x.cnpj ? mascaraCnpj(x.cnpj) : "",
+    cnpj: x.cnpj ? mascaraDocumento(x.cnpj) : "",
     contato: x.contato ?? "",
     telefone: x.telefone ?? "",
     whatsapp: x.whatsapp ?? "",
@@ -78,6 +79,7 @@ export function doFornecedor(x: Fornecedor): Form {
     fornecedor: x.fornecedor ?? true,
     cupom_base: x.cupom_base ?? "VENDA",
     cupom_desconto_pct: x.cupom_desconto_pct ? String(x.cupom_desconto_pct) : "",
+    chave_pix: x.chave_pix ?? "",
   };
 }
 
@@ -119,6 +121,7 @@ export default function FormularioFornecedor({
       // ⚠️ Vazio vira ZERO, não nulo: a coluna é NOT NULL, e "sem desconto" é
       // zero por cento, que é uma resposta.
       cupom_desconto_pct: num(f.cupom_desconto_pct) ?? 0,
+      chave_pix: texto(f.chave_pix),
     };
     try {
       if (id) {
@@ -163,12 +166,14 @@ export default function FormularioFornecedor({
           </Campo>
           {/* ⚠️ O CNPJ é o que liga a nota que vem do Omie ao fornecedor certo —
               sem ele a conciliação vira trabalho manual. */}
-          <Campo rotulo="CNPJ" dica="é ele que casa a nota do Omie">
+          {/* 🔑 163: o CPF do freelancer mora no mesmo campo; a máscara escolhe pelos dígitos. */}
+          <Campo rotulo="CPF ou CNPJ" dica="o CNPJ é o que casa a nota do Omie">
             <input
               className="campo mono"
-              placeholder="00.000.000/0000-00"
+              id="pessoa-documento"
+              placeholder="CPF ou CNPJ"
               value={f.cnpj}
-              onChange={(e) => setF({ ...f, cnpj: mascaraCnpj(e.target.value) })}
+              onChange={(e) => setF({ ...f, cnpj: mascaraDocumento(e.target.value) })}
             />
           </Campo>
           <Campo rotulo="Cidade">
@@ -210,6 +215,17 @@ export default function FormularioFornecedor({
               className="campo"
               value={f.whatsapp}
               onChange={(e) => setF({ ...f, whatsapp: e.target.value })}
+            />
+          </Campo>
+          {/* 🔑 163: a chave Pix, o que se procura no dia de pagar o freelancer. */}
+          <Campo rotulo="Chave Pix" opcional>
+            <input
+              className="campo"
+              id="pessoa-chave-pix"
+              maxLength={140}
+              placeholder="CPF, celular, e-mail ou aleatória"
+              value={f.chave_pix}
+              onChange={(e) => setF({ ...f, chave_pix: e.target.value })}
             />
           </Campo>
           <Campo rotulo="E-mail">

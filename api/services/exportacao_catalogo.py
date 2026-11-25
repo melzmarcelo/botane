@@ -2277,8 +2277,90 @@ def _vendas_pagamentos(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
-def _recebimentos(cur, id_unidade: int, f: dict) -> Saida:
+def _contas_pagar(cur, id_unidade: int, f: dict) -> Saida:
+    """Contas a pagar (163): a mesma consulta da tela, com as situações escolhidas."""
+    from services import contas_pagar as cp
+    inicio, fim = _periodo(f)
+    status = _lista(f.get("situacao_pagar")) or ["A_PAGAR", "AGENDADO", "PAGO"]
+    sql, p = cp.consulta(id_unidade, status, inicio, fim, None, None, None)
+    cur.execute(sql, p)
+    cem = lambda v: None if v is None else Decimal(v).quantize(Decimal("0.01"))
+    linhas = [dict(r) | {"situacao": cp.SITUACOES[r["status"]] + (" (atrasada)" if r["atrasada"] else "")
+                         + (" — automática" if r["baixado_automaticamente"] else ""),
+                         "forma_rotulo": cp.FORMAS.get(r["forma"] or "", ""),
+                         "valor": cem(r["valor"]), "valor_pago": cem(r["valor_pago"]),
+                         "comprovante": "sim" if r["tem_comprovante"] else ""}
+              for r in cur.fetchall()]
+    total = sum(((l["valor_pago"] or l["valor"]) for l in linhas), Decimal(0))
+    por_categoria: dict = {}
+    for l in linhas:
+        chave = l["categoria"] or "Sem categoria"
+        por_categoria[chave] = por_categoria.get(chave, Decimal(0)) + (l["valor_pago"] or l["valor"])
+    return Saida(
+        linhas,
+        [("vencimento", "Vencimento"), ("pessoa", "Pessoa"), ("categoria", "Categoria"),
+         ("descricao", "Descrição"), ("funcao", "Função"), ("competencia", "Competência"),
+         ("valor", "Valor"), ("situacao", "Situação"), ("agendado_para", "Agendado para"),
+         ("pago_em", "Pago em"), ("valor_pago", "Valor pago"), ("forma_rotulo", "Forma"),
+         ("chave_pix", "Chave Pix"), ("comprovante", "Comprovante")],
+        "Contas a pagar",
+        [("Período", _intervalo(inicio, fim)), ("Contas", len(linhas)), ("Total", total)],
+        inicio, fim,
+        anexos=[([{"categoria": k, "valor": v} for k, v in sorted(por_categoria.items())],
+                 [("categoria", "Categoria"), ("valor", "Valor")], "Por categoria", None)],
+    )
+
+
+def _pagamentos_pessoa(cur, id_unidade: int, f: dict) -> Saida:
+    """O que foi PAGO a cada pessoa no período (163) — o extrato do freelancer."""
+    inicio, fim = _periodo(f)
+    cats = _lista(f.get("categorias_financeiro"))
+    cur.execute(
+        """SELECT coalesce(fo.nome_fantasia, fo.nome) AS pessoa, fo.chave_pix,
+                  count(*) AS pagamentos, count(DISTINCT c.competencia) AS dias,
+                  sum(c.valor_pago) AS total, max(c.pago_em) AS ultimo
+             FROM contas_pagar c JOIN fornecedores fo ON fo.id = c.id_pessoa
+            WHERE c.id_unidade = %s AND c.status = 'PAGO' AND c.pago_em BETWEEN %s AND %s
+              AND (%s::int[] IS NULL OR c.id_categoria = ANY(%s))
+            GROUP BY fo.id, fo.nome_fantasia, fo.nome, fo.chave_pix
+            ORDER BY sum(c.valor_pago) DESC""",
+        (id_unidade, inicio, fim, cats, cats))
+    linhas = [dict(r) | {"total": Decimal(r["total"]).quantize(Decimal("0.01"))}
+              for r in cur.fetchall()]
+    return Saida(
+        linhas,
+        [("pessoa", "Pessoa"), ("pagamentos", "Pagamentos"), ("dias", "Dias de competência"),
+         ("total", "Total pago"), ("ultimo", "Último pagamento"), ("chave_pix", "Chave Pix")],
+        "Pagamentos por pessoa",
+        [("Período", _intervalo(inicio, fim)), ("Pessoas", len(linhas)),
+         ("Total pago", sum((l["total"] for l in linhas), Decimal(0)))],
+        inicio, fim)
+
+
+FILTROS["situacao_pagar"] = {
+    "tipo": "multipla", "rotulo": "Situação", "ajuda": "a pagar, agendadas e pagas",
+    "opcoes": lambda _c, _u: [{"valor": "A_PAGAR", "nome": "a pagar"},
+                              {"valor": "AGENDADO", "nome": "agendadas"},
+                              {"valor": "PAGO", "nome": "pagas"},
+                              {"valor": "CANCELADO", "nome": "canceladas"}]}
+
+
+def _opcoes_categorias_financeiro(cur, _u):
+    cur.execute("SELECT id, nome FROM financeiro_categorias WHERE ativo ORDER BY ordem, lower(nome)")
+    return [{"valor": r["id"], "nome": r["nome"]} for r in cur.fetchall()]
+
+
+FILTROS["categorias_financeiro"] = {"tipo": "multipla", "rotulo": "Categorias",
+                                    "ajuda": "todas as categorias",
+                                    "opcoes": _opcoes_categorias_financeiro}
+
+
+def _recebimento_notas(cur, id_unidade: int, f: dict) -> Saida:
     """Recebimento de notas (162): quem recebeu cada nota e se ela já chegou ao sistema.
+
+    ⚠️ **Não é `_recebimentos`**: esse nome (e a chave "recebimentos") já é o relatório dos
+    recebimentos do consumo. Com o mesmo nome, este o substituía em silêncio (24/11/2026, a
+    bateria pegou: smoke_relatorios_gestao).
 
     ⚠️ A mesma consulta da tela (`recebimentos.consulta`).
     """
@@ -3532,12 +3614,23 @@ RELATORIOS: dict[str, Relatorio] = {
         "Crédito, débito, Pix, dinheiro (já sem o troco) e vale, dia a dia — para saber quanto "
         "entrou em cada forma e conferir o caixa.",
         "cmv.relatorios", "vendas-pagamentos", ("periodo",), _vendas_pagamentos),
+    # 🔑 Módulo Financeiro (163, pedido do dono de 24/11/2026).
+    "contas-pagar": Relatorio(
+        "Contas a pagar",
+        "As contas do período por situação — a pagar (pelo vencimento), agendadas e pagas (pela "
+        "data do pagamento) —, com a chave Pix e o total por categoria.",
+        "financeiro.pagar_ver", "contas-a-pagar", ("periodo", "situacao_pagar"), _contas_pagar),
+    "pagamentos-pessoa": Relatorio(
+        "Pagamentos por pessoa",
+        "O que foi pago a cada pessoa no período — o extrato do freelancer.",
+        "financeiro.pagar_ver", "pagamentos-por-pessoa", ("periodo", "categorias_financeiro"),
+        _pagamentos_pessoa),
     # 🔑 O recebimento de notas (162, pedido do dono de 24/11/2026).
-    "recebimentos": Relatorio(
+    "recebimento-notas": Relatorio(
         "Recebimento de notas",
         "As notas que chegaram com a mercadoria: quem recebeu, quando, e se já estão no sistema.",
         "compras.receber", "recebimento-de-notas", ("periodo", "situacao_recebimento"),
-        _recebimentos),
+        _recebimento_notas),
     # 🔑 A conferência do caixa (161, etapa 3 das finalizadoras).
     "caixa": Relatorio(
         "Conferência do caixa",
@@ -3628,7 +3721,8 @@ GRUPOS = {
     "saldos": "Estoque", "saldos-rede": "Estoque", "movimentos": "Estoque", "vencimentos": "Estoque",
     "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
     "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
-    "vendas-pagamentos": "Vendas", "caixa": "Vendas", "recebimentos": "Compras",
+    "vendas-pagamentos": "Vendas", "caixa": "Vendas", "recebimento-notas": "Compras",
+    "contas-pagar": "Financeiro", "pagamentos-pessoa": "Financeiro",
     "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
     "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
     "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",

@@ -95,17 +95,7 @@ export const MENU: GrupoMenu[] = [
     grupo: "Vendas",
     icone: "vendas",
     itens: [
-      // ⚠️ **Não entra com `cmv.painel`.** Esta tela mostra o que cada PESSOA
-      // deve — dívida individual, não número de negócio — e a chave do painel é
-      // a mais larga da casa. Fica com as mesmas do servidor.
-      // 🔑 Contas a receber (22/10/2026) substitui "Períodos" — o consumo em aberto,
-      // os lotes de cobrança e a baixa.
-      {
-        href: "/receber",
-        nome: "Contas a receber",
-        icone: "calendario",
-        chave: ["consumo.periodos", "cmv.relatorios"],
-      },
+      // 🔑 Contas a receber saiu daqui para o grupo Financeiro (163, 24/11/2026).
       // 🔑 O estudo das vendas (21/10/2026) — a mesma chave dos documentos.
       { href: "/vendas/painel", nome: "Painel", icone: "grafico",
         chave: ["cmv.painel", "cmv.relatorios"] },
@@ -163,6 +153,24 @@ export const MENU: GrupoMenu[] = [
     icone: "grafico",
     itens: [
       { href: "/cmv", nome: "CMV", icone: "grafico", chave: "cmv.painel" },
+    ],
+  },
+  {
+    // 🔑 **Módulo Financeiro** (163, pedido do dono de 24/11/2026): o que a casa recebe e o que
+    // paga. Contas a receber veio de Vendas, sem mudar de endereço.
+    grupo: "Financeiro",
+    icone: "preco",
+    itens: [
+      // ⚠️ **Não entra com `cmv.painel`.** Esta tela mostra o que cada PESSOA deve — dívida
+      // individual, não número de negócio — e a chave do painel é a mais larga da casa.
+      {
+        href: "/receber",
+        nome: "Contas a receber",
+        icone: "calendario",
+        chave: ["consumo.periodos", "cmv.relatorios"],
+      },
+      { href: "/financeiro/pagar", nome: "Contas a pagar", icone: "nota",
+        chave: ["financeiro.pagar_ver", "financeiro.pagar_lancar", "financeiro.pagar_baixar"] },
     ],
   },
   {
@@ -458,7 +466,7 @@ export const INICIO: ItemMenu = { href: "/", nome: "Início", icone: "casa" };
  */
 export const SECAO_DO_GRUPO: Record<string, string> = {
   Cadastros: "Operação", Compras: "Operação", Vendas: "Operação", Estoque: "Operação",
-  CMV: "Gestão", "Precificação": "Gestão", "Portal de Clientes": "Gestão", Etiquetas: "Gestão",
+  CMV: "Gestão", Financeiro: "Gestão", "Precificação": "Gestão", "Portal de Clientes": "Gestão", Etiquetas: "Gestão",
   "Análise": "Análise",
   "Administração": "Sistema",
 };
