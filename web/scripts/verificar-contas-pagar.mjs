@@ -9,6 +9,8 @@
  *   7. o cadastro de Pessoas tem a chave Pix; no celular a página não rola de lado;
  *   8. etapa 3 (167): parcelar mostra a prévia e lança "parcela 1/3"; a conta fixa que vence hoje
  *      nasce na hora em A pagar, marcada; encerrar cancelando as em aberto tira a conta da lista.
+ *   9. etapa 4: o fluxo de caixa está no menu, mostra a conta em aberto no dia do vencimento, a
+ *      previsão liga e desliga, e o saldo inicial sobe o acumulado; no celular não rola de lado.
  * O que o roteiro cria é estornado e cancelado no fim.
  *
  *    node scripts/verificar-contas-pagar.mjs   (API na 9200 e web na 3100 de pé)
@@ -244,6 +246,39 @@ try {
     { timeout: 15000 }, `Internet tela ${MARCA}`).catch(() => {});
   checar("e a conta em aberto dela foi cancelada", (await linhaDe(p, `Internet tela ${MARCA}`)).length === 0);
 
+  console.log("9. fluxo de caixa (etapa 4)");
+  const diaMais = (n) => { const d = new Date(`${HOJE}T12:00:00`); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const venc = diaMais(5);
+  const { status: stF } = await api("POST", "/contas-pagar", { id_pessoa: ids[0], descricao: `Fluxo tela ${MARCA}`,
+    competencia: HOJE, vencimento: venc, valor: 77.77 }, token);
+  checar("a conta para o fluxo nasce", stF === 201, stF);
+  await p.goto(`${WEB}/financeiro/fluxo?de=${HOJE}&ate=${diaMais(10)}&previsao=false`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector("#fluxo-totais", { timeout: 60000 }).catch(() => {});
+  checar("o Fluxo de caixa está no menu do Financeiro", !!(await p.$('aside a[href="/financeiro/fluxo"]')));
+  checar("a tela abre com os totais e o dia a dia", !!(await p.$("#fluxo-totais")) && !!(await p.$("#fluxo-dias")));
+  const linhaVenc = await p.$eval(`[data-dia-fluxo="${venc}"]`, (e) => e.innerText).catch(() => "");
+  checar("a conta em aberto aparece no dia do vencimento, como saída", /77,77/.test(linhaVenc) && /a pagar/.test(linhaVenc), linhaVenc);
+  checar("a previsão começa desligada pela URL", !(await p.$eval("#fluxo-previsao", (e) => e.checked)));
+  const rodape = async () => p.$eval("#fluxo-rodape", (e) => e.innerText).catch(() => "");
+  const numeros = (t) => (t.match(/-?R\$\s?-?[\d.]+,\d{2}/g) ?? []).map((x) => Number(x.replace(/[^\d,-]/g, "").replace(",", ".")));
+  const antesR = numeros(await rodape());
+  await p.type("#fluxo-saldo-inicial", "1000");
+  await p.waitForFunction((v) => {
+    const t = document.querySelector("#fluxo-rodape")?.innerText ?? "";
+    return !t.includes(v);
+  }, { timeout: 15000 }, (await rodape()).split("	").pop()).catch(() => {});
+  const depoisR = numeros(await rodape());
+  checar("o saldo inicial de 1.000 sobe o acumulado final em 1.000 (o saldo do período não muda)",
+    antesR.length === 4 && depoisR.length === 4 && Math.abs(depoisR[3] - antesR[3] - 1000) < 0.01 && Math.abs(depoisR[2] - antesR[2]) < 0.01,
+    { antesR, depoisR });
+  await p.click("#fluxo-previsao");
+  await p.waitForFunction(() => location.search.includes("previsao=true") || !location.search.includes("previsao=false"),
+    { timeout: 10000 }).catch(() => {});
+  checar("ligar a previsão vai para a URL", await p.$eval("#fluxo-previsao", (e) => e.checked)
+    && !(await p.evaluate(() => location.search.includes("previsao=false"))));
+  checar("o botão do relatório está na tela", (await p.evaluate(() => document.body.innerText)).includes("Imprimir")
+    || !!(await p.$('[data-relatorio="fluxo-caixa"]')));
+
   console.log("7. cadastro e celular");
   await p.goto(`${WEB}/fornecedores/${ids[0]}`, { waitUntil: "networkidle2", timeout: 180000 });
   await p.waitForSelector("#pessoa-chave-pix", { timeout: 30000 }).catch(() => {});
@@ -260,6 +295,11 @@ try {
   await esperar(500);
   const largP = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, tela: window.innerWidth }));
   checar("no celular o painel não rola de lado", largP.doc <= largP.tela, largP);
+  await p.goto(`${WEB}/financeiro/fluxo`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector("#fluxo-totais", { timeout: 60000 }).catch(() => {});
+  await esperar(500);
+  const largF = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, tela: window.innerWidth }));
+  checar("no celular o fluxo de caixa não rola de lado", largF.doc <= largF.tela, largF);
 } finally {
   await navegador.close();
   // ⚠️ A conta fixa de teste ativa geraria uma conta por mês para sempre na base local.

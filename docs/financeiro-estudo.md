@@ -10,8 +10,9 @@ automática. Anexo do comprovante."*
 Estado: **etapa 1 construída em 24/11/2026** (1.3.23, migração 163), com as oito decisões da
 seção 3 (o CPF entrou no campo de documento que já existia). **Etapa 2 (painel) construída em
 25/11/2026** (1.3.24, sem migração). **Etapa 3 (contas fixas e parcelas) construída em
-25/11/2026** (1.3.27, migração 167). O que foi decidido está em `docs/memoria/financeiro.md`; a
-etapa 4 segue por fazer.
+25/11/2026** (1.3.27, migração 167). **Etapa 4 (fluxo de caixa) construída em 25/11/2026** (1.3.28,
+sem migração) — as quatro etapas do estudo estão feitas. O que foi decidido está em
+`docs/memoria/financeiro.md`.
 
 ## 1. O que já existe e serve
 

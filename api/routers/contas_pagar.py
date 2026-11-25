@@ -6,6 +6,7 @@ agendar e cancelar) e baixar (pagar, comprovante, estorno). Ver `services/contas
 """
 
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
@@ -27,7 +28,7 @@ from models.contas_pagar import (
 )
 from paginacao import pagina
 from seguranca import Contexto, requer_permissao, unidade_atual
-from services import contas_fixas
+from services import contas_fixas, fluxo_caixa
 from services import contas_pagar as servico
 
 router = APIRouter(prefix="/contas-pagar", tags=["contas a pagar"])
@@ -82,6 +83,27 @@ def painel(de: date | None = None, ate: date | None = None,
     with get_cursor() as cur:
         servico.baixar_e_registrar(cur)
         return servico.painel(cur, unidade_atual(cur, ctx), inicio, fim)
+
+
+@router.get("/fluxo")
+def fluxo(de: date | None = None, ate: date | None = None, previsao: bool = True,
+          saldo_inicial: Decimal = Query(Decimal(0), ge=-99999999, le=99999999),
+          ctx: Contexto = Depends(_ver)) -> dict:
+    """O fluxo de caixa (etapa 4): entradas × saídas dia a dia. Sem período = do dia 1º do mês
+    até 30 dias à frente."""
+    hoje = relogio.hoje_da_casa()
+    inicio = de or hoje.replace(day=1)
+    fim = ate or hoje + timedelta(days=30)
+    if fim < inicio:
+        raise HTTPException(status_code=422, detail="O fim do período vem antes do início.")
+    if (fim - inicio).days > fluxo_caixa.TETO_DE_DIAS:
+        raise HTTPException(status_code=422, detail="O período vai até um ano e um mês.")
+    with get_cursor() as cur:
+        # A geração das contas fixas e a baixa automática primeiro: senão o mês que já devia
+        # ter nascido apareceria como "fixa prevista" e a agendada de ontem, como em aberto.
+        servico.baixar_e_registrar(cur)
+        return fluxo_caixa.fluxo(cur, unidade_atual(cur, ctx), inicio, fim, previsao,
+                                 saldo_inicial)
 
 
 @router.get("/categorias")

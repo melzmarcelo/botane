@@ -2439,6 +2439,49 @@ def _painel_financeiro(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _fluxo_caixa(cur, id_unidade: int, f: dict) -> Saida:
+    """O fluxo de caixa (etapa 4) impresso: o mesmo `fluxo_caixa.fluxo` da tela, dia a dia.
+
+    🔑 Sem fim escolhido, vai até 30 dias à frente, como a tela (o `_periodo` comum para em hoje,
+    e um fluxo que para em hoje não mostra o que vem).
+    ⚠️ O saldo do relatório é o ACUMULADO NO PERÍODO (parte de zero): o saldo do banco não está
+    no sistema, e a tela só o usa se a pessoa digitar.
+    """
+    from services import contas_pagar as cp, fluxo_caixa as fc
+    hoje = relogio.hoje_da_casa()
+    inicio = f.get("inicio") or hoje.replace(day=1)
+    fim = f.get("fim") or hoje + timedelta(days=30)
+    cp.baixar_e_registrar(cur)
+    d = fc.fluxo(cur, id_unidade, inicio, fim)
+    cem = lambda v: Decimal(str(v)).quantize(Decimal("0.01"))
+    t = d["totais"]
+    linhas = [{"data": x["data"],
+               "tipo": "hoje" if x["hoje"] else ("realizado" if x["passado"] else "previsto"),
+               "vendas": cem(x["vendas"] + x["vendas_previstas"]), "receber": cem(x["receber"]),
+               "pago": cem(x["pago"]), "a_pagar": cem(x["a_pagar"] + x["fixas"]),
+               "taxas": cem(x["taxas"]), "saldo": cem(x["saldo"]), "acumulado": cem(x["acumulado"])}
+              for x in d["dias"]
+              if x["entradas"] or x["saidas"]]
+    return Saida(
+        linhas,
+        [("data", "Dia"), ("tipo", "Situação"), ("vendas", "Vendas"), ("receber", "Recebido"),
+         ("pago", "Pago"), ("a_pagar", "A pagar"), ("taxas", "Taxas de cartão"),
+         ("saldo", "Saldo do dia"), ("acumulado", "Acumulado")],
+        "Fluxo de caixa",
+        [("Período", _intervalo(inicio, fim)),
+         ("Entradas", cem(t["entradas"])), ("Saídas", cem(t["saidas"])),
+         ("Saldo do período", cem(t["saldo"])),
+         ("Vendas previstas (média das últimas semanas)", cem(t["vendas_previstas"])),
+         ("Atrasado (contado em hoje)", cem(d["atrasado"]["valor"])),
+         ("Vendas sem forma de pagamento", cem(d["sem_forma"]["valor"])),
+         ("A receber sem data (em cobrança + consumo sem lote)",
+          cem(d["a_receber_sem_data"]["em_cobranca"] + d["a_receber_sem_data"]["sem_lote"]))],
+        inicio, fim,
+        anexos=[([{"forma": x["rotulo"], "valor": cem(x["valor"])} for x in d["por_forma"]],
+                 [("forma", "Forma"), ("valor", "Vendas")], "Vendas por forma de pagamento", None)],
+    )
+
+
 FILTROS["situacao_pagar"] = {
     "tipo": "multipla", "rotulo": "Situação", "ajuda": "a pagar, agendadas e pagas",
     "opcoes": lambda _c, _u: [{"valor": "A_PAGAR", "nome": "a pagar"},
@@ -3745,6 +3788,11 @@ RELATORIOS: dict[str, Relatorio] = {
         "Pago × em aberto no período por categoria, pessoa e forma; atrasado, o que vence nos "
         "próximos dias e as baixas automáticas para conferir no banco.",
         "financeiro.pagar_ver", "painel-do-financeiro", ("periodo",), _painel_financeiro),
+    "fluxo-caixa": Relatorio(
+        "Fluxo de caixa",
+        "Dia a dia: o que entrou e vai entrar (vendas por forma, contas a receber) × o que saiu e "
+        "vai sair (contas pagas, a pagar, contas fixas, taxas de cartão), com o saldo acumulado.",
+        "financeiro.pagar_ver", "fluxo-de-caixa", ("periodo",), _fluxo_caixa),
     # 🔑 O recebimento de notas (162, pedido do dono de 24/11/2026).
     "recebimento-notas": Relatorio(
         "Recebimento de notas",
@@ -3842,7 +3890,7 @@ GRUPOS = {
     "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
     "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
     "vendas-pagamentos": "Vendas", "caixa": "Vendas", "recebimento-notas": "Compras",
-    "contas-pagar": "Financeiro", "contas-fixas": "Financeiro", "pagamentos-pessoa": "Financeiro", "painel-financeiro": "Financeiro",
+    "contas-pagar": "Financeiro", "contas-fixas": "Financeiro", "pagamentos-pessoa": "Financeiro", "painel-financeiro": "Financeiro", "fluxo-caixa": "Financeiro",
     "consumo-pessoa": "Vendas", "recebimentos": "Vendas", "precos-pdv": "Vendas",
     "cmv": "Custos e CMV", "abc": "Custos e CMV", "memoria-cmv": "Custos e CMV",
     "memoria-produto": "Custos e CMV", "precos": "Custos e CMV", "margem": "Custos e CMV",

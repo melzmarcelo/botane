@@ -89,6 +89,33 @@
     O roteiro do navegador encerra a conta fixa de teste no fim, senão ela gera todo mês.
   - Cobertura: `smoke_contas_fixas.py` (47) e `verificar-contas-pagar.mjs` seção 8 (25 no total).
 
-## Etapas seguintes (do estudo)
+- 🔑 **Fluxo de caixa, etapa 4** (1.3.28, 25/11/2026, sem migração, pedido do dono: *"pode seguir
+  com a etapa 4 do financeiro"*). `services/fluxo_caixa.py`, `GET /contas-pagar/fluxo?de&ate&previsao&saldo_inicial`
+  (mesmas três chaves; sem período = dia 1º do mês até hoje + 30; invertido ou > 400 dias = 422),
+  tela `financeiro/fluxo/` (no menu entre Painel e Contas a receber), relatório `fluxo-caixa`.
+  🔑 **Nada é gravado**: tudo é calculado do que as outras telas registram.
+  - **Entra**: vendas pelas finalizadoras (160), dinheiro LÍQUIDO do troco; a venda sem forma
+    entra pelo total como "não informado" (e o aviso diz quantas); lote de cobrança RECEBIDO na
+    data da baixa. **Sai**: pago (data do pagamento, valor pago); em aberto pela data agendada ou
+    pelo vencimento; a conta fixa que ainda NÃO nasceu, no vencimento do mês (o cálculo roda
+    depois de `baixar_e_registrar`, então o mês nascido não conta duas vezes); taxa de cartão
+    estimada pela taxa da loja (161).
+  - ⚠️ **Fica de fora**: venda com pessoa (é contas a receber: entra quando o lote é recebido —
+    contar as duas dobraria), consumo interno, cancelada, pagamento em VALE (o dinheiro entrou
+    quando o vale foi vendido), lote em PERMUTA ou FOLHA. Lote em cobrança e consumo sem lote não
+    têm data: aparecem só como "a receber sem data".
+  - ⚠️ **O atrasado vai para HOJE** (é o primeiro dia em que ainda pode sair); período que não
+    inclui hoje não o mostra. ⚠️ **O cartão conta no dia da venda**, não no depósito (a casa não
+    registra o prazo de cada maquininha — possível etapa futura).
+  - 🔑 **Previsão de vendas** (liga e desliga, padrão ligada): média do mesmo dia da semana nas 4
+    semanas antes de hoje, só nos dias depois de hoje; a taxa dela é a taxa média real da loja.
+  - **Saldo inicial**: o do banco não está no sistema; a pessoa digita (fica na URL). Sem ele o
+    acumulado parte de zero, e o "menor saldo" diz isso. O relatório sempre parte de zero.
+  - Cobertura: `smoke_fluxo_caixa.py` (42, por DIFERENÇA numa janela de 2032 — a base pode ter
+    contas fixas de verdade projetando lá; zera as taxas da loja durante o teste e devolve) e
+    `verificar-contas-pagar.mjs` seção 9 (34 no total).
 
-4. Fluxo de caixa (a receber × a pagar).
+## Etapas seguintes
+
+As quatro do estudo estão feitas. Ideias que ficaram: prazo de depósito do cartão por forma no
+fluxo; integrar com o financeiro do Omie, se a casa usar.

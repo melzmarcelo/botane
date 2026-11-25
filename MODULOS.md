@@ -294,12 +294,13 @@ Memória: [`docs/memoria/financeiro.md`](docs/memoria/financeiro.md).
 
 - **Rotas:** `contas_pagar.py`
 - **Serviços:** `contas_pagar.py` (com o laço da baixa automática, em `main.py`, que também gera
-  as contas fixas do mês) e `contas_fixas.py` (etapa 3, migração 167)
-- **Telas:** `financeiro/painel/` e `financeiro/pagar/` (com a janela das contas fixas em
-  `fixas.tsx`; roteiro `verificar-contas-pagar.mjs`, que cobre as duas); `receber/` mora em Vendas
-- **Relatórios:** `contas-pagar`, `contas-fixas`, `pagamentos-pessoa`, `painel-financeiro`
+  as contas fixas do mês), `contas_fixas.py` (etapa 3, migração 167) e `fluxo_caixa.py` (etapa 4,
+  sem migração: só calcula)
+- **Telas:** `financeiro/painel/`, `financeiro/fluxo/` e `financeiro/pagar/` (com a janela das contas fixas em
+  `fixas.tsx`; roteiro `verificar-contas-pagar.mjs`, que cobre as três); `receber/` mora em Vendas
+- **Relatórios:** `contas-pagar`, `contas-fixas`, `pagamentos-pessoa`, `painel-financeiro`, `fluxo-caixa`
 - **Permissões:** `financeiro.pagar_ver`, `financeiro.pagar_lancar`, `financeiro.pagar_baixar`
-- **Suítes:** `smoke_contas_pagar.py` e `smoke_contas_fixas.py`
+- **Suítes:** `smoke_contas_pagar.py`, `smoke_contas_fixas.py` e `smoke_fluxo_caixa.py`
 
 ⚠️ **Não entra no CMV nem no estoque.** A pessoa é do cadastro de Pessoas (que ganhou a chave Pix).
 

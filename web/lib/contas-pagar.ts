@@ -101,6 +101,32 @@ export const painelFinanceiro = (de: string, ate: string) => {
   if (ate) q.set("ate", ate);
   return api.get<Painel>(`/contas-pagar/painel?${q}`);
 };
+/** Um dia do fluxo de caixa (etapa 4): entradas × saídas e o saldo acumulado. */
+export type DiaFluxo = {
+  data: string; passado: boolean; hoje: boolean;
+  vendas: number; formas: Record<string, number>; vendas_previstas: number; receber: number;
+  pago: number; n_pago: number; a_pagar: number; n_a_pagar: number; atrasado: number;
+  fixas: number; fixas_previstas: { descricao: string; valor: number }[]; taxas: number;
+  entradas: number; saidas: number; saldo: number; acumulado: number;
+};
+export type Fluxo = {
+  hoje: string; de: string; ate: string; previsao: boolean; saldo_inicial: number;
+  dias: DiaFluxo[];
+  totais: { vendas: number; vendas_previstas: number; receber: number; pago: number; a_pagar: number;
+            fixas: number; taxas: number; entradas: number; saidas: number; saldo: number; saldo_final: number };
+  por_forma: { forma: string; rotulo: string; valor: number }[];
+  atrasado: { valor: number; contas: number };
+  sem_forma: { cupons: number; valor: number };
+  a_receber_sem_data: { em_cobranca: number; lotes: number; sem_lote: number; pessoas: number };
+  taxas_configuradas: boolean; semanas_da_previsao: number;
+};
+export const fluxoDeCaixa = (de: string, ate: string, previsao: boolean, saldoInicial: number) => {
+  const q = new URLSearchParams({ previsao: String(previsao) });
+  if (de) q.set("de", de);
+  if (ate) q.set("ate", ate);
+  if (saldoInicial) q.set("saldo_inicial", String(saldoInicial));
+  return api.get<Fluxo>(`/contas-pagar/fluxo?${q}`);
+};
 export const categoriasFinanceiro = () => api.get<Categoria[]>("/contas-pagar/categorias");
 export const criarCategoria = (nome: string) => api.post<Msg>("/contas-pagar/categorias", { nome });
 export const alterarCategoria = (id: number, nome: string, ativo: boolean) =>
