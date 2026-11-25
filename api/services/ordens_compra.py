@@ -13,7 +13,12 @@ from decimal import ROUND_CEILING, Decimal
 from fastapi import HTTPException
 
 A_COMPRAR, COMPRADO, CANCELADO = "A_COMPRAR", "COMPRADO", "CANCELADO"
-SITUACOES = {A_COMPRAR: "A comprar", COMPRADO: "Comprado"}
+# 🔑 **Aprovação** (migração 165, pedido do dono de 25/11/2026): quem não tem
+# `compras.ordem_aprovar` pede em AGUARDANDO, e só o aprovado vai para A comprar.
+AGUARDANDO, RECUSADO = "AGUARDANDO", "RECUSADO"
+ABERTOS = (AGUARDANDO, A_COMPRAR)
+SITUACOES = {AGUARDANDO: "Aguardando aprovação", A_COMPRAR: "A comprar", COMPRADO: "Comprado",
+             RECUSADO: "Recusado"}
 
 # 🔑 **Para quando** (migração 159, modelo do dono de 24/11/2026). A ordem é a de A comprar:
 # o mais urgente primeiro, e dentro de cada um o que espera há mais tempo.
@@ -23,7 +28,8 @@ _PESO = {"HOJE": 0, "SEMANA": 1, "PODE_ESPERAR": 2}
 _COLUNAS = """
     i.id, i.id_unidade, i.id_produto, i.descricao_livre, i.quantidade, i.quantidade_pedida,
     i.um, i.observacao, i.status, i.urgencia, i.id_item_origem, i.id_fornecedor, i.criado_em,
-    i.criado_por, i.comprado_em, i.comprado_por,
+    i.criado_por, i.comprado_em, i.comprado_por, i.aprovado_em, i.aprovado_por, i.recusado_em,
+    i.motivo_recusa, ua.nome AS aprovado_por_nome, ur.nome AS recusado_por_nome,
     -- 🔑 "Pedido por: Cozinha" (modelo do dono): o setor de quem pediu, de `usuario_setores`.
     -- Sem setor, a tela mostra o nome.
     (SELECT string_agg(s.nome, ', ' ORDER BY s.nome) FROM usuario_setores us
@@ -38,6 +44,8 @@ _JUNTAS = """
     LEFT JOIN produtos p ON p.id = i.id_produto
     LEFT JOIN usuarios uc ON uc.id = i.criado_por
     LEFT JOIN usuarios uq ON uq.id = i.comprado_por
+    LEFT JOIN usuarios ua ON ua.id = i.aprovado_por
+    LEFT JOIN usuarios ur ON ur.id = i.recusado_por
     LEFT JOIN fornecedores f ON f.id = i.id_fornecedor"""
 
 
@@ -45,27 +53,34 @@ def consulta_da_lista(id_unidade: int, status: list[str], de: date | None = None
                       ate: date | None = None, busca: str | None = None) -> tuple[str, dict]:
     """A consulta da tela e do relatório — uma só, para os dois não divergirem.
 
-    O período é pela data da compra e, no que ainda não foi comprado, pela do pedido.
+    O período é pela data da compra (ou da recusa) e, no que está aberto, pela do pedido.
+    Aberto (aguardando ou a comprar) vem do mais urgente ao menos, e dentro dele o mais antigo.
     """
     termo = (busca or "").strip() or None
     sql = f"""SELECT {_COLUNAS} {_JUNTAS}
         WHERE i.id_unidade = %(u)s AND i.status = ANY(%(status)s)
-          AND (%(de)s::date IS NULL OR coalesce(i.comprado_em, i.criado_em)::date >= %(de)s)
-          AND (%(ate)s::date IS NULL OR coalesce(i.comprado_em, i.criado_em)::date <= %(ate)s)
+          AND (%(de)s::date IS NULL OR
+               coalesce(i.comprado_em, i.recusado_em, i.criado_em)::date >= %(de)s)
+          AND (%(ate)s::date IS NULL OR
+               coalesce(i.comprado_em, i.recusado_em, i.criado_em)::date <= %(ate)s)
           AND (%(busca)s::text IS NULL OR coalesce(p.nome, i.descricao_livre) ILIKE
                '%%' || %(busca)s || '%%' OR p.codigo ILIKE '%%' || %(busca)s || '%%')
-        ORDER BY (i.status <> 'A_COMPRAR'),
-                 CASE WHEN i.status = 'A_COMPRAR' THEN
+        ORDER BY (i.status NOT IN ('AGUARDANDO', 'A_COMPRAR')),
+                 CASE WHEN i.status IN ('AGUARDANDO', 'A_COMPRAR') THEN
                       CASE i.urgencia WHEN 'HOJE' THEN 0 WHEN 'SEMANA' THEN 1 ELSE 2 END END,
-                 CASE WHEN i.status = 'A_COMPRAR' THEN i.criado_em END,
-                 coalesce(i.comprado_em, i.criado_em) DESC, i.id DESC"""
+                 CASE WHEN i.status IN ('AGUARDANDO', 'A_COMPRAR') THEN i.criado_em END,
+                 coalesce(i.comprado_em, i.recusado_em, i.criado_em) DESC, i.id DESC"""
     return sql, {"u": id_unidade, "status": status, "de": de, "ate": ate, "busca": termo}
 
 
 def resumo(cur, id_unidade: int) -> dict:
-    cur.execute("""SELECT count(*) AS n FROM ordem_compra_itens
-                    WHERE id_unidade = %s AND status = 'A_COMPRAR'""", (id_unidade,))
-    return {"a_comprar": cur.fetchone()["n"]}
+    cur.execute("""SELECT count(*) FILTER (WHERE status = 'A_COMPRAR') AS a_comprar,
+                          count(*) FILTER (WHERE status = 'AGUARDANDO') AS aguardando
+                     FROM ordem_compra_itens
+                    WHERE id_unidade = %s AND status IN ('A_COMPRAR', 'AGUARDANDO')""",
+                (id_unidade,))
+    r = cur.fetchone()
+    return {"a_comprar": r["a_comprar"], "aguardando": r["aguardando"]}
 
 
 def _unidades_do_produto(cur, produto: dict) -> list[dict]:
@@ -121,9 +136,10 @@ def opcoes_do_produto(cur, id_unidade: int, id_produto: int) -> dict:
     _exigir_comprado(p)
     unidades = _unidades_do_produto(cur, p)
     cur.execute(
-        """SELECT i.id, i.quantidade, i.um, i.observacao, u.nome AS pedido_por
+        """SELECT i.id, i.quantidade, i.um, i.observacao, i.status, u.nome AS pedido_por
              FROM ordem_compra_itens i LEFT JOIN usuarios u ON u.id = i.criado_por
-            WHERE i.id_unidade = %s AND i.id_produto = %s AND i.status = 'A_COMPRAR'
+            WHERE i.id_unidade = %s AND i.id_produto = %s
+              AND i.status IN ('AGUARDANDO', 'A_COMPRAR')
             ORDER BY i.criado_em""", (id_unidade, id_produto))
     return {
         "id": p["id"], "nome": p["nome"], "unidades": unidades,
@@ -168,11 +184,30 @@ def _nome_do_item(cur, linha: dict) -> str:
     return cur.fetchone()["nome"]
 
 
-def _exigir_aberto(cur, linha: dict) -> None:
-    """A frase diz quem chegou antes: um 409 seco faria a pessoa tentar de novo."""
-    if linha["status"] == A_COMPRAR:
+def _exigir_aberto(cur, linha: dict, aceitas: tuple[str, ...] = ABERTOS) -> None:
+    """A frase diz quem chegou antes: um 409 seco faria a pessoa tentar de novo.
+
+    `aceitas` = as situações em que a ação vale. Comprar só aceita A_COMPRAR; aprovar, só
+    AGUARDANDO; corrigir e cancelar, as duas abertas.
+    """
+    if linha["status"] in aceitas:
         return
     nome = _nome_do_item(cur, linha)
+    if linha["status"] == AGUARDANDO:
+        raise HTTPException(status_code=409,
+                            detail=f"{nome} ainda aguarda aprovação: só se compra o aprovado.")
+    if linha["status"] == A_COMPRAR:
+        quem = ""
+        if linha.get("aprovado_por"):
+            cur.execute("SELECT nome FROM usuarios WHERE id = %s", (linha["aprovado_por"],))
+            r = cur.fetchone()
+            quem = f" por {r['nome']}" if r else ""
+        raise HTTPException(status_code=409, detail=f"{nome} já foi aprovado{quem}.")
+    if linha["status"] == RECUSADO:
+        cur.execute("SELECT nome FROM usuarios WHERE id = %s", (linha["recusado_por"],))
+        r = cur.fetchone()
+        raise HTTPException(status_code=409,
+                            detail=f"{nome} foi recusado por {r['nome'] if r else '—'}.")
     if linha["status"] == COMPRADO:
         cur.execute(
             """SELECT u.nome, to_char(i.comprado_em, 'DD/MM "às" HH24:MI') AS quando
@@ -185,12 +220,27 @@ def _exigir_aberto(cur, linha: dict) -> None:
 
 
 def exigir_dono_ou_comprador(linha: dict, id_usuario: int, pode_comprar: bool) -> None:
+    """`pode_comprar` aqui = compra OU aprova: os dois corrigem e cancelam qualquer pedido."""
     if not pode_comprar and linha["criado_por"] != id_usuario:
         raise HTTPException(status_code=403,
-                            detail="Só quem pediu ou quem compra pode mexer neste item.")
+                            detail="Só quem pediu, quem aprova ou quem compra pode mexer neste item.")
 
 
-def adicionar(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
+def _situacao_nova(pode_aprovar: bool) -> str:
+    """🔑 Quem aprova pede direto em A comprar; os outros, em Aguardando aprovação."""
+    return A_COMPRAR if pode_aprovar else AGUARDANDO
+
+
+def adicionar(cur, id_unidade: int, id_usuario: int, dados: dict, pode_aprovar: bool) -> dict:
+    """Um item na lista.
+
+    🔑 **Sem `compras.ordem_aprovar`, o pedido nasce AGUARDANDO** e só vai para A comprar
+    quando alguém que aprova aprovar (migração 165).
+    ⚠️ **Somar só na linha da MESMA situação.** Quem não aprova somando num pedido já aprovado
+    aumentaria a compra sem aprovação: o que ele pede vira linha nova, aguardando. E quem aprova
+    não soma no pedido de outro que ainda aguarda (aprovaria a linha inteira sem querer).
+    """
+    situacao = _situacao_nova(pode_aprovar)
     produto = None
     if dados.get("id_produto"):
         produto = _produto(cur, dados["id_produto"])
@@ -202,12 +252,16 @@ def adicionar(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
     um = _sigla(cur, dados["um"], produto)
     observacao = _texto(dados.get("observacao"))
 
+    alvo = None
     if dados.get("somar_em"):
         alvo = _travar(cur, id_unidade, dados["somar_em"])
         _exigir_aberto(cur, alvo)
         if not produto or alvo["id_produto"] != produto["id"] or alvo["um"].upper() != um.upper():
             raise HTTPException(status_code=400,
                                 detail="Só dá para somar no mesmo produto e na mesma unidade.")
+        if alvo["status"] != situacao:
+            alvo = None  # vira linha nova, na situação de quem pede (ver a docstring)
+    if alvo:
         juntas = " · ".join(x for x in (alvo["observacao"], observacao) if x) or None
         # Somar nunca deixa o pedido menos urgente: vale o mais urgente dos dois.
         nova = dados.get("urgencia") or "SEMANA"
@@ -218,26 +272,41 @@ def adicionar(cur, id_unidade: int, id_usuario: int, dados: dict) -> dict:
                 WHERE id = %s RETURNING quantidade""",
             (dados["quantidade"], juntas[:300] if juntas else None, urgencia, alvo["id"]))
         return {"id": alvo["id"], "somado": True, "quantidade": cur.fetchone()["quantidade"],
-                "item": produto["nome"], "message": f"Somado ao pedido de {produto['nome']}."}
+                "item": produto["nome"], "status": situacao,
+                "message": f"Somado ao pedido de {produto['nome']}"
+                           + ("." if pode_aprovar else ", que aguarda aprovação.")}
 
     livre = None if produto else _texto(dados.get("descricao_livre"))
     cur.execute(
         """INSERT INTO ordem_compra_itens
                (id_unidade, id_produto, descricao_livre, quantidade, um, observacao, urgencia,
-                criado_por)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                criado_por, status, aprovado_em, aprovado_por)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,
+                   CASE WHEN %s THEN now() END, CASE WHEN %s THEN %s::int END) RETURNING id""",
         (id_unidade, produto["id"] if produto else None, livre, dados["quantidade"], um,
-         observacao, dados.get("urgencia") or "SEMANA", id_usuario))
+         observacao, dados.get("urgencia") or "SEMANA", id_usuario, situacao,
+         pode_aprovar, pode_aprovar, id_usuario))
     nome = produto["nome"] if produto else livre
     return {"id": cur.fetchone()["id"], "somado": False, "quantidade": dados["quantidade"],
-            "item": nome, "message": f"{nome} na lista."}
+            "item": nome, "status": situacao,
+            "message": f"{nome} na lista." if pode_aprovar
+                       else f"{nome} foi para aprovação."}
 
 
 def corrigir(cur, id_unidade: int, id_item: int, id_usuario: int, pode_comprar: bool,
-             dados: dict) -> dict:
+             dados: dict, pode_aprovar: bool = False) -> dict:
+    """⚠️ **Pedido já aprovado, quem só pediu não corrige** (migração 165): mudar a quantidade
+    depois do sim seria comprar sem aprovação. Cancela e pede de novo. Linha de antes da
+    aprovação existir (`aprovado_por` nulo) segue a regra antiga."""
     linha = _travar(cur, id_unidade, id_item)
-    exigir_dono_ou_comprador(linha, id_usuario, pode_comprar)
+    exigir_dono_ou_comprador(linha, id_usuario, pode_comprar or pode_aprovar)
     _exigir_aberto(cur, linha)
+    if (linha["status"] == A_COMPRAR and linha["aprovado_por"]
+            and not (pode_comprar or pode_aprovar)):
+        raise HTTPException(
+            status_code=409,
+            detail="Este pedido já foi aprovado e não pode mais ser alterado por quem pediu. "
+                   "Cancele e peça de novo, ou peça a quem aprova para corrigir.")
     produto = _produto(cur, linha["id_produto"]) if linha["id_produto"] else None
     um = _sigla(cur, dados["um"], produto)
     cur.execute("""UPDATE ordem_compra_itens SET quantidade = %s, um = %s, observacao = %s,
@@ -251,9 +320,10 @@ def corrigir(cur, id_unidade: int, id_item: int, id_usuario: int, pode_comprar: 
             "message": "Pedido corrigido."}
 
 
-def cancelar(cur, id_unidade: int, id_item: int, id_usuario: int, pode_comprar: bool) -> dict:
+def cancelar(cur, id_unidade: int, id_item: int, id_usuario: int, pode_comprar: bool,
+             pode_aprovar: bool = False) -> dict:
     linha = _travar(cur, id_unidade, id_item)
-    exigir_dono_ou_comprador(linha, id_usuario, pode_comprar)
+    exigir_dono_ou_comprador(linha, id_usuario, pode_comprar or pode_aprovar)
     _exigir_aberto(cur, linha)
     cur.execute("""UPDATE ordem_compra_itens
                       SET status = 'CANCELADO', cancelado_em = now(), cancelado_por = %s
@@ -285,7 +355,7 @@ def comprar(cur, id_unidade: int, id_usuario: int, itens: list[dict],
     if len(linhas) != len(ids):
         raise HTTPException(status_code=404, detail="Item não encontrado nesta loja.")
     for linha in linhas.values():
-        _exigir_aberto(cur, linha)
+        _exigir_aberto(cur, linha, (A_COMPRAR,))
 
     comprados: list[int] = []
     parciais = 0
@@ -301,12 +371,14 @@ def comprar(cur, id_unidade: int, id_usuario: int, itens: list[dict],
                 """INSERT INTO ordem_compra_itens
                        (id_unidade, id_produto, descricao_livre, quantidade, um, observacao,
                         urgencia, status, id_item_origem, id_fornecedor, criado_em, criado_por,
-                        comprado_em, comprado_por)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, 'COMPRADO', %s, %s, %s, %s, now(), %s)
+                        comprado_em, comprado_por, aprovado_em, aprovado_por)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, 'COMPRADO', %s, %s, %s, %s, now(), %s,
+                           %s, %s)
                    RETURNING id""",
                 (linha["id_unidade"], linha["id_produto"], linha["descricao_livre"], qtd,
                  linha["um"], linha["observacao"], linha["urgencia"], linha["id"], id_fornecedor,
-                 linha["criado_em"], linha["criado_por"], id_usuario))
+                 linha["criado_em"], linha["criado_por"], id_usuario,
+                 linha["aprovado_em"], linha["aprovado_por"]))
             comprados.append(cur.fetchone()["id"])
         else:
             cur.execute(
@@ -373,6 +445,51 @@ def voltar(cur, id_unidade: int, ids: list[int]) -> dict:
             "message": "1 item voltou à lista." if n == 1 else f"{n} itens voltaram à lista."}
 
 
+def _travar_varios(cur, id_unidade: int, ids: list[int]) -> list[dict]:
+    """⚠️ Em ordem de id, como em `comprar`: dois aprovadores no mesmo lote não dão deadlock."""
+    unicos = sorted(set(ids))
+    if len(unicos) != len(ids):
+        raise HTTPException(status_code=400, detail="O mesmo item veio duas vezes.")
+    cur.execute("""SELECT * FROM ordem_compra_itens
+                    WHERE id = ANY(%s) AND id_unidade = %s ORDER BY id FOR UPDATE""",
+                (unicos, id_unidade))
+    linhas = [dict(r) for r in cur.fetchall()]
+    if len(linhas) != len(unicos):
+        raise HTTPException(status_code=404, detail="Item não encontrado nesta loja.")
+    return linhas
+
+
+def aprovar(cur, id_unidade: int, id_usuario: int, ids: list[int]) -> dict:
+    """Aprovado vai para A comprar. Tudo ou nada: o segundo aprovador recebe 409 com o nome
+    de quem aprovou antes."""
+    linhas = _travar_varios(cur, id_unidade, ids)
+    for linha in linhas:
+        _exigir_aberto(cur, linha, (AGUARDANDO,))
+    cur.execute("""UPDATE ordem_compra_itens
+                      SET status = 'A_COMPRAR', aprovado_em = now(), aprovado_por = %s
+                    WHERE id = ANY(%s)""", (id_usuario, [l["id"] for l in linhas]))
+    n = len(linhas)
+    return {"ids": [l["id"] for l in linhas],
+            "message": "1 pedido aprovado: está em A comprar." if n == 1
+                       else f"{n} pedidos aprovados: estão em A comprar."}
+
+
+def recusar(cur, id_unidade: int, id_usuario: int, ids: list[int], motivo: str | None) -> dict:
+    """🔑 Recusado é situação própria, não cancelado: quem pediu vê na aba Recusados, e o
+    motivo junto. Nada se apaga."""
+    linhas = _travar_varios(cur, id_unidade, ids)
+    for linha in linhas:
+        _exigir_aberto(cur, linha, (AGUARDANDO,))
+    cur.execute("""UPDATE ordem_compra_itens
+                      SET status = 'RECUSADO', recusado_em = now(), recusado_por = %s,
+                          motivo_recusa = %s
+                    WHERE id = ANY(%s)""",
+                (id_usuario, _texto(motivo), [l["id"] for l in linhas]))
+    n = len(linhas)
+    return {"ids": [l["id"] for l in linhas],
+            "message": "1 pedido recusado." if n == 1 else f"{n} pedidos recusados."}
+
+
 def sugestoes(cur, id_unidade: int) -> list[dict]:
     """O que está abaixo do mínimo e se compra, com a quantidade para pedir (etapa 2).
 
@@ -413,7 +530,8 @@ def sugestoes(cur, id_unidade: int) -> list[dict]:
     for r in cur.fetchall():
         embalagens.setdefault(r["id_produto"], []).append(r)
     cur.execute("""SELECT id_produto, um, sum(quantidade) AS quantidade FROM ordem_compra_itens
-                    WHERE id_unidade = %s AND status = 'A_COMPRAR' AND id_produto = ANY(%s)
+                    WHERE id_unidade = %s AND status IN ('AGUARDANDO', 'A_COMPRAR')
+                      AND id_produto = ANY(%s)
                     GROUP BY id_produto, um ORDER BY um""", (id_unidade, ids))
     abertos: dict[int, list] = {}
     for r in cur.fetchall():
@@ -448,25 +566,29 @@ def sugestoes(cur, id_unidade: int) -> list[dict]:
     return saida
 
 
-def adicionar_lote(cur, id_unidade: int, id_usuario: int, itens: list[dict]) -> dict:
+def adicionar_lote(cur, id_unidade: int, id_usuario: int, itens: list[dict],
+                   pode_aprovar: bool) -> dict:
     """Vários itens de uma vez (as sugestões), tudo ou nada.
 
     🔑 **O que já tem linha aberta no mesmo produto e unidade SOMA nela**, sem perguntar: a
     sugestão já descontou o que estava na lista, e duas linhas de farinha confundem quem compra.
+    ⚠️ Só na linha da situação de quem pede (ver `adicionar`).
     """
+    situacao = _situacao_nova(pode_aprovar)
     feitos = []
     for dados in itens:
         if dados.get("id_produto") and not dados.get("somar_em"):
             cur.execute(
                 """SELECT id FROM ordem_compra_itens
-                    WHERE id_unidade = %s AND id_produto = %s AND status = 'A_COMPRAR'
+                    WHERE id_unidade = %s AND id_produto = %s AND status = %s
                       AND upper(um) = upper(%s)
                     ORDER BY criado_em LIMIT 1""",
-                (id_unidade, dados["id_produto"], dados["um"].strip()))
+                (id_unidade, dados["id_produto"], situacao, dados["um"].strip()))
             ja = cur.fetchone()
             if ja:
                 dados = {**dados, "somar_em": ja["id"]}
-        feitos.append(adicionar(cur, id_unidade, id_usuario, dados))
+        feitos.append(adicionar(cur, id_unidade, id_usuario, dados, pode_aprovar))
     n = len(feitos)
+    frase = "1 item" if n == 1 else f"{n} itens"
     return {"ids": [f["id"] for f in feitos], "itens": feitos,
-            "message": "1 item na lista." if n == 1 else f"{n} itens na lista."}
+            "message": f"{frase} na lista." if pode_aprovar else f"{frase} para aprovação."}

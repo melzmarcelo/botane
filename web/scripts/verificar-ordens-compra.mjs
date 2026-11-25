@@ -7,7 +7,9 @@
  *   5. comprar parte: o resto fica, a parte vai para Comprados;
  *   6. "Voltar à lista" junta de novo;
  *   7. no celular, a página não rola de lado;
- *   8. etapa 2: o link das sugestões abre a janela com o produto sem saldo, e "Pôr na lista" grava.
+ *   8. etapa 2: o link das sugestões abre a janela com o produto sem saldo, e "Pôr na lista" grava;
+ *   9. aprovação (migração 165): o pedido da cozinha vai para "Aguardando aprovação", o
+ *      administrador aprova (vai para A comprar) e recusa com motivo (vai para Recusados).
  * O que o roteiro cria é cancelado no fim.
  *
  *    node scripts/verificar-ordens-compra.mjs   (API na 9200 e web na 3100 de pé)
@@ -231,13 +233,94 @@ try {
   // lento) a checagem imediata pegava ainda "?sugestoes=1".
   await p.waitForFunction(() => !location.search.includes("sugestoes"), { timeout: 15000 }).catch(() => {});
   checar("e a janela fecha (sai da URL)", !(await p.$("#ordem-sugestoes")) && !p.url().includes("sugestoes"), p.url());
+
+  console.log("9. aprovação (migração 165)");
+  const { dados: papeis } = await api("GET", "/papeis", undefined, token);
+  const cozinha = papeis.find((x) => x.nome === "Cozinha");
+  const emailCozinha = `ordemw${MARCA}@teste.botane`;
+  const { status: stU } = await api("POST", "/usuarios", {
+    nome: `Cozinha ordem ${MARCA}`, email: emailCozinha, senha: "Teste#12345",
+    papeis: [{ id_papel: cozinha.id, id_unidade: 1 }],
+  }, token);
+  checar("a pessoa da cozinha nasce", stU === 200 || stU === 201, stU);
+  const { dados: loginCozinha } = await api("POST", "/auth/login", { email: emailCozinha, senha: "Teste#12345" });
+  // ⚠️ Contexto separado: o localStorage é da origem, e a sessão do administrador seria trocada.
+  const contexto = await navegador.createBrowserContext();
+  const c = await contexto.newPage();
+  await c.setViewport({ width: 1366, height: 1000 });
+  await c.goto(WEB + "/login", { timeout: 180000 });
+  await c.evaluate((a, r) => { localStorage.setItem("botane.access", a); localStorage.setItem("botane.refresh", r); localStorage.setItem("botane.unidade", "1"); },
+                   loginCozinha.access_token, loginCozinha.refresh_token);
+  await c.goto(`${WEB}/compras/ordens`, { waitUntil: "networkidle2", timeout: 180000 });
+  await c.waitForSelector("#ordem-form", { timeout: 60000 }).catch(() => {});
+  checar("para a cozinha, o botão diz que vai para aprovação",
+    /Enviar para aprovação/.test(await c.$eval("#ordem-adicionar", (e) => e.innerText).catch(() => "")));
+  async function pedirLivre(pg, texto) {
+    await clicar(pg, "#ordem-alternar");
+    await pg.waitForSelector("#ordem-descricao");
+    await pg.waitForFunction(() => document.querySelectorAll("#ordem-um option").length > 1, { timeout: 15000 });
+    await pg.type("#ordem-descricao", texto);
+    await pg.type("#ordem-quantidade", "2");
+    await pg.select("#ordem-um", "UN");
+    await clicar(pg, "#ordem-adicionar");
+  }
+  await pedirLivre(c, `Pano aprovar ${MARCA}`);
+  await esperarLinha(c, `Pano aprovar ${MARCA}`);
+  await c.waitForFunction(() => location.search.includes("aba=AGUARDANDO"), { timeout: 15000 }).catch(() => {});
+  checar("o pedido aparece em Aguardando aprovação", c.url().includes("aba=AGUARDANDO"), c.url());
+  const aguarda = await linhaCom(c, `Pano aprovar ${MARCA}`);
+  checar("com o selo de aguardando aprovação", !!aguarda && /Aguardando aprovação/.test(aguarda.texto), aguarda);
+  checar("e a cozinha não vê o botão Aprovar",
+    !(await c.$(`li[data-ordem-item="${aguarda?.id}"] [data-acao="aprovar"]`)));
+  await pedirLivre(c, `Vela recusar ${MARCA}`);
+  await esperarLinha(c, `Vela recusar ${MARCA}`);
+  const recusar = await linhaCom(c, `Vela recusar ${MARCA}`);
+
+  await p.goto(`${WEB}/compras/ordens?aba=AGUARDANDO`, { waitUntil: "networkidle2", timeout: 180000 });
+  await esperarLinha(p, `Pano aprovar ${MARCA}`);
+  checar("a aba mostra quantos aguardam",
+    /Aguardando aprovação \(\d+\)/.test(await p.$eval("#ordem-aba-aguardando", (e) => e.innerText).catch(() => "")));
+  await clicar(p, `li[data-ordem-item="${aguarda.id}"] [data-acao="aprovar"]`);
+  await p.waitForFunction((id) => !document.querySelector(`li[data-ordem-item="${id}"]`), { timeout: 15000 }, aguarda.id).catch(() => {});
+  checar("aprovado, sai de Aguardando", !(await p.$(`li[data-ordem-item="${aguarda.id}"]`)));
+
+  await clicar(p, `li[data-ordem-item="${recusar.id}"] [data-acao="recusar"]`);
+  await p.waitForSelector("#ordem-motivo-recusa", { timeout: 10000 }).catch(() => {});
+  await p.type("#ordem-motivo-recusa", "tem no freezer 2");
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")]
+      .find((x) => x.innerText.trim() === "Recusar" && !x.dataset.acao);
+    b?.click();
+  });
+  await p.waitForFunction((id) => !document.querySelector(`li[data-ordem-item="${id}"]`), { timeout: 15000 }, recusar.id).catch(() => {});
+  checar("recusado, sai de Aguardando", !(await p.$(`li[data-ordem-item="${recusar.id}"]`)));
+
+  await clicar(p, "#ordem-aba-comprar");
+  await esperarLinha(p, `Pano aprovar ${MARCA}`);
+  const aprovado = await linhaCom(p, `Pano aprovar ${MARCA}`);
+  checar("o aprovado está em A comprar, com quem aprovou",
+    !!aprovado && /aprovado por/i.test(aprovado.texto), aprovado);
+
+  await c.goto(`${WEB}/compras/ordens?aba=RECUSADO`, { waitUntil: "networkidle2", timeout: 180000 });
+  await esperarLinha(c, `Vela recusar ${MARCA}`);
+  const recusado = await linhaCom(c, `Vela recusar ${MARCA}`);
+  checar("quem pediu vê a recusa com o motivo",
+    !!recusado && /Recusado/.test(recusado.texto) && /tem no freezer 2/.test(recusado.texto), recusado);
+  await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await c.reload({ waitUntil: "networkidle2", timeout: 60000 });
+  await esperarLinha(c, `Vela recusar ${MARCA}`);
+  const largurasC = await c.evaluate(() => ({ doc: document.documentElement.scrollWidth, tela: window.innerWidth }));
+  checar("com as quatro abas, o celular não rola de lado", largurasC.doc <= largurasC.tela, largurasC);
+  await contexto.close();
 } finally {
   await navegador.close();
   // ⚠️ O comprado também: rodada que falha no meio deixaria a linha em Comprados.
   const { dados: comprados } = await api("GET", `/ordens-compra?status=COMPRADO&busca=${MARCA}&limite=50`, undefined, token);
   if (comprados?.length) await api("POST", "/ordens-compra/voltar", { ids: comprados.map((i) => i.id) }, token);
-  const { dados: abertos } = await api("GET", `/ordens-compra?status=A_COMPRAR&busca=${MARCA}&limite=50`, undefined, token);
-  for (const i of abertos ?? []) await api("POST", `/ordens-compra/${i.id}/cancelar`, {}, token);
+  for (const situacao of ["A_COMPRAR", "AGUARDANDO"]) {
+    const { dados: abertos } = await api("GET", `/ordens-compra?status=${situacao}&busca=${MARCA}&limite=50`, undefined, token);
+    for (const i of abertos ?? []) await api("POST", `/ordens-compra/${i.id}/cancelar`, {}, token);
+  }
   if (produto?.id) await api("DELETE", `/produtos/${produto.id}`, undefined, token);
   if (minimo?.id) await api("DELETE", `/produtos/${minimo.id}`, undefined, token);
 }

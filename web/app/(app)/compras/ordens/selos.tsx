@@ -22,8 +22,16 @@ export function SeloUrgencia({ urgencia }: { urgencia: Urgencia }) {
   );
 }
 
+// 🔑 Aprovação (165): "Aguardando aprovação" neutro (ainda não é tarefa de quem compra),
+// "Aguardando compra" no alerta, comprado na erva e recusado no tom de erro.
+const SITUACAO: Record<AbaOrdem, [string, string]> = {
+  AGUARDANDO: ["Aguardando aprovação", "bg-superficie2 text-tinta"],
+  A_COMPRAR: ["Aguardando compra", "bg-alerta-claro text-alerta"],
+  COMPRADO: ["Comprado", "bg-erva-claro text-erva"],
+  RECUSADO: ["Recusado", "bg-erro-claro text-erro"],
+};
+
 export function SeloSituacao({ status }: { status: AbaOrdem }) {
-  return status === "COMPRADO"
-    ? <span className={`${pilula} bg-erva-claro text-erva`}>Comprado</span>
-    : <span className={`${pilula} bg-alerta-claro text-alerta`}>Aguardando compra</span>;
+  const [rotulo, cor] = SITUACAO[status] ?? SITUACAO.A_COMPRAR;
+  return <span className={`${pilula} ${cor}`} data-selo-situacao={status}>{rotulo}</span>;
 }

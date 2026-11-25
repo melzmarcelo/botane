@@ -152,6 +152,15 @@ def levantar(cur, id_unidade: int) -> list[dict]:
            "Lance no PDV e marque aqui — senão a venda não entra no caixa nem no CMV.",
            "ver os pedidos", "/pedidos?situacao=sem_pdv")
 
+    # 🔑 A ORDEM DE COMPRA aguardando aprovação (165): enquanto ninguém aprova, quem compra
+    # não vê o pedido. Só para quem aprova (`routers/alertas.CHAVES`).
+    r = _um(cur, """
+        SELECT count(*) AS n FROM ordem_compra_itens
+         WHERE id_unidade = %s AND status = 'AGUARDANDO'""", (id_unidade,))
+    juntar("compras.ordem_aguardando", ATENCAO, "Pedido de compra aguardando aprovação",
+           r.get("n"), "Só vai para a lista de quem compra depois de aprovado.",
+           "aprovar ou recusar", "/compras/ordens?aba=AGUARDANDO")
+
     r = _um(cur, """
         SELECT count(*) AS n FROM estoque_movimentos
          WHERE id_unidade = %s AND custo_provisorio

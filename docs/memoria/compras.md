@@ -5,6 +5,33 @@
 
 ## O que já existe
 
+- 🔑 **Aprovação da ordem de compra** (1.3.26, migração 165, 25/11/2026, pedido do dono: *"quando
+  o usuario sem permissão realiza a ordem de compra este vai para a aprovação de um usuario que tem
+  permissão. quando aprovado ele vai para ser comprado"*).
+  - Chave nova **`compras.ordem_aprovar`** (Administrador e Gerente; os outros papéis o dono dá na
+    tela de papéis). Caminho: **AGUARDANDO → A_COMPRAR → COMPRADO**, e **RECUSADO** (com motivo
+    opcional) como situação própria, não CANCELADO: quem pediu precisa ver a recusa e o porquê.
+  - 🔑 **Quem aprova pede direto em A comprar** (`aprovado_por` = ele mesmo). Quem só compra
+    (Conferente) também passa por aprovação: a chave é a de aprovar, não a de comprar.
+  - Rotas `POST /ordens-compra/aprovar` e `/recusar` (`{ids}`, tudo ou nada, travando em ordem de
+    id; o segundo aprovador recebe 409 com o nome de quem aprovou). Comprar o que aguarda: 409.
+  - ⚠️ **Somar só na linha da MESMA situação.** Quem não aprova somando num aprovado aumentaria a
+    compra sem aprovação: vira linha nova aguardando. Quem aprova somando no que aguarda aprovaria
+    a linha inteira sem querer: vira linha nova, aprovada. A tela só oferece "Somar" na linha da
+    situação de quem pede; o lote das sugestões segue a mesma regra.
+  - ⚠️ **Aprovado, quem só pediu não CORRIGE mais** (409: cancela e pede de novo); cancelar
+    continua podendo. Linha de antes da 165 (`aprovado_por` nulo) segue a regra antiga.
+  - As sugestões do mínimo descontam também o que aguarda aprovação; a troca de unidade converte
+    os dois abertos.
+  - Alerta `compras.ordem_aguardando` (só para quem tem `compras.ordem_aprovar`), que abre a aba.
+  - Tela: quatro abas (Aguardando aprovação · A comprar · Comprados · Recusados), com contagem
+    nas duas abertas; caixinhas e "Aprovar N"/"Recusar N" para quem aprova; o botão do pedido diz
+    "Enviar para aprovação" para quem não aprova, e a tela vai para a aba onde o pedido ficou.
+    Relatório ganhou a coluna "Aprovação" (quem aprovou, ou quem recusou e o motivo).
+  - ⚠️ O roteiro do navegador deixa duas linhas em Recusados na base local (recusado não se
+    cancela pela API); a suíte da API apaga as dela direto no banco.
+  - Cobertura: `smoke_ordens_compra.py` seção 5b e `verificar-ordens-compra.mjs` seção 9.
+
 - 🔑 **Recebimento de notas** (1.3.22, migração 162, 24/11/2026, pedido do dono: *"o usuário
   pode informar que recebeu a nota X do fornecedor Y da data Z e anexar uma foto, como opcional.
   Pois um usuário recebe a nota e produtos e acaba perdendo e quem repassa ela para o sistema

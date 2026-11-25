@@ -3492,7 +3492,12 @@ def _ordens_compra(cur, id_unidade: int, f: dict) -> Saida:
                          "para_quando": ordens_compra.URGENCIAS.get(r["urgencia"], ""),
                          "pedido_quem": r["setor_pedido"] or r["pedido_por"],
                          "pedido_em": quando(r["criado_em"]),
-                         "comprado_quando": quando(r["comprado_em"])}
+                         "comprado_quando": quando(r["comprado_em"]),
+                         # A aprovação (165): quem aprovou, ou quem recusou e por quê.
+                         "aprovacao": (f"recusado por {r['recusado_por_nome']}"
+                                       + (f": {r['motivo_recusa']}" if r["motivo_recusa"] else "")
+                                       if r["status"] == "RECUSADO"
+                                       else r["aprovado_por_nome"] or "")}
               for r in cur.fetchall()]
     resumo: list[tuple[str, object]] = [("Itens", len(linhas))]
     if inicio and fim:
@@ -3502,7 +3507,8 @@ def _ordens_compra(cur, id_unidade: int, f: dict) -> Saida:
         [("item", "Item"), ("quantidade", "Quantidade"), ("um", "Unidade"),
          ("para_quando", "Para quando"),
          ("observacao", "Observação"), ("situacao", "Situação"), ("pedido_quem", "Pedido por"),
-         ("pedido_em", "Pedido em"), ("comprado_por_nome", "Comprado por"),
+         ("pedido_em", "Pedido em"), ("aprovacao", "Aprovação"),
+         ("comprado_por_nome", "Comprado por"),
          ("comprado_quando", "Comprado em"), ("fornecedor", "Fornecedor")],
         "Ordem de compra", resumo, inicio, fim)
 

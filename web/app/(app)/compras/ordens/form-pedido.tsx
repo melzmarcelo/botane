@@ -8,6 +8,7 @@ import { Aviso, Campo, Modal } from "@/components/ui";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 import { qtd, textoParaNumero } from "@/lib/numeros";
 import {
+  AbaOrdem,
   FILTRO_COMPRADOS,
   NovoItem,
   OpcoesDoProduto,
@@ -26,8 +27,13 @@ import {
  *
  * 🔑 **Continua tudo pelo teclado**: produto, Tab, quantidade, observação, Enter. Na observação
  * o Enter envia e Shift+Enter quebra a linha. Ao gravar, o foco volta para o produto.
+ * 🔑 **Aprovação** (migração 165): sem `compras.ordem_aprovar`, o pedido vai para "Aguardando
+ * aprovação". Somar só se oferece na linha da MESMA situação de quem pede (a API repete a regra).
  */
-export default function FormPedido({ aoPedir }: { aoPedir: () => void }) {
+export default function FormPedido({ aoPedir, podeAprovar }: {
+  aoPedir: (status?: AbaOrdem) => void;
+  podeAprovar: boolean;
+}) {
   const aviso = useAviso();
   const fonte = useMemo(() => fonteProdutos(FILTRO_COMPRADOS), []);
   const [produto, setProduto] = useState<{ id: number; rotulo: string; nome: string } | null>(null);
@@ -87,7 +93,7 @@ export default function FormPedido({ aoPedir }: { aoPedir: () => void }) {
       const r = await pedirItem(corpo);
       aviso.sucesso(r.message);
       limpar();
-      aoPedir();
+      aoPedir(r.status);
     } catch (e) {
       setRepetido(null);
       setErro(e instanceof Error ? e.message : "Não foi possível pedir o item");
@@ -113,7 +119,9 @@ export default function FormPedido({ aoPedir }: { aoPedir: () => void }) {
       observacao: observacao.trim() || null,
     };
     // ⚠️ Avisa e não bloqueia: pode ser para outro uso, e a observação diz qual.
-    const igual = !foraDoCadastro && opcoes?.abertos.find((a) => a.um === um);
+    const minhaSituacao = podeAprovar ? "A_COMPRAR" : "AGUARDANDO";
+    const igual = !foraDoCadastro &&
+      opcoes?.abertos.find((a) => a.um === um && a.status === minhaSituacao);
     if (igual) {
       setRepetido({
         corpo,
@@ -172,7 +180,8 @@ export default function FormPedido({ aoPedir }: { aoPedir: () => void }) {
         {!!opcoes?.abertos.length && (
           <p className="mt-1 text-[13px] text-alerta" id="ordem-ja-na-lista">
             Já na lista: {opcoes.abertos.map((a) =>
-              `${qtd(a.quantidade)} ${a.um} (${a.pedido_por ?? "alguém"})`).join(", ")}
+              `${qtd(a.quantidade)} ${a.um} (${a.pedido_por ?? "alguém"}` +
+              `${a.status === "AGUARDANDO" ? ", aguardando aprovação" : ""})`).join(", ")}
           </p>
         )}
       </div>
@@ -230,7 +239,7 @@ export default function FormPedido({ aoPedir }: { aoPedir: () => void }) {
           )}
         </p>
         <button type="submit" className="btn btn-primario" id="ordem-adicionar" disabled={ocupado}>
-          {ocupado ? "Enviando…" : "Enviar pedido"}
+          {ocupado ? "Enviando…" : podeAprovar ? "Enviar pedido" : "Enviar para aprovação"}
         </button>
       </div>
 

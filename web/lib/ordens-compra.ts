@@ -5,7 +5,13 @@ import { api } from "@/lib/api";
  * 23/11/2026). Comprado NÃO é recebido: o estoque só anda quando a nota é lançada.
  */
 
-export type AbaOrdem = "A_COMPRAR" | "COMPRADO";
+/**
+ * 🔑 Aprovação (migração 165, pedido do dono de 25/11/2026): o pedido de quem não tem
+ * `compras.ordem_aprovar` nasce em AGUARDANDO e só vai para A comprar quando é aprovado.
+ */
+export type AbaOrdem = "AGUARDANDO" | "A_COMPRAR" | "COMPRADO" | "RECUSADO";
+
+export const ABAS_ORDEM: AbaOrdem[] = ["AGUARDANDO", "A_COMPRAR", "COMPRADO", "RECUSADO"];
 
 /** Para quando o item precisa chegar (migração 159, modelo do dono de 24/11/2026). */
 export type Urgencia = "PODE_ESPERAR" | "SEMANA" | "HOJE";
@@ -39,6 +45,12 @@ export type OrdemItem = {
   comprado_em: string | null;
   comprado_por_nome: string | null;
   fornecedor: string | null;
+  aprovado_em: string | null;
+  aprovado_por: number | null;
+  aprovado_por_nome: string | null;
+  recusado_em: string | null;
+  recusado_por_nome: string | null;
+  motivo_recusa: string | null;
 };
 
 export type OpcoesDoProduto = {
@@ -46,7 +58,10 @@ export type OpcoesDoProduto = {
   nome: string;
   unidades: { um: string; fator: number | string }[];
   um_padrao: string | null;
-  abertos: { id: number; quantidade: number | string; um: string; pedido_por: string | null }[];
+  abertos: {
+    id: number; quantidade: number | string; um: string; pedido_por: string | null;
+    status: "AGUARDANDO" | "A_COMPRAR";
+  }[];
 };
 
 export type NovoItem = {
@@ -88,13 +103,14 @@ export const FILTRO_COMPRADOS = "comprado=true";
 /** O painel de estoque e os alertas abrem a ordem de compra direto nas sugestões. */
 export const LINK_SUGESTOES = "/compras/ordens?sugestoes=1";
 
-type Resposta = { id: number; message: string };
+type Resposta = { id: number; message: string; status?: AbaOrdem };
 type RespostaLote = { ids: number[]; message: string };
 
 export const listarOrdens = (aba: AbaOrdem, q: Record<string, string>) =>
   api.listar<OrdemItem>(`/ordens-compra?${new URLSearchParams({ status: aba, ...q })}`);
 
-export const resumoOrdens = () => api.get<{ a_comprar: number }>("/ordens-compra/resumo");
+export const resumoOrdens = () =>
+  api.get<{ a_comprar: number; aguardando: number }>("/ordens-compra/resumo");
 
 export const opcoesDoProduto = (id: number) =>
   api.get<OpcoesDoProduto>(`/ordens-compra/produto/${id}`);
@@ -121,6 +137,12 @@ export const marcarComprado = (
   itens: { id: number; quantidade: number }[],
   id_fornecedor: number | null,
 ) => api.post<RespostaLote>("/ordens-compra/comprar", { itens, id_fornecedor });
+
+export const aprovarPedidos = (ids: number[]) =>
+  api.post<RespostaLote>("/ordens-compra/aprovar", { ids });
+
+export const recusarPedidos = (ids: number[], motivo: string | null) =>
+  api.post<RespostaLote>("/ordens-compra/recusar", { ids, motivo });
 
 export const voltarParaLista = (ids: number[]) =>
   api.post<RespostaLote>("/ordens-compra/voltar", { ids });

@@ -6,14 +6,17 @@ import { useAviso } from "@/components/aviso-flutuante";
 import CabecalhoTela from "@/components/cabecalho-tela";
 import BotaoExportar from "@/components/exportar";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
-import { Aviso, Carregando, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, Carregando, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { qtd } from "@/lib/numeros";
 import {
   AbaOrdem,
+  ABAS_ORDEM,
+  aprovarPedidos,
   cancelarItem,
   listarOrdens,
   OrdemItem,
+  recusarPedidos,
   resumoOrdens,
   voltarParaLista,
 } from "@/lib/ordens-compra";
@@ -32,6 +35,9 @@ import JanelaSugestoes from "./sugestoes";
  * urgentes primeiro.
  * 🔑 **Cada linha anda sozinha.** Comprou, sai de "A comprar" e entra em "Comprados".
  * 🔑 **Comprado não é recebido**: nada aqui mexe no estoque. Por isso desfazer é um clique.
+ * 🔑 **Aprovação** (migração 165, pedido do dono de 25/11/2026): o pedido de quem não tem
+ * `compras.ordem_aprovar` espera em "Aguardando aprovação"; aprovado, vai para "A comprar";
+ * recusado, para "Recusados", com o motivo. O pedido de quem aprova já nasce aprovado.
  * ⚠️ As colunas só existem do `md` para cima: no celular (quem marca costuma estar no mercado)
  * cada linha volta a ser um cartão, com os mesmos elementos.
  */
@@ -40,8 +46,36 @@ const PASSOS = [
   { titulo: "Escolha o produto", texto: "Digite o nome ou o código e escolha da lista." },
   { titulo: "Diga quanto precisa", texto: "Quantidade e unidade (kg, L, un, cx…)." },
   { titulo: "Marque a urgência", texto: "Ajuda a priorizar o que comprar primeiro." },
-  { titulo: "Acompanhe", texto: "Seu pedido vai de “A comprar” para “Comprados”." },
+  { titulo: "Acompanhe", texto: "Seu pedido é aprovado, vai para “A comprar” e depois para “Comprados”." },
 ];
+
+const ROTULO_ABA: Record<AbaOrdem, string> = {
+  AGUARDANDO: "Aguardando aprovação",
+  A_COMPRAR: "A comprar",
+  COMPRADO: "Comprados",
+  RECUSADO: "Recusados",
+};
+
+const ID_ABA: Record<AbaOrdem, string> = {
+  AGUARDANDO: "ordem-aba-aguardando",
+  A_COMPRAR: "ordem-aba-comprar",
+  COMPRADO: "ordem-aba-comprados",
+  RECUSADO: "ordem-aba-recusados",
+};
+
+const FRASE_ABA: Record<AbaOrdem, string> = {
+  AGUARDANDO: "Pedidos esperando aprovação, os mais urgentes primeiro. Aprovado, vai para quem compra.",
+  A_COMPRAR: "Pedidos aprovados esperando compra, os mais urgentes primeiro.",
+  COMPRADO: "O que já foi comprado, o mais recente primeiro.",
+  RECUSADO: "Pedidos recusados, com o motivo, o mais recente primeiro.",
+};
+
+const VAZIO_ABA: Record<AbaOrdem, string> = {
+  AGUARDANDO: "Nenhum pedido aguardando aprovação.",
+  A_COMPRAR: "Nada para comprar agora.",
+  COMPRADO: "Nenhum item comprado ainda.",
+  RECUSADO: "Nenhum pedido recusado.",
+};
 
 function quando(iso: string) {
   const d = new Date(iso);
@@ -66,15 +100,19 @@ export default function PaginaOrdemDeCompra() {
   const aviso = useAviso();
   const podeComprar = pode("compras.ordem_comprar");
   const podePedir = pode("compras.ordem_solicitar");
+  const podeAprovar = pode("compras.ordem_aprovar");
   const [aba, setAba] = useEstadoNaUrl<string>("aba", "A_COMPRAR", { atraso: 0 });
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [de, setDe] = useEstadoNaUrl<string>("de", "", { atraso: 0 });
   const [ate, setAte] = useEstadoNaUrl<string>("ate", "", { atraso: 0 });
   // 🔑 Na URL para o painel de estoque e os alertas abrirem direto nas sugestões (etapa 2).
   const [sugestoes, setSugestoes] = useEstadoNaUrl<boolean>("sugestoes", false);
-  const abaAtual: AbaOrdem = aba === "COMPRADO" ? "COMPRADO" : "A_COMPRAR";
+  const abaAtual: AbaOrdem = (ABAS_ORDEM as string[]).includes(aba) ? (aba as AbaOrdem) : "A_COMPRAR";
+  const comData = abaAtual === "COMPRADO" || abaAtual === "RECUSADO";
   const [lista, setLista] = useState<OrdemItem[] | null>(null);
-  const [aComprar, setAComprar] = useState<number | null>(null);
+  const [contagem, setContagem] = useState<{ a_comprar: number; aguardando: number } | null>(null);
+  const [recusando, setRecusando] = useState<OrdemItem[] | null>(null);
+  const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState("");
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const [comprando, setComprando] = useState<OrdemItem[] | null>(null);
@@ -95,13 +133,13 @@ export default function PaginaOrdemDeCompra() {
     try {
       const q: Record<string, string> = { ...pag.parametros };
       if (busca.trim()) q.busca = busca.trim();
-      if (abaAtual === "COMPRADO" && de) q.de = de;
-      if (abaAtual === "COMPRADO" && ate) q.ate = ate;
+      if (comData && de) q.de = de;
+      if (comData && ate) q.ate = ate;
       const [l, r] = await Promise.all([listarOrdens(abaAtual, q), resumoOrdens()]);
       if (pedido !== ultimoPedido.current) return;
       setLista(l.itens);
       if (l.total !== null) pag.setTotal(l.total);
-      setAComprar(r.a_comprar);
+      setContagem(r);
       setMarcados(new Set());
     } catch (e) {
       if (pedido !== ultimoPedido.current) return;
@@ -109,7 +147,7 @@ export default function PaginaOrdemDeCompra() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar a lista");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, abaAtual, busca, de, ate, unidade, pag.offset, pag.porPagina]);
+  }, [pag.pronto, abaAtual, comData, busca, de, ate, unidade, pag.offset, pag.porPagina]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -121,6 +159,35 @@ export default function PaginaOrdemDeCompra() {
       await carregar();
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível voltar à lista");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function aprovar(ids: number[]) {
+    setOcupado(true);
+    try {
+      const r = await aprovarPedidos(ids);
+      aviso.sucesso(r.message);
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível aprovar");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function recusar() {
+    if (!recusando) return;
+    setOcupado(true);
+    try {
+      const r = await recusarPedidos(recusando.map((i) => i.id), motivo.trim() || null);
+      aviso.sucesso(r.message);
+      setRecusando(null);
+      setMotivo("");
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível recusar");
     } finally {
       setOcupado(false);
     }
@@ -146,9 +213,15 @@ export default function PaginaOrdemDeCompra() {
     if (novo.has(id)) novo.delete(id); else novo.add(id);
     return novo;
   });
-  const podeMexer = (i: OrdemItem) => podeComprar || i.criado_por === eu?.id;
+  // ⚠️ Aprovado, quem só pediu já não corrige (a API recusa): só cancela. Linha de antes da
+  // aprovação existir (`aprovado_por` nulo) segue como era.
+  const podeMexer = (i: OrdemItem) => podeComprar || podeAprovar || i.criado_por === eu?.id;
+  const podeCorrigir = (i: OrdemItem) => podeComprar || podeAprovar ||
+    (i.criado_por === eu?.id && (i.status === "AGUARDANDO" || !i.aprovado_por));
   const selecionados = (lista ?? []).filter((i) => marcados.has(i.id));
-  const comCaixinha = abaAtual === "A_COMPRAR" && podeComprar;
+  const comCaixinha = (abaAtual === "A_COMPRAR" && podeComprar) ||
+    (abaAtual === "AGUARDANDO" && podeAprovar);
+  const aberta = abaAtual === "A_COMPRAR" || abaAtual === "AGUARDANDO";
 
   return (
     <div className="flex flex-col gap-6">
@@ -171,7 +244,8 @@ export default function PaginaOrdemDeCompra() {
         {/* 🔑 Aberta, e não atrás de "saber mais" (o padrão de 15/09): é a tela que a equipe
             inteira usa, e o modelo do dono a mostra à vista. */}
         <p className="prosa mt-2 max-w-[38rem] text-[15px] text-suave" id="ordem-explica">
-          Acabou ou está acabando alguma coisa? Peça aqui. Quem compra recebe seu pedido, compra e
+          Acabou ou está acabando alguma coisa? Peça aqui. O pedido passa pela{" "}
+          <strong className="text-tinta">aprovação</strong>; aprovado, quem compra recebe, compra e
           marca como <strong className="text-tinta">comprado</strong>: você acompanha tudo nesta
           tela. Marcar não mexe no estoque; a mercadoria entra quando a nota é lançada.
         </p>
@@ -197,20 +271,28 @@ export default function PaginaOrdemDeCompra() {
         </ol>
       )}
 
-      {abaAtual === "A_COMPRAR" && podePedir && (
-        <section className="cartao p-5"><FormPedido aoPedir={() => void carregar()} /></section>
+      {aberta && podePedir && (
+        <section className="cartao p-5">
+          <FormPedido podeAprovar={podeAprovar}
+                      aoPedir={(status) => {
+                        // O pedido que foi para aprovação aparece onde ele está.
+                        if (status && status !== abaAtual) setAba(status);
+                        else void carregar();
+                      }} />
+        </section>
       )}
 
       <section className="cartao p-5">
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" id="ordem-aba-comprar" onClick={() => setAba("A_COMPRAR")}
-                  className={abaAtual === "A_COMPRAR" ? "btn btn-primario" : "btn btn-secundario"}>
-            A comprar{aComprar !== null ? ` (${aComprar})` : ""}
-          </button>
-          <button type="button" id="ordem-aba-comprados" onClick={() => setAba("COMPRADO")}
-                  className={abaAtual === "COMPRADO" ? "btn btn-primario" : "btn btn-secundario"}>
-            Comprados
-          </button>
+          {ABAS_ORDEM.map((a) => {
+            const n = a === "AGUARDANDO" ? contagem?.aguardando : a === "A_COMPRAR" ? contagem?.a_comprar : null;
+            return (
+              <button key={a} type="button" id={ID_ABA[a]} onClick={() => setAba(a)}
+                      className={abaAtual === a ? "btn btn-primario" : "btn btn-secundario"}>
+                {ROTULO_ABA[a]}{n != null ? ` (${n})` : ""}
+              </button>
+            );
+          })}
           {/* ⚠️ A largura vai no invólucro: `.campo` tem `width: 100%` fora das camadas e
               ganha de qualquer utilitário posto no próprio campo. */}
           <div className="w-full sm:ml-auto sm:w-64">
@@ -221,26 +303,36 @@ export default function PaginaOrdemDeCompra() {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[13.5px]">
-          <p className="text-suave">
-            {abaAtual === "A_COMPRAR"
-              ? "Pedidos esperando compra, os mais urgentes primeiro."
-              : "O que já foi comprado, o mais recente primeiro."}
-          </p>
-          {abaAtual === "COMPRADO" && (
+          <p className="text-suave">{FRASE_ABA[abaAtual]}</p>
+          {comData && (
             <span className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
               <span className="text-suave">de</span>
-              <input type="date" className="campo py-1" style={{ width: "auto" }} aria-label="comprado de"
+              <input type="date" className="campo py-1" style={{ width: "auto" }}
+                     aria-label={abaAtual === "RECUSADO" ? "recusado de" : "comprado de"}
                      value={de} max={ate || undefined} onChange={(e) => setDe(e.target.value)} />
               <span className="text-suave">até</span>
-              <input type="date" className="campo py-1" style={{ width: "auto" }} aria-label="comprado até"
+              <input type="date" className="campo py-1" style={{ width: "auto" }}
+                     aria-label={abaAtual === "RECUSADO" ? "recusado até" : "comprado até"}
                      value={ate} min={de || undefined} onChange={(e) => setAte(e.target.value)} />
             </span>
           )}
-          {comCaixinha && selecionados.length > 0 && (
+          {comCaixinha && selecionados.length > 0 && abaAtual === "A_COMPRAR" && (
             <button type="button" className="btn btn-primario sm:ml-auto" id="ordem-comprar-selecionados"
                     onClick={() => setComprando(selecionados)}>
               Marcar {selecionados.length} como comprado
             </button>
+          )}
+          {comCaixinha && selecionados.length > 0 && abaAtual === "AGUARDANDO" && (
+            <span className="flex flex-wrap gap-2 sm:ml-auto">
+              <button type="button" className="btn btn-secundario" id="ordem-recusar-selecionados"
+                      disabled={ocupado} onClick={() => setRecusando(selecionados)}>
+                Recusar {selecionados.length}
+              </button>
+              <button type="button" className="btn btn-primario" id="ordem-aprovar-selecionados"
+                      disabled={ocupado} onClick={() => void aprovar(selecionados.map((i) => i.id))}>
+                Aprovar {selecionados.length}
+              </button>
+            </span>
           )}
         </div>
 
@@ -251,7 +343,7 @@ export default function PaginaOrdemDeCompra() {
             <Vazio>
               {busca || de || ate
                 ? "Nada encontrado com esse filtro."
-                : abaAtual === "A_COMPRAR" ? "Nada para comprar agora." : "Nenhum item comprado ainda."}
+                : VAZIO_ABA[abaAtual]}
             </Vazio>
           </div>
         ) : (
@@ -296,31 +388,49 @@ export default function PaginaOrdemDeCompra() {
                   </span>
                   <span className="text-[13px]">
                     <SeloSituacao status={i.status} />
-                    {i.comprado_em && (
+                    {i.comprado_em ? (
                       <span className="mt-1 block text-[12.5px] text-suave">
                         comprado por {i.comprado_por_nome ?? "—"} · {quando(i.comprado_em)}
                         {i.fornecedor && <> · {i.fornecedor}</>}
                       </span>
-                    )}
+                    ) : i.status === "RECUSADO" ? (
+                      <span className="mt-1 block text-[12.5px] text-suave" data-recusa>
+                        por {i.recusado_por_nome ?? "—"}
+                        {i.recusado_em && <> · {quando(i.recusado_em)}</>}
+                        {i.motivo_recusa && <span className="block text-tinta">“{i.motivo_recusa}”</span>}
+                      </span>
+                    ) : i.status === "A_COMPRAR" && i.aprovado_por_nome && i.aprovado_por !== i.criado_por ? (
+                      <span className="mt-1 block text-[12.5px] text-suave" data-aprovado>
+                        aprovado por {i.aprovado_por_nome}
+                      </span>
+                    ) : null}
                   </span>
                   {/* Comprei em destaque; corrigir e cancelar, que são raros, sem peso. */}
                   <div className="flex w-full flex-wrap items-center gap-1 md:w-auto md:justify-end">
-                    {abaAtual === "A_COMPRAR" ? (
+                    {aberta ? (
                       <>
-                        {podeComprar && (
+                        {abaAtual === "A_COMPRAR" && podeComprar && (
                           <button type="button" className="btn btn-secundario btn-pequeno" data-acao="comprei"
                                   onClick={() => setComprando([i])}>Comprei</button>
                         )}
-                        {podeMexer(i) && (
+                        {abaAtual === "AGUARDANDO" && podeAprovar && (
                           <>
-                            <button type="button" className="btn btn-terciario btn-pequeno" data-acao="corrigir"
-                                    onClick={() => setCorrigindo(i)}>Corrigir</button>
-                            <button type="button" className="btn btn-terciario btn-pequeno" data-acao="cancelar"
-                                    onClick={() => setCancelando(i)}>Cancelar</button>
+                            <button type="button" className="btn btn-secundario btn-pequeno" data-acao="aprovar"
+                                    disabled={ocupado} onClick={() => void aprovar([i.id])}>Aprovar</button>
+                            <button type="button" className="btn btn-terciario btn-pequeno" data-acao="recusar"
+                                    disabled={ocupado} onClick={() => setRecusando([i])}>Recusar</button>
                           </>
                         )}
+                        {podeCorrigir(i) && (
+                          <button type="button" className="btn btn-terciario btn-pequeno" data-acao="corrigir"
+                                  onClick={() => setCorrigindo(i)}>Corrigir</button>
+                        )}
+                        {podeMexer(i) && (
+                          <button type="button" className="btn btn-terciario btn-pequeno" data-acao="cancelar"
+                                  onClick={() => setCancelando(i)}>Cancelar</button>
+                        )}
                       </>
-                    ) : podeComprar && (
+                    ) : abaAtual === "COMPRADO" && podeComprar && (
                       <button type="button" className="btn btn-secundario btn-pequeno" data-acao="voltar"
                               disabled={ocupado} onClick={() => void voltar([i.id])}>Voltar à lista</button>
                     )}
@@ -338,7 +448,8 @@ export default function PaginaOrdemDeCompra() {
                          aoPor={(m) => {
                            setSugestoes(false);
                            aviso.sucesso(m);
-                           if (abaAtual !== "A_COMPRAR") setAba("A_COMPRAR");
+                           const destino: AbaOrdem = podeAprovar ? "A_COMPRAR" : "AGUARDANDO";
+                           if (abaAtual !== destino) setAba(destino);
                            else void carregar();
                          }} />
       )}
@@ -353,6 +464,26 @@ export default function PaginaOrdemDeCompra() {
       {corrigindo && (
         <JanelaCorrigir item={corrigindo} aoFechar={() => setCorrigindo(null)}
                         aoSalvar={(m) => { setCorrigindo(null); aviso.sucesso(m); void carregar(); }} />
+      )}
+      {recusando && (
+        <Confirmacao titulo={recusando.length === 1 ? "Recusar este pedido?" : `Recusar ${recusando.length} pedidos?`}
+                     rotuloConfirmar="Recusar" rotuloCancelar="Voltar" perigo ocupado={ocupado}
+                     aoConfirmar={() => void recusar()}
+                     aoCancelar={() => { setRecusando(null); setMotivo(""); }}>
+          <p>
+            {recusando.length === 1
+              ? `${recusando[0].item}, ${qtd(recusando[0].quantidade)} ${recusando[0].um}, não vai para a compra.`
+              : "Eles não vão para a compra."}{" "}
+            Quem pediu vê a recusa na aba Recusados.
+          </p>
+          <div className="mt-3">
+            <Campo rotulo="Motivo" opcional>
+              <textarea className="campo min-h-[4rem]" id="ordem-motivo-recusa" maxLength={300} rows={2}
+                        placeholder="Ex.: ainda tem no estoque do freezer 2"
+                        value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+            </Campo>
+          </div>
+        </Confirmacao>
       )}
       {cancelando && (
         <Confirmacao titulo="Cancelar este pedido?" rotuloConfirmar="Cancelar pedido"

@@ -18,6 +18,8 @@ CHAVES = {
     "estoque.provisorio": "estoque.saldos",
     "compras.pendencias": "compras.notas",
     "compras.nao_lancadas": "compras.notas",
+    # A ordem de compra esperando sim (165): só quem pode aprovar.
+    "compras.ordem_aguardando": "compras.ordem_aprovar",
     "cadastro.rascunho": "cadastros.produtos",
     "fichas.faltando": "fichas.visualizar",
     "cmv.sem_vinculo": "cmv.painel",

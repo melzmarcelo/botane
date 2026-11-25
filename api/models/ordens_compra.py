@@ -59,3 +59,15 @@ class OrdemComprarRequest(BaseModel):
 
 class OrdemVoltarRequest(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=200)
+
+
+class OrdemAprovarRequest(BaseModel):
+    """Os pedidos aguardando que quem aprova marcou (migração 165)."""
+
+    ids: list[int] = Field(min_length=1, max_length=200)
+
+
+class OrdemRecusarRequest(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=200)
+    # Opcional, mas é o que quem pediu lê na aba Recusados.
+    motivo: str | None = Field(default=None, max_length=300)

@@ -475,7 +475,8 @@ def aplicar(cur, id_produto: int, plano: dict, id_usuario: int | None = None) ->
     # ⚠️ O pedido em embalagem (FD, PCT) não muda: a embalagem continua existindo.
     cur.execute(
         """UPDATE ordem_compra_itens SET quantidade = quantidade * %s, um = %s
-            WHERE id_produto = %s AND status = 'A_COMPRAR' AND upper(um) = upper(%s)""",
+            WHERE id_produto = %s AND status IN ('AGUARDANDO', 'A_COMPRAR')
+              AND upper(um) = upper(%s)""",
         (fator, plano["para"], id_produto, plano["de"]),
     )
 

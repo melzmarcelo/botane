@@ -94,10 +94,28 @@ def _desativar_filiais():
             if comprados:
                 chamar("POST", "/ordens-compra/voltar", {"ids": [x["id"] for x in comprados]},
                        token=token, unidade=u["id"])
-            _s, abertos = chamar("GET", f"/ordens-compra?status=A_COMPRAR&busca={marca}&limite=200",
-                                 token=token, unidade=u["id"])
-            for x in (abertos or []):
+            # ⚠️ E as que aguardam aprovação (165): senão o alerta do dono fica aceso para sempre.
+            abertos = []
+            for situacao in ("A_COMPRAR", "AGUARDANDO"):
+                _s, l = chamar("GET", f"/ordens-compra?status={situacao}&busca={marca}&limite=200",
+                               token=token, unidade=u["id"])
+                abertos += l or []
+            for x in abertos:
                 chamar("POST", f"/ordens-compra/{x['id']}/cancelar", {}, token=token, unidade=u["id"])
+        # ⚠️ Recusado não se cancela pela API (é história), e ficaria na aba Recusados da base
+        # local: sai direto no banco, só o que a rodada criou.
+        try:
+            sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
+            from database import get_cursor
+            with get_cursor() as cur:
+                cur.execute("""DELETE FROM ordem_compra_itens
+                                WHERE status = 'RECUSADO' AND descricao_livre LIKE %s""",
+                            (f"%{marca}%",))
+                cur.execute("""DELETE FROM ordem_compra_itens i USING produtos p
+                                WHERE p.id = i.id_produto AND i.status = 'RECUSADO'
+                                  AND p.codigo LIKE %s""", (f"%{marca}%",))
+        except Exception:
+            pass
         for u in (lista or []):
             if u.get("ativo") and str(u.get("nome", "")).startswith("Filial ordem"):
                 chamar("PUT", f"/unidades/{u['id']}", {"ativo": False}, token=token)
@@ -227,6 +245,8 @@ checar("e entra", bool(tk), (s, lg))
 if tk:
     s, meu = api("POST", "/ordens-compra", {"id_produto": outro, "quantidade": 1, "um": "UN"}, tk=tk)
     checar("a cozinha pede", s == 201, (s, meu))
+    checar("e o pedido dela vai para aprovação (165)",
+           meu.get("status") == "AGUARDANDO" and "aprovação" in meu.get("message", ""), meu)
     s, _ = api("POST", "/ordens-compra/comprar", {"itens": [{"id": meu["id"]}]}, tk=tk)
     checar("a cozinha não marca comprado", s == 403, s)
     s, _ = api("PUT", f"/ordens-compra/{a['id']}", {"quantidade": 1, "um": "UN"}, tk=tk)
@@ -237,6 +257,82 @@ if tk:
     checar("corrige o próprio", s == 200, s)
     s, _ = api("POST", f"/ordens-compra/{meu['id']}/cancelar", {}, tk=tk)
     checar("cancela o próprio", s == 201, s)
+
+print("5b. aprovação (migração 165)")
+if tk:
+    s, pd = api("POST", "/ordens-compra", {"id_produto": outro, "quantidade": 4, "um": "UN",
+                                           "observacao": f"aprovar {marca}"}, tk=tk)
+    checar("pedido da cozinha nasce AGUARDANDO", s == 201 and pd["status"] == "AGUARDANDO", (s, pd))
+    checar("aparece em Aguardando aprovação", linha(pd["id"], "AGUARDANDO") is not None)
+    checar("e NÃO em A comprar", linha(pd["id"]) is None)
+    s, res = api("GET", "/ordens-compra/resumo")
+    checar("o resumo conta o que aguarda", s == 200 and res.get("aguardando", 0) >= 1, res)
+    s, r = api("POST", "/ordens-compra/comprar", {"itens": [{"id": pd["id"]}]})
+    checar("não se compra o que aguarda aprovação: 409",
+           s == 409 and "aguarda aprovação" in r["detail"], (s, r))
+    s, _ = api("POST", "/ordens-compra/aprovar", {"ids": [pd["id"]]}, tk=tk)
+    checar("a cozinha não aprova: 403", s == 403, s)
+    s, al = api("GET", "/alertas")
+    checar("quem aprova vê o alerta de pedido aguardando",
+           any(x["chave"] == "compras.ordem_aguardando" for x in (al or [])), al)
+    s, al = api("GET", "/alertas", tk=tk)
+    checar("a cozinha não vê esse alerta",
+           not any(x["chave"] == "compras.ordem_aguardando" for x in (al or [])), al)
+    s, _ = api("PUT", f"/ordens-compra/{pd['id']}", {"quantidade": 5, "um": "UN"}, tk=tk)
+    checar("enquanto aguarda, quem pediu corrige", s == 200 and igual(linha(pd["id"], "AGUARDANDO")["quantidade"], 5))
+
+    s, r = api("POST", "/ordens-compra/aprovar", {"ids": [pd["id"]]})
+    checar("o administrador aprova", s == 201 and r["ids"] == [pd["id"]], (s, r))
+    l = linha(pd["id"])
+    checar("aprovado vai para A comprar, com quem aprovou",
+           l and l["aprovado_por_nome"] and l["aprovado_em"], l)
+    s, r = api("POST", "/ordens-compra/aprovar", {"ids": [pd["id"]]})
+    checar("aprovar de novo: 409 dizendo que já foi aprovado",
+           s == 409 and "já foi aprovado" in r["detail"], (s, r))
+    s, r = api("PUT", f"/ordens-compra/{pd['id']}", {"quantidade": 50, "um": "UN"}, tk=tk)
+    checar("aprovado, quem só pediu não corrige mais: 409", s == 409, (s, r))
+    s, r = api("POST", "/ordens-compra", {"id_produto": outro, "quantidade": 3, "um": "UN",
+                                          "somar_em": pd["id"]}, tk=tk)
+    checar("somar no aprovado vira linha nova aguardando (não aumenta a compra sem aprovação)",
+           s == 201 and not r["somado"] and r["id"] != pd["id"] and r["status"] == "AGUARDANDO", (s, r))
+    checar("e o aprovado continua com 5", igual(linha(pd["id"])["quantidade"], 5))
+    id_extra = r["id"]
+    s, r = api("POST", "/ordens-compra", {"id_produto": outro, "quantidade": 1, "um": "UN",
+                                          "somar_em": id_extra})
+    checar("quem aprova somando no que aguarda também abre linha nova, já aprovada",
+           s == 201 and not r["somado"] and r["status"] == "A_COMPRAR", (s, r))
+    s, _ = api("POST", f"/ordens-compra/{r['id']}/cancelar", {})
+
+    s, r = api("POST", "/ordens-compra/recusar", {"ids": [id_extra], "motivo": "tem no freezer 2"})
+    checar("o administrador recusa com motivo", s == 201, (s, r))
+    l = linha(id_extra, "RECUSADO")
+    checar("recusado vai para Recusados, com motivo e quem recusou",
+           l and l["motivo_recusa"] == "tem no freezer 2" and l["recusado_por_nome"], l)
+    checar("e sai de Aguardando", linha(id_extra, "AGUARDANDO") is None)
+    s, r = api("POST", f"/ordens-compra/{id_extra}/cancelar", {}, tk=tk)
+    checar("recusado não se cancela: 409", s == 409 and "recusado" in r["detail"], (s, r))
+    s, r = api("POST", "/ordens-compra/aprovar", {"ids": [id_extra]})
+    checar("nem se aprova depois: 409", s == 409, (s, r))
+    s, rel = api("GET", "/exportar/ordens-compra/dados?situacao_ordem=RECUSADO")
+    texto = json.dumps(rel, ensure_ascii=False)
+    checar("o relatório mostra a recusa com o motivo", "tem no freezer 2" in texto, texto[:300])
+
+    s, a2 = api("POST", "/ordens-compra", {"descricao_livre": f"Aprovar lote {marca}",
+                                           "quantidade": 1, "um": "UN"}, tk=tk)
+    s, r = api("POST", "/ordens-compra/aprovar", {"ids": [a2["id"], 999999999]})
+    checar("aprovar lote com item inexistente: 404", s == 404, s)
+    checar("e nada foi aprovado (tudo ou nada)", linha(a2["id"], "AGUARDANDO") is not None)
+    s, r = api("POST", "/ordens-compra/recusar", {"ids": [a2["id"]]})
+    checar("recusar sem motivo também vale", s == 201 and linha(a2["id"], "RECUSADO") is not None, (s, r))
+
+    s, r = api("POST", "/ordens-compra/lote", {"itens": [
+        {"descricao_livre": f"Lote cozinha {marca}", "quantidade": 2, "um": "UN"}]}, tk=tk)
+    checar("o lote da cozinha também vai para aprovação",
+           s == 201 and linha(r["ids"][0], "AGUARDANDO") is not None and "aprovação" in r["message"], (s, r))
+    s, _ = api("POST", f"/ordens-compra/{r['ids'][0]}/cancelar", {}, tk=tk)
+    checar("quem pediu cancela o que aguarda", s == 201, s)
+    s, _ = api("POST", f"/ordens-compra/{pd['id']}/cancelar", {}, tk=tk)
+    checar("e cancela o próprio aprovado (só não corrige)", s == 201, s)
 
 print("6. lojas")
 s, filial = chamar("POST", "/unidades", {"nome": f"Filial ordem {marca}", "apelido": f"O{marca}"},
