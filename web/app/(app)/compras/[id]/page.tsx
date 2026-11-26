@@ -16,8 +16,10 @@ import {
   Cartao,
   Confirmacao,
   Etiqueta,
+  Modal,
   Vazio,
 } from "@/components/ui";
+import { desfazerRecebimento, marcarRecebida } from "@/lib/compras";
 import { CORES, rotuloStatus, dataBr, ItemNota, NotaDetalhe, ORIGENS } from "../tipos";
 import ConversaoDoItem from "./conversao-do-item";
 import Voltar from "@/components/voltar";
@@ -50,7 +52,11 @@ export default function PaginaNota() {
   // O item cuja conversão está aberta na janela.
   const [conversao, setConversao] = useState<ItemNota | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const [confirmando, setConfirmando] = useState<"estornar" | null>(null);
+  const [confirmando, setConfirmando] = useState<"estornar" | "desfazer-recebimento" | null>(null);
+  // A janela do "Marcar como recebida" (168): o nome de quem recebeu é obrigatório.
+  const [recebendo, setRecebendo] = useState(false);
+  const [recebidoPor, setRecebidoPor] = useState("");
+  const [erroRecebido, setErroRecebido] = useState<string | null>(null);
   /** O item cujo produto vai ser SUBSTITUIDO por um cadastro novo.
    *
    * ⚠️ **Nunca `window.confirm`** — e menos ainda neste arquivo, que ja
@@ -246,6 +252,45 @@ export default function PaginaNota() {
     }
   }
 
+  /**
+   * 🔑 **Marcar como recebida** (migração 168, pedido do dono, 26/11/2026): com
+   * "Somente recebidas" desligado no Omie, a nota chega conciliada antes da mercadoria.
+   * Quem recebe marca aqui, com o nome de quem recebeu; outra pessoa confere as
+   * recebidas e dá o recebimento no Omie, e a sincronização a traz como lançada.
+   */
+  async function receber() {
+    const nome = recebidoPor.trim();
+    if (nome.length < 2) {
+      setErroRecebido("Informe o nome de quem recebeu a mercadoria.");
+      return;
+    }
+    setOcupado(true);
+    try {
+      const r = await marcarRecebida(Number(id), nome);
+      aviso.sucesso(r.message);
+      setRecebendo(false);
+      await carregar();
+    } catch (e) {
+      setErroRecebido(e instanceof Error ? e.message : "Não foi possível marcar como recebida");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function desfazerReceb() {
+    setOcupado(true);
+    try {
+      const r = await desfazerRecebimento(Number(id));
+      aviso.sucesso(r.message);
+      setConfirmando(null);
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível desfazer o recebimento");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!nota) return <Carregando />;
 
@@ -288,6 +333,18 @@ export default function PaginaNota() {
             <Etiqueta cor="erva">lançada em {dataBr(nota.lancada_em)}</Etiqueta>
           )}
         </div>
+        {nota.recebido_por && (
+          <p id="nota-recebida-por" className="mt-2 text-[14px]">
+            Recebida por <b>{nota.recebido_por}</b>
+            {nota.recebido_em && ` em ${dataBr(nota.recebido_em)}`}
+            {nota.recebido_marcado_por && (
+              <span className="text-suave"> · marcada por {nota.recebido_marcado_por}</span>
+            )}
+            {nota.status === "RECEBIDA" && (
+              <span className="text-suave"> · falta dar o recebimento no Omie</span>
+            )}
+          </p>
+        )}
         <p className="mt-2 max-w-[70ch] prosa text-suave">
           {nota.fornecedor ?? nota.nome_emitente ?? "sem fornecedor"}
           {nota.cnpj_emitente && ` · ${nota.cnpj_emitente}`}
@@ -341,6 +398,27 @@ export default function PaginaNota() {
               title="Relê esta nota no Omie e traz o que mudou lá"
             >
               Atualizar do Omie
+            </button>
+          )}
+          {nota.pode_receber && pode("compras.notas") && (
+            <button
+              id="nota-marcar-recebida"
+              className="btn btn-secundario"
+              onClick={() => { setRecebidoPor(""); setErroRecebido(null); setRecebendo(true); }}
+              disabled={ocupado}
+              title="A mercadoria chegou: registra quem recebeu, para depois dar o recebimento no Omie"
+            >
+              Marcar como recebida
+            </button>
+          )}
+          {nota.status === "RECEBIDA" && pode("compras.notas") && (
+            <button
+              id="nota-desfazer-recebida"
+              className="btn btn-secundario"
+              onClick={() => setConfirmando("desfazer-recebimento")}
+              disabled={ocupado}
+            >
+              Desfazer recebimento
             </button>
           )}
           {lancada && pode("estoque.ajuste") && (
@@ -795,6 +873,53 @@ export default function PaginaNota() {
           <p className="mt-3 text-[13.5px] text-suave">
             Cada entrada ganha uma contrapartida no razão e o custo médio volta a ser
             recalculado. Nada se apaga: os dois movimentos ficam à vista.
+          </p>
+        </Confirmacao>
+      )}
+
+      {recebendo && (
+        <Modal titulo="Marcar a nota como recebida" largura="480px"
+               aoFechar={() => setRecebendo(false)}>
+          <form id="form-recebida" onSubmit={(e) => { e.preventDefault(); void receber(); }}>
+            <p className="text-[15px] leading-snug">
+              A mercadoria da <b>NF {nota.numero ?? "—"}</b> de{" "}
+              <b>{nota.fornecedor ?? nota.nome_emitente ?? "—"}</b> chegou. Depois, alguém
+              confere as recebidas e dá o recebimento no Omie — e ela volta lançada.
+            </p>
+            <Campo rotulo="Quem recebeu" erro={erroRecebido} className="mt-4">
+              <input
+                id="nota-recebido-por"
+                className="campo"
+                value={recebidoPor}
+                maxLength={120}
+                autoFocus
+                required
+                onChange={(e) => { setRecebidoPor(e.target.value); setErroRecebido(null); }}
+              />
+            </Campo>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button type="button" className="btn btn-secundario" onClick={() => setRecebendo(false)}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-primario" aria-busy={ocupado} disabled={ocupado}>
+                {ocupado ? "…" : "Marcar como recebida"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {confirmando === "desfazer-recebimento" && (
+        <Confirmacao
+          titulo="Desfazer o recebimento"
+          rotuloConfirmar="Desfazer"
+          ocupado={ocupado}
+          aoCancelar={() => setConfirmando(null)}
+          aoConfirmar={() => void desfazerReceb()}
+        >
+          <p>
+            A <b>NF {nota.numero ?? "—"}</b> volta a conciliada e o nome de quem recebeu
+            ({nota.recebido_por}) é apagado.
           </p>
         </Confirmacao>
       )}

@@ -150,7 +150,8 @@ def _opcoes_situacao_consumo(_cur, _id_unidade: int) -> list[dict]:
 # compras, perdas e ajustes, margem dos pratos e recebimentos.
 SITUACOES_NOTA = {
     "lancada": "Lançadas no estoque",
-    "pendente": "Ainda não lançadas (importadas ou conciliadas)",
+    "pendente": "Ainda não lançadas (importadas, conciliadas ou recebidas)",
+    "recebida": "Recebidas (esperando o recebimento no Omie)",
     "cancelada": "Canceladas",
 }
 DETALHES_COMPRAS = {
@@ -1575,14 +1576,17 @@ def _situacoes_nota(f: dict) -> list[str]:
     if "lancada" in escolhidas:
         status.append("LANCADA")
     if "pendente" in escolhidas:
-        status += ["IMPORTADA", "CONCILIADA"]
+        status += ["IMPORTADA", "CONCILIADA", "RECEBIDA"]
+    if "recebida" in escolhidas and "RECEBIDA" not in status:
+        status.append("RECEBIDA")
     if "cancelada" in escolhidas:
         status.append("CANCELADA")
-    return status or ["LANCADA", "IMPORTADA", "CONCILIADA"]
+    return status or ["LANCADA", "IMPORTADA", "CONCILIADA", "RECEBIDA"]
 
 
 _ROTULO_STATUS_NOTA = {"LANCADA": "lançada", "IMPORTADA": "importada",
-                       "CONCILIADA": "conciliada", "CANCELADA": "cancelada"}
+                       "CONCILIADA": "conciliada", "RECEBIDA": "recebida",
+                       "CANCELADA": "cancelada"}
 
 
 def _compras(cur, id_unidade: int, f: dict) -> Saida:
@@ -1625,7 +1629,7 @@ def _compras(cur, id_unidade: int, f: dict) -> Saida:
                        n.cnpj_emitente AS cnpj, n.status, n.origem,
                        (SELECT count(*) FROM nota_itens i WHERE i.id_nota = n.id) AS itens,
                        n.valor_produtos, n.valor_desconto, n.valor_frete, n.valor_outros,
-                       n.valor_total
+                       n.valor_total, n.recebido_por
                   FROM notas_entrada n
                   LEFT JOIN fornecedores fo ON fo.id = n.id_fornecedor
                  WHERE {filtro_nota}
@@ -1635,7 +1639,8 @@ def _compras(cur, id_unidade: int, f: dict) -> Saida:
                             if r["numero"] else "—")}
                   for r in cur.fetchall()]
         colunas = [("data", "Entrada"), ("nota", "Nota"), ("fornecedor", "Fornecedor"),
-                   ("cnpj", "CNPJ"), ("status", "Situação"), ("itens", "Itens"),
+                   ("cnpj", "CNPJ"), ("status", "Situação"),
+                   ("recebido_por", "Recebido por"), ("itens", "Itens"),
                    ("valor_produtos", "Produtos"), ("valor_desconto", "Desconto"),
                    ("valor_frete", "Frete"), ("valor_outros", "Outros (IPI, ST)"),
                    ("valor_total", "Total da nota")]

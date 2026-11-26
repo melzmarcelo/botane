@@ -586,6 +586,11 @@ export default function PaginaCompras() {
                 <span className="flex items-center gap-2 sm:justify-end">
                   {n.pendentes > 0 && <Etiqueta cor="alerta">{plural(n.pendentes, "pendente", "pendentes")}</Etiqueta>}
                   <Etiqueta cor={CORES[n.status]}>{rotuloStatus(n.status)}</Etiqueta>
+                  {/* Quem recebeu, na lista das recebidas: é por ela que alguém dá o
+                      recebimento no Omie (168). */}
+                  {n.status === "RECEBIDA" && n.recebido_por && (
+                    <span className="text-[12px] text-suave" data-recebido-por>por {n.recebido_por}</span>
+                  )}
                 </span>
               </li>
             ))}

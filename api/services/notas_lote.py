@@ -48,7 +48,7 @@ def _candidatas(cur, id_unidade: int, travar: bool = False) -> list[dict]:
                     WHERE i.id_nota = n.id AND NOT i.ignorado) AS itens
              FROM notas_entrada n
              LEFT JOIN fornecedores f ON f.id = n.id_fornecedor
-            WHERE n.id_unidade = %s AND n.status IN ('IMPORTADA', 'CONCILIADA')
+            WHERE n.id_unidade = %s AND n.status IN ('IMPORTADA', 'CONCILIADA', 'RECEBIDA')
               AND NOT EXISTS (SELECT 1 FROM nota_itens i
                                WHERE i.id_nota = n.id AND i.id_produto IS NULL
                                  AND NOT i.ignorado)

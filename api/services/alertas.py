@@ -181,7 +181,7 @@ def levantar(cur, id_unidade: int) -> list[dict]:
 
     r = _um(cur, """
         SELECT count(*) AS n, coalesce(sum(valor_total), 0) AS valor FROM notas_entrada
-         WHERE id_unidade = %s AND status = 'CONCILIADA'""", (id_unidade,))
+         WHERE id_unidade = %s AND status IN ('CONCILIADA', 'RECEBIDA')""", (id_unidade,))
     juntar("compras.nao_lancadas", ATENCAO, "Nota conciliada, ainda não lançada", r.get("n"),
            "Já está pronta: falta o clique que transforma em estoque.",
            "lançar", "/compras", r.get("valor"))

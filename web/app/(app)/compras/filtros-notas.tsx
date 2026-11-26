@@ -13,9 +13,12 @@ import { useEstadoNaUrl } from "@/lib/estado-na-url";
  * entrada — a mesma regra do servidor (`coalesce`), que é quem filtra.
  */
 export const SITUACOES: { valor: string; nome: string; status: string[] }[] = [
-  { valor: "abertas", nome: "a lançar", status: ["IMPORTADA", "CONCILIADA"] },
+  { valor: "abertas", nome: "a lançar", status: ["IMPORTADA", "CONCILIADA", "RECEBIDA"] },
   { valor: "IMPORTADA", nome: "importada", status: ["IMPORTADA"] },
   { valor: "CONCILIADA", nome: "conciliada", status: ["CONCILIADA"] },
+  // 🔑 As que chegaram e esperam o recebimento no Omie (168): a lista de quem dá o
+  // recebimento lá.
+  { valor: "RECEBIDA", nome: "recebida", status: ["RECEBIDA"] },
   { valor: "LANCADA", nome: "lançada", status: ["LANCADA"] },
   { valor: "CANCELADA", nome: "cancelada", status: ["CANCELADA"] },
   { valor: "NAO_ENCONTRADA", nome: "não encontrada no Omie", status: ["NAO_ENCONTRADA"] },

@@ -73,3 +73,13 @@ export const previaDoLote = () => api.get<PreviaDoLote>("/notas/lote/previa");
  */
 export const lancarLote = (ids: number[]) =>
   api.post<ResultadoDoLote>("/notas/lote/lancar", { ids });
+
+/**
+ * 🔑 **Nota RECEBIDA** (migração 168, pedido do dono, 26/11/2026): a mercadoria chegou e
+ * falta o recebimento no Omie. O nome de quem recebeu é obrigatório e fica na nota.
+ */
+export const marcarRecebida = (idNota: number, recebidoPor: string) =>
+  api.post<{ message: string }>(`/notas/${idNota}/receber`, { recebido_por: recebidoPor });
+
+export const desfazerRecebimento = (idNota: number) =>
+  api.delete<{ message: string }>(`/notas/${idNota}/receber`);

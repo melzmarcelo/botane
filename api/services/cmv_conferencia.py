@@ -52,7 +52,7 @@ def conferir(cur, id_unidade: int, inicio: date, fim: date) -> dict:
     r = _um(cur, """
         SELECT count(*) AS n, coalesce(sum(n.valor_total), 0) AS valor
           FROM notas_entrada n
-         WHERE n.id_unidade = %(u)s AND n.status IN ('IMPORTADA', 'CONCILIADA')
+         WHERE n.id_unidade = %(u)s AND n.status IN ('IMPORTADA', 'CONCILIADA', 'RECEBIDA')
            AND coalesce(n.data_entrada, n.data_emissao) >= %(inicio)s
            AND coalesce(n.data_entrada, n.data_emissao) < %(limite)s""", p)
     juntar("notas_nao_lancadas", IMPEDE_O_NUMERO, "Nota do período ainda não lançada",

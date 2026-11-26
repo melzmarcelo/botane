@@ -16,6 +16,8 @@ export type Nota = {
   status: string;
   itens: number;
   pendentes: number;
+  /** Quem recebeu a mercadoria (168). */
+  recebido_por: string | null;
 };
 
 export type ItemNota = {
@@ -88,6 +90,13 @@ export type NotaDetalhe = Omit<Nota, "itens"> & {
   id_local: number | null;
   lancada_em: string | null;
   tem_xml: boolean;
+  /** Quem recebeu a mercadoria (168) — digitado, obrigatório ao marcar como recebida. */
+  recebido_por: string | null;
+  recebido_em: string | null;
+  /** O usuário que marcou. */
+  recebido_marcado_por: string | null;
+  /** Mostra "Marcar como recebida": conciliada do Omie com "Somente recebidas" desligado. */
+  pode_receber: boolean;
   /** O limite de alta que esta loja configurou, em %. Zero desliga o aviso. */
   alerta_variacao_pct: number;
 };
@@ -95,6 +104,8 @@ export type NotaDetalhe = Omit<Nota, "itens"> & {
 export const CORES: Record<string, "erva" | "alerta" | "neutro"> = {
   LANCADA: "erva",
   CONCILIADA: "alerta",
+  // 🔑 A mercadoria chegou; falta o recebimento no Omie (168, 26/11/2026).
+  RECEBIDA: "erva",
   IMPORTADA: "neutro",
   // Cancelada no Omie: fora da fila e fora do estoque.
   CANCELADA: "neutro",
@@ -111,6 +122,7 @@ export const CORES: Record<string, "erva" | "alerta" | "neutro"> = {
 export const ROTULO_STATUS: Record<string, string> = {
   IMPORTADA: "importada",
   CONCILIADA: "conciliada",
+  RECEBIDA: "recebida",
   LANCADA: "lançada",
   CANCELADA: "cancelada",
   NAO_ENCONTRADA: "não encontrada no Omie",

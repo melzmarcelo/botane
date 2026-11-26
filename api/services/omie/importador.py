@@ -392,10 +392,17 @@ def calcular_nota(cur, id_nota: int) -> dict:
     # ⚠️ **A CANCELADA não é ressuscitada pelo recálculo** (09/10/2026). Esta conta
     # roda em toda religação e em toda correção de cadastro, e devolvia a nota para
     # IMPORTADA/CONCILIADA — de volta à fila de onde o cancelamento a tirou.
+    # 🔑 **A RECEBIDA continua recebida** (168, 26/11/2026): conciliada de novo, a
+    # nota que alguém marcou como recebida volta a RECEBIDA, não a CONCILIADA.
+    # Com item pendente ela é IMPORTADA como qualquer outra — o recebimento fica
+    # guardado nas colunas e reaparece quando o item for resolvido.
     cur.execute(
-        """UPDATE notas_entrada SET status = %s
+        """UPDATE notas_entrada
+              SET status = CASE WHEN %s THEN 'IMPORTADA'
+                                WHEN recebido_por IS NOT NULL THEN 'RECEBIDA'
+                                ELSE 'CONCILIADA' END
             WHERE id = %s AND status NOT IN ('LANCADA', 'CANCELADA', 'NAO_ENCONTRADA')""",
-        ("IMPORTADA" if pendentes else "CONCILIADA", id_nota),
+        (bool(pendentes), id_nota),
     )
     return {"itens": len(itens), "pendentes": pendentes}
 
@@ -628,8 +635,12 @@ def estornar_lancamento(cur, id_nota: int, id_usuario: int, *, na_data_original:
         motor.estornar(cur, m["id"], id_usuario, motivo or f"Estorno da nota #{id_nota}",
                        data_movimento=m["data_movimento"] if na_data_original else None)
     cur.execute(
-        """UPDATE notas_entrada SET status = 'CONCILIADA', lancada_em = NULL,
-                                    lancada_por = NULL
+        # A nota que alguém marcou como RECEBIDA volta a recebida (168): a mercadoria
+        # chegou, só o Omie desfez o recebimento dele.
+        """UPDATE notas_entrada
+              SET status = CASE WHEN recebido_por IS NOT NULL THEN 'RECEBIDA'
+                                ELSE 'CONCILIADA' END,
+                  lancada_em = NULL, lancada_por = NULL
             WHERE id = %s""",
         (id_nota,),
     )
@@ -1004,7 +1015,8 @@ def mudou_no_omie(cur, id_unidade: int, cabecalho: dict) -> dict | None:
     # notas recebidas" decide. ⚠️ Só quando a LISTA traz a marca, como a de cima.
     # ⚠️ Só nota ABERTA: a lançada não se relê, e "mudou" nela seria um alarme falso
     # de nota travada.
-    if (cabecalho.get("recebida") is True and aqui["status"] in ("IMPORTADA", "CONCILIADA")
+    if (cabecalho.get("recebida") is True
+            and aqui["status"] in ("IMPORTADA", "CONCILIADA", "RECEBIDA")
             and mapeadores.situacao_no_omie(_como_dict(aqui["bruto"]))["recebida"] is not True):
         difere["recebida"] = (False, True)
     # 🔑 **A ETAPA mudou lá** (27/10/2026, pedido do dono: a nota recebida que volta
@@ -1199,7 +1211,7 @@ def atualizar_abertas(cur, id_unidade: int, cliente: ClienteOmie, limite: int = 
     cur.execute(
         """SELECT id, id_omie, numero, nome_emitente FROM notas_entrada
             WHERE id_unidade = %s AND origem = 'OMIE' AND id_omie IS NOT NULL
-              AND status IN ('IMPORTADA', 'CONCILIADA')
+              AND status IN ('IMPORTADA', 'CONCILIADA', 'RECEBIDA')
               AND (%s::bigint IS NULL OR id < %s)
             ORDER BY id DESC LIMIT %s""",
         (id_unidade, antes_de, antes_de, limite),
@@ -1247,7 +1259,7 @@ def atualizar_abertas(cur, id_unidade: int, cliente: ClienteOmie, limite: int = 
         cur.execute(
             """SELECT count(*) AS n FROM notas_entrada
                 WHERE id_unidade = %s AND origem = 'OMIE' AND id_omie IS NOT NULL
-                  AND status IN ('IMPORTADA', 'CONCILIADA') AND id < %s""",
+                  AND status IN ('IMPORTADA', 'CONCILIADA', 'RECEBIDA') AND id < %s""",
             (id_unidade, ultima),
         )
         restantes = cur.fetchone()["n"]
@@ -1444,7 +1456,7 @@ def lancar_as_recebidas(cur, id_unidade: int, ids: list[int] | None = None) -> d
     cur.execute(
         """SELECT id, bruto FROM notas_entrada
             WHERE id_unidade = %s AND origem = 'OMIE'
-              AND status IN ('IMPORTADA', 'CONCILIADA')
+              AND status IN ('IMPORTADA', 'CONCILIADA', 'RECEBIDA')
               AND (%s::int[] IS NULL OR id = ANY(%s::int[]))
               AND (%s::date IS NULL OR coalesce(data_entrada, data_emissao) >= %s
                    OR EXISTS (SELECT 1 FROM estoque_movimentos m

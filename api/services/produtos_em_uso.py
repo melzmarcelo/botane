@@ -22,7 +22,7 @@ ele mostraria outro número.
 EM_USO = """(
     EXISTS (SELECT 1 FROM nota_itens ni JOIN notas_entrada ne ON ne.id = ni.id_nota
              WHERE ni.id_produto = p.id AND NOT ni.ignorado AND ne.id_unidade = {u}
-               AND ne.status IN ('IMPORTADA', 'CONCILIADA'))
+               AND ne.status IN ('IMPORTADA', 'CONCILIADA', 'RECEBIDA'))
     OR EXISTS (SELECT 1 FROM venda_itens vi JOIN vendas ve ON ve.id = vi.id_venda
                 WHERE vi.id_produto = p.id AND ve.id_unidade = {u} AND NOT ve.cancelada
                   AND ve.data >= current_date - 30)

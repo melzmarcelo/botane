@@ -706,3 +706,30 @@
   - ⚠️ A #777 (NF 358317, estornada sozinha em 27/10, 80→40) ainda respondia `cRecebido N`, etapa 40
     ao ser relida em 06/11 15:17 — e foi lançada à mão. Se lá ela estava recebida, o Omie não estava
     dizendo; vale conferir no Omie.
+
+- 🔑 **A situação RECEBIDA** (1.3.30, migração 168, 26/11/2026). Pedido do dono: *"quando no Omie
+  estiver desmarcada a opção Somente recebidos, vamos criar uma nova situação na nota, a situação
+  Recebido … a nota vem do Omie como Conciliada, aí o usuário vai ter a opção de marcar ela como
+  Recebida, onde depois outro usuário pode verificar as recebidas e no Omie fazer o recebimento dela,
+  aí ela vem para o sistema como Lançada. Ao marcar … abrir uma tela para o usuário informar o nome de
+  quem recebeu, informação obrigatória."*
+  - Colunas `recebido_por` (TEXTO digitado: quem recebe na porta nem sempre tem usuário),
+    `recebido_em`, `recebido_id_usuario` (quem marcou). Status `RECEBIDA`.
+  - `POST /notas/{id}/receber` (`compras.notas`): só **CONCILIADA**, só **origem OMIE** e só com
+    **"Somente recebidas" desligado** (com ela ligada a não recebida nem é importada). 409 em cada
+    recusa, com a frase. `GET /notas/{id}` devolve `pode_receber` com a MESMA regra (é o que mostra o
+    botão) e `recebido_marcado_por`. `DELETE /notas/{id}/receber` desfaz (só a RECEBIDA → CONCILIADA,
+    apaga o nome). Auditoria `receber` / `desfazer_recebimento`.
+  - ⚠️ **Não mexe no estoque.** Quem lança continua sendo o lançamento: a sincronização com "Lançar
+    notas recebidas" ligado (a nota recebida no Omie é lançada sozinha) ou o botão. A RECEBIDA entra
+    em tudo que é "aberta": releitura das abertas, `lancar_as_recebidas`, lote "lançar as
+    conciliadas", "a lançar" da lista, Início, alerta de não lançadas, conferência do CMV, produtos em
+    uso, relatório de compras.
+  - 🔑 **O nome FICA na nota depois de lançada**, e é por ele (`recebido_por IS NOT NULL`) que:
+    `calcular_nota` devolve a nota a RECEBIDA e não a CONCILIADA (com item pendente ela é IMPORTADA, e
+    volta RECEBIDA quando o item é resolvido); `estornar_lancamento` (botão e recebimento desfeito no
+    Omie) a devolve a RECEBIDA — a mercadoria chegou, só o Omie voltou atrás.
+  - Tela: botão "Marcar como recebida" (janela com "Quem recebeu", obrigatório), "Desfazer
+    recebimento", linha "Recebida por X em data · marcada por Y"; filtro "recebida" na lista, com o
+    nome na linha. Relatório de compras: coluna "Recebido por" e a situação "recebidas".
+  - Cobertura: `smoke_nota_recebida.py` (28). ⚠️ Sem roteiro de navegador ainda.

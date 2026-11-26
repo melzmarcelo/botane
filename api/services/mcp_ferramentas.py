@@ -221,7 +221,7 @@ FERRAMENTAS: list[Ferramenta] = [
         "/notas",
         {"busca": Param("string", "Número da NF ou nome do fornecedor."),
          "status": Param("string", "Situação da nota.",
-                         enum=["PENDENTE", "IMPORTADA", "CONCILIADA", "LANCADA", "CANCELADA",
+                         enum=["PENDENTE", "IMPORTADA", "CONCILIADA", "RECEBIDA", "LANCADA", "CANCELADA",
                                "NAO_ENCONTRADA"]),
          **_PERIODO, "limite": _lim(25, 200), "offset": _OFFSET}),
     Ferramenta(

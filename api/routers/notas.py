@@ -493,7 +493,7 @@ def listar(filtro: FiltroNotas = Depends(),
             cur,
             """SELECT n.id, n.chave_nfe, n.numero, n.serie, n.nome_emitente, n.cnpj_emitente,
                       n.data_emissao, n.data_entrada, n.valor_total, n.status, n.origem,
-                      f.nome AS fornecedor,
+                      n.recebido_por, n.recebido_em, f.nome AS fornecedor,
                       (SELECT count(*) FROM nota_itens i WHERE i.id_nota = n.id) AS itens,
                       (SELECT count(*) FROM nota_itens i
                         WHERE i.id_nota = n.id AND i.id_produto IS NULL AND NOT i.ignorado)
@@ -655,8 +655,10 @@ def obter(id_nota: int,
     _conferir_loja_da_nota(ctx, id_nota)
     with get_cursor() as cur:
         cur.execute(
-            """SELECT n.*, f.nome AS fornecedor FROM notas_entrada n
+            """SELECT n.*, f.nome AS fornecedor, ur.nome AS recebido_marcado_por
+                 FROM notas_entrada n
                  LEFT JOIN fornecedores f ON f.id = n.id_fornecedor
+                 LEFT JOIN usuarios ur ON ur.id = n.recebido_id_usuario
                 WHERE n.id = %s""",
             (id_nota,),
         )
@@ -680,6 +682,11 @@ def obter(id_nota: int,
         nota["situacao_no_omie"] = (_mapeadores.situacao_no_omie(_bruto)
                                     if isinstance(_bruto, dict) else None)
         nota["tem_xml"] = bool(nota.pop("xml_bruto", None))
+        # 🔑 O botão "Marcar como recebida" (168): só na conciliada do Omie e só com
+        # "Somente recebidas" desligado — a MESMA regra que `receber` confere.
+        nota["pode_receber"] = bool(
+            nota["status"] == "CONCILIADA" and nota.get("origem") == "OMIE"
+            and not importador._opcoes_de_notas(cur, nota["id_unidade"])["so_recebidas"])
 
         cur.execute(
             """SELECT i.*, p.nome AS produto, p.um_estoque, p.codigo AS codigo_produto,
@@ -1341,6 +1348,93 @@ def repontar_arquivados(
                     "cadastro em uso." if mexidos else
                     "Nada a repontar — nenhuma nota aberta aponta para cadastro arquivado."),
     }
+
+
+class ReceberRequest(BaseModel):
+    recebido_por: str = Field(min_length=2, max_length=120)
+
+
+@router.post("/{id_nota}/receber")
+def receber(id_nota: int, body: ReceberRequest,
+            ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
+    """Marca a nota como RECEBIDA: a mercadoria chegou, o Omie ainda não deu o recebimento.
+
+    🔑 **Pedido do dono (26/11/2026, migração 168):** com "Somente recebidas" DESLIGADO
+    no Omie, a nota chega conciliada antes de a mercadoria chegar. Quem recebe na porta
+    marca aqui, com o nome de quem recebeu (obrigatório); outra pessoa confere as
+    recebidas e dá o recebimento no Omie — e a sincronização a traz como LANÇADA.
+    ⚠️ **Só CONCILIADA, só do Omie e só com "Somente recebidas" desligado.** Com a opção
+    ligada, a não recebida nem é importada; a XML/manual não passa pelo recebimento do Omie.
+    ⚠️ Não mexe no estoque: quem lança continua sendo o lançamento (o automático, se
+    "Lançar notas recebidas" estiver ligado, ou o botão).
+    """
+    _conferir_loja_da_nota(ctx, id_nota)
+    nome = " ".join(body.recebido_por.split())
+    if len(nome) < 2:
+        raise HTTPException(status_code=422, detail="Informe o nome de quem recebeu.")
+    with get_cursor() as cur:
+        cur.execute("""SELECT id_unidade, status, origem FROM notas_entrada
+                        WHERE id = %s FOR UPDATE""", (id_nota,))
+        nota = cur.fetchone()
+        if not nota:
+            raise HTTPException(status_code=404, detail="Nota não encontrada")
+        if nota["status"] == "RECEBIDA":
+            raise HTTPException(status_code=409, detail="Esta nota já está marcada como recebida.")
+        if nota["status"] != "CONCILIADA":
+            raise HTTPException(
+                status_code=409,
+                detail=("Só a nota conciliada pode ser marcada como recebida"
+                        + (" — esta tem item sem produto; resolva antes."
+                           if nota["status"] == "IMPORTADA" else ".")))
+        if nota["origem"] != "OMIE":
+            raise HTTPException(status_code=409,
+                                detail="Só nota vinda do Omie é marcada como recebida.")
+        if importador._opcoes_de_notas(cur, nota["id_unidade"])["so_recebidas"]:
+            raise HTTPException(
+                status_code=409,
+                detail=("Com \"Somente recebidas\" ligado no Omie, a nota só chega aqui depois "
+                        "de recebida lá — não há o que marcar."))
+        cur.execute(
+            """UPDATE notas_entrada
+                  SET status = 'RECEBIDA', recebido_por = %s, recebido_em = now(),
+                      recebido_id_usuario = %s
+                WHERE id = %s""",
+            (nome, ctx.id_usuario, id_nota),
+        )
+        auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "receber",
+                            depois={"recebido_por": nome}, id_unidade=nota["id_unidade"])
+    return {"id": id_nota, "status": "RECEBIDA", "recebido_por": nome,
+            "message": f"Nota marcada como recebida por {nome}"}
+
+
+@router.delete("/{id_nota}/receber")
+def desfazer_recebimento(id_nota: int,
+                         ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
+    """Tira a marca de recebida (marcada por engano): a nota volta a CONCILIADA.
+
+    ⚠️ Só a RECEBIDA. A lançada já entrou no estoque — o nome de quem recebeu fica nela.
+    """
+    _conferir_loja_da_nota(ctx, id_nota)
+    with get_cursor() as cur:
+        cur.execute("""SELECT id_unidade, status, recebido_por FROM notas_entrada
+                        WHERE id = %s FOR UPDATE""", (id_nota,))
+        nota = cur.fetchone()
+        if not nota:
+            raise HTTPException(status_code=404, detail="Nota não encontrada")
+        if nota["status"] != "RECEBIDA":
+            raise HTTPException(status_code=409,
+                                detail="Esta nota não está marcada como recebida.")
+        cur.execute(
+            """UPDATE notas_entrada
+                  SET status = 'CONCILIADA', recebido_por = NULL, recebido_em = NULL,
+                      recebido_id_usuario = NULL
+                WHERE id = %s""",
+            (id_nota,),
+        )
+        auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "desfazer_recebimento",
+                            antes={"recebido_por": nota["recebido_por"]},
+                            id_unidade=nota["id_unidade"])
+    return {"id": id_nota, "status": "CONCILIADA", "message": "Recebimento desfeito"}
 
 
 @router.post("/{id_nota}/estornar")
