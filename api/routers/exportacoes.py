@@ -215,12 +215,16 @@ class _Filtros:
         situacao_recebimento: list[str] | None = Query(default=None),
         # 🔑 O que listar no Estudo de vendas (pedido do dono, 25/11/2026).
         secoes_vendas: list[str] | None = Query(default=None),
+        # 🔑 Entradas por nota (painel do estoque, 26/11/2026).
+        situacao_entrada: list[str] | None = Query(default=None),
+        busca_entrada: str | None = Query(default=None, max_length=80),
     ):
         self.como_dict = {
             "situacao_ordem": situacao_ordem, "busca_ordem": busca_ordem,
             "situacao_pagar": situacao_pagar, "categorias_financeiro": categorias_financeiro,
             "situacao_recebimento": situacao_recebimento, "secoes_vendas": secoes_vendas,
             "pdv_produto": pdv_produto,
+            "situacao_entrada": situacao_entrada, "busca_entrada": busca_entrada,
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
             "locais": locais, "setores": setores,
             "categorias": categorias, "tipos_produto": tipos_produto,

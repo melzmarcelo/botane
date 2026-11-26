@@ -192,6 +192,13 @@ texto = json.dumps(dd, ensure_ascii=False, default=str)
 checar("responde com as notas, a situação e quem recebeu",
        s == 200 and f"PEL{marca}" in texto and "Joana Recebe" in texto and "recebida" in texto
        and f"PEX{marca}" not in texto, (s, texto[:300]))
+# ⚠️ Os filtros têm de CHEGAR ao relatório (a rota ignora em silêncio o que não declara):
+# só as recebidas, e a busca corta as notas de outras rodadas.
+s, dd = chamar("GET", f"/exportar/entradas-por-nota/dados?inicio={DE}&fim={ATE}"
+                      f"&busca_entrada=PE%20{marca}&situacao_entrada=RECEBIDA", token=token)
+texto = json.dumps(dd, ensure_ascii=False, default=str)
+checar("o filtro de situação chega ao relatório (só a recebida)",
+       s == 200 and f"PER{marca}" in texto and f"PEL{marca}" not in texto, (s, texto[:300]))
 s, cat = chamar("GET", "/exportar/catalogo", token=token)
 checar("está no catálogo", "entradas-por-nota" in json.dumps(cat, ensure_ascii=False), str(cat)[:200])
 
