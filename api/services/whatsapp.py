@@ -110,9 +110,11 @@ EVENTOS: dict[str, dict] = {
         "quando": "Quando a casa confirma um pedido feito pelo catálogo",
         "modelo": "pedido_confirmado",
         "texto": "Olá, {{1}}! Seu pedido nº {{2}} no {{3}} está confirmado: {{4}}, "
-                 "{{5}}. Total: R$ {{6}}. Se precisar de alguma coisa, é só responder esta "
-                 "mensagem. Obrigado pela preferência!",
+                 "{{5}}. Total: R$ {{6}}. Qualquer dúvida, fale com a gente no WhatsApp de "
+                 "atendimento. Obrigado pela preferência!",
         # ⚠️ A Meta recusou "… R$ {{6}}. Obrigado!": variáveis demais para o tamanho (24/11/2026).
+        # ⚠️ 26/11/2026: saiu o "é só responder esta mensagem" — o número de avisos não lê
+        #    respostas de cliente (manda o número do atendimento). Editado também na Meta.
         "variaveis": ["nome", "numero", "casa", "retirada/entrega", "quando", "total"],
         "categoria": "Utilidade",
     },
