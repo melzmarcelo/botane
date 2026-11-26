@@ -732,4 +732,7 @@
   - Tela: botão "Marcar como recebida" (janela com "Quem recebeu", obrigatório), "Desfazer
     recebimento", linha "Recebida por X em data · marcada por Y"; filtro "recebida" na lista, com o
     nome na linha. Relatório de compras: coluna "Recebido por" e a situação "recebidas".
-  - Cobertura: `smoke_nota_recebida.py` (28). ⚠️ Sem roteiro de navegador ainda.
+  - Cobertura: `smoke_nota_recebida.py` (28) e `verificar-entradas-nota.mjs` (partes 1 e 2). ⚠️ A
+    limpeza da suíte deixa CANCELADA a nota lançada e estornada (tem movimento, não se apaga): recebida,
+    ela entrava no "a lançar" e o `verificar.mjs` contava uma nota a mais por rodada.
+  - ⚠️ O "a lançar" do `verificar.mjs` passou a somar `status=RECEBIDA` também.

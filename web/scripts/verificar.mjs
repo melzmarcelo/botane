@@ -11139,7 +11139,8 @@ try {
   checar("e origem, período e só com item sem produto",
     !!(await p.$("#notas-origem")) && !!(await p.$("#notas-de")) && !!(await p.$("#notas-ate"))
       && !!(await p.$("#notas-pendentes")));
-  const { total: aLancar } = await api("GET", "/notas?status=IMPORTADA&status=CONCILIADA&limite=1", null, token);
+  // 🔑 Desde a 1.3.30 (migração 168) o "a lançar" é importada + conciliada + RECEBIDA.
+  const { total: aLancar } = await api("GET", "/notas?status=IMPORTADA&status=CONCILIADA&status=RECEBIDA&limite=1", null, token);
   await p.select("#notas-situacao", "abertas").catch(() => {});
   await p.waitForFunction(() => location.search.includes("situacao=abertas"), { timeout: 6000 }).catch(() => {});
   // ⚠️ O valor em reais chega numa SEGUNDA chamada (o resumo), depois da contagem: esperar
@@ -11156,7 +11157,7 @@ try {
   const tituloNotas = await p.evaluate((re) =>
     [...document.querySelectorAll("main h2, main h3")].map((h) => h.textContent?.trim() ?? "")
       .find((t) => new RegExp(re).test(t)) ?? "", ehTituloNotas.source);
-  checar("'a lançar' vai na URL e o título conta as importadas e conciliadas",
+  checar("'a lançar' vai na URL e o título conta as importadas, conciliadas e recebidas",
     p.url().includes("situacao=abertas") && tituloNotas.startsWith(`${aLancarTela} nota`),
     { url: p.url(), tituloNotas, aLancar });
   checar("e o título traz o valor em reais", aLancar === 0 || /R\$/.test(tituloNotas), tituloNotas);
@@ -11198,7 +11199,8 @@ for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mj
                        "verificar-site-novo.mjs", "verificar-nota-produto-inativo.mjs", "verificar-cesta-nao-cobrar.mjs",
                        "verificar-assistente-whatsapp.mjs", "verificar-inicio-personalizado.mjs",
                        "verificar-ordens-compra.mjs", "verificar-venda-itens-pagamentos.mjs",
-                       "verificar-recebimentos.mjs", "verificar-contas-pagar.mjs"]) {
+                       "verificar-recebimentos.mjs", "verificar-contas-pagar.mjs",
+                       "verificar-entradas-nota.mjs"]) {
   console.log(`\n== ${roteiro}`);
   let saida;
   try {

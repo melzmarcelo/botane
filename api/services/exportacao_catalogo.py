@@ -2487,6 +2487,49 @@ def _fluxo_caixa(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+FILTROS["situacao_entrada"] = {
+    "tipo": "multipla", "rotulo": "Situação da nota", "ajuda": "todas",
+    "opcoes": lambda _c, _u: [{"valor": "IMPORTADA", "nome": "a conciliar"},
+                              {"valor": "CONCILIADA", "nome": "conciliadas"},
+                              {"valor": "RECEBIDA", "nome": "recebidas"},
+                              {"valor": "LANCADA", "nome": "lançadas"}]}
+FILTROS["busca_entrada"] = {"tipo": "texto", "rotulo": "Produto, nota, fornecedor ou quem recebeu",
+                            "ajuda": "tudo"}
+
+
+def _entradas_por_nota(cur, id_unidade: int, f: dict) -> Saida:
+    """A aba "Entradas por nota" do painel do estoque, impressa (pedido do dono, 26/11/2026).
+
+    O mesmo `painel_entradas.entradas` da tela: item a item, por produto, com a nota, a
+    situação e quem recebeu. Sem período, o mês corrente (o `_periodo` comum).
+    """
+    from services import painel_entradas as pe
+    inicio, fim = _periodo(f)
+    d = pe.entradas(cur, id_unidade, inicio, fim, _lista(f.get("situacao_entrada")),
+                    f.get("busca_entrada"), limite=20000)
+    cem = lambda v: Decimal(str(v)).quantize(Decimal("0.01"))
+    linhas = [{"produto": (f"{i['codigo']} · {i['produto']}" if i["produto"]
+                           else f"{i['descricao_fornecedor']} (sem produto)"),
+               "nota": i["nota"], "fornecedor": i["fornecedor"], "data": i["data"],
+               "situacao": pe.SITUACOES.get(i["situacao"], i["situacao"]),
+               "recebido_por": i["recebido_por"] or "",
+               "quantidade": Decimal(str(i["quantidade"])), "um": i["um"],
+               "custo": cem(i["custo"])}
+              for i in d["itens"]]
+    return Saida(
+        linhas,
+        [("produto", "Produto"), ("nota", "Nota"), ("fornecedor", "Fornecedor"),
+         ("data", "Entrada"), ("situacao", "Situação"), ("recebido_por", "Recebido por"),
+         ("quantidade", "Qtd"), ("um", "Un."), ("custo", "Custo")],
+        "Entradas por nota",
+        [("Período", _intervalo(inicio, fim)), ("Itens", d["totais"]["itens"]),
+         ("Produtos", d["totais"]["produtos"]), ("Notas", d["totais"]["notas"]),
+         ("Custo de entrada", cem(d["totais"]["valor"]))]
+        + [(f"Itens {x['nome']}", x["itens"]) for x in d["por_situacao"]],
+        inicio, fim,
+    )
+
+
 FILTROS["situacao_pagar"] = {
     "tipo": "multipla", "rotulo": "Situação", "ajuda": "a pagar, agendadas e pagas",
     "opcoes": lambda _c, _u: [{"valor": "A_PAGAR", "nome": "a pagar"},
@@ -3732,6 +3775,13 @@ RELATORIOS: dict[str, Relatorio] = {
         "compras.notas", "compras",
         ("periodo", "detalhe_compras", "situacao_nota", "busca_fornecedor",
          "categorias", "setores"), _compras),
+    # 🔑 A aba "Entradas por nota" do painel do estoque (26/11/2026).
+    "entradas-por-nota": Relatorio(
+        "Entradas por nota",
+        "Os itens das notas de entrada do período, por produto: a nota de cada um, a situação "
+        "(a conciliar, conciliada, recebida, lançada) e quem recebeu.",
+        "estoque.saldos", "entradas-por-nota",
+        ("periodo", "situacao_entrada", "busca_entrada"), _entradas_por_nota),
     "perdas": Relatorio(
         "Perdas e ajustes",
         "Quanto se perdeu e por quê: perdas por motivo, diferenças de inventário e "
@@ -3895,6 +3945,7 @@ RELATORIOS: dict[str, Relatorio] = {
 GRUPOS = {
     "saldos": "Estoque", "saldos-rede": "Estoque", "movimentos": "Estoque", "vencimentos": "Estoque",
     "movimentacao": "Estoque", "inventario-valorizado": "Estoque", "perdas": "Estoque",
+    "entradas-por-nota": "Estoque",
     "vendas": "Vendas", "vendas-documentos": "Vendas", "vendas-motivos": "Vendas",
     "vendas-pagamentos": "Vendas", "caixa": "Vendas", "recebimento-notas": "Compras",
     "contas-pagar": "Financeiro", "contas-fixas": "Financeiro", "pagamentos-pessoa": "Financeiro", "painel-financeiro": "Financeiro", "fluxo-caixa": "Financeiro",

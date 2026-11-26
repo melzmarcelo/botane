@@ -97,10 +97,18 @@ def _limpar():
                 cur.execute("DELETE FROM integracoes WHERE id_unidade = %s AND servico = 'OMIE'",
                             (UNIDADE,))
             for n in notas:
-                # A lançada e estornada tem movimentos no razão (append-only): fica.
                 cur.execute("""DELETE FROM notas_entrada n WHERE id = %s AND NOT EXISTS (
                                  SELECT 1 FROM estoque_movimentos m
                                   WHERE m.origem_tipo = 'NOTA' AND m.origem_id = n.id)""", (n,))
+                # ⚠️ A lançada e estornada tem movimentos no razão (append-only) e fica —
+                # CANCELADA, fora das filas: recebida, ela entrava no "a lançar" e o
+                # roteiro do navegador contava uma nota a mais por rodada.
+                cur.execute("""UPDATE notas_entrada SET status = 'CANCELADA'
+                                WHERE id = %s AND status <> 'LANCADA'""", (n,))
+            # Sobras de rodadas antigas (antes desta limpeza).
+            cur.execute("""UPDATE notas_entrada SET status = 'CANCELADA'
+                            WHERE numero LIKE 'RC_%%' AND nome_emitente LIKE 'Fornecedor recebida %%'
+                              AND status IN ('IMPORTADA', 'CONCILIADA', 'RECEBIDA')""")
     except Exception as e:  # noqa: BLE001
         print("limpeza falhou:", e)
 

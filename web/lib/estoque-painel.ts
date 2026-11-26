@@ -139,6 +139,53 @@ export function pedirPerdas(f: FiltrosPerdas): Promise<PainelPerdas> {
   return api.get<PainelPerdas>(`/estoque/painel/perdas?${q}`);
 }
 
+/**
+ * 🔑 **Entradas por nota** (pedido do dono, 26/11/2026): os itens das notas de entrada do
+ * período, pela situação da nota, com a nota de cada um e quem recebeu.
+ */
+export type ItemEntrada = {
+  id: number;
+  id_nota: number;
+  id_produto: number | null;
+  codigo: string | null;
+  produto: string | null;
+  descricao_fornecedor: string;
+  /** Na unidade de ESTOQUE quando há produto; senão, a da nota. */
+  quantidade: number;
+  um: string;
+  custo: number;
+  nota: string;
+  fornecedor: string | null;
+  data: string | null;
+  situacao: "IMPORTADA" | "CONCILIADA" | "RECEBIDA" | "LANCADA";
+  origem: string;
+  recebido_por: string | null;
+  recebido_em: string | null;
+  lancada_em: string | null;
+};
+
+export type PainelEntradas = {
+  inicio: string;
+  fim: string;
+  situacoes: string[];
+  busca: string | null;
+  por_situacao: { situacao: string; nome: string; itens: number; notas: number; produtos: number; valor: number }[];
+  totais: { itens: number; notas: number; produtos: number; valor: number };
+  itens: ItemEntrada[];
+  cortado: boolean;
+  limite: number;
+};
+
+export function pedirEntradas(f: { inicio?: string; fim?: string; situacao?: string; busca?: string }):
+    Promise<PainelEntradas> {
+  const q = new URLSearchParams();
+  if (f.inicio) q.set("inicio", f.inicio);
+  if (f.fim) q.set("fim", f.fim);
+  if (f.situacao) q.append("situacao", f.situacao);
+  if (f.busca?.trim()) q.set("busca", f.busca.trim());
+  return api.get<PainelEntradas>(`/estoque/painel/entradas?${q}`);
+}
+
 /** O endereço da listagem de Saldos já filtrada — é para onde os cartões levam. */
 export const listaNegativos = "/estoque?visao=prateleira&situacao=negativo&comSaldo=false";
 export const listaAbaixo = "/estoque?visao=produto&situacao=minimo&comSaldo=false";

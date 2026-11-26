@@ -752,3 +752,23 @@
     deles. A tela e o conector (`saida_de_estoque`) passam pela rota.
   - "Descarte" entra em `perda_motivos` só se faltar (índice por `lower(nome)`).
   - Cobertura: `smoke_estoque.py` (recusa sem observação, Descarte na lista) e `verificar.mjs` 11zz.
+
+- 🔑 **Painel, aba "Entradas por nota"** (1.3.30, 26/11/2026, sem migração). Pedido do dono: *"no
+  painel do estoque, vamos criar uma nova visualização … para ver os itens em notas de entrada …
+  filtrar um período e ver todos os itens que estão em alguma nota naquele período, divididos por
+  conciliados, lançados, recebido (quem recebeu) e o número da nota … uma visão dos produtos que
+  estão entrando no estoque e por qual nota."*
+  - `services/painel_entradas.py` → `GET /estoque/painel/entradas?inicio&fim&situacao=…&busca=`
+    (`estoque.saldos`, a chave das outras abas). Sem datas, os últimos 30 dias (`_periodo`).
+  - Situações = as da NOTA: a conciliar (IMPORTADA), conciliada, recebida (168, ver
+    [compras.md](compras.md)) e lançada. ⚠️ Fora: cancelada, não encontrada no Omie, item `ignorado`.
+  - Data = `coalesce(data_entrada, data_emissao)` e custo = valor − desconto + frete e outros
+    rateados: as MESMAS réguas do relatório de compras. Quantidade = `quantidade_convertida`
+    (unidade de estoque) quando há produto; senão, a da nota.
+  - 🔑 `por_situacao` conta o período inteiro (com a busca, sem o filtro de situação): é o número ao
+    lado de cada aba. A lista tem teto de 2.000 itens (`cortado`); o relatório, 20.000.
+  - Tela: abas de situação (clicar de novo volta a todas), busca (produto, código, nota, fornecedor,
+    quem recebeu), leitura "por produto" ou "por nota", nota com link, produto abre a aba "Por
+    produto". Tudo na URL (`situacao`, `leitura`, `busca`). Imprimir → relatório `entradas-por-nota`.
+  - ⚠️ A quarta aba fez a fila de abas passar da tela do celular: o `nav` ganhou `flex-wrap`.
+  - Cobertura: `smoke_painel_entradas.py` (20, janela de abril/2033) e `verificar-entradas-nota.mjs`.

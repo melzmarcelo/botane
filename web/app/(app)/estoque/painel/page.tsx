@@ -4,16 +4,18 @@ import { useEffect, useState } from "react";
 
 import BuscaCadastro from "@/components/busca-cadastro";
 import CabecalhoTela from "@/components/cabecalho-tela";
+import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Vazio } from "@/components/ui";
 import { fonteProdutos, type ItemBusca } from "@/lib/busca-cadastro";
 import { hoje } from "@/lib/datas";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import {
-  pedirPerdas, pedirProduto, pedirVisaoGeral,
-  type Agrupar, type PainelPerdas, type PainelProduto, type VisaoGeral,
+  pedirEntradas, pedirPerdas, pedirProduto, pedirVisaoGeral,
+  type Agrupar, type PainelEntradas, type PainelPerdas, type PainelProduto, type VisaoGeral,
 } from "@/lib/estoque-painel";
 
 import { andar, janela, MODOS, nomeDoRecorte, type Modo } from "../../vendas/painel/periodo";
+import Entradas, { type Leitura } from "./entradas";
 import Geral from "./geral";
 import Perdas, { type Recorte } from "./perdas";
 import Produto from "./produto";
@@ -27,6 +29,8 @@ import Produto from "./produto";
  * - **Por produto**: como anda um produto — o saldo no tempo, o que entrou e saiu, e em
  *   quantos dias acaba.
  * - **Perdas**: onde e por quê — motivo, setor, categoria, prateleira e produto.
+ * - **Entradas por nota** (26/11/2026): os itens das notas do período, por situação da nota
+ *   (a conciliar, conciliada, recebida, lançada), com a nota de cada um e quem recebeu.
  *
  * 🔑 **Tudo na URL** (`useEstadoNaUrl`), como no painel de vendas: voltar de um produto
  * devolve o mesmo recorte, e o recorte vira um link que se manda para alguém.
@@ -37,6 +41,7 @@ const ABAS = [
   { valor: "geral", nome: "Visão geral" },
   { valor: "produto", nome: "Por produto" },
   { valor: "perdas", nome: "Perdas" },
+  { valor: "entradas", nome: "Entradas por nota" },
 ] as const;
 type Aba = (typeof ABAS)[number]["valor"];
 
@@ -55,10 +60,14 @@ export default function PainelDeEstoque() {
   const [categoria, setCategoria] = useEstadoNaUrl<string>("categoria", "");
   const [setor, setSetor] = useEstadoNaUrl<string>("setor", "");
   const [local, setLocal] = useEstadoNaUrl<string>("local", "");
+  const [situacaoEntrada, setSituacaoEntrada] = useEstadoNaUrl<string>("situacao", "");
+  const [leitura, setLeitura] = useEstadoNaUrl<string>("leitura", "produto");
+  const [buscaEntrada, setBuscaEntrada] = useEstadoNaUrl<string>("busca", "");
 
   const [geral, setGeral] = useState<VisaoGeral | null>(null);
   const [prod, setProd] = useState<PainelProduto | null>(null);
   const [perdas, setPerdas] = useState<PainelPerdas | null>(null);
+  const [entradas, setEntradas] = useState<PainelEntradas | null>(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(true);
 
@@ -76,6 +85,10 @@ export default function PainelDeEstoque() {
           ? pedirProduto(Number(idProduto), de || undefined, ate || undefined, agrupar as Agrupar)
               .then((r) => vivo && setProd(r))
           : Promise.resolve(setProd(null)))
+      : a === "entradas" ? pedirEntradas({
+          inicio: de || undefined, fim: ate || undefined,
+          situacao: situacaoEntrada || undefined, busca: buscaEntrada || undefined,
+        }).then((r) => vivo && setEntradas(r))
       : pedirPerdas({
           inicio: de || undefined, fim: ate || undefined, agrupar: agrupar as Agrupar,
           motivo: num(motivo), categoria: num(categoria), setor: num(setor), local: num(local),
@@ -87,10 +100,10 @@ export default function PainelDeEstoque() {
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [a, idProduto, de, ate, agrupar, motivo, categoria, setor, local]);
+  }, [a, idProduto, de, ate, agrupar, motivo, categoria, setor, local, situacaoEntrada, buscaEntrada]);
 
   // O recorte EM VIGOR: o da URL, ou o que o servidor escolheu (os últimos 30 dias).
-  const resposta = a === "produto" ? prod : a === "perdas" ? perdas : null;
+  const resposta = a === "produto" ? prod : a === "perdas" ? perdas : a === "entradas" ? entradas : null;
   const inicio = de || resposta?.inicio || "";
   const fim = ate || resposta?.fim || "";
 
@@ -138,12 +151,19 @@ export default function PainelDeEstoque() {
           <>
             A visão do estoque para decidir: o que está negativo ou abaixo do mínimo (o cartão
             leva à lista para agir), como anda cada produto e onde estão as perdas. Os números
-            são os do razão, líquidos de estorno.
+            são os do razão, líquidos de estorno. Em entradas por nota, os itens das notas de
+            compra do período e em que pé cada nota está.
           </>
         }
+        acoes={a === "entradas" ? (
+          <BotaoExportar relatorio="entradas-por-nota"
+                         iniciais={{ inicio, fim, ...(buscaEntrada ? { busca_entrada: buscaEntrada } : {}),
+                                     ...(situacaoEntrada ? { situacao_entrada: [situacaoEntrada] } : {}) }} />
+        ) : undefined}
       />
 
-      <nav className="flex gap-2" aria-label="abas do painel">
+      {/* ⚠️ flex-wrap: com a quarta aba (Entradas por nota) a fila passava da tela do celular. */}
+      <nav className="flex flex-wrap gap-2" aria-label="abas do painel">
         {ABAS.map((x) => (
           <button key={x.valor} type="button" data-aba={x.valor}
                   className={`btn ${a === x.valor ? "btn-primario" : "btn-secundario"}`}
@@ -196,7 +216,7 @@ export default function PainelDeEstoque() {
                       disabled={!inicio || carregando} onClick={() => ir(andar(m, inicio, fim, 1))}>›</button>
             </div>
 
-            <label className="flex items-center gap-2 text-[13.5px]">
+            {a !== "entradas" && <label className="flex items-center gap-2 text-[13.5px]">
               <span className="text-suave">por</span>
               <select className="campo py-1" style={{ width: "auto" }} id="painel-estoque-agrupar" value={agrupar}
                       onChange={(e) => setAgrupar(e.target.value)}>
@@ -204,7 +224,7 @@ export default function PainelDeEstoque() {
                 <option value="semana">semana</option>
                 <option value="mes">mês</option>
               </select>
-            </label>
+            </label>}
 
             {a === "perdas" && comRecorte && (
               <button type="button" className="link-acao text-[13px]"
@@ -228,6 +248,13 @@ export default function PainelDeEstoque() {
         {a === "produto" && (!idProduto ? (
           <Cartao><Vazio>Escolha um produto para ver como anda o estoque dele.</Vazio></Cartao>
         ) : prod ? <Produto d={prod} /> : carregando && <Carregando />)}
+
+        {a === "entradas" && (entradas ? (
+          <Entradas d={entradas} situacao={situacaoEntrada} aoSituacao={setSituacaoEntrada}
+                    leitura={(leitura === "nota" ? "nota" : "produto") as Leitura}
+                    aoLeitura={setLeitura} busca={buscaEntrada} aoBusca={setBuscaEntrada}
+                    aoVerProduto={verProduto} />
+        ) : carregando && <Carregando />)}
 
         {a === "perdas" && (perdas ? (
           <Perdas d={perdas} filtros={filtrosPerdas} aoFiltrar={filtrarPerdas} aoVerProduto={verProduto} />

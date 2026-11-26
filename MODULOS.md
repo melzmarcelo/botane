@@ -99,6 +99,7 @@ Saldos, movimentos, ajustes, inventário e transferências entre lojas.
 
 - **Rotas:** `estoque.py`, `ajustes.py`, `inventario.py`, `transferencias.py`, `alertas.py`
 - **Serviços:** `estoque.py` (**a única porta de escrita no razão**), `ajustes.py`, `inventario_selecao.py`, `transferencias.py`, `alertas.py`
+- **Painel, aba "Entradas por nota"** (1.3.30): `GET /estoque/painel/entradas`, `services/painel_entradas.py`, tela `estoque/painel/entradas.tsx`, relatório `entradas-por-nota`; suíte `smoke_painel_entradas.py`, roteiro `verificar-entradas-nota.mjs` (que cobre também a nota recebida)
 - **Telas:** `estoque/`, `ajustes/`, `inventario/` (roteiro `verificar-parcelas.mjs`), `transferencias/`, `rede/`, `alertas/`
 - **Permissões:** `estoque.saldos`, `estoque.entradas`, `estoque.saidas`, `estoque.perdas`, `estoque.ajuste`, `estoque.custo`, `estoque.inventario`, `estoque.inventario_criar`, `estoque.transferencias`, `estoque.transferencia_receber`, `estoque.retroativo`
 

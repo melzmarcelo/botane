@@ -29,6 +29,7 @@ from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 import relogio
 from services import estoque as motor
 from services import painel_estoque
+from services import painel_entradas
 from services import transferencias as transito_servico
 
 router = APIRouter(prefix="/estoque", tags=["estoque"])
@@ -89,6 +90,22 @@ def painel_perdas(inicio: date | None = None, fim: date | None = None,
             cur, unidade_atual(cur, ctx), inicio, fim, agrupar,
             {"motivo": id_motivo, "categoria": id_categoria, "setor": id_setor,
              "local": id_local, "produto": id_produto}, limite)
+
+
+@router.get("/painel/entradas")
+def painel_entradas_por_nota(inicio: date | None = None, fim: date | None = None,
+                             situacao: list[str] | None = Query(default=None),
+                             busca: str | None = Query(default=None, max_length=80),
+                             ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> dict:
+    """Os itens das notas de entrada do período, por situação e com a nota de cada um.
+
+    🔑 Pedido do dono (26/11/2026) — ver `services/painel_entradas.py`. Sem datas, os
+    últimos 30 dias. `situacao` é lista (IMPORTADA, CONCILIADA, RECEBIDA, LANCADA).
+    """
+    inicio, fim = _periodo(inicio, fim)
+    with get_cursor() as cur:
+        return painel_entradas.entradas(cur, unidade_atual(cur, ctx), inicio, fim,
+                                        [s.upper() for s in situacao or [] if s], busca)
 
 
 @router.get("/saldos", response_model=list[SaldoResponse])
