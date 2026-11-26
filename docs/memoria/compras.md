@@ -5,7 +5,7 @@
 
 ## O que já existe
 
-- 🔑 **Ordem de compra: lista suspensa, fornecedor principal e agrupar** (26/11/2026, sem
+- 🔑 **Ordem de compra: lista suspensa, fornecedor principal e agrupar** (1.3.29, 26/11/2026, sem
   migração, pedido do dono: *"ao ir digitando o produto, já ir apresentando os produtos em uma
   lista suspensa… sem abrir a tela de pesquisa. Ao marcar como comprado, sugerir o fornecedor
   principal. Listar o fornecedor principal no grid, e ter uma opção para agrupar… No grid de
