@@ -596,6 +596,18 @@ protótipo navegável (artifact `https://claude.ai/artifact/Jvq2Pku1vEjUVy8DQxeQ
   parte dos navegadores.
   ⚠️ Vale para o `BuscaCadastro`; o `FiltroCadastro` mostra o fixado como etiqueta, não no campo.
 
+- 🔑 **`BuscaCadastro` com lista suspensa: `sugerirAoDigitar`** (26/11/2026, pedido do dono na
+  ordem de compra; detalhes em `compras.md`). A partir de 2 letras, 250 ms depois da última
+  tecla, até 8 resultados, com o código EXATO primeiro. ↑ ↓ andam, Enter escolhe e devolve o
+  foco, Tab escolhe e segue, Esc fecha. Sem a lista aberta, Enter faz o de sempre (abre a janela
+  com vários resultados).
+  ⚠️ **Opcional de propósito**: muda o que sair do campo faz. Com ela, o blur com VÁRIOS
+  resultados não abre a janela (só escolhe com um) — nas telas sem ela, abrir é o gesto que a
+  equipe já tem na mão.
+  ⚠️ Os itens da lista usam `onMouseDown` com `preventDefault`: sem isso o campo perde o foco
+  antes do clique, e o blur resolveria o texto por conta própria. O Tab que escolhe pela lista
+  marca `escolheuPelaLista` para o blur seguinte não resolver de novo com o texto velho.
+
 - 🔑 **Os atalhos fixados SAÍRAM do menu** (05/10/2026, pedido do dono: *"retira os meus
   atalhos do menu"* — confirmado: o recurso inteiro, para todos). Foram embora a seção "Seus
   atalhos", o alfinete de cada linha, `lib/atalhos.ts`, os estilos `.menu-fixar*`/`.menu-secao`

@@ -46,7 +46,12 @@ _COLUNAS = """
     coalesce(p.nome, i.descricao_livre) AS item, p.codigo,
     (i.id_produto IS NULL) AS fora_do_cadastro,
     uc.nome AS pedido_por, uq.nome AS comprado_por_nome,
-    coalesce(f.nome_fantasia, f.nome) AS fornecedor"""
+    coalesce(f.nome_fantasia, f.nome) AS fornecedor,
+    -- 🔑 **O fornecedor PRINCIPAL do produto** (26/11/2026, pedido do dono): o preferencial em
+    -- `produto_fornecedor`, senão o primeiro pelo nome — a regra das sugestões do mínimo. É o que
+    -- a tela sugere ao marcar como comprado e por onde agrupa. ⚠️ Só fornecedor ATIVO: sugerir
+    -- um inativo daria 400 no comprar.
+    fp.id_fornecedor AS id_fornecedor_principal, fp.nome AS fornecedor_principal"""
 
 _JUNTAS = """
     FROM ordem_compra_itens i
@@ -55,17 +60,27 @@ _JUNTAS = """
     LEFT JOIN usuarios uq ON uq.id = i.comprado_por
     LEFT JOIN usuarios ua ON ua.id = i.aprovado_por
     LEFT JOIN usuarios ur ON ur.id = i.recusado_por
-    LEFT JOIN fornecedores f ON f.id = i.id_fornecedor"""
+    LEFT JOIN fornecedores f ON f.id = i.id_fornecedor
+    LEFT JOIN LATERAL (
+        SELECT pf.id_fornecedor, coalesce(fx.nome_fantasia, fx.nome) AS nome
+          FROM produto_fornecedor pf JOIN fornecedores fx ON fx.id = pf.id_fornecedor
+         WHERE pf.id_produto = i.id_produto AND fx.ativo
+         ORDER BY pf.preferencial DESC, fx.nome LIMIT 1) fp ON true"""
 
 
 def consulta_da_lista(id_unidade: int, status: list[str], de: date | None = None,
                       ate: date | None = None, busca: str | None = None,
-                      criado_por: int | None = None) -> tuple[str, dict]:
+                      criado_por: int | None = None,
+                      agrupar_fornecedor: bool = False) -> tuple[str, dict]:
     """A consulta da tela e do relatório — uma só, para os dois não divergirem.
 
     O período é pela data da compra (ou da recusa) e, no que está aberto, pela do pedido.
     Aberto (aguardando ou a comprar) vem do mais urgente ao menos, e dentro dele o mais antigo.
     `criado_por` (de `so_de`): só os pedidos dessa pessoa (166).
+    `agrupar_fornecedor` (26/11/2026): o fornecedor principal vem antes de tudo — nas abas abertas
+    — e, no que já foi comprado, o fornecedor da compra; quem não tem fornecedor fica no fim.
+    Dentro do grupo, a ordem de sempre. ⚠️ É no BANCO, não na tela: a lista é paginada, e
+    agrupar só a página deixaria o mesmo fornecedor espalhado por várias.
     """
     termo = (busca or "").strip() or None
     sql = f"""SELECT {_COLUNAS} {_JUNTAS}
@@ -78,12 +93,15 @@ def consulta_da_lista(id_unidade: int, status: list[str], de: date | None = None
           AND (%(busca)s::text IS NULL OR coalesce(p.nome, i.descricao_livre) ILIKE
                '%%' || %(busca)s || '%%' OR p.codigo ILIKE '%%' || %(busca)s || '%%')
         ORDER BY (i.status NOT IN ('AGUARDANDO', 'A_COMPRAR')),
+                 __GRUPO__
                  CASE WHEN i.status IN ('AGUARDANDO', 'A_COMPRAR') THEN
                       CASE i.urgencia WHEN 'HOJE' THEN 0 WHEN 'SEMANA' THEN 1 ELSE 2 END END,
                  CASE WHEN i.status IN ('AGUARDANDO', 'A_COMPRAR') THEN i.criado_em END,
                  coalesce(i.comprado_em, i.recusado_em, i.criado_em) DESC, i.id DESC"""
-    return sql, {"u": id_unidade, "status": status, "de": de, "ate": ate, "busca": termo,
-                 "quem": criado_por}
+    grupo = ("lower(CASE WHEN i.status = 'COMPRADO' THEN coalesce(f.nome_fantasia, f.nome) "
+             "ELSE fp.nome END) NULLS LAST," if agrupar_fornecedor else "")
+    return sql.replace("__GRUPO__", grupo), {
+        "u": id_unidade, "status": status, "de": de, "ate": ate, "busca": termo, "quem": criado_por}
 
 
 def resumo(cur, id_unidade: int, criado_por: int | None = None) -> dict:

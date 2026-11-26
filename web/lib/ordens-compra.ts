@@ -44,7 +44,14 @@ export type OrdemItem = {
   setor_pedido: string | null;
   comprado_em: string | null;
   comprado_por_nome: string | null;
+  /** De quem foi comprado (o que se informou ao marcar). */
   fornecedor: string | null;
+  /**
+   * O fornecedor principal do produto (26/11/2026): o preferencial, senão o primeiro pelo nome,
+   * só entre os ativos. É o que a janela de comprar sugere e por onde a lista agrupa.
+   */
+  id_fornecedor_principal: number | null;
+  fornecedor_principal: string | null;
   aprovado_em: string | null;
   aprovado_por: number | null;
   aprovado_por_nome: string | null;

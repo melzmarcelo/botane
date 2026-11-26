@@ -5,6 +5,33 @@
 
 ## O que já existe
 
+- 🔑 **Ordem de compra: lista suspensa, fornecedor principal e agrupar** (26/11/2026, sem
+  migração, pedido do dono: *"ao ir digitando o produto, já ir apresentando os produtos em uma
+  lista suspensa… sem abrir a tela de pesquisa. Ao marcar como comprado, sugerir o fornecedor
+  principal. Listar o fornecedor principal no grid, e ter uma opção para agrupar… No grid de
+  comprados, apresentar o fornecedor da compra"*).
+  - **Lista suspensa**: `BuscaCadastro` ganhou `sugerirAoDigitar` (opcional; ver
+    `_transversais/padroes-de-ui.md`). Ligada no produto do pedido e no fornecedor da janela de
+    comprar. ⚠️ Com ela, **sair do campo com vários resultados NÃO abre a janela de pesquisa**
+    (só escolhe quando há um): era a janela pulando ao clicar noutro campo que o dono não queria.
+  - 🔑 **Fornecedor principal** = o preferencial de `produto_fornecedor`, senão o primeiro pelo
+    nome, **só ativos** (inativo daria 400 no comprar). Mesma regra das sugestões do mínimo. Vem
+    em `consulta_da_lista` (LATERAL), logo na tela e no relatório (coluna nova "Fornecedor
+    principal"): `id_fornecedor_principal`, `fornecedor_principal`.
+  - **Coluna "Fornecedor"**: nas abas abertas, o principal; em Comprados, "Comprado de" (o
+    `id_fornecedor` gravado ao marcar), que antes ficava escondido no rodapé da situação.
+  - **Agrupar** (`?agrupar=true` na URL, `agrupar_fornecedor=true` na API): ordena NO BANCO pelo
+    fornecedor (principal; em Comprados, o da compra), sem fornecedor no fim. ⚠️ No banco porque
+    a lista é paginada. Cabeçalho por grupo com "Selecionar o grupo".
+  - 🔑 **A janela de comprar sugere** o fornecedor quando TODOS os itens têm o mesmo principal;
+    com principais diferentes, fica vazia e avisa (sugerir um gravaria errado nos outros).
+  - ⚠️ **Recarregar a lista mantém marcado o que continua nela** (antes zerava): o agrupar
+    recarrega mais de uma vez, e o "Selecionar o grupo" clicado entre uma e outra sumia. E
+    ligar o agrupar limpa a lista, como a troca de aba: os cabeçalhos apareciam sobre a velha.
+  - ⚠️ A grade passou a 8 colunas (o roteiro confere o número). O nome de fornecedor sai em
+    MAIÚSCULAS: a suíte compara com `.upper()`.
+  - Cobertura: `smoke_ordens_compra.py` seção 12 e `verificar-ordens-compra.mjs` seção 10.
+
 - 🔑 **Aprovação da ordem de compra** (1.3.26, migração 165, 25/11/2026, pedido do dono: *"quando
   o usuario sem permissão realiza a ordem de compra este vai para a aprovação de um usuario que tem
   permissão. quando aprovado ele vai para ser comprado"*).

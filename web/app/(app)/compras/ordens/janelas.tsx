@@ -20,7 +20,20 @@ import {
 /**
  * Marcar como comprado. A quantidade já vem com o pedido: quem comprou tudo só confirma, e
  * quem achou menos troca o número — o que faltou continua na lista.
+ *
+ * 🔑 **O fornecedor já vem sugerido** (26/11/2026, pedido do dono): quando todos os itens têm o
+ * MESMO fornecedor principal, ele entra preenchido; com principais diferentes, fica vazio e a
+ * frase diz por quê — sugerir um deles gravaria fornecedor errado nos outros. Trocar ou apagar
+ * continua livre.
  */
+function sugestaoDeFornecedor(itens: OrdemItem[]) {
+  const ids = new Set(itens.map((i) => i.id_fornecedor_principal));
+  const primeiro = itens[0];
+  if (ids.size === 1 && primeiro?.id_fornecedor_principal) {
+    return { id: primeiro.id_fornecedor_principal, rotulo: primeiro.fornecedor_principal ?? "" };
+  }
+  return null;
+}
 export function JanelaComprar({
   itens,
   aoFechar,
@@ -33,7 +46,9 @@ export function JanelaComprar({
   const fonte = useMemo(() => fonteFornecedores(), []);
   const [quantidades, setQuantidades] = useState<Record<number, string>>(() =>
     Object.fromEntries(itens.map((i) => [i.id, qtdParaCampo(i.quantidade)])));
-  const [fornecedor, setFornecedor] = useState<{ id: number; rotulo: string } | null>(null);
+  const sugerido = useMemo(() => sugestaoDeFornecedor(itens), [itens]);
+  const [fornecedor, setFornecedor] = useState<{ id: number; rotulo: string } | null>(sugerido);
+  const principais = new Set(itens.map((i) => i.id_fornecedor_principal).filter(Boolean)).size;
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -71,12 +86,15 @@ export function JanelaComprar({
           return (
             <div key={i.id} className="flex flex-wrap items-center gap-2">
               <span className="min-w-0 flex-1 font-medium">{i.item}</span>
-              <input className="campo w-24 text-right" inputMode="decimal"
-                     aria-label={`quantidade comprada de ${i.item}`} data-ordem-qtd={i.id}
-                     value={quantidades[i.id]}
-                     // ⚠️ Quem entra aqui veio trocar o número: sem isto, digitar 7 sobre 12 dava 712.
-                     onFocus={(e) => e.target.select()}
-                     onChange={(e) => setQuantidades((q) => ({ ...q, [i.id]: e.target.value }))} />
+              {/* ⚠️ A largura vai no invólucro: `.campo` tem `width: 100%` e ganha do `w-24`. */}
+              <div className="w-24">
+                <input className="campo text-right" inputMode="decimal"
+                       aria-label={`quantidade comprada de ${i.item}`} data-ordem-qtd={i.id}
+                       value={quantidades[i.id]}
+                       // ⚠️ Quem entra aqui veio trocar o número: sem isto, digitar 7 sobre 12 dava 712.
+                       onFocus={(e) => e.target.select()}
+                       onChange={(e) => setQuantidades((q) => ({ ...q, [i.id]: e.target.value }))} />
+              </div>
               <span className="w-10 text-suave">{i.um}</span>
               {n > 0 && falta > 0 && (
                 <p className="w-full text-right text-[13px] text-suave">
@@ -88,8 +106,20 @@ export function JanelaComprar({
         })}
         <Campo rotulo="Fornecedor" opcional>
           <BuscaCadastro id="ordem-fornecedor" fonte={fonte} selecionado={fornecedor}
+                         sugerirAoDigitar
                          aoEscolher={(f) => setFornecedor(f ? { id: f.id, rotulo: f.nome } : null)} />
         </Campo>
+        {sugerido && fornecedor?.id === sugerido.id && (
+          <p className="-mt-1 text-[13px] text-suave" id="ordem-fornecedor-sugerido">
+            {itens.length === 1 ? "Fornecedor principal do produto." : "Fornecedor principal de todos os itens."}
+          </p>
+        )}
+        {!sugerido && principais > 1 && (
+          <p className="-mt-1 text-[13px] text-alerta" id="ordem-fornecedor-diferentes">
+            Os itens têm fornecedores principais diferentes: escolha de quem comprou, ou marque cada
+            fornecedor separado.
+          </p>
+        )}
         <p className="text-[13px] text-suave">
           Isto não mexe no estoque. A mercadoria entra quando a nota for lançada.
         </p>

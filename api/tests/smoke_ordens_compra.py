@@ -536,6 +536,52 @@ s, rel = api("GET", "/exportar/ordens-compra/dados")
 texto = json.dumps(rel, ensure_ascii=False)
 checar("o relatório tem Para quando", "Para quando" in texto and "Urgente — hoje" in texto, texto[:200])
 
+print("12. o fornecedor principal (26/11/2026)")
+_s, f_a = api("POST", "/fornecedores", {"nome": f"AAA Moinho ordem {marca}", "fornecedor": True})
+_s, f_b = api("POST", "/fornecedores", {"nome": f"ZZZ Distribuidora ordem {marca}", "fornecedor": True})
+checar("os dois fornecedores nascem", bool(f_a and f_a.get("id") and f_b and f_b.get("id")), (f_a, f_b))
+
+
+def produto_com(sufixo, fornecedores):
+    s, p = chamar("POST", "/produtos", {
+        "codigo": f"OC{marca}{sufixo}", "nome": f"Insumo ordem {marca} {sufixo}", "tipo": "INSUMO",
+        "um_estoque": "UN", "um_compra": "UN", "fator_compra": 1, "status": "ATIVO",
+        "fornecedores": fornecedores}, token=token, unidade=matriz_id)
+    checar(f"produto {sufixo} nasce com os fornecedores", s == 201, (s, p))
+    com_minimo.append(p["id"])          # sai no fim, como os outros da rodada
+    return p["id"]
+
+
+# O preferencial vence a ordem do nome; sem preferencial, o primeiro pelo nome.
+p_pref = produto_com("FP", [{"id_fornecedor": f_a["id"]}, {"id_fornecedor": f_b["id"], "preferencial": True}])
+p_nome = produto_com("FN", [{"id_fornecedor": f_a["id"]}])
+p_sem = produto_com("FS", [])
+pedidos = {}
+for chave, pid in (("pref", p_pref), ("nome", p_nome), ("sem", p_sem)):
+    _s, r = api("POST", "/ordens-compra", {"id_produto": pid, "quantidade": 1, "um": "UN"})
+    pedidos[chave] = r["id"]
+l_pref, l_nome, l_sem = (linha(pedidos[k]) for k in ("pref", "nome", "sem"))
+checar("o preferencial é o principal, mesmo vindo depois no nome",
+       l_pref and l_pref["id_fornecedor_principal"] == f_b["id"]
+       and l_pref["fornecedor_principal"] == f"ZZZ Distribuidora ordem {marca}".upper(), l_pref)
+checar("sem preferencial, o primeiro pelo nome", l_nome and l_nome["id_fornecedor_principal"] == f_a["id"], l_nome)
+checar("sem fornecedor no cadastro, principal nulo", l_sem and l_sem["fornecedor_principal"] is None, l_sem)
+_s, l = api("GET", f"/ordens-compra?status=A_COMPRAR&busca=OC{marca}&agrupar_fornecedor=true&limite=200")
+ordem = [x["id"] for x in l if x["id"] in pedidos.values()]
+checar("agrupar ordena pelo principal, e quem não tem vai para o fim",
+       ordem == [pedidos["nome"], pedidos["pref"], pedidos["sem"]], ordem)
+s, r = api("POST", "/ordens-compra/comprar", {"itens": [{"id": pedidos["nome"]}], "id_fornecedor": f_b["id"]})
+c = linha(pedidos["nome"], "COMPRADO")
+checar("comprado de outro: a linha guarda de quem comprou e segue sabendo o principal",
+       c and c["fornecedor"] == f"ZZZ Distribuidora ordem {marca}".upper() and c["id_fornecedor_principal"] == f_a["id"], c)
+s, rel = api("GET", "/exportar/ordens-compra/dados")
+checar("o relatório tem a coluna do fornecedor principal",
+       "Fornecedor principal" in json.dumps(rel, ensure_ascii=False))
+chamar("DELETE", f"/fornecedores/{f_b['id']}", token=token)
+checar("fornecedor desativado deixa de ser sugerido",
+       (linha(pedidos["pref"]) or {}).get("id_fornecedor_principal") == f_a["id"], linha(pedidos["pref"]))
+chamar("DELETE", f"/fornecedores/{f_a['id']}", token=token)
+
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 if falhas:
     for x in falhas:

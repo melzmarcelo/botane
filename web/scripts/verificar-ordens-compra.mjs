@@ -8,6 +8,7 @@
  *   6. "Voltar à lista" junta de novo;
  *   7. no celular, a página não rola de lado;
  *   8. etapa 2: o link das sugestões abre a janela com o produto sem saldo, e "Pôr na lista" grava;
+ *  10. (26/11/2026) lista suspensa no produto, fornecedor principal, agrupar e "Comprado de";
  *   9. aprovação (migração 165): o pedido da cozinha vai para "Aguardando aprovação", o
  *      administrador aprova (vai para A comprar) e recusa com motivo (vai para Recusados);
  *      e (166) a cozinha vê só os próprios pedidos e não mexe no aprovado.
@@ -42,16 +43,25 @@ async function api(metodo, caminho, corpo, token) {
 const { dados: login } = await api("POST", "/auth/login", { email: "admin@botane.com.br", senha: "botane123" });
 const token = login.access_token;
 const codigo = `OCW${MARCA}`;
+// 🔑 Seção 10: a farinha e o sabão têm o mesmo fornecedor principal; o óleo, nenhum.
+const { dados: moinho } = await api("POST", "/fornecedores", { nome: `Moinho ordem ${MARCA}`, fornecedor: true }, token);
+checar("o fornecedor de teste nasce", !!moinho?.id, moinho);
+const doMoinho = moinho?.id ? [{ id_fornecedor: moinho.id, preferencial: true }] : [];
 const { status: st0, dados: produto } = await api("POST", "/produtos", {
   codigo, nome: `Farinha ordem ${MARCA}`, tipo: "INSUMO", um_estoque: "UN", um_compra: "UN",
-  fator_compra: 1, status: "ATIVO",
+  fator_compra: 1, status: "ATIVO", fornecedores: doMoinho,
 }, token);
 checar("o produto de teste nasce", st0 === 201, produto);
 const { status: st1, dados: minimo } = await api("POST", "/produtos", {
   codigo: `OCM${MARCA}`, nome: `Sabão ordem ${MARCA}`, tipo: "INSUMO", um_estoque: "UN", um_compra: "UN",
-  fator_compra: 1, status: "ATIVO", estoque_minimo: 6,
+  fator_compra: 1, status: "ATIVO", estoque_minimo: 6, fornecedores: doMoinho,
 }, token);
 checar("o produto com mínimo nasce", st1 === 201, minimo);
+const { dados: oleo } = await api("POST", "/produtos", {
+  codigo: `OCO${MARCA}`, nome: `Oleo ordem ${MARCA}`, tipo: "INSUMO", um_estoque: "UN", um_compra: "UN",
+  fator_compra: 1, status: "ATIVO",
+}, token);
+checar("o produto sem fornecedor nasce", !!oleo?.id, oleo);
 
 const linhaCom = (p, texto) => p.evaluate((t) => {
   const li = [...document.querySelectorAll("#ordem-lista li")]
@@ -105,6 +115,7 @@ try {
   checar("os quatro passos estão na tela", await p.evaluate(() =>
     document.querySelectorAll("#ordem-passos li").length === 4));
   // ⚠️ Cabeçalho e linhas eram grades separadas e a coluna de ações (auto) desalinhava tudo.
+  // Oito colunas desde a do fornecedor (26/11/2026).
   const colunas = await p.evaluate(() => {
     const cab = document.querySelector("#ordem-lista")?.previousElementSibling;
     const li = document.querySelector("#ordem-lista li");
@@ -112,7 +123,7 @@ try {
     return { cab: x(cab), linha: x(li) };
   });
   checar("as colunas do cabeçalho caem em cima das da linha",
-    colunas.cab.length === 7 && colunas.cab.every((v, n) => Math.abs(v - colunas.linha[n]) <= 1), colunas);
+    colunas.cab.length === 8 && colunas.cab.every((v, n) => Math.abs(v - colunas.linha[n]) <= 1), colunas);
 
   console.log("3. repetido");
   await pedirPeloTeclado(p, "2");
@@ -323,6 +334,73 @@ try {
   const largurasC = await c.evaluate(() => ({ doc: document.documentElement.scrollWidth, tela: window.innerWidth }));
   checar("com as quatro abas, o celular não rola de lado", largurasC.doc <= largurasC.tela, largurasC);
   await contexto.close();
+
+  // 🔑 26/11/2026, pedido do dono: lista suspensa no produto, fornecedor principal na lista,
+  // agrupar por ele, a janela de comprar já sugerindo, e de quem se comprou em Comprados.
+  console.log("10. fornecedor e lista suspensa");
+  await p.setViewport({ width: 1366, height: 1000 });
+  await p.goto(`${WEB}/compras/ordens?aba=A_COMPRAR`, { waitUntil: "networkidle2", timeout: 180000 });
+  await p.waitForSelector("#ordem-produto", { timeout: 60000 });
+  // Vários resultados e clicar em outro campo: com a lista suspensa, a janela NÃO pula sozinha.
+  await p.click("#ordem-produto");
+  await p.type("#ordem-produto", `ordem ${MARCA}`);
+  await p.waitForSelector("[data-sugestao]", { timeout: 15000 }).catch(() => {});
+  await p.click("#ordem-quantidade");
+  await esperar(1500);
+  checar("sair do campo com vários resultados não abre a janela de pesquisa",
+    !/para andar, Enter para escolher/.test(await p.evaluate(() => document.body.innerText)));
+  await p.click("#ordem-produto", { clickCount: 3 });
+  await p.keyboard.press("Backspace");
+  await p.type("#ordem-produto", `Oleo ordem ${MARCA}`);
+  const apareceu = await p.waitForSelector(`[data-sugestao="${oleo?.id}"]`, { timeout: 15000 }).catch(() => null);
+  checar("ao digitar, a lista suspensa mostra o produto", !!apareceu);
+  await p.keyboard.press("Enter");
+  await p.waitForFunction(() => document.querySelector("#ordem-um")?.value === "UN", { timeout: 20000 }).catch(() => {});
+  checar("Enter escolhe da lista, sem abrir a janela de pesquisa",
+    await p.evaluate(() => document.querySelector("#ordem-um")?.value === "UN"
+      && !/para andar, Enter para escolher/.test(document.body.innerText)));
+  await p.click("#ordem-quantidade");
+  await p.type("#ordem-quantidade", "2");
+  await p.keyboard.press("Enter");
+  await esperarLinha(p, `Oleo ordem ${MARCA}`);
+  const linhaOleo = await linhaCom(p, `Oleo ordem ${MARCA}`);
+  checar("o pedido escolhido pela lista entra", !!linhaOleo, linhaOleo);
+
+  const fornecedorDaLinha = (texto) => p.evaluate((t) => {
+    const li = [...document.querySelectorAll("#ordem-lista li[data-ordem-item]")]
+      .find((x) => x.innerText.toUpperCase().includes(t.toUpperCase()));
+    return li?.querySelector("[data-fornecedor]")?.innerText ?? null;
+  }, texto);
+  checar("a lista mostra o fornecedor principal",
+    /MOINHO ORDEM/i.test((await fornecedorDaLinha(`Farinha ordem ${MARCA}`)) ?? ""),
+    await fornecedorDaLinha(`Farinha ordem ${MARCA}`));
+  checar("e um traço quando o produto não tem", (await fornecedorDaLinha(`Oleo ordem ${MARCA}`))?.includes("—"),
+    await fornecedorDaLinha(`Oleo ordem ${MARCA}`));
+
+  await clicar(p, "#ordem-agrupar");
+  const grupo = `li[data-ordem-grupo="${`Moinho ordem ${MARCA}`.toUpperCase()}"]`;
+  await p.waitForSelector(grupo, { timeout: 15000 }).catch(() => {});
+  checar("agrupar põe um cabeçalho por fornecedor", !!(await p.$(grupo)));
+  await clicar(p, `${grupo} [data-acao="selecionar-grupo"]`);
+  const farinha = await linhaCom(p, `Farinha ordem ${MARCA}`);
+  checar("selecionar o grupo marca os itens dele",
+    !!farinha && await p.$eval(`li[data-ordem-item="${farinha.id}"] input[type=checkbox]`, (e) => e.checked), farinha);
+  checar("e não marca quem é de outro fornecedor", !(await p.$eval(
+    `li[data-ordem-item="${linhaOleo?.id}"] input[type=checkbox]`, (e) => e.checked).catch(() => true)));
+  await clicar(p, "#ordem-comprar-selecionados");
+  await p.waitForSelector("#ordem-fornecedor", { timeout: 15000 }).catch(() => {});
+  checar("a janela de comprar já traz o fornecedor principal",
+    /MOINHO ORDEM/i.test(await p.$eval("#ordem-fornecedor", (e) => e.value).catch(() => ""))
+      && !!(await p.$("#ordem-fornecedor-sugerido")));
+  await clicar(p, "#ordem-confirmar-compra");
+  await p.waitForFunction((id) => !document.querySelector(`li[data-ordem-item="${id}"]`), { timeout: 15000 }, farinha?.id).catch(() => {});
+  await clicar(p, "#ordem-aba-comprados");
+  await p.waitForFunction((m) => [...document.querySelectorAll("#ordem-lista li[data-ordem-item]")]
+    .some((x) => x.innerText.toUpperCase().includes(`FARINHA ORDEM ${m}`)), { timeout: 15000 }, MARCA).catch(() => {});
+  checar("em Comprados, a coluna mostra de quem se comprou",
+    /MOINHO ORDEM/i.test((await fornecedorDaLinha(`Farinha ordem ${MARCA}`)) ?? ""),
+    await fornecedorDaLinha(`Farinha ordem ${MARCA}`));
+  checar("e o cabeçalho diz Comprado de", await p.evaluate(() => /Comprado de/.test(document.body.innerText)));
 } finally {
   await navegador.close();
   // ⚠️ O comprado também: rodada que falha no meio deixaria a linha em Comprados.
@@ -334,6 +412,8 @@ try {
   }
   if (produto?.id) await api("DELETE", `/produtos/${produto.id}`, undefined, token);
   if (minimo?.id) await api("DELETE", `/produtos/${minimo.id}`, undefined, token);
+  if (oleo?.id) await api("DELETE", `/produtos/${oleo.id}`, undefined, token);
+  if (moinho?.id) await api("DELETE", `/fornecedores/${moinho.id}`, undefined, token);
 }
 
 console.log(`\n${ok} passaram, ${falhas.length} falharam`);

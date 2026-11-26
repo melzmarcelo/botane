@@ -160,8 +160,9 @@ export default function FormPedido({ aoPedir, podeAprovar }: {
                    placeholder="Ex.: guardanapo de papel, pano de prato…"
                    value={descricao} onChange={(e) => setDescricao(e.target.value)} />
           ) : (
+            // 🔑 Lista suspensa ao digitar (26/11/2026, pedido do dono): escolhe sem abrir a janela.
             <BuscaCadastro key={rodada} id="ordem-produto" fonte={fonte} selecionado={produto}
-                           autoFocus={rodada > 0}
+                           autoFocus={rodada > 0} sugerirAoDigitar
                            aoEscolher={(i) => {
                              if (i) void escolher(i.id, i.codigo ? `${i.codigo} · ${i.nome}` : i.nome, i.nome);
                              else { setProduto(null); setOpcoes(null); setUm(""); }

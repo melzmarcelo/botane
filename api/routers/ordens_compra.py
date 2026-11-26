@@ -41,11 +41,13 @@ def listar(resposta: Response,
            status: Literal["AGUARDANDO", "A_COMPRAR", "COMPRADO", "RECUSADO"] = "A_COMPRAR",
            de: date | None = None, ate: date | None = None,
            busca: str | None = Query(None, max_length=80),
+           agrupar_fornecedor: bool = False,
            limite: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
            ctx: Contexto = Depends(_ver)) -> list[dict]:
     with get_cursor() as cur:
         sql, params = servico.consulta_da_lista(unidade_atual(cur, ctx), [status], de, ate, busca,
-                                                servico.so_de(ctx.pode, ctx.id_usuario))
+                                                servico.so_de(ctx.pode, ctx.id_usuario),
+                                                agrupar_fornecedor)
         return pagina(cur, sql, params, limite=limite, offset=offset, resposta=resposta)
 
 

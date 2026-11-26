@@ -36,6 +36,7 @@ export default function BuscaCadastro({
   id,
   aoEscolherVarios,
   jaEscolhidos,
+  sugerirAoDigitar = false,
 }: {
   fonte: FonteBusca;
   selecionado: { id: number; rotulo: string } | null;
@@ -54,6 +55,15 @@ export default function BuscaCadastro({
   aoEscolherVarios?: (itens: ItemBusca[]) => void;
   /** Ids ja na lista de quem chamou — aparecem marcados e nao se somam de novo. */
   jaEscolhidos?: number[];
+  /**
+   * 🔑 **Lista suspensa enquanto se digita** (26/11/2026, pedido do dono para a ordem de
+   * compra: "ao ir digitando o produto, já ir apresentando os produtos em uma lista suspensa
+   * abaixo do campo, para ir adicionando sem abrir a tela de pesquisa"). ↑ ↓ andam, Enter ou
+   * Tab escolhem o marcado, Esc fecha. Sem a lista aberta, Tab e Enter fazem o de sempre.
+   * ⚠️ Opcional de propósito, como `aoEscolherVarios`: o componente serve dezenas de telas, e
+   * em várias o Tab que resolve sozinho é o gesto que a equipe já tem na mão.
+   */
+  sugerirAoDigitar?: boolean;
 }) {
   const [texto, setTexto] = useState(selecionado?.rotulo ?? "");
   const [aberto, setAberto] = useState(false);
@@ -75,6 +85,12 @@ export default function BuscaCadastro({
    * "seleciona tudo" para sempre.
    */
   const acabouDeFocar = useRef(false);
+  const [sugestoes, setSugestoes] = useState<ItemBusca[] | null>(null);
+  const [marcada, setMarcada] = useState(0);
+  const [focado, setFocado] = useState(false);
+  // ⚠️ Escolher pela lista com Tab tira o foco, e o blur chamaria `resolver` com o texto
+  // ainda digitado (o estado novo não chegou): buscaria de novo e poderia abrir a janela.
+  const escolheuPelaLista = useRef(false);
 
   // Quem manda no texto é a escolha: trocar o item por fora (carregar uma nota
   // para corrigir, por exemplo) tem de aparecer no campo.
@@ -82,7 +98,12 @@ export default function BuscaCadastro({
     setTexto(selecionado?.rotulo ?? "");
   }, [selecionado?.id, selecionado?.rotulo]);
 
-  const resolver = useCallback(async () => {
+  /**
+   * `peloBlur`: com a lista suspensa ligada, sair do campo só escolhe quando há UM resultado. Com
+   * vários, a janela não abre sozinha — foi ela, pulando ao clicar em outro lugar da tela, o que
+   * o dono pediu para não ver. O texto fica, a lista volta ao focar, e o Enter (explícito) abre.
+   */
+  const resolver = useCallback(async (peloBlur = false) => {
     if (disabled || resolvendoRef.current) return;
     const termo = texto.trim();
     if (termo === (selecionado?.rotulo ?? "").trim()) return;   // nada mudou
@@ -96,21 +117,77 @@ export default function BuscaCadastro({
       const { itens } = await fonte.buscar(termo, POR_PAGINA);
       if (itens.length === 1) {
         aoEscolher(itens[0]);
-      } else {
+      } else if (!(peloBlur && sugerirAoDigitar)) {
         setAberto(true);
       }
     } catch {
-      setAberto(true);
+      if (!(peloBlur && sugerirAoDigitar)) setAberto(true);
     } finally {
       setResolvendo(false);
       resolvendoRef.current = false;
     }
-  }, [texto, selecionado?.rotulo, disabled, fonte, aoEscolher]);
+  }, [texto, selecionado?.rotulo, disabled, fonte, aoEscolher, sugerirAoDigitar]);
 
   /** O campo está mostrando exatamente o registro escolhido (e não um texto em digitação). */
   const mostraOEscolhido = !!selecionado && texto === selecionado.rotulo;
 
+  // A lista suspensa: a partir de duas letras, 250 ms depois da última tecla.
+  useEffect(() => {
+    if (!sugerirAoDigitar || !focado || mostraOEscolhido || texto.trim().length < 2) {
+      setSugestoes(null);
+      return;
+    }
+    let vivo = true;
+    const t = setTimeout(async () => {
+      try {
+        const termo = texto.trim().toLowerCase();
+        const { itens } = await fonte.buscar(texto.trim(), 8);
+        if (!vivo) return;
+        // 🔑 O código EXATO primeiro: a busca ordena por nome, e quem digitou "123" quer o 123,
+        // não o primeiro nome em ordem alfabética que contém 123.
+        const exato = itens.filter((i) => i.codigo?.toLowerCase() === termo);
+        setSugestoes([...exato, ...itens.filter((i) => !exato.includes(i))]);
+        setMarcada(0);
+      } catch {
+        if (vivo) setSugestoes(null);
+      }
+    }, 250);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
+  }, [sugerirAoDigitar, focado, mostraOEscolhido, texto, fonte]);
+
+  const listaAberta = !!sugestoes && focado && !mostraOEscolhido;
+
+  function escolherDaLista(item: ItemBusca, devolverFoco: boolean) {
+    escolheuPelaLista.current = !devolverFoco;
+    setSugestoes(null);
+    aoEscolher(item);
+    setTexto(rotuloDe(item));
+    if (devolverFoco) requestAnimationFrame(() => campo.current?.focus());
+  }
+
   function aoTeclar(e: KeyboardEvent<HTMLInputElement>) {
+    if (listaAberta && sugestoes.length) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setMarcada((n) => e.key === "ArrowDown"
+          ? Math.min(n + 1, sugestoes.length - 1) : Math.max(n - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        // Enter não envia o formulário; Tab escolhe e segue para o próximo campo.
+        if (e.key === "Enter") e.preventDefault();
+        escolherDaLista(sugestoes[marcada], e.key === "Enter");
+        return;
+      }
+    }
+    if (e.key === "Escape" && listaAberta) {
+      e.preventDefault();
+      setSugestoes(null);
+      return;
+    }
     if (e.key === "Enter") {
       // Enter num campo de busca não pode enviar o formulário: a pessoa está
       // resolvendo o item, não terminando o lançamento.
@@ -129,7 +206,7 @@ export default function BuscaCadastro({
 
   return (
     <>
-      <div className={`flex gap-1.5 ${className}`}>
+      <div className={`relative flex gap-1.5 ${className}`}>
         <input
           id={id}
           ref={campo}
@@ -140,7 +217,12 @@ export default function BuscaCadastro({
           placeholder={fonte.placeholder}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
+          role={sugerirAoDigitar ? "combobox" : undefined}
+          aria-expanded={sugerirAoDigitar ? listaAberta : undefined}
+          aria-controls={sugerirAoDigitar && id ? `${id}-lista` : undefined}
+          autoComplete={sugerirAoDigitar ? "off" : undefined}
           onFocus={(e) => {
+            setFocado(true);
             if (!mostraOEscolhido) return;
             acabouDeFocar.current = true;
             e.currentTarget.select();
@@ -153,7 +235,12 @@ export default function BuscaCadastro({
           }}
           onBlur={() => {
             acabouDeFocar.current = false;
-            void resolver();
+            setFocado(false);
+            if (escolheuPelaLista.current) {
+              escolheuPelaLista.current = false;
+              return;
+            }
+            void resolver(true);
           }}
           onKeyDown={aoTeclar}
           aria-label={fonte.titulo}
@@ -168,6 +255,30 @@ export default function BuscaCadastro({
         >
           {resolvendo ? "…" : <Lupa />}
         </button>
+        {listaAberta && (
+          <ul id={id ? `${id}-lista` : undefined} role="listbox" data-sugestoes
+              className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-linha bg-superficie py-1 shadow-lg">
+            {!sugestoes.length ? (
+              <li className="px-3 py-2 text-[13.5px] text-suave">
+                Nenhum {fonte.singular} com “{texto.trim()}”.
+              </li>
+            ) : sugestoes.map((item, n) => (
+              <li key={item.id} role="option" aria-selected={n === marcada} data-sugestao={item.id}
+                  className={`cursor-pointer px-3 py-1.5 ${n === marcada ? "bg-erva-claro" : "hover:bg-erva-claro/60"}`}
+                  // ⚠️ `mousedown` sem padrão: senão o campo perde o foco antes do clique, e o
+                  // blur resolveria o texto digitado por conta própria.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setMarcada(n)}
+                  onClick={() => escolherDaLista(item, true)}>
+                <p className="text-[14px]">
+                  {item.codigo && <span className="mono mr-1.5 text-suave">{item.codigo}</span>}
+                  {item.nome}
+                </p>
+                {item.detalhe && <p className="text-[12.5px] text-suave">{item.detalhe}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {aberto && (

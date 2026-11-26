@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import CabecalhoTela from "@/components/cabecalho-tela";
@@ -40,6 +40,10 @@ import JanelaSugestoes from "./sugestoes";
  * recusado, para "Recusados", com o motivo. O pedido de quem aprova já nasce aprovado.
  * ⚠️ As colunas só existem do `md` para cima: no celular (quem marca costuma estar no mercado)
  * cada linha volta a ser um cartão, com os mesmos elementos.
+ * 🔑 **Fornecedor** (26/11/2026, pedido do dono): nas abas abertas, o fornecedor PRINCIPAL do
+ * produto; em Comprados, o fornecedor DA COMPRA. "Agrupar por fornecedor" ordena no banco por
+ * ele e põe um cabeçalho por grupo, com "selecionar" para marcar o grupo inteiro de uma vez —
+ * e a janela de comprar já sugere o fornecedor quando todos têm o mesmo principal.
  */
 
 const PASSOS = [
@@ -88,11 +92,11 @@ function quando(iso: string) {
   return `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} ${hora}`;
 }
 
-// Produto · Quantidade · Urgência · Pedido por · Situação · ações (e a caixinha de quem compra).
+// Produto · Quantidade · Urgência · Pedido por · Fornecedor · Situação · ações (e a caixinha).
 // ⚠️ **Uma grade só, e cabeçalho e linhas em SUBGRADE.** Eram grades separadas com a mesma
 // receita, e a coluna de ações é `auto`: vazia no cabeçalho (zero) e com os botões nas linhas
 // (~250px). As frações saíam diferentes e "Quantidade" ficava 100px fora do número (24/11/2026).
-const TRILHOS = "md:grid md:grid-cols-[1.75rem_minmax(0,2fr)_minmax(0,0.8fr)_minmax(8.5rem,1fr)_minmax(0,1.1fr)_minmax(9.5rem,1.1fr)_auto] md:gap-x-3";
+const TRILHOS = "md:grid md:grid-cols-[1.75rem_minmax(0,1.7fr)_minmax(4.75rem,0.7fr)_minmax(7.75rem,0.9fr)_minmax(0,1fr)_minmax(0,1.35fr)_minmax(8.75rem,1fr)_auto] md:gap-x-3";
 const LINHA = "md:col-span-full md:grid md:grid-cols-subgrid md:items-center";
 
 export default function PaginaOrdemDeCompra() {
@@ -109,6 +113,7 @@ export default function PaginaOrdemDeCompra() {
   const [ate, setAte] = useEstadoNaUrl<string>("ate", "", { atraso: 0 });
   // 🔑 Na URL para o painel de estoque e os alertas abrirem direto nas sugestões (etapa 2).
   const [sugestoes, setSugestoes] = useEstadoNaUrl<boolean>("sugestoes", false);
+  const [agrupar, setAgrupar] = useEstadoNaUrl<boolean>("agrupar", false, { atraso: 0 });
   const abaAtual: AbaOrdem = (ABAS_ORDEM as string[]).includes(aba) ? (aba as AbaOrdem) : "A_COMPRAR";
   const comData = abaAtual === "COMPRADO" || abaAtual === "RECUSADO";
   const [lista, setLista] = useState<OrdemItem[] | null>(null);
@@ -121,12 +126,14 @@ export default function PaginaOrdemDeCompra() {
   const [corrigindo, setCorrigindo] = useState<OrdemItem | null>(null);
   const [cancelando, setCancelando] = useState<OrdemItem | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const pag = usePaginacao("ordens-compra", { filtros: [abaAtual, busca, de, ate, unidade] });
+  const pag = usePaginacao("ordens-compra", { filtros: [abaAtual, busca, de, ate, unidade, agrupar] });
 
   // ⚠️ A lista de uma aba não pode aparecer sob os botões da outra: "Voltar à lista" num item
   // que ainda está em A comprar. Limpa ao trocar, e resposta atrasada não sobrescreve a nova.
   const ultimoPedido = useRef(0);
-  useEffect(() => { setLista(null); }, [abaAtual, unidade]);
+  // ⚠️ Agrupar também: os cabeçalhos apareciam sobre a lista VELHA, e o "Selecionar o grupo"
+  // clicado nesse meio-tempo sumia quando a lista agrupada chegava (ela zera as marcações).
+  useEffect(() => { setLista(null); }, [abaAtual, unidade, agrupar]);
 
   const carregar = useCallback(async () => {
     if (!pag.pronto) return;
@@ -137,19 +144,23 @@ export default function PaginaOrdemDeCompra() {
       if (busca.trim()) q.busca = busca.trim();
       if (comData && de) q.de = de;
       if (comData && ate) q.ate = ate;
+      if (agrupar) q.agrupar_fornecedor = "true";
       const [l, r] = await Promise.all([listarOrdens(abaAtual, q), resumoOrdens()]);
       if (pedido !== ultimoPedido.current) return;
       setLista(l.itens);
       if (l.total !== null) pag.setTotal(l.total);
       setContagem(r);
-      setMarcados(new Set());
+      // ⚠️ Fica marcado o que continua na lista, e não "zera tudo": o agrupar recarrega mais de
+      // uma vez (estado, URL, paginação), e o "Selecionar o grupo" clicado entre uma e outra
+      // sumia. O que saiu (comprado, aprovado, cancelado) sai da seleção sozinho.
+      setMarcados((m) => new Set(l.itens.filter((i) => m.has(i.id)).map((i) => i.id)));
     } catch (e) {
       if (pedido !== ultimoPedido.current) return;
       setLista([]);
       setErro(e instanceof Error ? e.message : "Falha ao carregar a lista");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, abaAtual, comData, busca, de, ate, unidade, pag.offset, pag.porPagina]);
+  }, [pag.pronto, abaAtual, comData, busca, de, ate, agrupar, unidade, pag.offset, pag.porPagina]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -223,6 +234,20 @@ export default function PaginaOrdemDeCompra() {
   const comCaixinha = (abaAtual === "A_COMPRAR" && podeComprar) ||
     (abaAtual === "AGUARDANDO" && podeAprovar);
   const aberta = abaAtual === "A_COMPRAR" || abaAtual === "AGUARDANDO";
+  // Em Comprados, de quem se comprou; nas outras abas, o principal do produto.
+  const fornecedorDe = (i: OrdemItem) =>
+    abaAtual === "COMPRADO" ? i.fornecedor : i.fornecedor_principal;
+  const grupos = new Map<string, number[]>();
+  for (const i of lista ?? []) {
+    const chave = fornecedorDe(i) ?? "";
+    grupos.set(chave, [...(grupos.get(chave) ?? []), i.id]);
+  }
+  const marcarGrupo = (ids: number[]) => setMarcados((m) => {
+    const todos = ids.every((id) => m.has(id));
+    const novo = new Set(m);
+    for (const id of ids) if (todos) novo.delete(id); else novo.add(id);
+    return novo;
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -320,6 +345,11 @@ export default function PaginaOrdemDeCompra() {
                      value={ate} min={de || undefined} onChange={(e) => setAte(e.target.value)} />
             </span>
           )}
+          <label className="flex items-center gap-1.5 sm:ml-auto" htmlFor="ordem-agrupar">
+            <input type="checkbox" id="ordem-agrupar" className="h-4 w-4" checked={agrupar}
+                   onChange={(e) => setAgrupar(e.target.checked)} />
+            Agrupar por fornecedor
+          </label>
           {comCaixinha && selecionados.length > 0 && abaAtual === "A_COMPRAR" && (
             <button type="button" className="btn btn-primario sm:ml-auto" id="ordem-comprar-selecionados"
                     onClick={() => setComprando(selecionados)}>
@@ -359,12 +389,39 @@ export default function PaginaOrdemDeCompra() {
               <span>Quantidade</span>
               <span>Urgência</span>
               <span>Pedido por</span>
+              <span title={abaAtual === "COMPRADO" ? undefined : "o fornecedor principal do produto"}>
+                {abaAtual === "COMPRADO" ? "Comprado de" : "Fornecedor"}
+              </span>
               <span>Situação</span>
               <span />
             </div>
             <ul className={`flex flex-col divide-y divide-[var(--borda)] ${LINHA}`} id="ordem-lista">
-              {lista.map((i) => (
-                <li key={i.id} data-ordem-item={i.id}
+              {lista.map((i, n) => {
+                const chave = fornecedorDe(i) ?? "";
+                const novoGrupo = agrupar && (n === 0 || (fornecedorDe(lista[n - 1]) ?? "") !== chave);
+                const doGrupo = grupos.get(chave) ?? [];
+                return (
+                <Fragment key={i.id}>
+                {novoGrupo && (
+                  <li data-ordem-grupo={chave || "sem"}
+                      className={`flex flex-wrap items-center gap-2 bg-superficie2 px-2 py-2 text-[13.5px] ${LINHA}`}>
+                    <span className="font-semibold md:col-span-6">
+                      {chave || (abaAtual === "COMPRADO" ? "Sem fornecedor informado" : "Sem fornecedor principal")}
+                      <span className="ml-1.5 font-normal text-suave">
+                        · {doGrupo.length} {doGrupo.length === 1 ? "item" : "itens"}
+                      </span>
+                    </span>
+                    {comCaixinha && (
+                      <span className="md:col-span-2 md:justify-self-end">
+                        <button type="button" className="btn btn-terciario btn-pequeno" data-acao="selecionar-grupo"
+                                onClick={() => marcarGrupo(doGrupo)}>
+                          {doGrupo.every((id) => marcados.has(id)) ? "Desmarcar o grupo" : "Selecionar o grupo"}
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                )}
+                <li data-ordem-item={i.id}
                     className={`flex flex-wrap items-center gap-x-3 gap-y-2 py-3 ${LINHA}`}>
                   <span className="flex md:justify-center">
                     {comCaixinha && (
@@ -386,16 +443,21 @@ export default function PaginaOrdemDeCompra() {
                     )}
                   </span>
                   <span><SeloUrgencia urgencia={i.urgencia} /></span>
-                  <span className="text-[13.5px]" title={i.pedido_por ?? undefined}>
-                    {i.setor_pedido ?? i.pedido_por ?? "—"}
+                  <span className="min-w-0 text-[13.5px]" title={i.pedido_por ?? undefined}>
+                    {/* Nome comprido corta com reticências (o inteiro fica no title), e não no meio. */}
+                    <span className="md:block md:truncate">{i.setor_pedido ?? i.pedido_por ?? "—"}</span>
                     <span className="text-suave md:block"><span className="md:hidden"> · </span>{quando(i.criado_em)}</span>
+                  </span>
+                  {/* ⚠️ Duas linhas no máximo: nome de distribuidora é comprido e empurrava a linha. */}
+                  <span className="text-[13.5px] md:line-clamp-2" data-fornecedor title={fornecedorDe(i) ?? undefined}>
+                    <span className="text-suave md:hidden">{abaAtual === "COMPRADO" ? "Comprado de " : "Fornecedor: "}</span>
+                    {fornecedorDe(i) ?? "—"}
                   </span>
                   <span className="text-[13px]">
                     <SeloSituacao status={i.status} />
                     {i.comprado_em ? (
                       <span className="mt-1 block text-[12.5px] text-suave">
                         comprado por {i.comprado_por_nome ?? "—"} · {quando(i.comprado_em)}
-                        {i.fornecedor && <> · {i.fornecedor}</>}
                       </span>
                     ) : i.status === "RECUSADO" ? (
                       <span className="mt-1 block text-[12.5px] text-suave" data-recusa>
@@ -440,7 +502,9 @@ export default function PaginaOrdemDeCompra() {
                     )}
                   </div>
                 </li>
-              ))}
+                </Fragment>
+                );
+              })}
             </ul>
           </div>
         )}

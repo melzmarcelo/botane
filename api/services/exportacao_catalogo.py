@@ -3591,7 +3591,9 @@ def _ordens_compra(cur, id_unidade: int, f: dict) -> Saida:
          ("observacao", "Observação"), ("situacao", "Situação"), ("pedido_quem", "Pedido por"),
          ("pedido_em", "Pedido em"), ("aprovacao", "Aprovação"),
          ("comprado_por_nome", "Comprado por"),
-         ("comprado_quando", "Comprado em"), ("fornecedor", "Fornecedor")],
+         ("comprado_quando", "Comprado em"), ("fornecedor", "Fornecedor"),
+         # 26/11/2026: o fornecedor principal do produto, o que a tela mostra nas abas abertas.
+         ("fornecedor_principal", "Fornecedor principal")],
         "Ordem de compra", resumo, inicio, fim)
 
 
