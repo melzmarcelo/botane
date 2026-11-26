@@ -427,6 +427,15 @@ print("\n10. o resumo do dia e a retenção")
 with get_cursor() as cur:
     cur.execute("UPDATE cardapio_eventos SET quando = quando - interval '400 days' WHERE id_sessao = %s",
                 (SESSAO,))
+    # ⚠️ A retenção NÃO reagrega dia que já tem resumo (certo em produção: cada dia é
+    # agregado uma vez). Mas toda rodada do MESMO dia joga os eventos no mesmo dia de 400
+    # dias atrás, e o resumo da rodada anterior fazia esta pular a agregação: a primeira
+    # rodada do dia passava, a segunda falhava (26/11/2026). O resumo velho daquele dia é
+    # sobra de teste — sai antes.
+    cur.execute("""DELETE FROM cardapio_agregados_dia a
+                    WHERE a.id_unidade = %s AND a.dia IN (
+                          SELECT DISTINCT quando::date FROM cardapio_eventos WHERE id_sessao = %s)""",
+                (U, SESSAO))
     sv.reter(cur)
     cur.execute("SELECT count(*) AS n FROM cardapio_eventos WHERE id_sessao = %s", (SESSAO,))
     checar("o bruto além de 13 meses é apagado", cur.fetchone()["n"] == 0)
